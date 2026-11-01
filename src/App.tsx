@@ -6,6 +6,7 @@ import { Corkboard } from './components/layout/Corkboard';
 import { PinOverlay } from './components/kiosk/PinOverlay';
 import { NightMode } from './components/kiosk/NightMode';
 import { SettingsModal } from './components/settings/SettingsModal';
+import { MobileCompanion } from './components/mobile/MobileCompanion';
 import { openLocalFileBinding } from './services/fileSync';
 
 export function App() {
@@ -32,9 +33,23 @@ export function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [hasFileBound, setHasFileBound] = useState(false);
 
+  // Responsive Mobile Detection (< 768px) with manual toggle override
+  const [isMobileViewport, setIsMobileViewport] = useState(
+    typeof window !== 'undefined' ? window.innerWidth < 768 : false
+  );
+  const [forceDesktopMode, setForceDesktopMode] = useState(false);
+
   useEffect(() => {
     initStore();
   }, [initStore]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobileViewport(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Screen Wake Lock API integration
   useEffect(() => {
@@ -97,6 +112,28 @@ export function App() {
           <span className="text-sm font-medium text-gray-400">Loading Ambiently...</span>
         </div>
       </div>
+    );
+  }
+
+  // 1. Mobile Companion Mode on small screens unless user specifically toggled Desktop
+  if (isMobileViewport && !forceDesktopMode) {
+    return (
+      <>
+        <MobileCompanion
+          tabs={tabs}
+          activeTabId={activeTabId}
+          notes={notes}
+          onSelectTab={setActiveTabId}
+          onAddNote={addNote}
+          onUpdateNote={updateNote}
+          onToggleDesktopView={() => setForceDesktopMode(true)}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+        />
+        <SettingsModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+        />
+      </>
     );
   }
 
