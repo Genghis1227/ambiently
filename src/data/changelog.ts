@@ -5,9 +5,19 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.0.6';
+export const APP_VERSION = '0.0.7';
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.0.7",
+    date: "November 1, 2026",
+    title: "Carousel Controls, Support/Donate Panel & Canvas Zoom Isolation",
+    highlights: [
+      "Added Auto-Rotate Tabs toggle and interval duration selector in Settings.",
+      "Isolated canvas zoom transform to prevent the Navigation Dock and Modals from being scaled off-screen on high densities.",
+      "Added Support & Donate panel in Settings with Venmo, PayPal, and Zelle QR codes.",
+    ],
+  },
   {
     version: 'v0.0.6',
     date: 'November 1, 2026',
