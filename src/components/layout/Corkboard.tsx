@@ -58,30 +58,44 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   const [checklistItems, setChecklistItems] = useState<{ id: string; text: string; done: boolean }[]>([]);
   const [newItemText, setNewItemText] = useState('');
 
-  const handlePointerDown = (e: React.PointerEvent, id: string, type: 'note' | 'widget', pos?: { xRatio: number; yRatio: number }) => {
-    // Prevent drag when clicking buttons or interactive elements
-    if ((e.target as HTMLElement).closest('button, input, textarea, select, a')) return;
+  const handlePointerDown = (
+    e: React.PointerEvent,
+    id: string,
+    type: 'note' | 'widget',
+    pos?: { xRatio: number; yRatio: number }
+  ) => {
+    // Prevent drag when clicking buttons, inputs, links, or interactive elements
+    if ((e.target as HTMLElement).closest('button, input, textarea, select, a, [role="button"]')) return;
 
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
+    const containerX = e.clientX - rect.left;
+    const containerY = e.clientY - rect.top;
+
     const currentX = (pos?.xRatio ?? 0.1) * rect.width;
     const currentY = (pos?.yRatio ?? 0.1) * rect.height;
 
     setDraggingId(id);
     setDraggingType(type);
     setDragOffset({
-      x: e.clientX - currentX,
-      y: e.clientY - currentY,
+      x: containerX - currentX,
+      y: containerY - currentY,
     });
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch (_) {}
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!draggingId || !containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
 
-    const newX = Math.max(0, Math.min(rect.width - 200, e.clientX - dragOffset.x));
-    const newY = Math.max(0, Math.min(rect.height - 200, e.clientY - dragOffset.y));
+    const containerX = e.clientX - rect.left;
+    const containerY = e.clientY - rect.top;
+
+    const newX = Math.max(0, Math.min(rect.width - 150, containerX - dragOffset.x));
+    const newY = Math.max(0, Math.min(rect.height - 150, containerY - dragOffset.y));
 
     if (draggingType === 'note') {
       const note = notes.find((n) => n.id === draggingId);
@@ -104,7 +118,12 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     }
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (e?: React.PointerEvent) => {
+    if (e && e.currentTarget && e.pointerId !== undefined) {
+      try {
+        (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+      } catch (_) {}
+    }
     setDraggingId(null);
   };
 
@@ -158,7 +177,12 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       ref={containerRef}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      className={`relative w-full h-screen overflow-hidden select-none bg-[radial-gradient(#1f2937_1px,transparent_1px)] [background-size:24px_24px] ${dockPaddingClass}`}
+      onPointerCancel={handlePointerUp}
+      style={{
+        touchAction: 'none',
+        WebkitTouchCallout: 'none',
+      }}
+      className={`relative w-full h-screen overflow-hidden select-none touch-none bg-[radial-gradient(#1f2937_1px,transparent_1px)] [background-size:24px_24px] ${dockPaddingClass}`}
     >
       {/* Floating Action Buttons on Corkboard */}
       <div className="absolute top-4 right-4 z-40 flex items-center gap-2">
@@ -191,20 +215,28 @@ export const Corkboard: React.FC<CorkboardProps> = ({
           rotation: 0,
         };
 
+        const isDragging = draggingId === widget.id;
         return (
           <div
             key={widget.id}
             onPointerDown={(e) => handlePointerDown(e, widget.id, 'widget', pos)}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
             style={{
               position: 'absolute',
               left: `${pos.xRatio * 100}%`,
               top: `${pos.yRatio * 100}%`,
               width: `${Math.max(280, pos.wRatio * 1000)}px`,
               minHeight: '220px',
-              transform: `rotate(${pos.rotation}deg)`,
-              zIndex: draggingId === widget.id ? 50 : pos.zIndex,
+              transform: `rotate(${pos.rotation}deg) ${isDragging ? 'scale(1.02)' : 'scale(1)'}`,
+              zIndex: isDragging ? 50 : pos.zIndex,
+              touchAction: 'none',
+              WebkitTouchCallout: 'none',
+              transition: isDragging ? 'none' : 'box-shadow 0.2s, transform 0.15s ease-out',
             }}
-            className="group rounded-2xl bg-gray-900/80 backdrop-blur-md border border-gray-800/90 p-4 shadow-2xl text-white cursor-grab active:cursor-grabbing transition-shadow hover:shadow-blue-500/10 flex flex-col justify-between"
+            className={`group rounded-2xl bg-gray-900/80 backdrop-blur-md border border-gray-800/90 p-4 shadow-2xl text-white cursor-grab active:cursor-grabbing touch-none select-none transition-shadow ${
+              isDragging ? 'ring-2 ring-blue-500 shadow-blue-500/20' : 'hover:shadow-blue-500/10'
+            } flex flex-col justify-between`}
           >
             {/* Red Visual Pushpin */}
             <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center justify-center pointer-events-none z-10">
@@ -284,20 +316,28 @@ export const Corkboard: React.FC<CorkboardProps> = ({
           rotation: 0,
         };
 
+        const isDragging = draggingId === note.id;
         return (
           <div
             key={note.id}
             onPointerDown={(e) => handlePointerDown(e, note.id, 'note', pos)}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
             style={{
               position: 'absolute',
               left: `${pos.xRatio * 100}%`,
               top: `${pos.yRatio * 100}%`,
               width: `${Math.max(240, pos.wRatio * 1000)}px`,
-              transform: `rotate(${pos.rotation}deg)`,
+              transform: `rotate(${pos.rotation}deg) ${isDragging ? 'scale(1.04)' : 'scale(1)'}`,
               backgroundColor: note.bgColor || '#fef08a',
-              zIndex: draggingId === note.id ? 50 : pos.zIndex,
+              zIndex: isDragging ? 50 : pos.zIndex,
+              touchAction: 'none',
+              WebkitTouchCallout: 'none',
+              transition: isDragging ? 'none' : 'box-shadow 0.2s, transform 0.15s ease-out',
             }}
-            className="group rounded-2xl p-5 shadow-2xl text-gray-900 cursor-grab active:cursor-grabbing border border-black/10 transition-shadow hover:shadow-yellow-500/10 flex flex-col justify-between"
+            className={`group rounded-2xl p-5 shadow-2xl text-gray-900 cursor-grab active:cursor-grabbing border border-black/10 touch-none select-none transition-shadow ${
+              isDragging ? 'ring-2 ring-blue-500/70 shadow-2xl' : 'hover:shadow-yellow-500/10'
+            } flex flex-col justify-between`}
           >
             {/* Red Visual Pushpin */}
             <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center justify-center pointer-events-none">
