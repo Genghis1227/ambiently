@@ -3,25 +3,36 @@
 > Modern, ambient smart-display and command center Progressive Web App (PWA) under the Trinhism ecosystem, designed as a self-hosted, local-first alternative to commercial display services (Mango Display, DAKboard, Skylight).
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPLv3-blue.svg)](LICENSE)
+[![Release](https://img.shields.io/badge/Release-v0.0.5-cyan.svg)](CHANGELOG.md)
+
+![Ambiently Banner](public/og-banner.png)
 
 ---
 
-## 🌟 Overview
+## 📚 Project Documentation
 
-**Ambiently** transforms any wall-mounted monitor, desk display, tablet, or spare TV into a clean, always-on smart command center. 
+* **[Features & Capabilities Reference (FEATURES.md)](FEATURES.md)** — Comprehensive breakdown of widgets, layout modes, photo frames, and mobile companion.
+* **[System Architecture (ARCHITECTURE.md)](ARCHITECTURE.md)** — Local-first persistence engine, Cloudflare edge workers, resolution scaling, and Supabase cloud sync.
+* **[Changelog (CHANGELOG.md)](CHANGELOG.md)** — Semantic version history and release notes.
+* **[Developer Workflow (DEVELOPER_WORKFLOW.md)](DEVELOPER_WORKFLOW.md)** — Standard Trinhism contributor protocols and git branch sequence.
 
-### Key Highlights
-* **⚡ 0ms Offline-First Boot:** Runs entirely out of client-side browser storage (IndexedDB via Dexie.js). Never shows a blank screen if your home Wi-Fi drops.
-* **💾 Local File Auto-Sync:** Direct integration with the browser File System Access API to auto-save and mirror state to a local `ambiently-data.json` file.
+---
+
+## 🌟 Highlights
+
+* **⚡ 0ms Offline-First Boot:** Runs entirely out of client-side browser storage (IndexedDB via Dexie.js). Never shows a blank screen if home Wi-Fi drops.
+* **💾 Local File Auto-Sync:** Direct integration with the browser File System Access API to auto-save and mirror state directly to a local `ambiently-data.json` file.
 * **🎛️ Dual-Mode Layout Engine:**
   * **Snapped Bento Grid:** Responsive 12×8 zero-scrollbar grid engineered for ambient landscape and portrait displays.
   * **Freeform Corkboard:** Dynamic pinboard with free floating coordinates (`x, y`), rotation, layering (`z-index`), and resize controls.
+* **📱 Mobile Companion Remote:** Automatically detects smartphone viewports (`< 768px`) to provide an instant task adder, checklist completion feed, and remote tab switcher.
+* **🖼️ Multi-Source Photo Frame:** 4 display styles (Ken Burns, 4-quadrant mosaic, angled Polaroid stack, and scrolling filmstrip) supporting local folders and Unsplash photography with offline Cache Storage API resilience.
+* **📅 Multi-Calendar Feeds:** Unified chronological agenda & monthly grid parsing multiple `webcal://` and `.ics` feeds with per-calendar color tags via Cloudflare edge workers.
 * **🔒 Kiosk Security & Hardware Polish:**
   * Screen Wake Lock API & Fullscreen Mode.
   * Scheduled Night Mode with low-glow, pixel-shifting OLED clock to prevent screen burn-in.
-  * Kid-Proof PIN lock with lightweight challenge reset.
-* **📱 Mobile Companion Mode:** Automatic responsive viewport adaptation for managing notes, switching tabs, and checking agenda on the go.
-* **📅 Multi-Calendar Feeds:** Unified chronological agenda & monthly grid parsing multiple `webcal://` / `.ics` feeds with per-calendar color tags.
+  * Kid-Proof PIN lock with a 4-second hold parent challenge.
+  * Display Density slider (`75%` to `150%`) for 1080p, 1440p, and 4K displays.
 
 ---
 
@@ -60,25 +71,16 @@ Visit `http://localhost:5173` to view Ambiently in your browser.
 
 ---
 
-## 🗺️ Roadmap & Milestones
+## ☁️ Supabase Cloud Sync Setup (Optional)
 
-- [ ] **Phase 1: Foundation, Local-First Engine & Kiosk App Shell** (Current)
-  - Normalized Dexie/Zustand schema + Device Vault
-  - Navigation Dock (Top/Bottom/Left/Right) & Automated Carousel
-  - 12×8 Bento Grid & Freeform Corkboard
-  - Fullscreen, Wake Lock, Night Mode & PIN Pad
-- [ ] **Phase 2: Core Direct-API Widgets**
-  - Sticky Notes Board (Rich text, Checklists, Giphy, Expiration timers, Trash drawer)
-  - Open-Meteo Weather & Multi-Face Clock (Digital, Flip, Analog)
-  - Event Countdown & Scheduled Quotes
-- [ ] **Phase 3: Cloudflare Edge Proxy, Multi-Calendar & RSS**
-  - `/functions/api/ical` and `/functions/api/rss`
-  - Color-coded multi-calendar feeds (Agenda & Monthly Grid)
-- [ ] **Phase 4: Multi-Source Photo Frame**
-  - 4 Display Styles (Ken Burns, Mosaic, Polaroids, Filmstrip)
-  - 4 Photo Sources (Plex OAuth, Google Drive, Local Folder, Curated Art)
-  - Offline Cache API (30–50 photos)
-- [ ] **Phase 5: Mobile Companion Mode & Supabase Cloud Sync**
+To enable multi-device sync across phones and displays:
+
+1. Create a free project at [supabase.com](https://supabase.com).
+2. Run the SQL schema located in [`supabase/schema.sql`](supabase/schema.sql) in the Supabase SQL Editor.
+3. Configure the environment variables in Cloudflare Pages (**Settings -> Environment variables**):
+   * `VITE_SUPABASE_URL` = `https://your-project.supabase.co`
+   * `VITE_SUPABASE_ANON_KEY` = `your-supabase-publishable-or-anon-key`
+4. In Ambiently Settings, sign in via Magic Link and click **Sync to Cloud**.
 
 ---
 
