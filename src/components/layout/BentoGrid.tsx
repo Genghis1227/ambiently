@@ -77,7 +77,6 @@ export const BentoGrid: React.FC<BentoGridProps> = ({
               <PhotoFrameWidget
                 initialStyle={widget.config?.displayStyle || 'ken_burns'}
                 rotationIntervalSec={widget.config?.rotationIntervalSec || 15}
-                showOverlay={widget.config?.showOverlay ?? true}
               />
             ) : null}
           </div>

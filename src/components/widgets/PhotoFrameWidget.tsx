@@ -15,30 +15,20 @@ import {
 interface PhotoFrameWidgetProps {
   initialStyle?: PhotoDisplayStyle;
   rotationIntervalSec?: number;
-  showOverlay?: boolean;
 }
 
 export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   initialStyle = 'ken_burns',
   rotationIntervalSec = 15,
-  showOverlay = true,
 }) => {
   const [style, setStyle] = useState<PhotoDisplayStyle>(initialStyle);
   const [photos, setPhotos] = useState<PhotoItem[]>(CURATED_AMBIENT_PHOTOS);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [currentTime, setCurrentTime] = useState(new Date());
 
   // Cache photos on mount for 0ms offline fallback
   useEffect(() => {
     cachePhotosLocally(photos);
   }, [photos]);
-
-  // Clock overlay tick
-  useEffect(() => {
-    if (!showOverlay) return;
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, [showOverlay]);
 
   // Slideshow auto-rotation
   useEffect(() => {
@@ -181,22 +171,12 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
         </div>
       </div>
 
-      {/* Subtle Bottom Ambient Clock & Date Overlay */}
-      {showOverlay && style === 'ken_burns' && (
-        <div className="relative z-10 p-4 flex items-end justify-between text-white pointer-events-none drop-shadow-lg">
-          <div>
-            <div className="text-3xl md:text-4xl font-light font-mono tracking-tight">
-              {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </div>
-            <div className="text-xs text-gray-300 font-medium">
-              {currentTime.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })}
-            </div>
+      {/* Subtle Bottom Photo Attribution */}
+      {currentPhoto.author && (
+        <div className="relative z-10 p-3 flex items-end justify-end text-white pointer-events-none drop-shadow-lg">
+          <div className="text-[11px] text-gray-400 text-right bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full border border-white/10">
+            Photo: <span className="text-gray-200 font-medium">{currentPhoto.author}</span>
           </div>
-          {currentPhoto.author && (
-            <div className="text-[11px] text-gray-400 text-right">
-              Photo: <span className="text-gray-200">{currentPhoto.author}</span>
-            </div>
-          )}
         </div>
       )}
     </div>
