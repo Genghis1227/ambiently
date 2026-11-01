@@ -116,7 +116,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
       <div className={`flex items-center gap-1.5 ${isVertical ? 'flex-col' : 'flex-row'}`}>
         <button
           onClick={onConnectFile}
-          title={hasFileBound ? 'Local file auto-sync active' : 'Click to bind local ambiently-data.json'}
+          title={hasFileBound ? 'PC Auto-Backup: Active' : 'Auto-Backup to PC (Optional)'}
           className={`relative flex items-center justify-center w-10 h-10 rounded-xl transition-all ${
             hasFileBound
               ? 'text-emerald-400 hover:bg-emerald-500/10'
@@ -124,9 +124,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
           }`}
         >
           <FolderSync className="w-4 h-4" />
-          {!hasFileBound && (
-            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-          )}
+          
         </button>
 
         <button

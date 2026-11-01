@@ -6,6 +6,7 @@ import { Corkboard } from './components/layout/Corkboard';
 import { PinOverlay } from './components/kiosk/PinOverlay';
 import { NightMode } from './components/kiosk/NightMode';
 import { SettingsModal } from './components/settings/SettingsModal';
+import { LocalBackupModal } from './components/kiosk/LocalBackupModal';
 import { MobileCompanion } from './components/mobile/MobileCompanion';
 import { openLocalFileBinding } from './services/fileSync';
 import { subscribeToRealtimeBoard, joinBoardByCode } from './services/supabase';
@@ -32,6 +33,7 @@ export function App() {
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
   const [hasFileBound, setHasFileBound] = useState(false);
   const syncRemoteNoteChange = useDashboardStore((s) => s.syncRemoteNoteChange);
 
@@ -216,7 +218,7 @@ export function App() {
         onToggleNightMode={toggleNightModeManual}
         onToggleFullscreen={handleToggleFullscreen}
         isFullscreen={isFullscreen}
-        onConnectFile={handleConnectFile}
+        onConnectFile={() => setIsBackupModalOpen(true)}
         hasFileBound={hasFileBound}
       />
 
@@ -235,6 +237,14 @@ export function App() {
           onForgotChallenge={() => unlockKiosk('')}
         />
       )}
+
+      {/* Local Backup Info Modal */}
+      <LocalBackupModal
+        isOpen={isBackupModalOpen}
+        hasFileBound={hasFileBound}
+        onClose={() => setIsBackupModalOpen(false)}
+        onSelectLocation={handleConnectFile}
+      />
 
       {/* Settings Modal */}
       <SettingsModal
