@@ -323,9 +323,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               </div>
             </div>
 
-            {/* Support & Donate Panel */}
-            <SupportPanel />
-
             {/* Cloud SaaS Sync Section */}
             <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800">
               <div className="flex items-center justify-between mb-2">
@@ -496,6 +493,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 <span className="text-xs text-emerald-400 mt-2 block">PIN successfully set!</span>
               )}
             </div>
+
+            {/* Support & Donate Panel */}
+            <SupportPanel />
 
             {/* Danger Zone: Factory Reset */}
             <div className="p-4 rounded-xl bg-red-950/20 border border-red-500/20 space-y-3">
