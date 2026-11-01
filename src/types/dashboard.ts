@@ -4,6 +4,8 @@ export type LayoutMode = 'grid' | 'freeform';
 
 export type WidgetType =
   | 'clock_weather'
+  | 'clock'
+  | 'weather'
   | 'sticky_notes'
   | 'photo_frame'
   | 'calendar'
