@@ -60,6 +60,19 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
     <nav
       className={`fixed z-30 flex items-center gap-2 p-2 rounded-2xl bg-gray-900/80 backdrop-blur-xl border border-gray-800/90 shadow-2xl transition-all ${positionClasses}`}
     >
+      {/* Brand Icon */}
+      <div className="flex items-center justify-center p-1">
+        <img
+          src="/logo.png"
+          alt="Ambiently"
+          className="w-7 h-7 rounded-lg object-cover shadow-sm border border-gray-700/60"
+        />
+      </div>
+
+      <div
+        className={`bg-gray-800 ${isVertical ? 'w-6 h-px my-0.5' : 'h-6 w-px mx-0.5'}`}
+      />
+
       {/* Tab Switcher Icons */}
       <div className={`flex items-center gap-1.5 ${isVertical ? 'flex-col' : 'flex-row'}`}>
         {tabs.map((tab) => {

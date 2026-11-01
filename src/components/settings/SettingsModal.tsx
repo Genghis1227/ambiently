@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Lock, Shield, Sparkles, FolderSync } from 'lucide-react';
+import { X, Lock, Shield, FolderSync } from 'lucide-react';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { openLocalFileBinding } from '../../services/fileSync';
 
@@ -46,9 +46,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
       <div className="w-full max-w-xl rounded-2xl bg-gray-900 border border-gray-800 p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-gray-800 pb-4 mb-6">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-blue-400" />
-            <h2 className="text-lg font-bold text-white">Ambiently Settings</h2>
+          <div className="flex items-center gap-3">
+            <img src="/logo.png" alt="Ambiently" className="w-8 h-8 rounded-lg shadow-sm" />
+            <div>
+              <h2 className="text-base font-bold text-white leading-tight">Ambiently Command Center</h2>
+              <p className="text-[11px] text-gray-400">dashboard.trinhism.com</p>
+            </div>
           </div>
           <button
             onClick={onClose}
