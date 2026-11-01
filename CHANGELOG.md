@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.0.10] - 2026-11-01
+
+### Fixed
+* **Mobile & Tablet Touch Dragging:**
+  * Added `touch-action: none` and `-webkit-touch-callout: none` to prevent mobile browsers (iOS Safari, Android Chrome) from intercepting touch gestures as scrolling or zooming.
+  * Corrected local container coordinate offsets `(e.clientX - rect.left)` and `(e.clientY - rect.top)` for precise 1:1 finger tracking.
+  * Bound pointer capture to card containers (`e.currentTarget`) to eliminate sub-element text selection glitches.
+  * Disabled CSS transitions during active dragging for fluid 60fps/120fps movement without input latency.
+
+---
+
 ## [0.0.9] - 2026-11-01
 
 ### Added
