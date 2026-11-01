@@ -4,6 +4,8 @@ import { ClockWeatherWidget } from '../widgets/ClockWeatherWidget';
 import { CountdownWidget } from '../widgets/CountdownWidget';
 import { QuotesWidget } from '../widgets/QuotesWidget';
 import { StickyNotesWidget } from '../widgets/StickyNotesWidget';
+import { CalendarWidget } from '../widgets/CalendarWidget';
+import { RssWidget } from '../widgets/RssWidget';
 
 interface BentoGridProps {
   widgets: DashboardWidget[];
@@ -63,6 +65,16 @@ export const BentoGrid: React.FC<BentoGridProps> = ({
                 onUpdateNote={onUpdateNote}
                 onDeleteNote={onDeleteNote}
               />
+            ) : widget.type === 'calendar' ? (
+              <CalendarWidget
+                sources={widget.config?.sources}
+                defaultView={widget.config?.defaultView}
+              />
+            ) : widget.type === 'rss' ? (
+              <RssWidget
+                feedUrl={widget.config?.feedUrl}
+                displayMode={widget.config?.displayMode}
+              />
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center text-center p-4 rounded-xl bg-gray-950/40 border border-gray-800/40">
                 <span className="text-2xl mb-1">🖼️</span>
@@ -76,4 +88,3 @@ export const BentoGrid: React.FC<BentoGridProps> = ({
     </div>
   );
 };
-
