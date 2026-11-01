@@ -216,13 +216,17 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             </div>
 
             {/* Note Bottom Actions */}
-            <div className="flex items-center justify-end pt-3 border-t border-black/5 mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex items-center justify-end pt-2 border-t border-black/10 mt-2 opacity-50 group-hover:opacity-100 transition-opacity">
               <button
-                onClick={() => onDeleteNote(note.id)}
-                className="p-1 rounded text-gray-600 hover:text-red-700 hover:bg-black/5 transition-all"
-                title="Archive note"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteNote(note.id);
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="p-1.5 rounded-lg text-gray-600 hover:text-red-700 hover:bg-black/10 transition-all cursor-pointer"
+                title="Delete note"
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                <Trash2 className="w-4 h-4" />
               </button>
             </div>
           </div>
