@@ -194,6 +194,9 @@ export function App() {
             notes={tabNotes.length > 0 ? tabNotes : notes}
             dockPaddingClass={dockPaddingClasses}
             onUpdateNotePos={updateNotePosition}
+            onAddNote={addNote}
+            onUpdateNote={updateNote}
+            onDeleteNote={deleteNote}
           />
         ) : (
           <BentoGrid
