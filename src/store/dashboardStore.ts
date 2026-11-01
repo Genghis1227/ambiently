@@ -44,6 +44,9 @@ interface DashboardState {
   saveLocalBackup: () => Promise<void>;
   
   // Widget / Note operations
+  addNote: (note: Partial<StickyNoteItem>) => Promise<void>;
+  updateNote: (noteId: string, updates: Partial<StickyNoteItem>) => Promise<void>;
+  deleteNote: (noteId: string) => Promise<void>;
   updateWidgetPosition: (
     widgetId: string,
     gridPos?: DashboardWidget['gridPos'],
@@ -205,6 +208,64 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       widgets: state.widgets,
       notes: state.notes,
     });
+  },
+
+  addNote: async (newNote) => {
+    const note: StickyNoteItem = {
+      id: newNote.id || `note-${Date.now()}`,
+      tabId: newNote.tabId || get().activeTabId,
+      widgetId: newNote.widgetId,
+      title: newNote.title,
+      content: newNote.content || '',
+      isChecklist: Boolean(newNote.isChecklist),
+      checklistItems: newNote.checklistItems,
+      bgColor: newNote.bgColor || '#fef08a',
+      fontSize: newNote.fontSize || 'base',
+      expiresAt: newNote.expiresAt,
+      freeformPos: newNote.freeformPos || {
+        xRatio: 0.15 + Math.random() * 0.2,
+        yRatio: 0.15 + Math.random() * 0.2,
+        wRatio: 0.3,
+        hRatio: 0.35,
+        zIndex: 10,
+        rotation: Math.floor(Math.random() * 6) - 3,
+      },
+      updated_at: new Date().toISOString(),
+    };
+    await db.notes.put(note);
+    set({ notes: [note, ...get().notes] });
+    get().saveLocalBackup();
+  },
+
+  updateNote: async (noteId, updates) => {
+    const existing = get().notes.find((n) => n.id === noteId);
+    if (!existing) return;
+    const updated: StickyNoteItem = {
+      ...existing,
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+    await db.notes.put(updated);
+    set({
+      notes: get().notes.map((n) => (n.id === noteId ? updated : n)),
+    });
+    get().saveLocalBackup();
+  },
+
+  deleteNote: async (noteId) => {
+    const existing = get().notes.find((n) => n.id === noteId);
+    if (!existing) return;
+    // Soft delete to archive
+    const updated: StickyNoteItem = {
+      ...existing,
+      archivedAt: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    await db.notes.put(updated);
+    set({
+      notes: get().notes.map((n) => (n.id === noteId ? updated : n)),
+    });
+    get().saveLocalBackup();
   },
 
   updateWidgetPosition: async (widgetId, gridPos, freeformPos) => {

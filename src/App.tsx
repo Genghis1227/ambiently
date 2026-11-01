@@ -22,6 +22,9 @@ export function App() {
     isUnlocked,
     toggleNightModeManual,
     updateNotePosition,
+    addNote,
+    updateNote,
+    deleteNote,
     saveLocalBackup,
   } = useDashboardStore();
 
@@ -142,7 +145,11 @@ export function App() {
       ) : (
         <BentoGrid
           widgets={tabWidgets.length > 0 ? tabWidgets : widgets}
+          notes={notes}
           dockPaddingClass={dockPaddingClasses}
+          onAddNote={addNote}
+          onUpdateNote={updateNote}
+          onDeleteNote={deleteNote}
         />
       )}
 
