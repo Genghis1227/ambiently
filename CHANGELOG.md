@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.0.9] - 2026-11-01
+
+### Added
+* **Plex Media Server OAuth & Streaming:**
+  * Automated Plex PIN generation (`plex.tv/api/v2/pins`), pairing status polling, and secure token vault storage (`db.vault`).
+  * Kiosk-friendly 4-character code and QR code pointing to `plex.tv/link` for fast mobile authorization.
+  * Discovers servers and filters secure `plex.direct` HTTPS endpoints to avoid browser mixed-content restrictions.
+  * Photo library enumeration and high-resolution photo transcode streaming into the slideshow.
+* **Universal 1-Click JSON Backup & Restore Hub:**
+  * Added 1-click **Download Backup (`.json`)** working across all desktop and mobile browsers.
+  * Added 1-click **Upload & Restore (`.json`)** to restore all customized tabs, widgets, notes, and layouts into local IndexedDB (`AmbientlyDB`).
+* **Danger Zone Factory Reset:**
+  * Added two-step confirmation Factory Reset button in Settings Modal to wipe local databases, photo caches, and credentials.
+* **Dedicated Standalone Weather Widget (`WeatherWidget.tsx`):**
+  * Decoupled weather from the clock tile into a dedicated card with current temperature, condition icon, humidity, wind, high/low, and a 5-day daily forecast strip powered by Open-Meteo.
+* **Dedicated Standalone Clock Widget (`ClockWidget.tsx`):**
+  * Clean, focused ambient clock display with date and live seconds.
+* **Visual Widget Catalog & Manager (`AddWidgetModal.tsx`):**
+  * Added `+` button in the dock and `+ Add Tile` button on the Family Board to add any widget.
+  * Added widget removal controls (`🗑️`) on tile hover.
+* **Photo Sources Hub Modal (`PhotoSourcesModal.tsx`):**
+  * Replaced the hidden folder icon with a prominent **Sources** button on the photo frame header supporting Plex, Local Folders, Google Drive links, and Curated presets.
+* **Family Board Note Creator & Touch-Friendly Deletion:**
+  * Added floating `+ Pin New Note` creator modal and made note deletion buttons permanently visible for touch and kiosk displays.
+
+### Fixed
+* **Redundant Photo Tile Time Overlay:** Stripped digital clock overlay from the ambient photo frame so it no longer duplicates the main Clock & Weather widget beside it.
+
+---
+
 ## [0.0.8] - 2026-11-01
 
 ### Added

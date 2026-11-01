@@ -6,7 +6,9 @@ import { Corkboard } from './components/layout/Corkboard';
 import { PinOverlay } from './components/kiosk/PinOverlay';
 import { NightMode } from './components/kiosk/NightMode';
 import { SettingsModal } from './components/settings/SettingsModal';
+import { LocalBackupModal } from './components/kiosk/LocalBackupModal';
 import { MobileCompanion } from './components/mobile/MobileCompanion';
+import { AddWidgetModal } from './components/widgets/AddWidgetModal';
 import { openLocalFileBinding } from './services/fileSync';
 import { subscribeToRealtimeBoard, joinBoardByCode } from './services/supabase';
 
@@ -24,14 +26,18 @@ export function App() {
     isUnlocked,
     toggleNightModeManual,
     updateNotePosition,
+    updateWidgetPosition,
+    addWidget,
+    removeWidget,
     addNote,
     updateNote,
     deleteNote,
-    saveLocalBackup,
   } = useDashboardStore();
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
+  const [isAddWidgetOpen, setIsAddWidgetOpen] = useState(false);
   const [hasFileBound, setHasFileBound] = useState(false);
   const syncRemoteNoteChange = useDashboardStore((s) => s.syncRemoteNoteChange);
 
@@ -75,48 +81,17 @@ export function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Screen Wake Lock API integration
-  useEffect(() => {
-    let wakeLock: any = null;
-    const requestWakeLock = async () => {
-      try {
-        if ('wakeLock' in navigator && settings.wakeLockEnabled) {
-          wakeLock = await (navigator as any).wakeLock.request('screen');
-        }
-      } catch (err) {
-        console.warn('Screen wake lock error:', err);
-      }
-    };
-    requestWakeLock();
-
-    return () => {
-      if (wakeLock) {
-        wakeLock.release().catch(() => {});
-      }
-    };
-  }, [settings.wakeLockEnabled]);
-
-  // Automated Tab Carousel
-  useEffect(() => {
-    if (!settings.carouselEnabled || tabs.length <= 1) return;
-
-    const currentTab = tabs.find((t) => t.id === activeTabId);
-    const duration = (currentTab?.autoRotateDurationSec || settings.defaultRotateDurationSec) * 1000;
-
-    const timer = setInterval(() => {
-      const currentIndex = tabs.findIndex((t) => t.id === activeTabId);
-      const nextIndex = (currentIndex + 1) % tabs.length;
-      setActiveTabId(tabs[nextIndex].id);
-    }, duration);
-
-    return () => clearInterval(timer);
-  }, [settings.carouselEnabled, settings.defaultRotateDurationSec, tabs, activeTabId, setActiveTabId]);
-
   const handleToggleFullscreen = () => {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+      document.documentElement.requestFullscreen().catch((err) => {
+        console.warn('Error attempting to enable fullscreen:', err.message);
+      });
+      setIsFullscreen(true);
     } else {
-      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+        setIsFullscreen(false);
+      }
     }
   };
 
@@ -124,16 +99,60 @@ export function App() {
     const res = await openLocalFileBinding();
     if (res.success) {
       setHasFileBound(true);
-      await saveLocalBackup();
     }
   };
 
+  // Screen Wake Lock API for always-on ambient smart display
+  useEffect(() => {
+    let wakeLock: any = null;
+    const requestWakeLock = async () => {
+      if ('wakeLock' in navigator && settings.wakeLockEnabled) {
+        try {
+          wakeLock = await (navigator as any).wakeLock.request('screen');
+        } catch (err: any) {
+          console.warn('Wake Lock request error:', err.message);
+        }
+      }
+    };
+
+    requestWakeLock();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        requestWakeLock();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (wakeLock) {
+        wakeLock.release().catch(() => {});
+      }
+    };
+  }, [settings.wakeLockEnabled]);
+
+  // Tab auto-carousel rotation
+  useEffect(() => {
+    if (!settings.carouselEnabled || tabs.length <= 1) return;
+
+    const currentTab = tabs.find((t) => t.id === activeTabId);
+    const duration = currentTab?.autoRotateDurationSec || settings.defaultRotateDurationSec || 30;
+
+    const interval = setInterval(() => {
+      const currentIndex = tabs.findIndex((t) => t.id === activeTabId);
+      const nextIndex = (currentIndex + 1) % tabs.length;
+      setActiveTabId(tabs[nextIndex].id);
+    }, duration * 1000);
+
+    return () => clearInterval(interval);
+  }, [settings.carouselEnabled, settings.defaultRotateDurationSec, tabs, activeTabId, setActiveTabId]);
+
   if (!isInitialized) {
     return (
-      <div className="w-screen h-screen flex items-center justify-center bg-[#090d16] text-white">
+      <div className="flex h-screen w-screen items-center justify-center bg-gray-950 text-white font-sans">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm font-medium text-gray-400">Loading Ambiently...</span>
+          <p className="text-sm font-medium text-gray-400">Loading Ambiently Display...</p>
         </div>
       </div>
     );
@@ -190,8 +209,15 @@ export function App() {
         {activeTab?.layoutMode === 'freeform' ? (
           <Corkboard
             notes={tabNotes.length > 0 ? tabNotes : notes}
+            widgets={tabWidgets}
             dockPaddingClass={dockPaddingClasses}
             onUpdateNotePos={updateNotePosition}
+            onUpdateWidgetPos={updateWidgetPosition}
+            onAddNote={addNote}
+            onUpdateNote={updateNote}
+            onDeleteNote={deleteNote}
+            onRemoveWidget={removeWidget}
+            onOpenAddWidget={() => setIsAddWidgetOpen(true)}
           />
         ) : (
           <BentoGrid
@@ -201,6 +227,7 @@ export function App() {
             onAddNote={addNote}
             onUpdateNote={updateNote}
             onDeleteNote={deleteNote}
+            onRemoveWidget={removeWidget}
           />
         )}
       </div>
@@ -216,8 +243,9 @@ export function App() {
         onToggleNightMode={toggleNightModeManual}
         onToggleFullscreen={handleToggleFullscreen}
         isFullscreen={isFullscreen}
-        onConnectFile={handleConnectFile}
+        onConnectFile={() => setIsBackupModalOpen(true)}
         hasFileBound={hasFileBound}
+        onOpenAddWidget={() => setIsAddWidgetOpen(true)}
       />
 
       {/* Night Mode Screen Overlay */}
@@ -235,6 +263,22 @@ export function App() {
           onForgotChallenge={() => unlockKiosk('')}
         />
       )}
+
+      {/* Local Backup Info Modal */}
+      <LocalBackupModal
+        isOpen={isBackupModalOpen}
+        hasFileBound={hasFileBound}
+        onClose={() => setIsBackupModalOpen(false)}
+        onSelectLocation={handleConnectFile}
+      />
+
+      {/* Add Widget Catalog Modal */}
+      <AddWidgetModal
+        isOpen={isAddWidgetOpen}
+        onClose={() => setIsAddWidgetOpen(false)}
+        activeTabId={activeTab?.id || 'tab-overview'}
+        onAddWidget={addWidget}
+      />
 
       {/* Settings Modal */}
       <SettingsModal

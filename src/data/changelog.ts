@@ -5,9 +5,25 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.0.8';
+export const APP_VERSION = '0.0.9';
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.0.9",
+    date: "November 1, 2026",
+    title: "Plex OAuth Photo Streamer, Standalone Weather & Universal Backup Hub",
+    highlights: [
+      "Plex Media Server OAuth PIN flow & high-res photo library streaming with secure HTTPS connections.",
+      "Universal 1-Click JSON Backup & Restore Hub supporting all desktop and mobile browsers.",
+      "Danger Zone Factory Reset with two-step confirmation safeguard.",
+      "Dedicated Standalone Weather Widget with 5-day daily forecast strip via Open-Meteo.",
+      "Dedicated Standalone Clock Widget for minimalist ambient time display.",
+      "Visual Widget Catalog (+ Add Tile) to add or remove any widget on Overview or Family Board.",
+      "Prominent Photo Sources Hub modal supporting Plex, Local Folders, Google Drive, and Curated Presets.",
+      "Family Board note creation, interactive checklist toggles, and discoverable delete controls.",
+      "Removed redundant clock overlay from ambient photo frame tile.",
+    ],
+  },
   {
     version: "v0.0.8",
     date: "November 1, 2026",

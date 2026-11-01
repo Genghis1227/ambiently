@@ -2,63 +2,56 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Image as ImageIcon,
-  FolderOpen,
+  Sliders,
 } from 'lucide-react';
 import {
   CURATED_AMBIENT_PHOTOS,
-  pickLocalPhotoDirectory,
   cachePhotosLocally,
   type PhotoItem,
   type PhotoDisplayStyle,
 } from '../../services/photos';
+import { PhotoSourcesModal } from '../photos/PhotoSourcesModal';
 
 interface PhotoFrameWidgetProps {
   initialStyle?: PhotoDisplayStyle;
   rotationIntervalSec?: number;
-  showOverlay?: boolean;
 }
 
 export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   initialStyle = 'ken_burns',
   rotationIntervalSec = 15,
-  showOverlay = true,
 }) => {
   const [style, setStyle] = useState<PhotoDisplayStyle>(initialStyle);
+  const [intervalSec, setIntervalSec] = useState<number>(rotationIntervalSec);
   const [photos, setPhotos] = useState<PhotoItem[]>(CURATED_AMBIENT_PHOTOS);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [sourceLabel, setSourceLabel] = useState<string>('Curated');
+  const [isSourcesModalOpen, setIsSourcesModalOpen] = useState(false);
 
   // Cache photos on mount for 0ms offline fallback
   useEffect(() => {
     cachePhotosLocally(photos);
   }, [photos]);
 
-  // Clock overlay tick
-  useEffect(() => {
-    if (!showOverlay) return;
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, [showOverlay]);
-
   // Slideshow auto-rotation
   useEffect(() => {
     if (photos.length <= 1) return;
     const interval = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % photos.length);
-    }, rotationIntervalSec * 1000);
+    }, intervalSec * 1000);
     return () => clearInterval(interval);
-  }, [photos, rotationIntervalSec]);
-
-  const handlePickLocalFolder = async () => {
-    const res = await pickLocalPhotoDirectory();
-    if (res.success && res.photos.length > 0) {
-      setPhotos(res.photos);
-      setCurrentIndex(0);
-      cachePhotosLocally(res.photos);
-    }
-  };
+  }, [photos, intervalSec]);
 
   const currentPhoto = photos[currentIndex] || photos[0];
+
+  const handlePhotosLoaded = (newPhotos: PhotoItem[], sourceName: string) => {
+    if (newPhotos.length > 0) {
+      setPhotos(newPhotos);
+      setCurrentIndex(0);
+      setSourceLabel(sourceName);
+      cachePhotosLocally(newPhotos);
+    }
+  };
 
   return (
     <div className="relative w-full h-full rounded-2xl overflow-hidden select-none bg-black flex flex-col justify-between">
@@ -72,7 +65,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
               animate={{ scale: 1.15, opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{
-                scale: { duration: rotationIntervalSec + 3, ease: 'linear' },
+                scale: { duration: intervalSec + 3, ease: 'linear' },
                 opacity: { duration: 1.2 },
               }}
               style={{
@@ -151,14 +144,17 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
 
       {/* Ambient Top Controls & Style Switcher */}
       <div className="relative z-10 p-3 flex items-center justify-between text-white drop-shadow-md">
-        <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-2 py-1 rounded-full border border-white/10 text-xs">
+        <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-xs">
           <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
-          <span className="font-medium truncate max-w-[140px]">
-            {currentPhoto.caption || 'Photo Frame'}
+          <span className="font-medium truncate max-w-[130px]">
+            {currentPhoto.caption || sourceLabel}
+          </span>
+          <span className="text-[10px] text-gray-400 font-mono">
+            ({currentIndex + 1}/{photos.length})
           </span>
         </div>
 
-        {/* Quick Style Switcher & Source Trigger */}
+        {/* Quick Style Switcher & Prominent Sources Trigger */}
         <div className="flex items-center gap-1 bg-black/40 backdrop-blur-md p-1 rounded-full border border-white/10">
           {(['ken_burns', 'mosaic', 'polaroid', 'filmstrip'] as const).map((s) => (
             <button
@@ -172,33 +168,35 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
             </button>
           ))}
           <button
-            onClick={handlePickLocalFolder}
-            title="Select local photos folder"
-            className="p-1 rounded-full text-amber-300 hover:bg-white/10 transition-all ml-1"
+            onClick={() => setIsSourcesModalOpen(true)}
+            title="Configure Photo Sources (Plex, Local Folder, Web, Presets)"
+            className="flex items-center gap-1 px-2.5 py-0.5 text-[10px] rounded-full bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 font-semibold border border-amber-500/30 transition-all cursor-pointer ml-1"
           >
-            <FolderOpen className="w-3.5 h-3.5" />
+            <Sliders className="w-3 h-3" />
+            <span>Sources</span>
           </button>
         </div>
       </div>
 
-      {/* Subtle Bottom Ambient Clock & Date Overlay */}
-      {showOverlay && style === 'ken_burns' && (
-        <div className="relative z-10 p-4 flex items-end justify-between text-white pointer-events-none drop-shadow-lg">
-          <div>
-            <div className="text-3xl md:text-4xl font-light font-mono tracking-tight">
-              {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </div>
-            <div className="text-xs text-gray-300 font-medium">
-              {currentTime.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })}
-            </div>
+      {/* Subtle Bottom Photo Attribution */}
+      {currentPhoto.author && (
+        <div className="relative z-10 p-3 flex items-end justify-end text-white pointer-events-none drop-shadow-lg">
+          <div className="text-[11px] text-gray-400 text-right bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full border border-white/10">
+            Photo: <span className="text-gray-200 font-medium">{currentPhoto.author}</span>
           </div>
-          {currentPhoto.author && (
-            <div className="text-[11px] text-gray-400 text-right">
-              Photo: <span className="text-gray-200">{currentPhoto.author}</span>
-            </div>
-          )}
         </div>
       )}
+
+      {/* Dedicated Photo Sources Hub Modal */}
+      <PhotoSourcesModal
+        isOpen={isSourcesModalOpen}
+        onClose={() => setIsSourcesModalOpen(false)}
+        currentStyle={style}
+        onStyleChange={setStyle}
+        rotationIntervalSec={intervalSec}
+        onRotationIntervalChange={setIntervalSec}
+        onPhotosLoaded={handlePhotosLoaded}
+      />
     </div>
   );
 };

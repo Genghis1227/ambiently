@@ -1,6 +1,9 @@
 import React from 'react';
+import { Trash2 } from 'lucide-react';
 import type { DashboardWidget, StickyNoteItem } from '../../types/dashboard';
 import { ClockWeatherWidget } from '../widgets/ClockWeatherWidget';
+import { ClockWidget } from '../widgets/ClockWidget';
+import { WeatherWidget } from '../widgets/WeatherWidget';
 import { CountdownWidget } from '../widgets/CountdownWidget';
 import { QuotesWidget } from '../widgets/QuotesWidget';
 import { StickyNotesWidget } from '../widgets/StickyNotesWidget';
@@ -15,6 +18,7 @@ interface BentoGridProps {
   onAddNote: (note: Partial<StickyNoteItem>) => void;
   onUpdateNote: (noteId: string, updates: Partial<StickyNoteItem>) => void;
   onDeleteNote: (noteId: string) => void;
+  onRemoveWidget?: (widgetId: string) => void;
 }
 
 export const BentoGrid: React.FC<BentoGridProps> = ({
@@ -24,6 +28,7 @@ export const BentoGrid: React.FC<BentoGridProps> = ({
   onAddNote,
   onUpdateNote,
   onDeleteNote,
+  onRemoveWidget,
 }) => {
   return (
     <div
@@ -41,10 +46,36 @@ export const BentoGrid: React.FC<BentoGridProps> = ({
               gridRowStart: y + 1,
               gridRowEnd: `span ${h}`,
             }}
-            className="rounded-2xl bg-gray-900/60 backdrop-blur-md border border-gray-800/80 p-4 flex flex-col justify-between overflow-hidden shadow-lg transition-all hover:border-gray-700/80"
+            className="group relative rounded-2xl bg-gray-900/60 backdrop-blur-md border border-gray-800/80 p-4 flex flex-col justify-between overflow-hidden shadow-lg transition-all hover:border-gray-700/80"
           >
+            {/* Widget Remove Trigger on Hover */}
+            {onRemoveWidget && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemoveWidget(widget.id);
+                }}
+                title="Remove widget from dashboard"
+                className="absolute top-2 right-2 z-20 opacity-0 group-hover:opacity-100 p-1.5 rounded-lg bg-black/60 hover:bg-red-500/80 text-gray-400 hover:text-white backdrop-blur-sm border border-white/10 transition-all cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+
             {/* Real Interactive Widget Renderers */}
-            {widget.type === 'clock_weather' ? (
+            {widget.type === 'weather' ? (
+              <WeatherWidget
+                locationName={widget.config?.locationName}
+                latitude={widget.config?.latitude}
+                longitude={widget.config?.longitude}
+                unit={widget.config?.unit || 'F'}
+              />
+            ) : widget.type === 'clock' ? (
+              <ClockWidget
+                clockFace={widget.config?.clockFace || 'digital'}
+                showSeconds={widget.config?.showSeconds ?? true}
+              />
+            ) : widget.type === 'clock_weather' ? (
               <ClockWeatherWidget
                 locationName={widget.config?.locationName}
                 latitude={widget.config?.latitude}
@@ -77,7 +108,6 @@ export const BentoGrid: React.FC<BentoGridProps> = ({
               <PhotoFrameWidget
                 initialStyle={widget.config?.displayStyle || 'ken_burns'}
                 rotationIntervalSec={widget.config?.rotationIntervalSec || 15}
-                showOverlay={widget.config?.showOverlay ?? true}
               />
             ) : null}
           </div>

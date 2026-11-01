@@ -6,7 +6,7 @@ export interface PhotoItem {
   caption?: string;
   author?: string;
   date?: string;
-  source: 'curated' | 'local' | 'plex' | 'gdrive';
+  source: 'curated' | 'local' | 'plex' | 'gdrive' | 'web';
 }
 
 export type PhotoDisplayStyle = 'ken_burns' | 'mosaic' | 'polaroid' | 'filmstrip';
@@ -65,6 +65,9 @@ export async function cachePhotosLocally(photos: PhotoItem[]): Promise<void> {
     const cache = await caches.open(CACHE_NAME);
     const slice = photos.slice(0, 30);
     for (const photo of slice) {
+      if (photo.url.startsWith('blob:') || photo.url.startsWith('data:')) {
+        continue;
+      }
       const match = await cache.match(photo.url);
       if (!match) {
         // Fetch and cache without failing the app if network drops
@@ -118,4 +121,49 @@ export async function pickLocalPhotoDirectory(): Promise<{
     }
     return { success: false, photos: [], error: err.message };
   }
+}
+
+// Parse Google Drive share URLs into direct streamable image URLs
+export function parseGoogleDriveLink(rawUrl: string): string | null {
+  if (!rawUrl || !rawUrl.includes('drive.google.com')) return null;
+
+  // Pattern 1: /file/d/FILE_ID/
+  const matchFileD = rawUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (matchFileD && matchFileD[1]) {
+    return `https://lh3.googleusercontent.com/d/${matchFileD[1]}`;
+  }
+
+  // Pattern 2: id=FILE_ID
+  const matchIdParam = rawUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (matchIdParam && matchIdParam[1]) {
+    return `https://lh3.googleusercontent.com/d/${matchIdParam[1]}`;
+  }
+
+  return null;
+}
+
+// Parse freeform list of web / Google Drive URLs into PhotoItems
+export function parseWebPhotoUrls(text: string): PhotoItem[] {
+  if (!text.trim()) return [];
+
+  const lines = text
+    .split(/[\r\n,]+/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 5);
+
+  const items: PhotoItem[] = [];
+  lines.forEach((line, idx) => {
+    const gdriveResolved = parseGoogleDriveLink(line);
+    const finalUrl = gdriveResolved || line;
+    const isGdrive = !!gdriveResolved;
+
+    items.push({
+      id: `web-${idx}-${Date.now()}`,
+      url: finalUrl,
+      caption: isGdrive ? 'Google Drive Photo' : `Web Photo ${idx + 1}`,
+      source: isGdrive ? 'gdrive' : 'web',
+    });
+  });
+
+  return items;
 }

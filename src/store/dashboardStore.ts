@@ -47,6 +47,9 @@ interface DashboardState {
   syncRemoteNoteChange: (note: StickyNoteItem, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void;
   
   // Widget / Note operations
+  addWidget: (widget: Partial<DashboardWidget>) => Promise<void>;
+  removeWidget: (widgetId: string) => Promise<void>;
+  updateWidgetConfig: (widgetId: string, configUpdates: Record<string, any>) => Promise<void>;
   addNote: (note: Partial<StickyNoteItem>) => Promise<void>;
   updateNote: (noteId: string, updates: Partial<StickyNoteItem>) => Promise<void>;
   deleteNote: (noteId: string) => Promise<void>;
@@ -296,6 +299,62 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     await db.notes.put(updated);
     set({
       notes: get().notes.map((n) => (n.id === noteId ? updated : n)),
+    });
+    get().saveLocalBackup();
+  },
+
+  addWidget: async (partialWidget) => {
+    const id = partialWidget.id || 'widget-' + Date.now();
+    const newWidget: DashboardWidget = {
+      id,
+      tabId: partialWidget.tabId || get().activeTabId,
+      type: partialWidget.type || 'weather',
+      title: partialWidget.title || 'Widget',
+      gridPos: partialWidget.gridPos || { x: 0, y: 0, w: 4, h: 4 },
+      freeformPos: partialWidget.freeformPos || {
+        xRatio: 0.1 + Math.random() * 0.3,
+        yRatio: 0.1 + Math.random() * 0.3,
+        wRatio: 0.35,
+        hRatio: 0.45,
+        zIndex: 10,
+        rotation: 0,
+      },
+      config: partialWidget.config || {},
+      updated_at: new Date().toISOString(),
+    };
+    await db.widgets.put(newWidget);
+    set({
+      widgets: [...get().widgets, newWidget],
+    });
+    get().saveLocalBackup();
+  },
+
+  removeWidget: async (widgetId) => {
+    const existing = get().widgets.find((w) => w.id === widgetId);
+    if (!existing) return;
+    const updated: DashboardWidget = {
+      ...existing,
+      deleted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    await db.widgets.put(updated);
+    set({
+      widgets: get().widgets.filter((w) => w.id !== widgetId),
+    });
+    get().saveLocalBackup();
+  },
+
+  updateWidgetConfig: async (widgetId, configUpdates) => {
+    const existing = get().widgets.find((w) => w.id === widgetId);
+    if (!existing) return;
+    const updated: DashboardWidget = {
+      ...existing,
+      config: { ...existing.config, ...configUpdates },
+      updated_at: new Date().toISOString(),
+    };
+    await db.widgets.put(updated);
+    set({
+      widgets: get().widgets.map((w) => (w.id === widgetId ? updated : w)),
     });
     get().saveLocalBackup();
   },
