@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.0.6] - 2026-11-01
+
+### Added
+* **Interactive Changelog Modal (`ChangelogModal`):**
+  * Subtle version pills (`v0.0.6`) placed in the Settings Modal and Mobile Companion headers.
+  * Clicking the pill opens a modal with release history cards and a direct link to `CHANGELOG.md` on GitHub.
+* **Documentation Suite:**
+  * Created `CHANGELOG.md` following the Keep a Changelog standard.
+  * Created `FEATURES.md` covering all 10 core feature pillars.
+  * Created `ARCHITECTURE.md` documenting the local-first engine, edge proxy functions, and Supabase RLS sync.
+  * Enriched `README.md` with official banners and setup instructions.
+
+---
+
 ## [0.0.5] - 2026-11-01
 
 ### Added

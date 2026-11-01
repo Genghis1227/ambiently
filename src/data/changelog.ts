@@ -5,9 +5,20 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.0.5';
+export const APP_VERSION = '0.0.6';
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: 'v0.0.6',
+    date: 'November 1, 2026',
+    title: 'Documentation Suite & Changelog Modal',
+    highlights: [
+      'Added subtle, non-intrusive version tag buttons in Settings and Mobile Companion headers.',
+      'Implemented ChangelogModal displaying release notes, dates, and direct links to GitHub.',
+      'Created CHANGELOG.md, FEATURES.md, and ARCHITECTURE.md documentation suite.',
+      'Updated README.md with official banner and Supabase configuration guides.',
+    ],
+  },
   {
     version: 'v0.0.5',
     date: 'November 1, 2026',
