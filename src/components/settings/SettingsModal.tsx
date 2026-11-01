@@ -12,10 +12,17 @@ import {
   Compass,
   AlertTriangle,
   Trash2,
+  Download,
+  Upload,
 } from 'lucide-react';
 import { db } from '../../services/db';
 import { useDashboardStore } from '../../store/dashboardStore';
-import { openLocalFileBinding } from '../../services/fileSync';
+import {
+  openLocalFileBinding,
+  downloadBackupFile,
+  parseAndValidateBackup,
+  restoreBackupToDatabase,
+} from '../../services/fileSync';
 import {
   getCurrentUser,
   sendMagicLink,
@@ -61,6 +68,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [syncLoading, setSyncLoading] = useState(false);
   const [isConfirmingReset, setIsConfirmingReset] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [backupStatus, setBackupStatus] = useState<string>('');
+  const restoreFileRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -92,6 +101,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     } catch (err) {
       console.error('Factory reset error:', err);
       window.location.reload();
+    }
+  };
+
+  const handleExportBackup = () => {
+    downloadBackupFile(settings, tabs, widgets, notes);
+    setBackupStatus('Backup file downloaded.');
+    setTimeout(() => setBackupStatus(''), 3000);
+  };
+
+  const handleRestoreFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBackupStatus('Validating backup...');
+    const validation = await parseAndValidateBackup(file);
+    if (!validation.success || !validation.data) {
+      setBackupStatus(validation.error || 'Invalid backup file.');
+      return;
+    }
+    const res = await restoreBackupToDatabase(validation.data);
+    if (res.success) {
+      setBackupStatus('Restored! Reloading...');
+      setTimeout(() => window.location.reload(), 1000);
+    } else {
+      setBackupStatus(res.error || 'Failed to restore.');
     }
   };
   const handleSavePin = async () => {
@@ -361,23 +394,62 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               )}
             </div>
 
-            {/* Local File Sync */}
-            <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800 flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2 text-sm font-semibold text-white">
-                  <FolderSync className="w-4 h-4 text-emerald-400" />
-                  Local File Auto-Sync
+            {/* Local Backup & Restore Hub */}
+            <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                    <FolderSync className="w-4 h-4 text-emerald-400" />
+                    <span>Local Backup & Restore (No Cloud Needed)</span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Download a full JSON snapshot of your dashboard, restore an existing file, or auto-sync.
+                  </p>
                 </div>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  Save and auto-sync state directly to a local <code className="text-blue-400 font-mono">ambiently-data.json</code>
-                </p>
               </div>
-              <button
-                onClick={handleBindLocalFile}
-                className="py-2 px-3.5 rounded-lg bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 text-xs font-medium hover:bg-emerald-600/30 transition-all"
-              >
-                Bind File
-              </button>
+
+              {backupStatus && (
+                <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 text-xs font-medium">
+                  {backupStatus}
+                </div>
+              )}
+
+              <input
+                ref={restoreFileRef}
+                type="file"
+                accept=".json"
+                onChange={handleRestoreFile}
+                className="hidden"
+              />
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleExportBackup}
+                  className="py-2 px-3 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export Backup</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => restoreFileRef.current?.click()}
+                  className="py-2 px-3 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Restore from File</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleBindLocalFile}
+                  className="py-2 px-3 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <FolderSync className="w-3.5 h-3.5" />
+                  <span>PC Auto-Sync</span>
+                </button>
+              </div>
             </div>
 
             {/* Kid-Proof PIN Protection */}
