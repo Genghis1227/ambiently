@@ -6,6 +6,7 @@ import { QuotesWidget } from '../widgets/QuotesWidget';
 import { StickyNotesWidget } from '../widgets/StickyNotesWidget';
 import { CalendarWidget } from '../widgets/CalendarWidget';
 import { RssWidget } from '../widgets/RssWidget';
+import { PhotoFrameWidget } from '../widgets/PhotoFrameWidget';
 
 interface BentoGridProps {
   widgets: DashboardWidget[];
@@ -71,17 +72,14 @@ export const BentoGrid: React.FC<BentoGridProps> = ({
                 defaultView={widget.config?.defaultView}
               />
             ) : widget.type === 'rss' ? (
-              <RssWidget
-                feedUrl={widget.config?.feedUrl}
-                displayMode={widget.config?.displayMode}
+              <RssWidget feedUrl={widget.config?.feedUrl} />
+            ) : widget.type === 'photo_frame' ? (
+              <PhotoFrameWidget
+                initialStyle={widget.config?.displayStyle || 'ken_burns'}
+                rotationIntervalSec={widget.config?.rotationIntervalSec || 15}
+                showOverlay={widget.config?.showOverlay ?? true}
               />
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-center p-4 rounded-xl bg-gray-950/40 border border-gray-800/40">
-                <span className="text-2xl mb-1">🖼️</span>
-                <span className="text-xs font-semibold text-gray-300">{widget.title}</span>
-                <p className="text-[11px] text-gray-500 mt-1">Photo frame scheduled for Phase 4</p>
-              </div>
-            )}
+            ) : null}
           </div>
         );
       })}
