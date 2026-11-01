@@ -5,9 +5,21 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.0.9';
+export const APP_VERSION = '0.0.10';
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.0.10",
+    date: "November 1, 2026",
+    title: "Mobile & Tablet Touch Dragging Optimization",
+    highlights: [
+      "Fixed touch-drag gesture handling on mobile phones and tablets across iOS Safari and Android Chrome.",
+      "Added touch-action: none and WebKit touch callout suppression to prevent browser scroll interception.",
+      "Calibrated local container coordinate offsets for 1:1 finger tracking precision.",
+      "Disabled CSS transitions during active dragging for fluid 60fps/120fps zero-latency movement.",
+      "Isolated pointer capture to card containers to eliminate sub-element text selection.",
+    ],
+  },
   {
     version: "v0.0.9",
     date: "November 1, 2026",
