@@ -150,14 +150,38 @@ export function App() {
   }[settings.dockPosition];
 
   return (
-    <div
-      className="relative w-screen h-screen overflow-hidden bg-[#090d16] select-none"
-      style={{
-        transform: `scale(${settings.displayDensity})`,
-        transformOrigin: 'center center',
-      }}
-    >
-      {/* Navigation Dock */}
+    <div className="relative w-screen h-screen overflow-hidden bg-[#090d16] select-none">
+      {/* 
+        ISOLATED CANVAS SCALER:
+        Scale transform is applied ONLY to the board canvas.
+        The Navigation Dock and Modals remain pinned at true 100% viewport resolution,
+        preventing zoom traps!
+      */}
+      <div
+        className="w-full h-full origin-center transition-transform duration-200"
+        style={{
+          transform: `scale(${settings.displayDensity})`,
+        }}
+      >
+        {activeTab?.layoutMode === 'freeform' ? (
+          <Corkboard
+            notes={tabNotes.length > 0 ? tabNotes : notes}
+            dockPaddingClass={dockPaddingClasses}
+            onUpdateNotePos={updateNotePosition}
+          />
+        ) : (
+          <BentoGrid
+            widgets={tabWidgets.length > 0 ? tabWidgets : widgets}
+            notes={notes}
+            dockPaddingClass={dockPaddingClasses}
+            onAddNote={addNote}
+            onUpdateNote={updateNote}
+            onDeleteNote={deleteNote}
+          />
+        )}
+      </div>
+
+      {/* Navigation Dock - Pinned at Viewport Level */}
       <NavigationDock
         tabs={tabs}
         activeTabId={activeTab?.id || ''}
@@ -171,24 +195,6 @@ export function App() {
         onConnectFile={handleConnectFile}
         hasFileBound={hasFileBound}
       />
-
-      {/* Main View Engine: Bento Grid vs Freeform Corkboard */}
-      {activeTab?.layoutMode === 'freeform' ? (
-        <Corkboard
-          notes={tabNotes.length > 0 ? tabNotes : notes}
-          dockPaddingClass={dockPaddingClasses}
-          onUpdateNotePos={updateNotePosition}
-        />
-      ) : (
-        <BentoGrid
-          widgets={tabWidgets.length > 0 ? tabWidgets : widgets}
-          notes={notes}
-          dockPaddingClass={dockPaddingClasses}
-          onAddNote={addNote}
-          onUpdateNote={updateNote}
-          onDeleteNote={deleteNote}
-        />
-      )}
 
       {/* Night Mode Screen Overlay */}
       <NightMode

@@ -1,10 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { X, Lock, Shield, FolderSync, Cloud, LogIn, LogOut, RefreshCw } from 'lucide-react';
+import {
+  X,
+  Lock,
+  Shield,
+  FolderSync,
+  Cloud,
+  LogIn,
+  LogOut,
+  RefreshCw,
+  Repeat,
+  Compass,
+} from 'lucide-react';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { openLocalFileBinding } from '../../services/fileSync';
-import { getCurrentUser, sendMagicLink, signOutSupabase, pushToCloud, pullFromCloud } from '../../services/supabase';
+import {
+  getCurrentUser,
+  sendMagicLink,
+  signOutSupabase,
+  pushToCloud,
+  pullFromCloud,
+} from '../../services/supabase';
 import { APP_VERSION } from '../../data/changelog';
 import { ChangelogModal } from '../changelog/ChangelogModal';
+import { SupportPanel } from './SupportPanel';
 import type { User } from '@supabase/supabase-js';
 
 interface SettingsModalProps {
@@ -20,6 +38,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     notes,
     setDockPosition,
     setDisplayDensity,
+    setCarouselEnabled,
+    setCarouselDuration,
     setPinLock,
     saveLocalBackup,
   } = useDashboardStore();
@@ -111,7 +131,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             <div className="flex items-center gap-3">
               <img src="/logo.png" alt="Ambiently" className="w-8 h-8 rounded-lg shadow-sm" />
               <div>
-                <h2 className="text-base font-bold text-white leading-tight">Ambiently Command Center</h2>
+                <h2 className="text-base font-bold text-white leading-tight">
+                  Ambiently Command Center
+                </h2>
                 <div className="flex items-center gap-2 mt-0.5">
                   <p className="text-[11px] text-gray-400">dashboard.trinhism.com</p>
                   <button
@@ -133,6 +155,112 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           </div>
 
           <div className="space-y-6">
+            {/* Automated Tab Carousel Section */}
+            <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Repeat className="w-4 h-4 text-emerald-400" />
+                  <div>
+                    <span className="text-sm font-semibold text-white block">
+                      Auto-Rotate Tabs (Carousel)
+                    </span>
+                    <span className="text-[11px] text-gray-400">
+                      Automatically cycles tabs for an ambient smart-display
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setCarouselEnabled(!settings.carouselEnabled)}
+                  className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors duration-200 ease-in-out cursor-pointer ${
+                    settings.carouselEnabled ? 'bg-emerald-600' : 'bg-gray-700'
+                  }`}
+                >
+                  <div
+                    className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${
+                      settings.carouselEnabled ? 'translate-x-6' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {settings.carouselEnabled && (
+                <div className="pt-2 border-t border-gray-800/60 flex items-center justify-between">
+                  <span className="text-xs text-gray-300">Rotation Interval:</span>
+                  <div className="flex gap-1.5">
+                    {[15, 30, 45, 60, 120].map((sec) => (
+                      <button
+                        key={sec}
+                        onClick={() => setCarouselDuration(sec)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-mono transition-all ${
+                          settings.defaultRotateDurationSec === sec
+                            ? 'bg-emerald-600/30 border border-emerald-500 text-emerald-300 font-bold'
+                            : 'bg-gray-800/80 text-gray-400 hover:text-white border border-transparent'
+                        }`}
+                      >
+                        {sec >= 60 ? `${sec / 60}m` : `${sec}s`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Display Density (Canvas Scale) */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block">
+                  Canvas Display Density / Zoom
+                </label>
+                <span className="text-[11px] text-blue-400 font-mono">
+                  {settings.displayDensity * 100}%
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-400 mb-2">
+                Scales board cards for 1080p, 1440p, or 4K screens (dock & settings remain pinned).
+              </p>
+              <div className="grid grid-cols-4 gap-2">
+                {([0.75, 1.0, 1.25, 1.5] as const).map((density) => (
+                  <button
+                    key={density}
+                    onClick={() => setDisplayDensity(density)}
+                    className={`py-2 px-3 rounded-xl border text-xs font-medium transition-all ${
+                      settings.displayDensity === density
+                        ? 'bg-blue-600/20 border-blue-500 text-blue-300'
+                        : 'border-gray-800 text-gray-400 hover:bg-gray-800'
+                    }`}
+                  >
+                    {density === 1.0 ? '100% (Default)' : `${density * 100}%`}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Dock Position */}
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-2 flex items-center gap-1.5">
+                <Compass className="w-3.5 h-3.5 text-blue-400" />
+                Navigation Dock Position
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {(['left', 'top', 'right', 'bottom'] as const).map((pos) => (
+                  <button
+                    key={pos}
+                    onClick={() => setDockPosition(pos)}
+                    className={`py-2 px-3 rounded-xl border text-xs font-medium capitalize transition-all ${
+                      settings.dockPosition === pos
+                        ? 'bg-blue-600/20 border-blue-500 text-blue-300'
+                        : 'border-gray-800 text-gray-400 hover:bg-gray-800'
+                    }`}
+                  >
+                    {pos}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Support & Donate Panel */}
+            <SupportPanel />
+
             {/* Cloud SaaS Sync Section */}
             <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800">
               <div className="flex items-center justify-between mb-2">
@@ -201,50 +329,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               )}
             </div>
 
-            {/* Dock Position */}
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-2">
-                Navigation Dock Position
-              </label>
-              <div className="grid grid-cols-4 gap-2">
-                {(['left', 'top', 'right', 'bottom'] as const).map((pos) => (
-                  <button
-                    key={pos}
-                    onClick={() => setDockPosition(pos)}
-                    className={`py-2 px-3 rounded-xl border text-xs font-medium capitalize transition-all ${
-                      settings.dockPosition === pos
-                        ? 'bg-blue-600/20 border-blue-500 text-blue-300'
-                        : 'border-gray-800 text-gray-400 hover:bg-gray-800'
-                    }`}
-                  >
-                    {pos}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Display Density */}
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-2">
-                Display Density / Zoom (Auto-Fit 1080p/4K)
-              </label>
-              <div className="grid grid-cols-4 gap-2">
-                {([0.75, 1.0, 1.25, 1.5] as const).map((density) => (
-                  <button
-                    key={density}
-                    onClick={() => setDisplayDensity(density)}
-                    className={`py-2 px-3 rounded-xl border text-xs font-medium transition-all ${
-                      settings.displayDensity === density
-                        ? 'bg-blue-600/20 border-blue-500 text-blue-300'
-                        : 'border-gray-800 text-gray-400 hover:bg-gray-800'
-                    }`}
-                  >
-                    {density === 1.0 ? '100% (Default)' : `${density * 100}%`}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {/* Local File Sync */}
             <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800 flex items-center justify-between">
               <div>
@@ -281,42 +365,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 ) : null}
               </div>
 
-            {settings.pinLockEnabled ? (
-              <p className="text-xs text-emerald-400 flex items-center gap-1.5">
-                <Lock className="w-3.5 h-3.5" /> PIN protection is currently active
-              </p>
-            ) : (
-              <div className="flex items-center gap-2">
-                <input
-                  type="password"
-                  maxLength={4}
-                  placeholder="Enter 4-digit PIN"
-                  value={pinInput}
-                  onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
-                  className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500 w-44 font-mono tracking-widest text-center"
-                />
-                <button
-                  onClick={handleSavePin}
-                  disabled={pinInput.length !== 4}
-                  className="py-1.5 px-3 rounded-lg bg-blue-600 disabled:opacity-40 text-xs font-medium text-white hover:bg-blue-500 transition-all"
-                >
-                  Set PIN
-                </button>
-              </div>
-            )}
-            {pinSuccess && (
-              <span className="text-xs text-emerald-400 mt-2 block">PIN successfully set!</span>
-            )}
+              {settings.pinLockEnabled ? (
+                <p className="text-xs text-emerald-400 flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5" /> PIN protection is currently active
+                </p>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="password"
+                    maxLength={4}
+                    placeholder="Enter 4-digit PIN"
+                    value={pinInput}
+                    onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
+                    className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500 w-44 font-mono tracking-widest text-center"
+                  />
+                  <button
+                    onClick={handleSavePin}
+                    disabled={pinInput.length !== 4}
+                    className="py-1.5 px-3 rounded-lg bg-blue-600 disabled:opacity-40 text-xs font-medium text-white hover:bg-blue-500 transition-all"
+                  >
+                    Set PIN
+                  </button>
+                </div>
+              )}
+              {pinSuccess && (
+                <span className="text-xs text-emerald-400 mt-2 block">PIN successfully set!</span>
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
-    {/* Dedicated Changelog Modal */}
-    <ChangelogModal
-      isOpen={isChangelogOpen}
-      onClose={() => setIsChangelogOpen(false)}
-    />
-  </>
+      {/* Dedicated Changelog Modal */}
+      <ChangelogModal
+        isOpen={isChangelogOpen}
+        onClose={() => setIsChangelogOpen(false)}
+      />
+    </>
   );
 };

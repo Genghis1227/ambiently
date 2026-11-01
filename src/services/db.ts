@@ -33,7 +33,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   id: 'global',
   dashboardTitle: 'Ambiently Command Center',
   dockPosition: 'left',
-  carouselEnabled: false,
+  carouselEnabled: true,
   defaultRotateDurationSec: 30,
   displayDensity: 1.0,
   wakeLockEnabled: true,

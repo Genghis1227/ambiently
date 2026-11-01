@@ -36,6 +36,8 @@ interface DashboardState {
   setDockPosition: (pos: DockPosition) => Promise<void>;
   setLayoutMode: (tabId: string, mode: LayoutMode) => Promise<void>;
   setDisplayDensity: (density: 0.75 | 1.0 | 1.25 | 1.5) => Promise<void>;
+  setCarouselEnabled: (enabled: boolean) => Promise<void>;
+  setCarouselDuration: (seconds: number) => Promise<void>;
   pauseCarouselTemporarily: (durationMs?: number) => void;
   toggleNightModeManual: () => void;
   setPinLock: (pin: string | null) => Promise<void>;
@@ -139,6 +141,20 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const updated = { ...get().settings, displayDensity, updated_at: new Date().toISOString() };
     await db.settings.put(updated);
     set({ settings: updated });
+  },
+
+  setCarouselEnabled: async (carouselEnabled) => {
+    const updated = { ...get().settings, carouselEnabled, updated_at: new Date().toISOString() };
+    await db.settings.put(updated);
+    set({ settings: updated });
+    get().saveLocalBackup();
+  },
+
+  setCarouselDuration: async (defaultRotateDurationSec) => {
+    const updated = { ...get().settings, defaultRotateDurationSec, updated_at: new Date().toISOString() };
+    await db.settings.put(updated);
+    set({ settings: updated });
+    get().saveLocalBackup();
   },
 
   pauseCarouselTemporarily: (durationMs = 20000) => {
