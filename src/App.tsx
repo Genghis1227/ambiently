@@ -228,6 +228,7 @@ export function App() {
             onUpdateNote={updateNote}
             onDeleteNote={deleteNote}
             onRemoveWidget={removeWidget}
+            onUpdateWidgetPosition={updateWidgetPosition}
           />
         )}
       </div>
