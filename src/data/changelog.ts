@@ -5,9 +5,20 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.0.7';
+export const APP_VERSION = '0.0.8';
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.0.8",
+    date: "November 1, 2026",
+    title: "Multi-User Dashboard Sharing & Live Realtime Sync",
+    highlights: [
+      "Added Share Board & Family Access modal with QR codes and 6-digit join codes.",
+      "Instant phone camera onboarding to Mobile Companion without app store downloads.",
+      "Live WebSocket synchronization via Supabase Realtime (< 300ms note & checklist updates).",
+      "Added dashboard_members table and idempotent migration handling in supabase/schema.sql.",
+    ],
+  },
   {
     version: "v0.0.7",
     date: "November 1, 2026",

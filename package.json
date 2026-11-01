@@ -2,7 +2,7 @@
   "name": "ambiently",
   "description": "Modern, ambient smart-display and command center PWA (dashboard.trinhism.com)",
   "private": true,
-  "version": "0.0.7",
+  "version": "0.0.8",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -19,6 +19,7 @@
     "framer-motion": "^14.9.0",
     "ical.js": "^2.2.1",
     "lucide-react": "^1.66.0",
+    "qrcode.react": "^4.2.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "tailwind-merge": "^3.7.0",

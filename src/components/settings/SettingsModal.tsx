@@ -23,6 +23,8 @@ import {
 import { APP_VERSION } from '../../data/changelog';
 import { ChangelogModal } from '../changelog/ChangelogModal';
 import { SupportPanel } from './SupportPanel';
+import { ShareBoardModal } from './ShareBoardModal';
+
 import type { User } from '@supabase/supabase-js';
 
 interface SettingsModalProps {
@@ -47,6 +49,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [pinInput, setPinInput] = useState('');
   const [pinSuccess, setPinSuccess] = useState(false);
   const [isChangelogOpen, setIsChangelogOpen] = useState(false);
+  const [isShareOpen, setIsShareOpen] = useState(false);
 
   // Supabase cloud state
   const [user, setUser] = useState<User | null>(null);
@@ -400,6 +403,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       <ChangelogModal
         isOpen={isChangelogOpen}
         onClose={() => setIsChangelogOpen(false)}
+      />
+      <ShareBoardModal
+        isOpen={isShareOpen}
+        onClose={() => setIsShareOpen(false)}
       />
     </>
   );

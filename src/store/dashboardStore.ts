@@ -44,6 +44,7 @@ interface DashboardState {
   unlockKiosk: (enteredPin: string) => boolean;
   lockKiosk: () => void;
   saveLocalBackup: () => Promise<void>;
+  syncRemoteNoteChange: (note: StickyNoteItem, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void;
   
   // Widget / Note operations
   addNote: (note: Partial<StickyNoteItem>) => Promise<void>;
@@ -266,6 +267,21 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       notes: get().notes.map((n) => (n.id === noteId ? updated : n)),
     });
     get().saveLocalBackup();
+  },
+
+  syncRemoteNoteChange: (remoteNote, eventType) => {
+    if (eventType === "DELETE" || remoteNote.deleted_at) {
+      set({ notes: get().notes.filter((n) => n.id !== remoteNote.id) });
+    } else if (eventType === "INSERT") {
+      const exists = get().notes.some((n) => n.id === remoteNote.id);
+      if (!exists) {
+        set({ notes: [remoteNote, ...get().notes] });
+      }
+    } else if (eventType === "UPDATE") {
+      set({
+        notes: get().notes.map((n) => (n.id === remoteNote.id ? remoteNote : n)),
+      });
+    }
   },
 
   deleteNote: async (noteId) => {

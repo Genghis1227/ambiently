@@ -1,13 +1,13 @@
-import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient, type User, type RealtimeChannel } from '@supabase/supabase-js';
 import { db } from './db';
 import type { DashboardTab, DashboardWidget, StickyNoteItem, AppSettings } from '../types/dashboard';
 
 let supabaseClient: SupabaseClient | null = null;
+let realtimeChannel: RealtimeChannel | null = null;
 
 export function getSupabase(): SupabaseClient | null {
   if (supabaseClient) return supabaseClient;
 
-  // Read from Vite env or return null if not configured
   const url = import.meta.env.VITE_SUPABASE_URL;
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
@@ -42,7 +42,172 @@ export async function sendMagicLink(email: string): Promise<{ success: boolean; 
 export async function signOutSupabase(): Promise<void> {
   const sb = getSupabase();
   if (sb) {
+    if (realtimeChannel) {
+      sb.removeChannel(realtimeChannel);
+      realtimeChannel = null;
+    }
     await sb.auth.signOut();
+  }
+}
+
+// Subscribe to Realtime WebSocket updates for live multi-user syncing
+export function subscribeToRealtimeBoard(
+  boardId: string,
+  onRemoteNoteChange: (note: StickyNoteItem, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void
+): () => void {
+  const sb = getSupabase();
+  if (!sb) return () => {};
+
+  if (realtimeChannel) {
+    sb.removeChannel(realtimeChannel);
+  }
+
+  realtimeChannel = sb
+    .channel(`dashboard-realtime-${boardId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'notes',
+      },
+      (payload) => {
+        const eventType = payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE';
+        const raw = (payload.new || payload.old) as any;
+        if (!raw) return;
+
+        const note: StickyNoteItem = {
+          id: raw.id,
+          tabId: raw.tab_id,
+          widgetId: raw.widget_id,
+          title: raw.title,
+          content: raw.content || '',
+          isChecklist: raw.is_checklist,
+          checklistItems: raw.checklist_items || [],
+          bgColor: raw.bg_color || '#fef08a',
+          fontSize: raw.font_size || 'base',
+          expiresAt: raw.expires_at,
+          archivedAt: raw.archived_at,
+          freeformPos: raw.freeform_pos || {},
+          updated_at: raw.updated_at || new Date().toISOString(),
+          deleted_at: raw.deleted_at,
+        };
+
+        onRemoteNoteChange(note, eventType);
+      }
+    )
+    .subscribe();
+
+  return () => {
+    if (realtimeChannel && sb) {
+      sb.removeChannel(realtimeChannel);
+      realtimeChannel = null;
+    }
+  };
+}
+
+// Generate or fetch shareable 6-character Invite Code for family
+export async function getOrCreateInviteCode(_boardId = 'default'): Promise<{ code: string; url: string } | null> {
+  const sb = getSupabase();
+  const user = await getCurrentUser();
+  if (!sb || !user) return null;
+
+  try {
+    const { data } = await sb.from('dashboards').select('invite_code').eq('user_id', user.id).maybeSingle();
+    let code = data?.invite_code;
+
+    if (!code) {
+      // Generate clean 6-character uppercase code (e.g. TRINH7)
+      code = Math.random().toString(36).substring(2, 8).toUpperCase();
+      await sb.from('dashboards').update({ invite_code: code }).eq('user_id', user.id);
+    }
+
+    const shareUrl = `${window.location.origin}/?join=${code}`;
+    return { code, url: shareUrl };
+  } catch (err) {
+    console.warn('Failed to get invite code:', err);
+    return null;
+  }
+}
+
+// Join a shared board via Invite Code (e.g. when family scans QR)
+export async function joinBoardByCode(code: string): Promise<{ success: boolean; boardTitle?: string; error?: string }> {
+  const sb = getSupabase();
+  if (!sb) return { success: false, error: 'Cloud service not connected.' };
+
+  try {
+    const { data, error } = await sb
+      .from('dashboards')
+      .select('id, title, user_id')
+      .eq('invite_code', code.trim().toUpperCase())
+      .single();
+
+    if (error || !data) {
+      return { success: false, error: 'Invalid or expired invite code.' };
+    }
+
+    // Pull shared notes & tabs from that board
+    const [tabsRes, notesRes, widgetsRes] = await Promise.all([
+      sb.from('tabs').select('*').eq('dashboard_id', data.id),
+      sb.from('notes').select('*').eq('dashboard_id', data.id),
+      sb.from('widgets').select('*').eq('dashboard_id', data.id),
+    ]);
+
+    if (tabsRes.data) {
+      await db.tabs.bulkPut(
+        tabsRes.data.map((t: any) => ({
+          id: t.id,
+          name: t.name,
+          icon: t.icon,
+          order: t.order_index,
+          layoutMode: t.layout_mode,
+          autoRotateDurationSec: t.auto_rotate_duration_sec,
+          updated_at: t.updated_at,
+          deleted_at: t.deleted_at,
+        }))
+      );
+    }
+
+    if (notesRes.data) {
+      await db.notes.bulkPut(
+        notesRes.data.map((n: any) => ({
+          id: n.id,
+          tabId: n.tab_id,
+          widgetId: n.widget_id,
+          title: n.title,
+          content: n.content,
+          isChecklist: n.is_checklist,
+          checklistItems: n.checklist_items,
+          bgColor: n.bg_color,
+          fontSize: n.font_size,
+          expiresAt: n.expires_at,
+          archivedAt: n.archived_at,
+          freeformPos: n.freeform_pos,
+          updated_at: n.updated_at,
+          deleted_at: n.deleted_at,
+        }))
+      );
+    }
+
+    if (widgetsRes.data) {
+      await db.widgets.bulkPut(
+        widgetsRes.data.map((w: any) => ({
+          id: w.id,
+          tabId: w.tab_id,
+          type: w.type,
+          title: w.title,
+          gridPos: w.grid_pos,
+          freeformPos: w.freeform_pos,
+          config: w.config,
+          updated_at: w.updated_at,
+          deleted_at: w.deleted_at,
+        }))
+      );
+    }
+
+    return { success: true, boardTitle: data.title };
+  } catch (err: any) {
+    return { success: false, error: err.message };
   }
 }
 
@@ -88,6 +253,7 @@ export async function pushToCloud(
     if (widgets.length > 0) {
       const formattedWidgets = widgets.map((w) => ({
         id: w.id,
+        dashboard_id: 'default',
         tab_id: w.tabId,
         user_id: user.id,
         type: w.type,
@@ -105,6 +271,7 @@ export async function pushToCloud(
     if (notes.length > 0) {
       const formattedNotes = notes.map((n) => ({
         id: n.id,
+        dashboard_id: 'default',
         user_id: user.id,
         tab_id: n.tabId,
         widget_id: n.widgetId,
