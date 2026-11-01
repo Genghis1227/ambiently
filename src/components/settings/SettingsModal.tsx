@@ -149,10 +149,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
   const handleSendMagicLink = async () => {
     if (!emailInput.trim()) return;
-    setAuthMessage('Sending magic link...');
+    setAuthMessage('Sending sign-in link...');
     const res = await sendMagicLink(emailInput.trim());
     if (res.success) {
-      setAuthMessage('Magic link sent! Check your email inbox.');
+      setAuthMessage('Sign-in link sent! Check your email inbox to log in.');
     } else {
       setAuthMessage(res.error || 'Failed to send magic link');
     }
@@ -169,7 +169,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     const res = await pushToCloud(settings, tabs, widgets, notes);
     setSyncLoading(false);
     if (res.success) {
-      setAuthMessage('Local dashboard uploaded to Supabase Cloud!');
+      setAuthMessage('Dashboard successfully backed up to the cloud!');
     } else {
       setAuthMessage(res.error || 'Cloud sync failed');
     }
@@ -180,7 +180,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     const res = await pullFromCloud();
     setSyncLoading(false);
     if (res.success) {
-      setAuthMessage('Downloaded latest changes from Cloud!');
+      setAuthMessage('Dashboard successfully restored from the cloud!');
       window.location.reload();
     } else {
       setAuthMessage(res.error || 'Cloud pull failed');
@@ -328,7 +328,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2 text-sm font-semibold text-white">
                   <Cloud className="w-4 h-4 text-cyan-400" />
-                  Supabase Cloud Sync (Multi-Device)
+                  Cloud Sync & Multi-Device Backup
                 </div>
                 {user && (
                   <button
@@ -345,43 +345,46 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   <p className="text-xs text-emerald-400">
                     Signed in as: <span className="font-mono text-gray-200">{user.email}</span>
                   </p>
+                  <p className="text-[11px] text-gray-400">
+                    Your widgets, notes, and settings stay synchronized across all your signed-in devices.
+                  </p>
                   <div className="flex items-center gap-2 pt-1">
                     <button
                       onClick={handlePushCloud}
                       disabled={syncLoading}
-                      className="flex-1 py-1.5 px-3 rounded-lg bg-cyan-600/30 border border-cyan-500/50 hover:bg-cyan-600/40 text-xs font-semibold text-cyan-200 flex items-center justify-center gap-1.5"
+                      className="flex-1 py-1.5 px-3 rounded-lg bg-cyan-600/30 border border-cyan-500/50 hover:bg-cyan-600/40 text-xs font-semibold text-cyan-200 flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       <RefreshCw className={`w-3.5 h-3.5 ${syncLoading ? 'animate-spin' : ''}`} />
-                      Sync to Cloud
+                      Back Up to Cloud
                     </button>
                     <button
                       onClick={handlePullCloud}
                       disabled={syncLoading}
-                      className="flex-1 py-1.5 px-3 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs font-semibold text-gray-300 flex items-center justify-center gap-1.5"
+                      className="flex-1 py-1.5 px-3 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs font-semibold text-gray-300 flex items-center justify-center gap-1.5 cursor-pointer"
                     >
-                      Pull from Cloud
+                      Restore from Cloud
                     </button>
                   </div>
                 </div>
               ) : (
                 <div className="space-y-2">
                   <p className="text-xs text-gray-400">
-                    Sign in with a Magic Link to sync your notes & layout across mobile and kiosk displays.
+                    Sign in with your email to automatically sync your dashboard across your phone, tablet, and smart displays.
                   </p>
                   <div className="flex gap-2">
                     <input
                       type="email"
-                      placeholder="Enter your email..."
+                      placeholder="name@example.com"
                       value={emailInput}
                       onChange={(e) => setEmailInput(e.target.value)}
-                      className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500"
+                      className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500"
                     />
                     <button
                       onClick={handleSendMagicLink}
-                      className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-xs font-semibold text-white rounded-lg flex items-center gap-1 transition-all"
+                      className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-xs font-semibold text-white rounded-lg flex items-center gap-1 transition-all cursor-pointer"
                     >
                       <LogIn className="w-3.5 h-3.5" />
-                      Sign In
+                      Send Login Link
                     </button>
                   </div>
                 </div>

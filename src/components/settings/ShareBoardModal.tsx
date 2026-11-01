@@ -71,7 +71,7 @@ export const ShareBoardModal: React.FC<ShareBoardModalProps> = ({ isOpen, onClos
               />
             ) : (
               <div className="w-44 h-44 flex flex-col items-center justify-center p-3 text-center text-gray-500 text-xs">
-                <span>Sign in to Supabase in Settings to generate a family invite code.</span>
+                <span>Sign in to Cloud Sync in Settings (⚙️) to generate a family invite code.</span>
               </div>
             )}
           </div>
