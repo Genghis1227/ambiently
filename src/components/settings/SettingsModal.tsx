@@ -10,7 +10,10 @@ import {
   RefreshCw,
   Repeat,
   Compass,
+  AlertTriangle,
+  Trash2,
 } from 'lucide-react';
+import { db } from '../../services/db';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { openLocalFileBinding } from '../../services/fileSync';
 import {
@@ -56,6 +59,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [emailInput, setEmailInput] = useState('');
   const [authMessage, setAuthMessage] = useState('');
   const [syncLoading, setSyncLoading] = useState(false);
+  const [isConfirmingReset, setIsConfirmingReset] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -65,6 +70,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
   if (!isOpen) return null;
 
+
+  const handleFactoryReset = async () => {
+    setIsResetting(true);
+    try {
+      // 1. Clear IndexedDB database completely
+      await db.delete();
+
+      // 2. Clear photo cache storage if supported
+      if ('caches' in window) {
+        const cacheKeys = await caches.keys();
+        await Promise.all(cacheKeys.map((k) => caches.delete(k)));
+      }
+
+      // 3. Clear localStorage & sessionStorage
+      localStorage.clear();
+      sessionStorage.clear();
+
+      // 4. Clean reload
+      window.location.href = window.location.origin + window.location.pathname;
+    } catch (err) {
+      console.error('Factory reset error:', err);
+      window.location.reload();
+    }
+  };
   const handleSavePin = async () => {
     if (pinInput.length === 4) {
       await setPinLock(pinInput);
@@ -393,6 +422,58 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               )}
               {pinSuccess && (
                 <span className="text-xs text-emerald-400 mt-2 block">PIN successfully set!</span>
+              )}
+            </div>
+
+            {/* Danger Zone: Factory Reset */}
+            <div className="p-4 rounded-xl bg-red-950/20 border border-red-500/20 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm font-semibold text-red-400">
+                  <AlertTriangle className="w-4 h-4 text-red-400" />
+                  <span>Danger Zone: Factory Reset</span>
+                </div>
+              </div>
+              <p className="text-xs text-gray-400 leading-relaxed">
+                Permanently wipes all customized tiles, notes, Plex credentials, local folders, and custom layouts, restoring Ambiently to its fresh out-of-the-box state.
+              </p>
+
+              {!isConfirmingReset ? (
+                <button
+                  onClick={() => setIsConfirmingReset(true)}
+                  className="py-2 px-4 rounded-lg bg-red-500/10 hover:bg-red-500/25 text-red-400 hover:text-red-300 border border-red-500/30 text-xs font-bold transition-all cursor-pointer flex items-center gap-2"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Start From Scratch (Factory Reset)</span>
+                </button>
+              ) : (
+                <div className="p-3 bg-red-950/60 rounded-xl border border-red-500/40 space-y-2.5">
+                  <p className="text-xs font-bold text-red-300">
+                    ⚠️ Are you absolutely sure? All tiles and notes will be permanently erased.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleFactoryReset}
+                      disabled={isResetting}
+                      className="py-1.5 px-3 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all cursor-pointer shadow-lg shadow-red-600/30 flex items-center gap-1.5"
+                    >
+                      {isResetting ? (
+                        <>
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                          <span>Resetting...</span>
+                        </>
+                      ) : (
+                        <span>Yes, Wipe Everything & Reset</span>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setIsConfirmingReset(false)}
+                      disabled={isResetting}
+                      className="py-1.5 px-3 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-medium transition-all cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           </div>
