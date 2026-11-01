@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
-import { X, Lock, Shield, FolderSync } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Lock, Shield, FolderSync, Cloud, LogIn, LogOut, RefreshCw } from 'lucide-react';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { openLocalFileBinding } from '../../services/fileSync';
+import { getCurrentUser, sendMagicLink, signOutSupabase, pushToCloud, pullFromCloud } from '../../services/supabase';
+import type { User } from '@supabase/supabase-js';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -11,6 +13,9 @@ interface SettingsModalProps {
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const {
     settings,
+    tabs,
+    widgets,
+    notes,
     setDockPosition,
     setDisplayDensity,
     setPinLock,
@@ -19,6 +24,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
   const [pinInput, setPinInput] = useState('');
   const [pinSuccess, setPinSuccess] = useState(false);
+
+  // Supabase cloud state
+  const [user, setUser] = useState<User | null>(null);
+  const [emailInput, setEmailInput] = useState('');
+  const [authMessage, setAuthMessage] = useState('');
+  const [syncLoading, setSyncLoading] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      getCurrentUser().then(setUser);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -42,6 +59,46 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     }
   };
 
+  const handleSendMagicLink = async () => {
+    if (!emailInput.trim()) return;
+    setAuthMessage('Sending magic link...');
+    const res = await sendMagicLink(emailInput.trim());
+    if (res.success) {
+      setAuthMessage('Magic link sent! Check your email inbox.');
+    } else {
+      setAuthMessage(res.error || 'Failed to send magic link');
+    }
+  };
+
+  const handleSignOut = async () => {
+    await signOutSupabase();
+    setUser(null);
+    setAuthMessage('Signed out');
+  };
+
+  const handlePushCloud = async () => {
+    setSyncLoading(true);
+    const res = await pushToCloud(settings, tabs, widgets, notes);
+    setSyncLoading(false);
+    if (res.success) {
+      setAuthMessage('Local dashboard uploaded to Supabase Cloud!');
+    } else {
+      setAuthMessage(res.error || 'Cloud sync failed');
+    }
+  };
+
+  const handlePullCloud = async () => {
+    setSyncLoading(true);
+    const res = await pullFromCloud();
+    setSyncLoading(false);
+    if (res.success) {
+      setAuthMessage('Downloaded latest changes from Cloud!');
+      window.location.reload();
+    } else {
+      setAuthMessage(res.error || 'Cloud pull failed');
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
       <div className="w-full max-w-xl rounded-2xl bg-gray-900 border border-gray-800 p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-y-auto">
@@ -62,6 +119,74 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         </div>
 
         <div className="space-y-6">
+          {/* Cloud SaaS Sync Section */}
+          <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                <Cloud className="w-4 h-4 text-cyan-400" />
+                Supabase Cloud Sync (Multi-Device)
+              </div>
+              {user && (
+                <button
+                  onClick={handleSignOut}
+                  className="flex items-center gap-1 text-xs text-red-400 hover:underline"
+                >
+                  <LogOut className="w-3 h-3" /> Sign Out
+                </button>
+              )}
+            </div>
+
+            {user ? (
+              <div className="space-y-3">
+                <p className="text-xs text-emerald-400">
+                  Signed in as: <span className="font-mono text-gray-200">{user.email}</span>
+                </p>
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    onClick={handlePushCloud}
+                    disabled={syncLoading}
+                    className="flex-1 py-1.5 px-3 rounded-lg bg-cyan-600/30 border border-cyan-500/50 hover:bg-cyan-600/40 text-xs font-semibold text-cyan-200 flex items-center justify-center gap-1.5"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${syncLoading ? 'animate-spin' : ''}`} />
+                    Sync to Cloud
+                  </button>
+                  <button
+                    onClick={handlePullCloud}
+                    disabled={syncLoading}
+                    className="flex-1 py-1.5 px-3 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs font-semibold text-gray-300 flex items-center justify-center gap-1.5"
+                  >
+                    Pull from Cloud
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-xs text-gray-400">
+                  Sign in with a Magic Link to sync your notes & layout across mobile and kiosk displays.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    placeholder="Enter your email..."
+                    value={emailInput}
+                    onChange={(e) => setEmailInput(e.target.value)}
+                    className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500"
+                  />
+                  <button
+                    onClick={handleSendMagicLink}
+                    className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-xs font-semibold text-white rounded-lg flex items-center gap-1 transition-all"
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    Sign In
+                  </button>
+                </div>
+              </div>
+            )}
+            {authMessage && (
+              <span className="text-[11px] text-cyan-300 mt-2 block">{authMessage}</span>
+            )}
+          </div>
+
           {/* Dock Position */}
           <div>
             <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-2">
