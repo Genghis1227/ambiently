@@ -8,6 +8,7 @@ import { NightMode } from './components/kiosk/NightMode';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { MobileCompanion } from './components/mobile/MobileCompanion';
 import { openLocalFileBinding } from './services/fileSync';
+import { subscribeToRealtimeBoard, joinBoardByCode } from './services/supabase';
 
 export function App() {
   const {
@@ -32,6 +33,29 @@ export function App() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [hasFileBound, setHasFileBound] = useState(false);
+  const syncRemoteNoteChange = useDashboardStore((s) => s.syncRemoteNoteChange);
+
+  // Auto-join shared board if ?join=CODE is in URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const joinCode = params.get("join");
+    if (joinCode) {
+      joinBoardByCode(joinCode).then((res) => {
+        if (res.success) {
+          console.log("Connected to shared board:", res.boardTitle);
+          initStore();
+        }
+      });
+    }
+  }, [initStore]);
+
+  // Live Supabase Realtime WebSocket subscription
+  useEffect(() => {
+    const unsubscribe = subscribeToRealtimeBoard("default", (note, eventType) => {
+      syncRemoteNoteChange(note, eventType);
+    });
+    return () => unsubscribe();
+  }, [syncRemoteNoteChange]);
 
   // Responsive Mobile Detection (< 768px) with manual toggle override
   const [isMobileViewport, setIsMobileViewport] = useState(
