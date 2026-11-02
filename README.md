@@ -3,7 +3,7 @@
 > Modern, ambient smart-display and command center Progressive Web App (PWA) under the Trinhism ecosystem, designed as a self-hosted, local-first alternative to commercial display services (Mango Display, DAKboard, Skylight).
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPLv3-blue.svg)](LICENSE)
-[![Release](https://img.shields.io/badge/Release-v0.0.12-cyan.svg)](CHANGELOG.md)
+[![Release](https://img.shields.io/badge/Release-v0.1.0-cyan.svg)](CHANGELOG.md)
 
 ![Ambiently Banner](public/og-banner.png)
 

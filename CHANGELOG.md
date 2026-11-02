@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.0] - 2026-11-02
+
+### Added
+* **Multi-Source iCal / Webcal Feed Manager (`WidgetSettingsModal.tsx`):**
+  * Added connected feed manager in Calendar Tile Settings to merge, toggle, color-tag, and remove multiple public or secret Google, Apple iCloud, and Outlook `.ics` / `webcal://` URLs.
+  * Default View selector (`Agenda Schedule` vs `Monthly Grid`).
+* **1-Click City Geocoding Lookup (`WidgetSettingsModal.tsx`):**
+  * Integrated Open-Meteo Geocoding API to auto-resolve latitude, longitude, and formatted city/state/country names directly from city text input.
+* **Expanded Clock Face Engine (`ClockWidget.tsx`, `ClockWeatherWidget.tsx`):**
+  * Added **Analog Dial** (with SVG hands, tick marks, and live seconds ticker), **Minimalist** typographic face, and **Digital** styles.
+  * Clock face selectors available for both standalone Clock and Clock+Weather combo tiles.
+* **Note Expiration Engine & Recoverable Trash Drawer (`Corkboard.tsx`):**
+  * Freeform sticky notes on Corkboard canvases now support expiration (`Permanent`, `Expire 24h`, `Expire 3d`, `Custom Date/Time`).
+  * Visual warning ring for notes expiring within 12 hours.
+  * Corkboard header **Trash / Archive Recovery Drawer** with 1-click note restore and permanent wipe options.
+  * Added **Sticky Notes & Reminders** tile support directly on Corkboard canvases.
+* **Interactive Canvas Layering & Rotation Controls (`Corkboard.tsx`):**
+  * Automatic bring-to-front (`zIndex`) layering whenever a widget or note is touched or dragged.
+  * Tile tilt (`↺`, `0°`, `↻`) controls on card hover.
+* **Night Mode & Kiosk Hardware Controls (`SettingsModal.tsx`, `App.tsx`):**
+  * Configurable auto-start and morning wake schedule (`22:00`–`07:00`) with automatic 60-second schedule timer.
+  * Night Mode visual style selector: **OLED Pixel-Shift Clock** (with burn-in prevention movement) vs **Dim Screen Overlay** with darkness slider.
+  * Screen Wake Lock API 24/7 toggle.
+  * Canvas interaction pauses tab carousel auto-rotation for 20 seconds.
+* **Per-Widget Photo Sources Persistence (`PhotoFrameWidget.tsx`, `Corkboard.tsx`):**
+  * Photo sources modal connected to individual widget configuration in IndexedDB so Plex, local folders, Google Drive, and presets persist seamlessly.
+* **Family QR Code Invite Modal Button (`SettingsModal.tsx`):**
+  * Added **Family QR Invite** button to launch the mobile companion QR onboarding modal.
+
+---
+
 ## [0.0.12] - 2026-11-01
 
 ### Added
