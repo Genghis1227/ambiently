@@ -18,6 +18,9 @@ import {
   ChevronDown,
   Edit2,
   Plus,
+  Moon,
+  Sun,
+  QrCode,
 } from 'lucide-react';
 import { db } from '../../services/db';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -58,6 +61,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setDisplayDensity,
     setCarouselEnabled,
     setCarouselDuration,
+    updateSettings,
     setPinLock,
     saveLocalBackup,
     addTab,
@@ -101,7 +105,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   }, [isOpen]);
 
   if (!isOpen) return null;
-
 
   const handleFactoryReset = async () => {
     setIsResetting(true);
@@ -150,6 +153,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       setBackupStatus(res.error || 'Failed to restore.');
     }
   };
+
   const handleSavePin = async () => {
     if (pinInput.length === 4) {
       await setPinLock(pinInput);
@@ -464,6 +468,128 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               )}
             </div>
 
+            {/* Night Mode & Kiosk Hardware Section */}
+            <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Moon className="w-4 h-4 text-indigo-400" />
+                  <div>
+                    <span className="text-sm font-semibold text-white block">
+                      Night Mode & Kiosk Display
+                    </span>
+                    <span className="text-[11px] text-gray-400">
+                      OLED burn-in protection, scheduled dimming & screen wake lock
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => updateSettings({ nightModeEnabled: !settings.nightModeEnabled })}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                    settings.nightModeEnabled
+                      ? 'bg-indigo-600/30 border-indigo-500 text-indigo-300'
+                      : 'bg-gray-900 border-gray-700 text-gray-400 hover:text-white'
+                  }`}
+                >
+                  {settings.nightModeEnabled ? 'Night Mode Active' : 'Activate Now'}
+                </button>
+              </div>
+
+              {/* Screen Wake Lock Toggle */}
+              <div className="flex items-center justify-between pt-2 border-t border-gray-800/60">
+                <div className="flex items-center gap-2">
+                  <Sun className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="text-xs text-gray-300">Keep Screen Awake 24/7 (Wake Lock API)</span>
+                </div>
+                <button
+                  onClick={() => updateSettings({ wakeLockEnabled: !settings.wakeLockEnabled })}
+                  className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                    settings.wakeLockEnabled ? 'bg-emerald-600' : 'bg-gray-700'
+                  }`}
+                >
+                  <div
+                    className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                      settings.wakeLockEnabled ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Night Mode Style Selector */}
+              <div className="space-y-1.5 pt-2 border-t border-gray-800/60">
+                <span className="text-xs text-gray-400 block">Night Mode Visual Style:</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => updateSettings({ nightModeStyle: 'oled_clock' })}
+                    className={`py-2 px-3 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                      settings.nightModeStyle === 'oled_clock'
+                        ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
+                        : 'bg-gray-900 border-gray-800 text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    OLED Pixel-Shift Clock
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateSettings({ nightModeStyle: 'dim' })}
+                    className={`py-2 px-3 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                      settings.nightModeStyle === 'dim'
+                        ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
+                        : 'bg-gray-900 border-gray-800 text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    Dim Screen Overlay
+                  </button>
+                </div>
+              </div>
+
+              {/* Night Schedule Start / End & Dim Opacity */}
+              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-800/60">
+                <div>
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 block mb-1">
+                    Auto-Start Time
+                  </label>
+                  <input
+                    type="time"
+                    value={settings.nightModeStart || '22:00'}
+                    onChange={(e) => updateSettings({ nightModeStart: e.target.value })}
+                    className="w-full rounded-lg bg-gray-900 border border-gray-800 p-1.5 text-xs text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 block mb-1">
+                    Morning Wake Time
+                  </label>
+                  <input
+                    type="time"
+                    value={settings.nightModeEnd || '07:00'}
+                    onChange={(e) => updateSettings({ nightModeEnd: e.target.value })}
+                    className="w-full rounded-lg bg-gray-900 border border-gray-800 p-1.5 text-xs text-white"
+                  />
+                </div>
+              </div>
+
+              {settings.nightModeStyle === 'dim' && (
+                <div className="pt-1">
+                  <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
+                    <span>Dim Overlay Darkness:</span>
+                    <span className="font-mono text-indigo-300">
+                      {Math.round((settings.nightDimOpacity ?? 0.85) * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.4"
+                    max="0.95"
+                    step="0.05"
+                    value={settings.nightDimOpacity ?? 0.85}
+                    onChange={(e) => updateSettings({ nightDimOpacity: parseFloat(e.target.value) })}
+                    className="w-full accent-indigo-500 cursor-pointer"
+                  />
+                </div>
+              )}
+            </div>
+
             {/* Display Density (Canvas Scale) */}
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -518,20 +644,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             </div>
 
             {/* Cloud SaaS Sync Section */}
-            <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800">
-              <div className="flex items-center justify-between mb-2">
+            <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800 space-y-3">
+              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm font-semibold text-white">
                   <Cloud className="w-4 h-4 text-cyan-400" />
-                  Cloud Sync & Multi-Device Backup
+                  Cloud Sync & Family Mobile Access
                 </div>
-                {user && (
+                <div className="flex items-center gap-2">
                   <button
-                    onClick={handleSignOut}
-                    className="flex items-center gap-1 text-xs text-red-400 hover:underline"
+                    type="button"
+                    onClick={() => setIsShareOpen(true)}
+                    className="px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
                   >
-                    <LogOut className="w-3 h-3" /> Sign Out
+                    <QrCode className="w-3.5 h-3.5" />
+                    <span>Family QR Invite</span>
                   </button>
-                )}
+                  {user && (
+                    <button
+                      onClick={handleSignOut}
+                      className="flex items-center gap-1 text-xs text-red-400 hover:underline"
+                    >
+                      <LogOut className="w-3 h-3" /> Sign Out
+                    </button>
+                  )}
+                </div>
               </div>
 
               {user ? (

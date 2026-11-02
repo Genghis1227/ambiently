@@ -15,17 +15,25 @@ import { PhotoSourcesModal } from '../photos/PhotoSourcesModal';
 interface PhotoFrameWidgetProps {
   initialStyle?: PhotoDisplayStyle;
   rotationIntervalSec?: number;
+  customPhotos?: PhotoItem[];
+  initialSourceLabel?: string;
+  onUpdateConfig?: (updates: Record<string, any>) => void;
 }
 
 export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   initialStyle = 'ken_burns',
   rotationIntervalSec = 15,
+  customPhotos,
+  initialSourceLabel = 'Curated',
+  onUpdateConfig,
 }) => {
   const [style, setStyle] = useState<PhotoDisplayStyle>(initialStyle);
   const [intervalSec, setIntervalSec] = useState<number>(rotationIntervalSec);
-  const [photos, setPhotos] = useState<PhotoItem[]>(CURATED_AMBIENT_PHOTOS);
+  const [photos, setPhotos] = useState<PhotoItem[]>(
+    customPhotos && customPhotos.length > 0 ? customPhotos : CURATED_AMBIENT_PHOTOS
+  );
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [sourceLabel, setSourceLabel] = useState<string>('Curated');
+  const [sourceLabel, setSourceLabel] = useState<string>(initialSourceLabel);
   const [isSourcesModalOpen, setIsSourcesModalOpen] = useState(false);
 
   // Sync props to state when widget config updates
@@ -36,6 +44,19 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   useEffect(() => {
     if (rotationIntervalSec) setIntervalSec(rotationIntervalSec);
   }, [rotationIntervalSec]);
+
+  useEffect(() => {
+    if (customPhotos && customPhotos.length > 0) {
+      setPhotos(customPhotos);
+      setCurrentIndex(0);
+    }
+  }, [customPhotos]);
+
+  useEffect(() => {
+    if (initialSourceLabel) {
+      setSourceLabel(initialSourceLabel);
+    }
+  }, [initialSourceLabel]);
 
   // Cache photos on mount for 0ms offline fallback
   useEffect(() => {
@@ -59,6 +80,26 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
       setCurrentIndex(0);
       setSourceLabel(sourceName);
       cachePhotosLocally(newPhotos);
+      if (onUpdateConfig) {
+        onUpdateConfig({
+          customPhotos: newPhotos,
+          sourceLabel: sourceName,
+        });
+      }
+    }
+  };
+
+  const handleStyleChange = (newStyle: PhotoDisplayStyle) => {
+    setStyle(newStyle);
+    if (onUpdateConfig) {
+      onUpdateConfig({ displayStyle: newStyle });
+    }
+  };
+
+  const handleIntervalChange = (newSec: number) => {
+    setIntervalSec(newSec);
+    if (onUpdateConfig) {
+      onUpdateConfig({ rotationIntervalSec: newSec });
     }
   };
 
@@ -168,7 +209,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
           {(['ken_burns', 'mosaic', 'polaroid', 'filmstrip'] as const).map((s) => (
             <button
               key={s}
-              onClick={() => setStyle(s)}
+              onClick={() => handleStyleChange(s)}
               className={`px-2 py-0.5 text-[10px] rounded-full uppercase tracking-wider font-semibold transition-all ${
                 style === s ? 'bg-blue-600 text-white shadow' : 'text-gray-300 hover:text-white'
               }`}
@@ -201,9 +242,9 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
         isOpen={isSourcesModalOpen}
         onClose={() => setIsSourcesModalOpen(false)}
         currentStyle={style}
-        onStyleChange={setStyle}
+        onStyleChange={handleStyleChange}
         rotationIntervalSec={intervalSec}
-        onRotationIntervalChange={setIntervalSec}
+        onRotationIntervalChange={handleIntervalChange}
         onPhotosLoaded={handlePhotosLoaded}
       />
     </div>

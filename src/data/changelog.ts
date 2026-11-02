@@ -5,9 +5,26 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.0.12';
+export const APP_VERSION = '0.1.0';
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.1.0",
+    date: "November 2, 2026",
+    title: "Phase 1–6 Feature Completion & Multi-Source Calendar / Kiosk Engine",
+    highlights: [
+      "Multi-Source iCal / Webcal Feed Manager in Calendar tile settings: add, color-tag, toggle, and delete Google, Apple, and Outlook .ics feeds.",
+      "1-Click City Geocoding Lookup in Weather tile settings powered by Open-Meteo to auto-resolve coordinates.",
+      "Analog dial, minimalist, and digital clock faces across Clock and Clock+Weather combo tiles.",
+      "Note expiration engine (Permanent, 24h, 3d, custom date/time), approaching-expiry warning glows, and Trash / Archive drawer with restoration and permanent wipe.",
+      "Sticky Notes & Reminders tile support directly on Corkboard canvases.",
+      "Automatic bring-to-front layering (z-index) and card tilt (↺ / 0° / ↻) controls on Corkboard widgets and notes.",
+      "Night Mode & Kiosk Display settings: Screen Wake Lock toggle, OLED pixel-shift clock vs Dim screen overlay, scheduled auto-start/wake times, and darkness slider.",
+      "Carousel pause protection: interacting with canvas widgets or notes temporarily pauses auto-rotation for 20 seconds.",
+      "Per-widget photo sources persistence connecting Plex, local folders, Google Drive, and presets across reloads.",
+      "Family QR Code invite button in Settings for instant mobile camera onboarding.",
+    ],
+  },
   {
     version: "v0.0.12",
     date: "November 1, 2026",
