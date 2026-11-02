@@ -45,7 +45,13 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
   const [addingChecklistNoteId, setAddingChecklistNoteId] = useState<string | null>(null);
   const [newCheckItemText, setNewCheckItemText] = useState('');
 
-  const activeNotes = notes.filter((n) => !n.archivedAt);
+  const now = new Date();
+  const activeNotes = notes.filter(
+    (n) =>
+      !n.archivedAt &&
+      (!n.expiresAt || new Date(n.expiresAt) > now) &&
+      ((n.tabId || 'tab-corkboard') === activeTabId || n.tabId === 'all')
+  );
 
   const handleQuickAdd = () => {
     if (!newNoteText.trim()) return;
@@ -194,7 +200,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
               <CheckSquare className="w-3.5 h-3.5" />
               Checklist Mode
             </button>
-            <span>Instantly syncs to wall display</span>
+            <span>Instantly syncs to selected canvas</span>
           </div>
         </div>
 
@@ -202,12 +208,12 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         <div className="space-y-3 flex-1">
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
             <LayoutGrid className="w-3.5 h-3.5 text-blue-400" />
-            Active Notes ({activeNotes.length})
+            Active Notes on Canvas ({activeNotes.length})
           </span>
 
           {activeNotes.length === 0 ? (
             <div className="p-8 text-center text-xs text-gray-500 bg-gray-950/40 rounded-2xl border border-gray-800/40">
-              No active notes on display. Use the bar above to add one!
+              No active notes on this canvas. Use the bar above to add one!
             </div>
           ) : (
             activeNotes.map((note) => {

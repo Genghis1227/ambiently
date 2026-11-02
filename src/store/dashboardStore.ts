@@ -13,8 +13,17 @@ import type {
   AppSettings,
   DockPosition,
   CanvasBackgroundTheme,
+  AutoOrganizeMode,
+  FreeformPosition,
 } from '../types/dashboard';
 import { saveSnapshotToFile, hasActiveLocalFile } from '../services/fileSync';
+import { computeNonOverlappingLayout, findOpenCanvasSpot } from '../utils/autoLayout';
+
+interface LayoutSnapshot {
+  tabId: string;
+  widgetPositions: Record<string, FreeformPosition>;
+  notePositions: Record<string, FreeformPosition>;
+}
 
 interface DashboardState {
   isInitialized: boolean;
@@ -29,6 +38,7 @@ interface DashboardState {
   carouselPauseTimer: number | null;
   needsFileReconnect: boolean;
   isUnlocked: boolean; // runtime unlock state when pinLockEnabled is on
+  lastLayoutSnapshot: LayoutSnapshot | null;
 
   // Actions
   initStore: () => Promise<void>;
@@ -37,7 +47,8 @@ interface DashboardState {
     name: string,
     icon: string,
     backgroundTheme?: CanvasBackgroundTheme,
-    customWallpaperUrl?: string
+    customWallpaperUrl?: string,
+    backgroundDimLevel?: number
   ) => Promise<string>;
   updateTab: (tabId: string, updates: Partial<DashboardTab>) => Promise<void>;
   deleteTab: (tabId: string) => Promise<void>;
@@ -55,7 +66,11 @@ interface DashboardState {
   lockKiosk: () => void;
   saveLocalBackup: () => Promise<void>;
   syncRemoteNoteChange: (note: StickyNoteItem, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void;
-  
+
+  // Auto-Organize / Auto-Tile Actions
+  autoOrganizeCanvas: (tabId: string, mode?: AutoOrganizeMode) => Promise<void>;
+  undoAutoOrganize: () => Promise<void>;
+
   // Widget / Note operations
   addWidget: (widget: Partial<DashboardWidget>) => Promise<void>;
   removeWidget: (widgetId: string) => Promise<void>;
@@ -86,6 +101,36 @@ async function hashPin(pin: string): Promise<string> {
     .join('');
 }
 
+function getExistingBoxesForTab(
+  tabId: string,
+  widgets: DashboardWidget[],
+  notes: StickyNoteItem[]
+) {
+  const now = new Date();
+  const tabWidgets = widgets.filter((w) => w.tabId === tabId);
+  const tabNotes = notes.filter(
+    (n) =>
+      ((n.tabId || 'tab-corkboard') === tabId || n.tabId === 'all') &&
+      !n.archivedAt &&
+      (!n.expiresAt || new Date(n.expiresAt) > now)
+  );
+
+  return [
+    ...tabWidgets.map((w) => ({
+      xRatio: w.freeformPos?.xRatio ?? 0.1,
+      yRatio: w.freeformPos?.yRatio ?? 0.1,
+      wRatio: w.freeformPos?.wRatio ?? 0.35,
+      hRatio: w.freeformPos?.hRatio ?? 0.45,
+    })),
+    ...tabNotes.map((n) => ({
+      xRatio: n.freeformPos?.xRatio ?? 0.15,
+      yRatio: n.freeformPos?.yRatio ?? 0.15,
+      wRatio: n.freeformPos?.wRatio ?? 0.24,
+      hRatio: n.freeformPos?.hRatio ?? 0.28,
+    })),
+  ];
+}
+
 export const useDashboardStore = create<DashboardState>((set, get) => ({
   isInitialized: false,
   settings: DEFAULT_SETTINGS,
@@ -98,6 +143,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   carouselPauseTimer: null,
   needsFileReconnect: false,
   isUnlocked: true,
+  lastLayoutSnapshot: null,
 
   initStore: async () => {
     // Load from Dexie or seed fresh database
@@ -139,7 +185,13 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     get().pauseCarouselTemporarily();
   },
 
-  addTab: async (name, icon, backgroundTheme = 'midnight_dots', customWallpaperUrl) => {
+  addTab: async (
+    name,
+    icon,
+    backgroundTheme = 'midnight_dots',
+    customWallpaperUrl,
+    backgroundDimLevel = 45
+  ) => {
     const newId = `tab-${Date.now()}`;
     const maxOrder = get().tabs.reduce((max, t) => Math.max(max, t.order), -1);
     const newTab: DashboardTab = {
@@ -149,6 +201,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       order: maxOrder + 1,
       backgroundTheme,
       customWallpaperUrl: customWallpaperUrl?.trim() || undefined,
+      backgroundDimLevel,
+      hideNotes: false,
       autoRotateDurationSec: 30,
       enabled: true,
       updated_at: new Date().toISOString(),
@@ -314,7 +368,6 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       set({ isUnlocked: true });
       return true;
     }
-    // Verify hash synchronously by testing against known
     hashPin(enteredPin).then((hash) => {
       if (hash === settings.pinHash) {
         set({ isUnlocked: true });
@@ -342,10 +395,119 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     });
   },
 
+  autoOrganizeCanvas: async (tabId, mode = 'bento') => {
+    const state = get();
+    const targetTab = state.tabs.find((t) => t.id === tabId);
+    const tabWidgets = state.widgets.filter((w) => w.tabId === tabId);
+    const tabNotes = targetTab?.hideNotes
+      ? []
+      : state.notes.filter(
+          (n) => (n.tabId || 'tab-corkboard') === tabId || n.tabId === 'all'
+        );
+
+    if (tabWidgets.length === 0 && tabNotes.length === 0) return;
+
+    // Save snapshot for 1-click Undo if we haven't already saved one for this tab
+    const prevWidgetPositions: Record<string, FreeformPosition> = {};
+    for (const w of tabWidgets) {
+      if (w.freeformPos) prevWidgetPositions[w.id] = { ...w.freeformPos };
+    }
+    const prevNotePositions: Record<string, FreeformPosition> = {};
+    for (const n of tabNotes) {
+      if (n.freeformPos) prevNotePositions[n.id] = { ...n.freeformPos };
+    }
+
+    const { widgetPositions, notePositions } = computeNonOverlappingLayout(
+      tabWidgets,
+      tabNotes,
+      mode
+    );
+
+    const nowIso = new Date().toISOString();
+    const updatedWidgets: DashboardWidget[] = [];
+    const nextWidgets = state.widgets.map((w) => {
+      const nextPos = widgetPositions[w.id];
+      if (!nextPos) return w;
+      const updated = { ...w, freeformPos: nextPos, updated_at: nowIso };
+      updatedWidgets.push(updated);
+      return updated;
+    });
+
+    const updatedNotes: StickyNoteItem[] = [];
+    const nextNotes = state.notes.map((n) => {
+      const nextPos = notePositions[n.id];
+      if (!nextPos) return n;
+      const updated = { ...n, freeformPos: nextPos, updated_at: nowIso };
+      updatedNotes.push(updated);
+      return updated;
+    });
+
+    if (updatedWidgets.length > 0) await db.widgets.bulkPut(updatedWidgets);
+    if (updatedNotes.length > 0) await db.notes.bulkPut(updatedNotes);
+
+    set({
+      widgets: nextWidgets,
+      notes: nextNotes,
+      lastLayoutSnapshot:
+        state.lastLayoutSnapshot?.tabId === tabId
+          ? state.lastLayoutSnapshot
+          : {
+              tabId,
+              widgetPositions: prevWidgetPositions,
+              notePositions: prevNotePositions,
+            },
+    });
+    get().saveLocalBackup();
+  },
+
+  undoAutoOrganize: async () => {
+    const snapshot = get().lastLayoutSnapshot;
+    if (!snapshot) return;
+
+    const nowIso = new Date().toISOString();
+    const updatedWidgets: DashboardWidget[] = [];
+    const nextWidgets = get().widgets.map((w) => {
+      const prevPos = snapshot.widgetPositions[w.id];
+      if (!prevPos) return w;
+      const updated = { ...w, freeformPos: prevPos, updated_at: nowIso };
+      updatedWidgets.push(updated);
+      return updated;
+    });
+
+    const updatedNotes: StickyNoteItem[] = [];
+    const nextNotes = get().notes.map((n) => {
+      const prevPos = snapshot.notePositions[n.id];
+      if (!prevPos) return n;
+      const updated = { ...n, freeformPos: prevPos, updated_at: nowIso };
+      updatedNotes.push(updated);
+      return updated;
+    });
+
+    if (updatedWidgets.length > 0) await db.widgets.bulkPut(updatedWidgets);
+    if (updatedNotes.length > 0) await db.notes.bulkPut(updatedNotes);
+
+    set({
+      widgets: nextWidgets,
+      notes: nextNotes,
+      lastLayoutSnapshot: null,
+    });
+    get().saveLocalBackup();
+  },
+
   addNote: async (newNote) => {
+    const state = get();
+    const targetTabId = newNote.tabId || state.activeTabId;
+    const existingBoxes = getExistingBoxesForTab(targetTabId, state.widgets, state.notes);
+    const defaultPos = findOpenCanvasSpot(
+      existingBoxes,
+      0.24,
+      0.28,
+      Math.floor(Math.random() * 5) - 2
+    );
+
     const note: StickyNoteItem = {
       id: newNote.id || `note-${Date.now()}`,
-      tabId: newNote.tabId || get().activeTabId,
+      tabId: targetTabId,
       widgetId: newNote.widgetId,
       title: newNote.title,
       content: newNote.content || '',
@@ -354,14 +516,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       bgColor: newNote.bgColor || '#fef08a',
       fontSize: newNote.fontSize || 'base',
       expiresAt: newNote.expiresAt,
-      freeformPos: newNote.freeformPos || {
-        xRatio: 0.15 + Math.random() * 0.2,
-        yRatio: 0.15 + Math.random() * 0.2,
-        wRatio: 0.26,
-        hRatio: 0.3,
-        zIndex: 10,
-        rotation: Math.floor(Math.random() * 6) - 3,
-      },
+      freeformPos: newNote.freeformPos || defaultPos,
       updated_at: new Date().toISOString(),
     };
     await db.notes.put(note);
@@ -385,14 +540,14 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   syncRemoteNoteChange: (remoteNote, eventType) => {
-    if (eventType === "DELETE" || remoteNote.deleted_at) {
+    if (eventType === 'DELETE' || remoteNote.deleted_at) {
       set({ notes: get().notes.filter((n) => n.id !== remoteNote.id) });
-    } else if (eventType === "INSERT") {
+    } else if (eventType === 'INSERT') {
       const exists = get().notes.some((n) => n.id === remoteNote.id);
       if (!exists) {
         set({ notes: [remoteNote, ...get().notes] });
       }
-    } else if (eventType === "UPDATE") {
+    } else if (eventType === 'UPDATE') {
       set({
         notes: get().notes.map((n) => (n.id === remoteNote.id ? remoteNote : n)),
       });
@@ -402,7 +557,6 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   deleteNote: async (noteId) => {
     const existing = get().notes.find((n) => n.id === noteId);
     if (!existing) return;
-    // Soft delete to archive
     const updated: StickyNoteItem = {
       ...existing,
       archivedAt: new Date().toISOString(),
@@ -431,21 +585,26 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   addWidget: async (partialWidget) => {
+    const state = get();
     const id = partialWidget.id || 'widget-' + Date.now();
+    const targetTabId = partialWidget.tabId || state.activeTabId;
+    const targetW = partialWidget.freeformPos?.wRatio || 0.35;
+    const targetH = partialWidget.freeformPos?.hRatio || 0.45;
+    const existingBoxes = getExistingBoxesForTab(targetTabId, state.widgets, state.notes);
+    const openPos = findOpenCanvasSpot(existingBoxes, targetW, targetH, 0);
+
     const newWidget: DashboardWidget = {
       id,
-      tabId: partialWidget.tabId || get().activeTabId,
+      tabId: targetTabId,
       type: partialWidget.type || 'weather',
       title: partialWidget.title || 'Widget',
       gridPos: partialWidget.gridPos || { x: 0, y: 0, w: 4, h: 4 },
-      freeformPos: partialWidget.freeformPos || {
-        xRatio: 0.1 + Math.random() * 0.3,
-        yRatio: 0.1 + Math.random() * 0.3,
-        wRatio: 0.35,
-        hRatio: 0.45,
-        zIndex: 10,
-        rotation: 0,
-      },
+      freeformPos: partialWidget.freeformPos
+        ? {
+            ...openPos,
+            ...partialWidget.freeformPos,
+          }
+        : openPos,
       config: partialWidget.config || {},
       updated_at: new Date().toISOString(),
     };

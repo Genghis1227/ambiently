@@ -8,16 +8,24 @@
 
 ### Pure Freeform Corkboard Multi-Canvas Engine
 * **Unified Corkboard Canvas Architecture:** Every tab is an independent, customizable freeform pinboard canvas (`Corkboard.tsx`) where both Sticky Notes and Live Widgets coexist with normalized coordinates (`xRatio`, `yRatio`, `wRatio`, `hRatio`), continuous `360°` rotation, and automatic bring-to-front (`zIndex`) layering.
+* **1-Click Auto-Organize & Auto-Tile Engine (`autoLayout.ts`):**
+  * Click the **Auto-Organize (`Wand2`)** button in the Navigation Dock to smoothly animate all widgets and sticky notes on the active canvas into a zero-overlap layout across **3 selectable modes**:
+    1. **Smart Bento Grid (`bento`):** Full-canvas zero-overlap Bento grid prioritizing primary widgets in hero slots.
+    2. **Keep Sizes & Pack (`pack`):** 2D shelf-packing that preserves each card's user-chosen dimensions and aspect ratio without overlapping.
+    3. **Split Zones (`split`):** Tiles all Live Widgets on the left (`63%`) and organizes Sticky Notes into a clean corkboard column on the right (`31%`).
+  * Includes **1-Click Undo (`RotateCcw`)** to restore your previous manual layout, plus **Smart Open-Space Spawning** so newly created tiles and notes automatically place themselves in unoccupied areas of the board.
 * **Interactive Corner Drag Resizing (`↘`), Grab-and-Rotate Handle (`↻`), & 1-Click Fullscreen (`⛶`):**
   * Drag any widget or sticky note's bottom-right grip handle to resize it smoothly (with sticky notes scaling from compact `110px × 90px` mini post-it tags up to `100%` full-board posters).
   * Grab the **top-center Rotate Handle (`↻`)** next to any pushpin to spin notes or widgets smoothly to any angle with a live degree indicator (`14°`), magnetic snap to `0°` within `±2.5°`, and double-click to straighten.
   * Click the Maximize (`Maximize2`) button to expand any widget (such as a Photo Frame or Calendar) to fill 100% of the canvas.
-* **Per-Canvas Background Themes & Custom Wallpapers (`canvasThemes.ts`):**
-  * Customize each canvas independently during creation (`CreateCanvasModal.tsx`) or in Settings (`SettingsModal.tsx`) with **Midnight Slate Dots**, **Warm Tactile Cork**, **OLED Pitch Black**, **Nordic Aurora**, **Architect Blueprint Grid**, or any **Custom Wallpaper Image URL** with a readable dark vignette.
-* **Custom Canvases & Icon Picker:** Create unlimited boards via the `+` button in the Navigation Dock or Settings, choosing from 16 curated Lucide icons (`Pin`, `Image`, `Calendar`, `Home`, `Coffee`, `Heart`, `Star`, `Music`, `Sun`, `CheckSquare`, `Sparkles`, `Smile`, `Tv`, `Folder`, `Clock`, `LayoutGrid`) and reorder tabs with 1-click `▲` / `▼` controls.
+* **Per-Canvas Background Themes, 4K Local Picture Upload & Dim Level Control (`canvasThemes.ts`, `imageUpload.ts`):**
+  * Customize each canvas independently during creation (`CreateCanvasModal.tsx`) or in Settings (`SettingsModal.tsx`) with **Midnight Slate Dots**, **Warm Tactile Cork**, **OLED Pitch Black**, **Nordic Aurora**, **Architect Blueprint Grid**, or **Custom Picture Wallpaper**.
+  * **Upload Local Picture (Up to 4K Ultra HD `3840×2160`):** Upload any photo from your device (optimized in-browser with native 4K/5K screen resolution support for 100% offline IndexedDB & JSON backup persistence), pick from **4 Curated 4K Photo Presets**, or paste a direct image URL.
+  * **Adjustable Background Dim Level (`0%` – `90%`):** Fine-tune the dark contrast veil over any custom background picture with a live preview slider.
+* **Custom Canvases & Icon Picker:** Create unlimited boards via the `+` button in the Navigation Dock or Settings, choosing from 16 curated Lucide icons and reorder tabs with 1-click `▲` / `▼` controls.
 
 ### Multi-Tab Navigation Dock & Automated Carousel
-* **4-Edge Dock Placement & Zero-Overlap Canvas Actions:** Position the glassmorphic navigation dock on the **Left, Right, Top, or Bottom** of the screen. Canvas actions (`Pin New Sticky Note`, `Add Widget Tile`, and `Archived & Expired Notes` with live badge count) live directly in the dock so top-right and fullscreen tiles have 100% unobstructed access to their hover controls.
+* **4-Edge Dock Placement & Zero-Overlap Canvas Actions:** Position the glassmorphic navigation dock on the **Left, Right, Top, or Bottom** of the screen. Canvas actions (`Pin New Sticky Note`, `Add Widget Tile`, `Auto-Organize / Auto-Tile`, and `Archived & Expired Notes` with live badge count) live directly in the dock so top-right and fullscreen tiles have 100% unobstructed access to their hover controls.
 * **Automated Tab Carousel:** Enable auto-rotation (`15s`, `30s`, `45s`, `1m`, `2m`) to cycle across your canvases automatically. Touching or clicking anywhere on the screen temporarily pauses the carousel for 20 seconds.
 
 ### Kiosk Hardware & Screen Polish
@@ -37,8 +45,12 @@
 
 ## 2. Smart Sticky Notes, Checklists & Corkboard (Phase 2)
 
+* **Per-Canvas Sticky Note Isolation & Board Assignment:**
+  * Each canvas owns its own independent sticky notes by default so new canvases start completely clean and deleting a note on one canvas never deletes notes on another.
+  * Move any note to another canvas—or explicitly select **📌 Pin to All Canvases**—via the Canvas Board selector inside the Note Creator / Editor modal.
+  * Toggle **Show / Hide Sticky Notes (`Eye` / `EyeOff`)** per canvas in Settings to temporarily hide all sticky notes on a board without deleting them.
 * **Rich Note & Interactive Checklist Modes:** Switch seamlessly between free-text notes and interactive to-do checklists with live strikethrough completion.
-* **Inline Sticky Note Editing (`✏️` / Double-Click):** Edit any existing note's title, message body, checklist items (add, edit, or delete rows), pastel color, typography scale (`S`, `M`, `L`, `XL`), or expiration timer without losing its position, size, or rotation on the corkboard.
+* **Inline Sticky Note Editing (`✏️` / Double-Click):** Edit any existing note's title, message body, checklist items (add, edit, or delete rows), pastel color, typography scale (`S`, `M`, `L`, `XL`), canvas board assignment, or expiration timer without losing its position, size, or rotation on the corkboard.
 * **Wide-Range Sizing & 4 Font Scales (`S / M / L / XL`):** Resize sticky notes from tiny `8%` label tags all the way up to `100%` posters, and choose from Small (`S`), Medium (`M`), Large (`L`), or Poster (`XL`) text scales.
 * **6-Color Pastel Palette:** Customize notes in Amber Yellow, Emerald Green, Sky Blue, Rose Pink, Lavender Purple, or Warm Peach.
 * **Note Expiration & Auto-Cleanup Engine:**
@@ -90,8 +102,8 @@ Every widget features a top-right **Tile Settings (`⚙️`)** button to customi
 
 * **Responsive Mobile Companion (`< 768px`):**
   * Automatically serves a streamlined mobile interface (`MobileCompanion.tsx`) when opened on a smartphone, with a 1-tap toggle to switch to the full Kiosk view if desired.
-  * **Quick Note & Inline Mobile Editing:** Post new notes/checklists, edit existing notes (`✏️`), or append new items (`+ Add item`) to existing checklists directly from your phone.
-  * **Remote Tab Switcher:** Tap any tab pill on your phone to switch the active canvas.
+  * **Quick Note & Inline Mobile Editing:** Post new notes/checklists to the selected canvas, edit existing notes (`✏️`), or append new items (`+ Add item`) to existing checklists directly from your phone.
+  * **Remote Tab Switcher:** Tap any tab pill on your phone to view and manage that canvas's notes.
 * **Family QR Code Invite (`ShareBoardModal.tsx`):**
   * Generate a scannable QR code and 6-digit join code in Settings so family members can connect their phones without typing passwords.
 * **3-Tier Persistence & Backup:**

@@ -1,5 +1,10 @@
 import React, { useRef, useState } from 'react';
-import type { StickyNoteItem, DashboardWidget, CanvasBackgroundTheme } from '../../types/dashboard';
+import type {
+  StickyNoteItem,
+  DashboardWidget,
+  CanvasBackgroundTheme,
+  DashboardTab,
+} from '../../types/dashboard';
 import {
   CheckSquare,
   Square,
@@ -15,6 +20,7 @@ import {
   RotateCcw,
   RotateCw,
   Edit2,
+  Layers,
 } from 'lucide-react';
 import { ClockWeatherWidget } from '../widgets/ClockWeatherWidget';
 import { ClockWidget } from '../widgets/ClockWidget';
@@ -33,9 +39,13 @@ import { CANVAS_THEMES } from '../../data/canvasThemes';
 interface CorkboardProps {
   notes: StickyNoteItem[];
   widgets?: DashboardWidget[];
+  tabs?: DashboardTab[];
+  activeTabId?: string;
   dockPaddingClass: string;
   backgroundTheme?: CanvasBackgroundTheme;
   customWallpaperUrl?: string;
+  backgroundDimLevel?: number;
+  hideNotes?: boolean;
   isCreatorOpen?: boolean;
   onOpenCreator?: () => void;
   onCloseCreator?: () => void;
@@ -71,9 +81,13 @@ const FONT_SIZE_CLASSES: Record<NonNullable<StickyNoteItem['fontSize']>, string>
 export const Corkboard: React.FC<CorkboardProps> = ({
   notes,
   widgets = [],
+  tabs = [],
+  activeTabId = 'tab-corkboard',
   dockPaddingClass,
   backgroundTheme = 'midnight_dots',
   customWallpaperUrl,
+  backgroundDimLevel = 45,
+  hideNotes = false,
   isCreatorOpen = false,
   onOpenCreator,
   onCloseCreator,
@@ -128,6 +142,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   const [isChecklist, setIsChecklist] = useState(false);
   const [selectedColor, setSelectedColor] = useState(COLOR_PALETTE[0]);
   const [selectedFontSize, setSelectedFontSize] = useState<NonNullable<StickyNoteItem['fontSize']>>('base');
+  const [selectedNoteTabId, setSelectedNoteTabId] = useState<string>(activeTabId);
   const [checklistItems, setChecklistItems] = useState<{ id: string; text: string; done: boolean }[]>([]);
   const [newItemText, setNewItemText] = useState('');
   const [expiryOption, setExpiryOption] = useState<'permanent' | '1day' | '3days' | 'custom'>('permanent');
@@ -147,6 +162,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     setChecklistItems(note.checklistItems ? [...note.checklistItems] : []);
     setSelectedColor(note.bgColor || COLOR_PALETTE[0]);
     setSelectedFontSize(note.fontSize || 'base');
+    setSelectedNoteTabId(note.tabId || activeTabId);
 
     if (note.expiresAt) {
       setExpiryOption('custom');
@@ -174,6 +190,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     setChecklistItems([]);
     setSelectedColor(COLOR_PALETTE[0]);
     setSelectedFontSize('base');
+    setSelectedNoteTabId(activeTabId);
     setExpiryOption('permanent');
     setCustomExpiry('');
     onCloseCreator?.();
@@ -188,7 +205,6 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     e.stopPropagation();
     if (!containerRef.current) return;
 
-    // Measure actual current element dimensions if hRatio was not explicitly set
     const cardEl = (e.currentTarget as HTMLElement).parentElement;
     const containerRect = containerRef.current.getBoundingClientRect();
     const cardRect = cardEl?.getBoundingClientRect();
@@ -245,7 +261,6 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     type: 'note' | 'widget',
     pos?: NonNullable<DashboardWidget['freeformPos']>
   ) => {
-    // Prevent drag when clicking buttons, inputs, links, or interactive elements
     if ((e.target as HTMLElement).closest('button, input, textarea, select, a, [role="button"], [data-no-drag="true"]')) return;
 
     if (!containerRef.current) return;
@@ -256,7 +271,6 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     const currentX = (pos?.xRatio ?? 0.1) * rect.width;
     const currentY = (pos?.yRatio ?? 0.1) * rect.height;
 
-    // Bring card to front on interaction
     const nextZ = getNextZIndex();
     if (type === 'note' && pos) {
       onUpdateNotePos(id, { ...pos, zIndex: nextZ });
@@ -293,7 +307,6 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       if (deltaAngle < -180) deltaAngle += 360;
 
       let nextRotation = Math.round(rotateStart.startRotation + deltaAngle);
-      // Magnetic snap to 0° when within ±2.5°
       if (Math.abs(nextRotation) <= 2.5) {
         nextRotation = 0;
       }
@@ -370,7 +383,6 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         const maxW = 1.0 - pos.xRatio;
         const maxH = 1.0 - pos.yRatio;
 
-        // Wide resize range for notes: 8% (compact post-it) up to 100% (full board)
         const newW = Math.max(0.08, Math.min(maxW, resizeStart.startW + deltaWRatio));
         const newH = Math.max(0.08, Math.min(maxH, resizeStart.startH + deltaHRatio));
 
@@ -447,6 +459,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
     if (editingNoteId) {
       onUpdateNote(editingNoteId, {
+        tabId: selectedNoteTabId || activeTabId,
         title: newTitle.trim() || undefined,
         content: newContent,
         isChecklist,
@@ -456,7 +469,9 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         expiresAt,
       });
     } else {
+      // Omit freeformPos so dashboardStore.addNote automatically finds an open non-overlapping spot!
       onAddNote({
+        tabId: selectedNoteTabId || activeTabId,
         title: newTitle.trim() || undefined,
         content: newContent,
         isChecklist,
@@ -464,14 +479,6 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         bgColor: selectedColor,
         fontSize: selectedFontSize,
         expiresAt,
-        freeformPos: {
-          xRatio: 0.2 + Math.random() * 0.3,
-          yRatio: 0.2 + Math.random() * 0.3,
-          wRatio: 0.26,
-          hRatio: 0.32,
-          zIndex: getNextZIndex(),
-          rotation: Math.floor(Math.random() * 6) - 3,
-        },
       });
     }
 
@@ -487,11 +494,13 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   };
 
   const now = new Date();
-  const activeNotes = notes.filter((n) => {
-    if (n.archivedAt) return false;
-    if (n.expiresAt && new Date(n.expiresAt) <= now) return false;
-    return true;
-  });
+  const activeNotes = hideNotes
+    ? []
+    : notes.filter((n) => {
+        if (n.archivedAt) return false;
+        if (n.expiresAt && new Date(n.expiresAt) <= now) return false;
+        return true;
+      });
 
   const trashNotes = notes.filter((n) => {
     if (n.archivedAt) return true;
@@ -501,6 +510,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
   const activeThemeObj =
     CANVAS_THEMES.find((t) => t.id === backgroundTheme) || CANVAS_THEMES[0];
+
+  const dimAlpha = Math.max(0, Math.min(0.92, (backgroundDimLevel ?? 45) / 100));
 
   return (
     <div
@@ -512,14 +523,19 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         touchAction: 'none',
         WebkitTouchCallout: 'none',
         ...(backgroundTheme === 'custom' && customWallpaperUrl
-          ? { backgroundImage: `url(${customWallpaperUrl})` }
+          ? { backgroundImage: `url("${customWallpaperUrl}")` }
           : {}),
       }}
       className={`relative w-full h-screen overflow-hidden select-none touch-none ${activeThemeObj.canvasClass} ${dockPaddingClass}`}
     >
-      {/* Subtle Vignette Overlay for Custom Wallpapers */}
+      {/* Dynamic Dim Overlay for Custom Picture Backgrounds */}
       {backgroundTheme === 'custom' && customWallpaperUrl && (
-        <div className="absolute inset-0 bg-black/45 pointer-events-none" />
+        <div
+          className="absolute inset-0 pointer-events-none transition-opacity duration-200"
+          style={{
+            backgroundColor: `rgba(9, 13, 22, ${dimAlpha})`,
+          }}
+        />
       )}
 
       {/* Empty Canvas Onboarding Prompt (when a new canvas has 0 tiles and 0 notes) */}
@@ -542,7 +558,10 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               )}
               {onOpenCreator && (
                 <button
-                  onClick={onOpenCreator}
+                  onClick={() => {
+                    setSelectedNoteTabId(activeTabId);
+                    onOpenCreator();
+                  }}
                   className="flex items-center gap-1.5 py-2 px-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white shadow-lg shadow-blue-500/25 transition-all cursor-pointer"
                 >
                   <Pin className="w-3.5 h-3.5" />
@@ -603,7 +622,9 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                     zIndex: isActiveManipulating ? 50 : pos.zIndex,
                     touchAction: 'none',
                     WebkitTouchCallout: 'none',
-                    transition: isActiveManipulating ? 'none' : 'box-shadow 0.2s, transform 0.15s ease-out',
+                    transition: isActiveManipulating
+                      ? 'none'
+                      : 'left 0.3s cubic-bezier(0.22, 1, 0.36, 1), top 0.3s cubic-bezier(0.22, 1, 0.36, 1), width 0.3s cubic-bezier(0.22, 1, 0.36, 1), height 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.25s ease-out, box-shadow 0.2s',
                   }
             }
             className={`group ${
@@ -887,7 +908,9 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               zIndex: isActiveManipulating ? 50 : pos.zIndex,
               touchAction: 'none',
               WebkitTouchCallout: 'none',
-              transition: isActiveManipulating ? 'none' : 'box-shadow 0.2s, transform 0.15s ease-out',
+              transition: isActiveManipulating
+                ? 'none'
+                : 'left 0.3s cubic-bezier(0.22, 1, 0.36, 1), top 0.3s cubic-bezier(0.22, 1, 0.36, 1), width 0.3s cubic-bezier(0.22, 1, 0.36, 1), height 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.25s ease-out, box-shadow 0.2s',
             }}
             className={`group rounded-2xl p-3.5 shadow-2xl text-gray-900 cursor-grab active:cursor-grabbing border border-black/10 touch-none select-none transition-shadow ${
               isDragging || isRotating
@@ -1026,7 +1049,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
                   className="p-1 rounded-lg text-gray-700 hover:text-blue-800 hover:bg-black/10 transition-all cursor-pointer"
-                  title="Edit note text, checklist, color, or font size"
+                  title="Edit note text, checklist, color, or canvas board"
                 >
                   <Edit2 className="w-3.5 h-3.5" />
                 </button>
@@ -1068,7 +1091,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       {/* Creator & Inline Editor Modal for Sticky Notes */}
       {isCreatorOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl p-5 space-y-4">
+          <div className="w-full max-w-sm rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl p-5 space-y-3.5">
             <div className="flex items-center justify-between border-b border-gray-800 pb-3">
               <span className="text-sm font-bold text-white">
                 {editingNoteId ? 'Edit Sticky Note' : 'Pin Note to Canvas'}
@@ -1121,31 +1144,54 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               />
             )}
 
-            {/* Font Size Selector */}
-            <div className="flex items-center justify-between bg-gray-950/60 px-3 py-1.5 rounded-xl border border-gray-800">
-              <span className="text-[11px] text-gray-400 font-medium">Text Size:</span>
-              <div className="flex items-center gap-1">
-                {(
-                  [
-                    { id: 'sm', label: 'S' },
-                    { id: 'base', label: 'M' },
-                    { id: 'lg', label: 'L' },
-                    { id: 'xl', label: 'XL' },
-                  ] as const
-                ).map((sz) => (
-                  <button
-                    key={sz.id}
-                    type="button"
-                    onClick={() => setSelectedFontSize(sz.id)}
-                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all cursor-pointer ${
-                      selectedFontSize === sz.id
-                        ? 'bg-blue-600 text-white'
-                        : 'text-gray-400 hover:text-white'
-                    }`}
+            {/* Canvas Board Selector & Font Size Selector */}
+            <div className="grid grid-cols-2 gap-2">
+              {tabs.length > 0 && (
+                <div className="flex items-center gap-1.5 bg-gray-950/60 px-2.5 py-1.5 rounded-xl border border-gray-800">
+                  <Layers className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <select
+                    value={selectedNoteTabId}
+                    onChange={(e) => setSelectedNoteTabId(e.target.value)}
+                    title="Choose which canvas this note appears on"
+                    className="w-full bg-transparent text-[11px] text-white focus:outline-none truncate"
                   >
-                    {sz.label}
-                  </button>
-                ))}
+                    {tabs.map((t) => (
+                      <option key={t.id} value={t.id} className="bg-gray-900 text-white">
+                        {t.name}
+                      </option>
+                    ))}
+                    <option value="all" className="bg-gray-900 text-amber-300">
+                      📌 Pin to All Canvases
+                    </option>
+                  </select>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between bg-gray-950/60 px-2.5 py-1.5 rounded-xl border border-gray-800">
+                <span className="text-[10px] text-gray-400 font-medium">Size:</span>
+                <div className="flex items-center gap-0.5">
+                  {(
+                    [
+                      { id: 'sm', label: 'S' },
+                      { id: 'base', label: 'M' },
+                      { id: 'lg', label: 'L' },
+                      { id: 'xl', label: 'XL' },
+                    ] as const
+                  ).map((sz) => (
+                    <button
+                      key={sz.id}
+                      type="button"
+                      onClick={() => setSelectedFontSize(sz.id)}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                        selectedFontSize === sz.id
+                          ? 'bg-blue-600 text-white'
+                          : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      {sz.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 

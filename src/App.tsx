@@ -38,6 +38,9 @@ export function App() {
     deleteNote,
     permanentlyDeleteNote,
     addTab,
+    autoOrganizeCanvas,
+    undoAutoOrganize,
+    lastLayoutSnapshot,
   } = useDashboardStore();
 
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -53,11 +56,11 @@ export function App() {
   // Auto-join shared board if ?join=CODE is in URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const joinCode = params.get("join");
+    const joinCode = params.get('join');
     if (joinCode) {
       joinBoardByCode(joinCode).then((res) => {
         if (res.success) {
-          console.log("Connected to shared board:", res.boardTitle);
+          console.log('Connected to shared board:', res.boardTitle);
           initStore();
         }
       });
@@ -66,7 +69,7 @@ export function App() {
 
   // Live Supabase Realtime WebSocket subscription
   useEffect(() => {
-    const unsubscribe = subscribeToRealtimeBoard("default", (note, eventType) => {
+    const unsubscribe = subscribeToRealtimeBoard('default', (note, eventType) => {
       syncRemoteNoteChange(note, eventType);
     });
     return () => unsubscribe();
@@ -212,9 +215,13 @@ export function App() {
   }
 
   const activeTab = visibleTabs.find((t) => t.id === activeTabId) || visibleTabs[0] || tabs[0];
-  const tabWidgets = widgets.filter((w) => w.tabId === activeTab?.id);
-  const tabNotes = notes.filter((n) => n.tabId === activeTab?.id);
-  const activeCanvasNotes = tabNotes.length > 0 ? tabNotes : notes;
+  const activeTabIdResolved = activeTab?.id || 'tab-corkboard';
+  const tabWidgets = widgets.filter((w) => w.tabId === activeTabIdResolved);
+
+  // Strict per-canvas sticky notes (plus notes explicitly pinned to 'all' canvases)
+  const activeCanvasNotes = notes.filter(
+    (n) => (n.tabId || 'tab-corkboard') === activeTabIdResolved || n.tabId === 'all'
+  );
 
   const now = new Date();
   const trashCount = activeCanvasNotes.filter(
@@ -253,9 +260,13 @@ export function App() {
         <Corkboard
           notes={activeCanvasNotes}
           widgets={tabWidgets}
+          tabs={visibleTabs}
+          activeTabId={activeTabIdResolved}
           dockPaddingClass={dockPaddingClasses}
           backgroundTheme={activeTab?.backgroundTheme || 'midnight_dots'}
           customWallpaperUrl={activeTab?.customWallpaperUrl}
+          backgroundDimLevel={activeTab?.backgroundDimLevel ?? 45}
+          hideNotes={Boolean(activeTab?.hideNotes)}
           isCreatorOpen={isNoteCreatorOpen}
           onOpenCreator={() => setIsNoteCreatorOpen(true)}
           onCloseCreator={() => setIsNoteCreatorOpen(false)}
@@ -276,7 +287,7 @@ export function App() {
       {/* Navigation Dock - Pinned at Viewport Level (Never obscures canvas tiles) */}
       <NavigationDock
         tabs={visibleTabs}
-        activeTabId={activeTab?.id || ''}
+        activeTabId={activeTabIdResolved}
         dockPosition={settings.dockPosition}
         isLocked={!isUnlocked}
         onSelectTab={setActiveTabId}
@@ -291,6 +302,9 @@ export function App() {
         onOpenCreateNote={() => setIsNoteCreatorOpen(true)}
         onOpenTrash={() => setIsTrashOpen(true)}
         trashCount={trashCount}
+        onAutoOrganize={(mode) => autoOrganizeCanvas(activeTabIdResolved, mode)}
+        onUndoOrganize={undoAutoOrganize}
+        canUndoOrganize={lastLayoutSnapshot?.tabId === activeTabIdResolved}
       />
 
       {/* Night Mode Screen Overlay */}
@@ -321,19 +335,19 @@ export function App() {
       <AddWidgetModal
         isOpen={isAddWidgetOpen}
         onClose={() => setIsAddWidgetOpen(false)}
-        activeTabId={activeTab?.id || 'tab-corkboard'}
+        activeTabId={activeTabIdResolved}
         onAddWidget={addWidget}
       />
 
       <CreateCanvasModal
         isOpen={isCreateCanvasOpen}
         onClose={() => setIsCreateCanvasOpen(false)}
-        onCreateCanvas={(name, icon, theme, wallpaperUrl) => {
-          addTab(name, icon, theme, wallpaperUrl);
+        onCreateCanvas={(name, icon, theme, wallpaperUrl, dimLevel) => {
+          addTab(name, icon, theme, wallpaperUrl, dimLevel);
         }}
       />
 
-      {/* Settings Modal */}
+      {/* Settings & Customization Modal */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}

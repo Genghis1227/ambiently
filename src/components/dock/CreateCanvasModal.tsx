@@ -1,7 +1,11 @@
-import React, { useState } from 'react';
-import { X, Plus, Palette } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { X, Plus, Palette, Upload, SunDim } from 'lucide-react';
 import { CANVAS_ICONS } from '../../data/canvasIcons';
 import { CANVAS_THEMES } from '../../data/canvasThemes';
+import {
+  CURATED_WALLPAPER_PRESETS,
+  processUploadedWallpaper,
+} from '../../utils/imageUpload';
 import type { CanvasBackgroundTheme } from '../../types/dashboard';
 
 interface CreateCanvasModalProps {
@@ -11,7 +15,8 @@ interface CreateCanvasModalProps {
     name: string,
     icon: string,
     backgroundTheme?: CanvasBackgroundTheme,
-    customWallpaperUrl?: string
+    customWallpaperUrl?: string,
+    backgroundDimLevel?: number
   ) => void;
 }
 
@@ -24,8 +29,26 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
   const [selectedIcon, setSelectedIcon] = useState('Pin');
   const [selectedTheme, setSelectedTheme] = useState<CanvasBackgroundTheme>('midnight_dots');
   const [customWallpaperUrl, setCustomWallpaperUrl] = useState('');
+  const [backgroundDimLevel, setBackgroundDimLevel] = useState<number>(45);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploading(true);
+    try {
+      const dataUrl = await processUploadedWallpaper(file);
+      setCustomWallpaperUrl(dataUrl);
+      setSelectedTheme('custom');
+    } catch (err) {
+      console.error('Failed to process uploaded wallpaper:', err);
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,12 +57,14 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
       name.trim(),
       selectedIcon,
       selectedTheme,
-      selectedTheme === 'custom' ? customWallpaperUrl.trim() : undefined
+      selectedTheme === 'custom' ? customWallpaperUrl.trim() : undefined,
+      backgroundDimLevel
     );
     setName('');
     setSelectedIcon('Pin');
     setSelectedTheme('midnight_dots');
     setCustomWallpaperUrl('');
+    setBackgroundDimLevel(45);
     onClose();
   };
 
@@ -80,7 +105,7 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
             <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
               Choose an Icon
             </label>
-            <div className="grid grid-cols-4 gap-2 max-h-44 overflow-y-auto p-1 bg-gray-950 rounded-xl border border-gray-800">
+            <div className="grid grid-cols-4 gap-2 max-h-40 overflow-y-auto p-1 bg-gray-950 rounded-xl border border-gray-800">
               {CANVAS_ICONS.map((item) => {
                 const IconComponent = item.icon;
                 const isSelected = selectedIcon === item.id;
@@ -134,17 +159,105 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
           </div>
 
           {selectedTheme === 'custom' && (
-            <div>
-              <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 block mb-1">
-                Custom Wallpaper Image URL
-              </label>
+            <div className="space-y-3 p-3 rounded-xl bg-gray-950 border border-gray-800">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                  Upload Picture (Up to 4K UHD) or Paste URL
+                </label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 text-[11px] font-bold transition-colors cursor-pointer"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>{isUploading ? 'Processing...' : 'Upload Picture'}</span>
+                </button>
+              </div>
+
+              {/* 4K Curated Photo Presets */}
+              <div className="grid grid-cols-4 gap-1.5">
+                {CURATED_WALLPAPER_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => setCustomWallpaperUrl(preset.url)}
+                    title={preset.label}
+                    className={`relative h-11 rounded-lg overflow-hidden border transition-all cursor-pointer ${
+                      customWallpaperUrl === preset.url
+                        ? 'border-emerald-400 ring-1 ring-emerald-400'
+                        : 'border-gray-800 opacity-75 hover:opacity-100'
+                    }`}
+                  >
+                    <img
+                      src={preset.thumbUrl}
+                      alt={preset.label}
+                      className="w-full h-full object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+
               <input
-                type="url"
-                value={customWallpaperUrl}
+                type="text"
+                value={customWallpaperUrl.startsWith('data:') ? 'Uploaded Local Picture (4K Ready)' : customWallpaperUrl}
                 onChange={(e) => setCustomWallpaperUrl(e.target.value)}
                 placeholder="https://images.unsplash.com/photo-..."
-                className="w-full rounded-xl bg-gray-950 border border-gray-800 p-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
+                className="w-full rounded-lg bg-gray-900 border border-gray-800 p-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
               />
+
+              {/* Background Dim Level Slider */}
+              <div>
+                <div className="flex items-center justify-between text-[11px] text-gray-300 mb-1">
+                  <span className="flex items-center gap-1 font-semibold">
+                    <SunDim className="w-3.5 h-3.5 text-amber-400" />
+                    Background Dim Level
+                  </span>
+                  <span className="font-mono font-bold text-emerald-400">{backgroundDimLevel}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={90}
+                  step={5}
+                  value={backgroundDimLevel}
+                  onChange={(e) => setBackgroundDimLevel(Number(e.target.value))}
+                  className="w-full accent-emerald-500 cursor-pointer"
+                />
+                <div className="flex justify-between text-[9px] text-gray-500 mt-0.5">
+                  <span>0% (Full Brightness)</span>
+                  <span>45% (Balanced)</span>
+                  <span>90% (Deep Dark)</span>
+                </div>
+              </div>
+
+              {/* Live Wallpaper + Dim Preview */}
+              {customWallpaperUrl && (
+                <div
+                  className="relative h-20 rounded-xl overflow-hidden border border-gray-800 flex items-center justify-center"
+                  style={{
+                    backgroundImage: `linear-gradient(rgba(9, 13, 22, ${
+                      backgroundDimLevel / 100
+                    }), rgba(9, 13, 22, ${Math.min(
+                      0.95,
+                      backgroundDimLevel / 100 + 0.1
+                    )})), url("${customWallpaperUrl}")`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                  }}
+                >
+                  <span className="px-2.5 py-1 rounded-md bg-gray-900/75 backdrop-blur-sm border border-white/10 text-[10px] font-semibold text-white shadow">
+                    Live Background Preview ({backgroundDimLevel}% Dim)
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
@@ -159,7 +272,7 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={!name.trim()}
+              disabled={!name.trim() || isUploading}
               className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-xs font-bold text-white shadow-lg shadow-emerald-500/25 transition-all cursor-pointer"
             >
               Create Canvas

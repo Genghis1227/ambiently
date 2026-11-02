@@ -8,6 +8,8 @@ export type CanvasBackgroundTheme =
   | 'blueprint'
   | 'custom';
 
+export type AutoOrganizeMode = 'bento' | 'pack' | 'split';
+
 export type WidgetType =
   | 'clock_weather'
   | 'clock'
@@ -49,6 +51,8 @@ export interface DashboardTab {
   order: number;
   backgroundTheme?: CanvasBackgroundTheme;
   customWallpaperUrl?: string;
+  backgroundDimLevel?: number; // 0 to 90 (percentage dark overlay on custom picture)
+  hideNotes?: boolean; // when true, hides sticky notes on this canvas
   layoutMode?: string;
   autoRotateDurationSec: number; // 0 = do not rotate, >0 = rotate after N seconds
   enabled?: boolean;

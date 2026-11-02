@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Lock,
@@ -21,6 +21,9 @@ import {
   Moon,
   Sun,
   QrCode,
+  Eye,
+  EyeOff,
+  SunDim,
 } from 'lucide-react';
 import { db } from '../../services/db';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -40,6 +43,10 @@ import {
 import { APP_VERSION } from '../../data/changelog';
 import { CANVAS_ICONS } from '../../data/canvasIcons';
 import { CANVAS_THEMES } from '../../data/canvasThemes';
+import {
+  CURATED_WALLPAPER_PRESETS,
+  processUploadedWallpaper,
+} from '../../utils/imageUpload';
 import type { CanvasBackgroundTheme } from '../../types/dashboard';
 import { CreateCanvasModal } from '../dock/CreateCanvasModal';
 import { ChangelogModal } from '../changelog/ChangelogModal';
@@ -85,13 +92,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [isConfirmingReset, setIsConfirmingReset] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [backupStatus, setBackupStatus] = useState<string>('');
-  const restoreFileRef = React.useRef<HTMLInputElement>(null);
+  const restoreFileRef = useRef<HTMLInputElement>(null);
+  const wallpaperUploadRef = useRef<HTMLInputElement>(null);
+  const [isUploadingWallpaper, setIsUploadingWallpaper] = useState(false);
+
   const [isCreateCanvasOpen, setIsCreateCanvasOpen] = useState(false);
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editTabName, setEditTabName] = useState('');
   const [editTabIcon, setEditTabIcon] = useState('Pin');
   const [editTabTheme, setEditTabTheme] = useState<CanvasBackgroundTheme>('midnight_dots');
   const [editTabWallpaperUrl, setEditTabWallpaperUrl] = useState('');
+  const [editTabDimLevel, setEditTabDimLevel] = useState<number>(45);
+  const [editTabHideNotes, setEditTabHideNotes] = useState<boolean>(false);
 
   const handleMoveTab = async (index: number, direction: 'up' | 'down') => {
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
@@ -100,6 +112,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     const [moved] = newTabs.splice(index, 1);
     newTabs.splice(targetIndex, 0, moved);
     await reorderTabs(newTabs.map((t) => t.id));
+  };
+
+  const handleEditWallpaperUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingWallpaper(true);
+    try {
+      const dataUrl = await processUploadedWallpaper(file);
+      setEditTabWallpaperUrl(dataUrl);
+      setEditTabTheme('custom');
+    } catch (err) {
+      console.error('Failed to process wallpaper:', err);
+    } finally {
+      setIsUploadingWallpaper(false);
+    }
   };
 
   useEffect(() => {
@@ -113,20 +140,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const handleFactoryReset = async () => {
     setIsResetting(true);
     try {
-      // 1. Clear IndexedDB database completely
       await db.delete();
-
-      // 2. Clear photo cache storage if supported
       if ('caches' in window) {
         const cacheKeys = await caches.keys();
         await Promise.all(cacheKeys.map((k) => caches.delete(k)));
       }
-
-      // 3. Clear localStorage & sessionStorage
       localStorage.clear();
       sessionStorage.clear();
-
-      // 4. Clean reload
       window.location.href = window.location.origin + window.location.pathname;
     } catch (err) {
       console.error('Factory reset error:', err);
@@ -259,7 +279,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                     Canvases & Boards
                   </span>
                   <span className="text-[11px] text-gray-400">
-                    Reorder, rename, custom icons, background themes, or add boards.
+                    Reorder, rename, background pictures & dim levels, or hide sticky notes per board.
                   </span>
                 </div>
                 <button
@@ -278,7 +298,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   const isFirst = idx === 0;
                   const isLast = idx === tabs.length - 1;
 
-                  // Find Icon & Theme
                   const matchedIconItem = CANVAS_ICONS.find((i) => i.id === tab.icon) || CANVAS_ICONS[0];
                   const IconComp = matchedIconItem.icon;
                   const matchedTheme =
@@ -292,7 +311,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2.5">
-                          {/* Icon Badge */}
                           <div className="p-2 rounded-lg bg-black/50 border border-white/10 text-emerald-400">
                             <IconComp className="w-4 h-4" />
                           </div>
@@ -302,12 +320,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                             </span>
                             <span className="text-[10px] text-gray-400 flex items-center gap-1.5">
                               <span>{matchedTheme.label}</span>
+                              {tab.backgroundTheme === 'custom' && (
+                                <span className="text-emerald-400">
+                                  ({tab.backgroundDimLevel ?? 45}% dim)
+                                </span>
+                              )}
+                              {tab.hideNotes && (
+                                <span className="text-amber-400 font-semibold">
+                                  • Notes Hidden
+                                </span>
+                              )}
                             </span>
                           </div>
                         </div>
 
-                        {/* Reorder, Edit & Action Controls */}
+                        {/* Reorder, Show/Hide Notes, Edit & Action Controls */}
                         <div className="flex items-center gap-1">
+                          {/* Quick Toggle Show/Hide Sticky Notes on this Canvas */}
+                          <button
+                            type="button"
+                            onClick={() => updateTab(tab.id, { hideNotes: !tab.hideNotes })}
+                            title={
+                              tab.hideNotes
+                                ? 'Sticky notes are hidden on this canvas (click to show)'
+                                : 'Sticky notes are visible on this canvas (click to hide)'
+                            }
+                            className={`p-1 rounded-md transition-colors cursor-pointer ${
+                              tab.hideNotes
+                                ? 'text-amber-400 bg-amber-500/15 hover:bg-amber-500/25'
+                                : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                            }`}
+                          >
+                            {tab.hideNotes ? (
+                              <EyeOff className="w-3.5 h-3.5" />
+                            ) : (
+                              <Eye className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+
                           {/* Move Up */}
                           <button
                             type="button"
@@ -342,10 +392,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                 setEditTabIcon(tab.icon || 'Pin');
                                 setEditTabTheme(tab.backgroundTheme || 'midnight_dots');
                                 setEditTabWallpaperUrl(tab.customWallpaperUrl || '');
+                                setEditTabDimLevel(tab.backgroundDimLevel ?? 45);
+                                setEditTabHideNotes(Boolean(tab.hideNotes));
                               }
                             }}
-                            title="Edit name, icon, and background theme"
-                            className="p-1 rounded-md text-gray-400 hover:text-blue-300 hover:bg-blue-500/20 transition-colors"
+                            title="Edit name, icon, background picture, and dim level"
+                            className="p-1 rounded-md text-gray-400 hover:text-blue-300 hover:bg-blue-500/20 transition-colors cursor-pointer"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
@@ -356,7 +408,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                               type="button"
                               onClick={() => deleteTab(tab.id)}
                               title="Delete this canvas"
-                              className="p-1 rounded-md text-gray-400 hover:text-red-400 hover:bg-red-500/20 transition-colors"
+                              className="p-1 rounded-md text-gray-400 hover:text-red-400 hover:bg-red-500/20 transition-colors cursor-pointer"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -386,7 +438,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                   type="button"
                                   onClick={() => setEditTabIcon(item.id)}
                                   className={`p-1.5 rounded flex items-center justify-center transition-all cursor-pointer ${
-                                    isCur ? 'bg-emerald-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                                    isCur
+                                      ? 'bg-emerald-600 text-white'
+                                      : 'text-gray-400 hover:text-white hover:bg-gray-800'
                                   }`}
                                   title={item.label}
                                 >
@@ -424,20 +478,138 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                           </div>
 
                           {editTabTheme === 'custom' && (
-                            <input
-                              type="url"
-                              value={editTabWallpaperUrl}
-                              onChange={(e) => setEditTabWallpaperUrl(e.target.value)}
-                              placeholder="Custom Wallpaper Image URL (https://...)"
-                              className="w-full rounded-lg bg-gray-950 border border-gray-800 p-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                            />
+                            <div className="space-y-2.5 p-2.5 rounded-lg bg-gray-950 border border-gray-800">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                                  Upload Picture (Up to 4K UHD) or Paste URL
+                                </span>
+                                <input
+                                  ref={wallpaperUploadRef}
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={handleEditWallpaperUpload}
+                                  className="hidden"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => wallpaperUploadRef.current?.click()}
+                                  disabled={isUploadingWallpaper}
+                                  className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold transition-colors cursor-pointer"
+                                >
+                                  <Upload className="w-3 h-3" />
+                                  <span>{isUploadingWallpaper ? 'Processing...' : 'Upload Picture'}</span>
+                                </button>
+                              </div>
+
+                              {/* 4K Curated Photo Presets */}
+                              <div className="grid grid-cols-4 gap-1.5">
+                                {CURATED_WALLPAPER_PRESETS.map((preset) => (
+                                  <button
+                                    key={preset.id}
+                                    type="button"
+                                    onClick={() => setEditTabWallpaperUrl(preset.url)}
+                                    title={preset.label}
+                                    className={`relative h-10 rounded-md overflow-hidden border transition-all cursor-pointer ${
+                                      editTabWallpaperUrl === preset.url
+                                        ? 'border-emerald-400 ring-1 ring-emerald-400'
+                                        : 'border-gray-800 opacity-75 hover:opacity-100'
+                                    }`}
+                                  >
+                                    <img
+                                      src={preset.thumbUrl}
+                                      alt={preset.label}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  </button>
+                                ))}
+                              </div>
+
+                              <input
+                                type="text"
+                                value={
+                                  editTabWallpaperUrl.startsWith('data:')
+                                    ? 'Uploaded Local Picture (4K Ready)'
+                                    : editTabWallpaperUrl
+                                }
+                                onChange={(e) => setEditTabWallpaperUrl(e.target.value)}
+                                placeholder="Custom Wallpaper Image URL (https://...)"
+                                className="w-full rounded-lg bg-gray-900 border border-gray-800 p-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                              />
+
+                              {/* Background Dim Level Slider */}
+                              <div>
+                                <div className="flex items-center justify-between text-[11px] text-gray-300 mb-1">
+                                  <span className="flex items-center gap-1 font-semibold">
+                                    <SunDim className="w-3.5 h-3.5 text-amber-400" />
+                                    Background Dim Level
+                                  </span>
+                                  <span className="font-mono font-bold text-emerald-400">
+                                    {editTabDimLevel}%
+                                  </span>
+                                </div>
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={90}
+                                  step={5}
+                                  value={editTabDimLevel}
+                                  onChange={(e) => setEditTabDimLevel(Number(e.target.value))}
+                                  className="w-full accent-emerald-500 cursor-pointer"
+                                />
+                                <div className="flex justify-between text-[9px] text-gray-500 mt-0.5">
+                                  <span>0% (Bright)</span>
+                                  <span>45% (Balanced)</span>
+                                  <span>90% (Dark)</span>
+                                </div>
+                              </div>
+
+                              {editTabWallpaperUrl && (
+                                <div
+                                  className="relative h-16 rounded-lg overflow-hidden border border-gray-800 flex items-center justify-center"
+                                  style={{
+                                    backgroundImage: `linear-gradient(rgba(9, 13, 22, ${
+                                      editTabDimLevel / 100
+                                    }), rgba(9, 13, 22, ${Math.min(
+                                      0.95,
+                                      editTabDimLevel / 100 + 0.1
+                                    )})), url("${editTabWallpaperUrl}")`,
+                                    backgroundSize: 'cover',
+                                    backgroundPosition: 'center',
+                                  }}
+                                >
+                                  <span className="px-2 py-0.5 rounded bg-gray-900/75 text-[10px] font-semibold text-white">
+                                    Preview ({editTabDimLevel}% Dim)
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                           )}
 
-                          <div className="flex justify-end gap-1.5">
+                          {/* Show / Hide Sticky Notes Toggle */}
+                          <div className="flex items-center justify-between pt-1">
+                            <span className="text-xs text-gray-300">
+                              Hide Sticky Notes on this Canvas:
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setEditTabHideNotes(!editTabHideNotes)}
+                              className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                                editTabHideNotes ? 'bg-amber-500' : 'bg-gray-700'
+                              }`}
+                            >
+                              <div
+                                className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                                  editTabHideNotes ? 'translate-x-5' : 'translate-x-0'
+                                }`}
+                              />
+                            </button>
+                          </div>
+
+                          <div className="flex justify-end gap-1.5 pt-1">
                             <button
                               type="button"
                               onClick={() => setEditingTabId(null)}
-                              className="px-2.5 py-1 rounded text-[11px] text-gray-400 hover:text-white"
+                              className="px-2.5 py-1 rounded text-[11px] text-gray-400 hover:text-white cursor-pointer"
                             >
                               Cancel
                             </button>
@@ -451,11 +623,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                     backgroundTheme: editTabTheme,
                                     customWallpaperUrl:
                                       editTabTheme === 'custom' ? editTabWallpaperUrl.trim() : undefined,
+                                    backgroundDimLevel: editTabDimLevel,
+                                    hideNotes: editTabHideNotes,
                                   });
                                 }
                                 setEditingTabId(null);
                               }}
-                              className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-[11px] font-bold text-white shadow"
+                              className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-[11px] font-bold text-white shadow cursor-pointer"
                             >
                               Save Changes
                             </button>
@@ -939,8 +1113,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       <CreateCanvasModal
         isOpen={isCreateCanvasOpen}
         onClose={() => setIsCreateCanvasOpen(false)}
-        onCreateCanvas={(name, icon, theme, wallpaperUrl) => {
-          addTab(name, icon, theme, wallpaperUrl);
+        onCreateCanvas={(name, icon, theme, wallpaperUrl, dimLevel) => {
+          addTab(name, icon, theme, wallpaperUrl, dimLevel);
         }}
       />
 
