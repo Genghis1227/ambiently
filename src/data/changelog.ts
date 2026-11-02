@@ -5,9 +5,25 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.1.3';
+export const APP_VERSION = '0.1.4';
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.1.4",
+    date: "November 2, 2026",
+    title: "Text Box & Canvas Headings, Mobile Touch Drag, Note Editing & Mobile Switcher",
+    highlights: [
+      "New Text Box & Canvas Heading Widget: custom text and titles floating directly on the screen without looking like a sticky note or standard tile box.",
+      "Clean transparent background mode (no card frame, just text on the screen) as well as Frosted Glass and Solid Dark card styles.",
+      "Rich typography formatting: 9 font sizes (XS to 5XL hero headings), 5 font weights, Left/Center/Right alignment, 4 font families (Clean Sans, Editorial Serif, Modern Mono, Script), letter spacing, and text transform.",
+      "Markdown formatting support: headers (# and ##), **bold**, *italic*, __underline__, and - bullet points, with double-click inline canvas editing and a real-time WYSIWYG settings customizer.",
+      "Fixed mobile sticky note hold-and-drag: refactored checklist row buttons, applied touch-action constraints, and added window-level pointer listeners for silky smooth 60 FPS dragging on touchscreens.",
+      "Mobile sticky note editing: added mobile-visible bottom actions (Edit, Trash, Straighten 0°, Color dots), dedicated header edit pencil button, and mobile touch double-tap detection.",
+      "Fixed blurry mobile screen when opening the Ambiently dock menu by eliminating full-screen backdrop blur and dark tint.",
+      "1-tap Switch to Mobile Companion button in the Ambient Command Hub menu on mobile viewports.",
+      "Mobile Companion note and checklist item deletion support.",
+    ],
+  },
   {
     version: "v0.1.3",
     date: "November 2, 2026",

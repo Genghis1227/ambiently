@@ -13,6 +13,7 @@ import {
   StickyNote,
   Tv,
   Plus,
+  Type,
 } from 'lucide-react';
 import type { WidgetType, DashboardWidget } from '../../types/dashboard';
 
@@ -129,6 +130,26 @@ const WIDGET_TEMPLATES: WidgetTemplate[] = [
     defaultGridPos: { w: 4, h: 4 },
     defaultConfig: { quoteMode: 'both', customQuotes: [] },
     color: 'from-yellow-500/20 to-amber-500/20 text-yellow-400 border-yellow-500/30',
+  },
+  {
+    type: 'textbox',
+    title: 'Text Box & Canvas Heading',
+    description: 'Formatted text, titles, announcements, or custom labels with transparent background & typography options.',
+    icon: Type,
+    defaultGridPos: { w: 4, h: 2 },
+    defaultConfig: {
+      content: 'Ambient Smart Display\nCommand Center',
+      fontSize: '2xl',
+      fontWeight: 'bold',
+      textAlign: 'center',
+      fontFamily: 'sans',
+      textColor: '#ffffff',
+      textShadow: true,
+      textTransform: 'none',
+      letterSpacing: 'normal',
+      bgStyle: 'transparent',
+    },
+    color: 'from-blue-500/20 to-cyan-500/20 text-cyan-300 border-cyan-500/30',
   },
   {
     type: 'sticky_notes',

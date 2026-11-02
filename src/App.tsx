@@ -203,6 +203,7 @@ export function App() {
           onSelectTab={setActiveTabId}
           onAddNote={addNote}
           onUpdateNote={updateNote}
+          onDeleteNote={deleteNote}
           onToggleDesktopView={() => setForceDesktopMode(true)}
           onOpenSettings={() => setIsSettingsOpen(true)}
         />
@@ -305,6 +306,7 @@ export function App() {
         onAutoOrganize={(mode) => autoOrganizeCanvas(activeTabIdResolved, mode)}
         onUndoOrganize={undoAutoOrganize}
         canUndoOrganize={lastLayoutSnapshot?.tabId === activeTabIdResolved}
+        onToggleMobileCompanion={isMobileViewport ? () => setForceDesktopMode(false) : undefined}
       />
 
       {/* Night Mode Screen Overlay */}
