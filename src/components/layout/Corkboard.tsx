@@ -48,6 +48,14 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [draggingType, setDraggingType] = useState<'note' | 'widget'>('note');
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [resizingId, setResizingId] = useState<string | null>(null);
+  const [resizingType, setResizingType] = useState<'note' | 'widget'>('widget');
+  const [resizeStart, setResizeStart] = useState<{ startX: number; startY: number; startW: number; startH: number }>({
+    startX: 0,
+    startY: 0,
+    startW: 0,
+    startH: 0,
+  });
 
   // Quick Note Modal / Creator on Corkboard
   const [isCreatorOpen, setIsCreatorOpen] = useState(false);
@@ -57,6 +65,29 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   const [selectedColor, setSelectedColor] = useState(COLOR_PALETTE[0]);
   const [checklistItems, setChecklistItems] = useState<{ id: string; text: string; done: boolean }[]>([]);
   const [newItemText, setNewItemText] = useState('');
+
+  const handleResizePointerDown = (
+    e: React.PointerEvent,
+    id: string,
+    type: 'note' | 'widget',
+    pos?: NonNullable<DashboardWidget['freeformPos']>
+  ) => {
+    e.stopPropagation();
+    if (!containerRef.current) return;
+
+    setResizingId(id);
+    setResizingType(type);
+    setResizeStart({
+      startX: e.clientX,
+      startY: e.clientY,
+      startW: pos?.wRatio ?? 0.35,
+      startH: pos?.hRatio ?? 0.45,
+    });
+
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {}
+  };
 
   const handlePointerDown = (
     e: React.PointerEvent,
@@ -88,8 +119,52 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!draggingId || !containerRef.current) return;
+    if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
+
+    // 1. Resizing in progress
+    if (resizingId) {
+      const deltaX = e.clientX - resizeStart.startX;
+      const deltaY = e.clientY - resizeStart.startY;
+      const deltaWRatio = deltaX / rect.width;
+      const deltaHRatio = deltaY / rect.height;
+
+      if (resizingType === 'widget' && onUpdateWidgetPos) {
+        const widget = widgets.find((w) => w.id === resizingId);
+        if (!widget || !widget.freeformPos) return;
+
+        const maxW = 1.0 - widget.freeformPos.xRatio;
+        const maxH = 1.0 - widget.freeformPos.yRatio;
+
+        const newW = Math.max(0.18, Math.min(maxW, resizeStart.startW + deltaWRatio));
+        const newH = Math.max(0.18, Math.min(maxH, resizeStart.startH + deltaHRatio));
+
+        onUpdateWidgetPos(widget.id, widget.gridPos, {
+          ...widget.freeformPos,
+          wRatio: newW,
+          hRatio: newH,
+        });
+      } else if (resizingType === 'note') {
+        const note = notes.find((n) => n.id === resizingId);
+        if (!note || !note.freeformPos) return;
+
+        const maxW = 1.0 - note.freeformPos.xRatio;
+        const maxH = 1.0 - note.freeformPos.yRatio;
+
+        const newW = Math.max(0.18, Math.min(maxW, resizeStart.startW + deltaWRatio));
+        const newH = Math.max(0.18, Math.min(maxH, resizeStart.startH + deltaHRatio));
+
+        onUpdateNotePos(note.id, {
+          ...note.freeformPos,
+          wRatio: newW,
+          hRatio: newH,
+        });
+      }
+      return;
+    }
+
+    // 2. Dragging in progress
+    if (!draggingId) return;
 
     const containerX = e.clientX - rect.left;
     const containerY = e.clientY - rect.top;
@@ -125,6 +200,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       } catch {}
     }
     setDraggingId(null);
+    setResizingId(null);
   };
 
   const handleAddChecklistItem = () => {
@@ -231,7 +307,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                     top: 0,
                     width: '100%',
                     height: '100%',
-                    zIndex: isDragging ? 50 : (pos.zIndex || 1),
+                    zIndex: isDragging || resizingId === widget.id ? 50 : (pos.zIndex || 1),
                     touchAction: 'none',
                     WebkitTouchCallout: 'none',
                   }
@@ -239,13 +315,17 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                     position: 'absolute',
                     left: `${pos.xRatio * 100}%`,
                     top: `${pos.yRatio * 100}%`,
-                    width: `${Math.max(280, pos.wRatio * 1000)}px`,
-                    minHeight: '220px',
+                    width: `${pos.wRatio * 100}%`,
+                    height: `${pos.hRatio * 100}%`,
+                    minWidth: '260px',
+                    minHeight: '200px',
+                    maxWidth: '100%',
+                    maxHeight: '100%',
                     transform: `rotate(${pos.rotation}deg) ${isDragging ? 'scale(1.02)' : 'scale(1)'}`,
-                    zIndex: isDragging ? 50 : pos.zIndex,
+                    zIndex: isDragging || resizingId === widget.id ? 50 : pos.zIndex,
                     touchAction: 'none',
                     WebkitTouchCallout: 'none',
-                    transition: isDragging ? 'none' : 'box-shadow 0.2s, transform 0.15s ease-out',
+                    transition: isDragging || resizingId === widget.id ? 'none' : 'box-shadow 0.2s, transform 0.15s ease-out',
                   }
             }
             className={`group ${
@@ -315,8 +395,26 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               )}
             </div>
 
+            {/* Bottom Right Resize Handle */}
+            {!isFullScreen && (
+              <div
+                onPointerDown={(e) => handleResizePointerDown(e, widget.id, 'widget', pos)}
+                title="Drag to resize tile"
+                className="absolute bottom-1 right-1 p-1.5 cursor-nwse-resize z-20 opacity-40 group-hover:opacity-100 hover:opacity-100 touch-none text-gray-400 hover:text-white transition-opacity"
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" className="fill-current">
+                  <circle cx="10" cy="10" r="1.5" />
+                  <circle cx="6" cy="10" r="1.5" />
+                  <circle cx="10" cy="6" r="1.5" />
+                  <circle cx="2" cy="10" r="1.5" />
+                  <circle cx="6" cy="6" r="1.5" />
+                  <circle cx="10" cy="2" r="1.5" />
+                </svg>
+              </div>
+            )}
+
             {/* Widget Inner Renderers */}
-            <div className="w-full h-full flex flex-col justify-between">
+            <div className="w-full h-full flex flex-col justify-between overflow-hidden">
               {widget.type === 'weather' ? (
                 <WeatherWidget
                   locationName={widget.config?.locationName}
@@ -384,13 +482,18 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               position: 'absolute',
               left: `${pos.xRatio * 100}%`,
               top: `${pos.yRatio * 100}%`,
-              width: `${Math.max(240, pos.wRatio * 1000)}px`,
+              width: `${pos.wRatio * 100}%`,
+              height: pos.hRatio ? `${pos.hRatio * 100}%` : 'auto',
+              minWidth: '220px',
+              minHeight: '160px',
+              maxWidth: '100%',
+              maxHeight: '100%',
               transform: `rotate(${pos.rotation}deg) ${isDragging ? 'scale(1.04)' : 'scale(1)'}`,
               backgroundColor: note.bgColor || '#fef08a',
-              zIndex: isDragging ? 50 : pos.zIndex,
+              zIndex: isDragging || resizingId === note.id ? 50 : pos.zIndex,
               touchAction: 'none',
               WebkitTouchCallout: 'none',
-              transition: isDragging ? 'none' : 'box-shadow 0.2s, transform 0.15s ease-out',
+              transition: isDragging || resizingId === note.id ? 'none' : 'box-shadow 0.2s, transform 0.15s ease-out',
             }}
             className={`group rounded-2xl p-5 shadow-2xl text-gray-900 cursor-grab active:cursor-grabbing border border-black/10 touch-none select-none transition-shadow ${
               isDragging ? 'ring-2 ring-blue-500/70 shadow-2xl' : 'hover:shadow-yellow-500/10'

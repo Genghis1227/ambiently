@@ -49,6 +49,43 @@ export const BentoGrid: React.FC<BentoGridProps> = ({
     null
   );
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [resizingId, setResizingId] = useState<string | null>(null);
+  const [resizePreview, setResizePreview] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+
+  const SIZE_PRESETS = [
+    { w: 4, h: 4 },
+    { w: 4, h: 8 },
+    { w: 6, h: 4 },
+    { w: 8, h: 4 },
+    { w: 8, h: 8 },
+    { w: 12, h: 8 },
+  ];
+
+  const handleCycleTileSize = (widget: DashboardWidget) => {
+    if (!onUpdateWidgetPosition) return;
+    const currentIdx = SIZE_PRESETS.findIndex((s) => s.w === widget.gridPos.w && s.h === widget.gridPos.h);
+    const nextPreset = SIZE_PRESETS[(currentIdx + 1) % SIZE_PRESETS.length];
+
+    const nextX = Math.min(widget.gridPos.x, 12 - nextPreset.w);
+    const nextY = Math.min(widget.gridPos.y, 8 - nextPreset.h);
+
+    onUpdateWidgetPosition(widget.id, {
+      x: Math.max(0, nextX),
+      y: Math.max(0, nextY),
+      w: nextPreset.w,
+      h: nextPreset.h,
+    });
+  };
+
+  const handleResizePointerDown = (e: React.PointerEvent, widget: DashboardWidget) => {
+    e.stopPropagation();
+    if (!containerRef.current || !onUpdateWidgetPosition) return;
+    setResizingId(widget.id);
+    setResizePreview({ ...widget.gridPos });
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {}
+  };
 
   const handlePointerDown = (e: React.PointerEvent, widget: DashboardWidget) => {
     if (!containerRef.current || !onUpdateWidgetPosition) return;
@@ -75,13 +112,42 @@ export const BentoGrid: React.FC<BentoGridProps> = ({
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!draggingId || !containerRef.current) return;
+    if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     const cellW = rect.width / 12;
     const cellH = rect.height / 8;
 
     const containerX = e.clientX - rect.left;
     const containerY = e.clientY - rect.top;
+
+    // Resizing tile
+    if (resizingId) {
+      const activeWidget = widgets.find((w) => w.id === resizingId);
+      if (!activeWidget) return;
+
+      const widgetLeft = activeWidget.gridPos.x * cellW;
+      const widgetTop = activeWidget.gridPos.y * cellH;
+
+      const currentW = containerX - widgetLeft;
+      const currentH = containerY - widgetTop;
+
+      const candidateCols = Math.round(currentW / cellW);
+      const candidateRows = Math.round(currentH / cellH);
+
+      const clampedW = Math.max(2, Math.min(12 - activeWidget.gridPos.x, candidateCols));
+      const clampedH = Math.max(2, Math.min(8 - activeWidget.gridPos.y, candidateRows));
+
+      setResizePreview({
+        x: activeWidget.gridPos.x,
+        y: activeWidget.gridPos.y,
+        w: clampedW,
+        h: clampedH,
+      });
+      return;
+    }
+
+    // Dragging tile
+    if (!draggingId) return;
 
     const activeWidget = widgets.find((w) => w.id === draggingId);
     if (!activeWidget) return;
@@ -107,6 +173,19 @@ export const BentoGrid: React.FC<BentoGridProps> = ({
         (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
       } catch {}
     }
+
+    if (resizingId && resizePreview && onUpdateWidgetPosition) {
+      const activeWidget = widgets.find((w) => w.id === resizingId);
+      if (activeWidget) {
+        onUpdateWidgetPosition(activeWidget.id, {
+          ...activeWidget.gridPos,
+          w: resizePreview.w,
+          h: resizePreview.h,
+        });
+      }
+    }
+    setResizingId(null);
+    setResizePreview(null);
 
     if (draggingId && targetPos && onUpdateWidgetPosition) {
       const activeWidget = widgets.find((w) => w.id === draggingId);
@@ -193,6 +272,21 @@ export const BentoGrid: React.FC<BentoGridProps> = ({
         </div>
       )}
 
+      {/* Target Resize Highlight Preview */}
+      {resizingId && resizePreview && (
+        <div
+          style={{
+            gridColumnStart: resizePreview.x + 1,
+            gridColumnEnd: `span ${resizePreview.w}`,
+            gridRowStart: resizePreview.y + 1,
+            gridRowEnd: `span ${resizePreview.h}`,
+          }}
+          className="rounded-2xl border-2 border-dashed border-emerald-400 bg-emerald-500/10 pointer-events-none z-10 transition-all duration-75 flex items-center justify-center text-emerald-300 text-xs font-mono font-bold"
+        >
+          Resize: {resizePreview.w}×{resizePreview.h}
+        </div>
+      )}
+
       {widgets.map((widget) => {
         const { x, y, w, h } = widget.gridPos;
         const isDragging = draggingId === widget.id;
@@ -238,6 +332,16 @@ export const BentoGrid: React.FC<BentoGridProps> = ({
                 >
                   <ArrowLeftRight className="w-3 h-3" />
                 </button>
+
+                {/* 1-Tap Size Preset Toggle */}
+                <button
+                  type="button"
+                  onClick={() => handleCycleTileSize(widget)}
+                  title="Click to cycle tile size (4x4, 4x8, 6x4, 8x4, 8x8, 12x8)"
+                  className="px-1.5 py-1 rounded-lg bg-black/60 hover:bg-emerald-600/60 text-gray-300 hover:text-emerald-200 backdrop-blur-sm border border-white/10 text-[10px] font-mono font-bold transition-all cursor-pointer"
+                >
+                  {w}×{h}
+                </button>
               </div>
             )}
 
@@ -253,6 +357,24 @@ export const BentoGrid: React.FC<BentoGridProps> = ({
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
+            )}
+
+            {/* Bottom Right Resize Handle */}
+            {onUpdateWidgetPosition && (
+              <div
+                onPointerDown={(e) => handleResizePointerDown(e, widget)}
+                title="Drag to resize tile on the grid"
+                className="absolute bottom-1 right-1 p-1.5 cursor-nwse-resize z-20 opacity-40 group-hover:opacity-100 hover:opacity-100 touch-none text-gray-400 hover:text-white transition-opacity"
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" className="fill-current">
+                  <circle cx="10" cy="10" r="1.5" />
+                  <circle cx="6" cy="10" r="1.5" />
+                  <circle cx="10" cy="6" r="1.5" />
+                  <circle cx="2" cy="10" r="1.5" />
+                  <circle cx="6" cy="6" r="1.5" />
+                  <circle cx="10" cy="2" r="1.5" />
+                </svg>
+              </div>
             )}
 
             {/* Real Interactive Widget Renderers */}
