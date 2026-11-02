@@ -35,6 +35,7 @@ interface DashboardState {
   setActiveTabId: (tabId: string) => void;
   setDockPosition: (pos: DockPosition) => Promise<void>;
   setLayoutMode: (tabId: string, mode: LayoutMode) => Promise<void>;
+  toggleTabEnabled: (tabId: string, enabled: boolean) => Promise<void>;
   setDisplayDensity: (density: 0.75 | 1.0 | 1.25 | 1.5) => Promise<void>;
   setCarouselEnabled: (enabled: boolean) => Promise<void>;
   setCarouselDuration: (seconds: number) => Promise<void>;
@@ -78,7 +79,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   isInitialized: false,
   settings: DEFAULT_SETTINGS,
   tabs: [],
-  activeTabId: 'tab-overview',
+  activeTabId: 'tab-corkboard',
   widgets: [],
   notes: [],
 
@@ -105,12 +106,16 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const loadedWidgets = (await db.widgets.toArray()).filter((w) => !w.deleted_at);
     const loadedNotes = (await db.notes.toArray()).filter((n) => !n.deleted_at);
 
-    const initialTabId = loadedTabs[0]?.id || 'tab-overview';
+    const tabsToUse = loadedTabs.length > 0 ? loadedTabs : DEFAULT_TABS;
+    const initialTab =
+      tabsToUse.find((t) => (t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false)) ||
+      tabsToUse[0];
+    const initialTabId = initialTab?.id || 'tab-corkboard';
 
     set({
       isInitialized: true,
       settings: loadedSettings,
-      tabs: loadedTabs.length > 0 ? loadedTabs : DEFAULT_TABS,
+      tabs: tabsToUse,
       activeTabId: initialTabId,
       widgets: loadedWidgets.length > 0 ? loadedWidgets : DEFAULT_WIDGETS,
       notes: loadedNotes.length > 0 ? loadedNotes : DEFAULT_NOTES,
@@ -137,6 +142,30 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     await db.tabs.put(updatedTab);
     set({
       tabs: get().tabs.map((t) => (t.id === tabId ? updatedTab : t)),
+    });
+    get().saveLocalBackup();
+  },
+
+  toggleTabEnabled: async (tabId, enabled) => {
+    const tab = get().tabs.find((t) => t.id === tabId);
+    if (!tab) return;
+    const updatedTab = { ...tab, enabled, updated_at: new Date().toISOString() };
+    await db.tabs.put(updatedTab);
+    const updatedTabs = get().tabs.map((t) => (t.id === tabId ? updatedTab : t));
+
+    let nextActiveTabId = get().activeTabId;
+    if (!enabled && get().activeTabId === tabId) {
+      const firstEnabled = updatedTabs.find((t) =>
+        t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false
+      );
+      if (firstEnabled) {
+        nextActiveTabId = firstEnabled.id;
+      }
+    }
+
+    set({
+      tabs: updatedTabs,
+      activeTabId: nextActiveTabId,
     });
     get().saveLocalBackup();
   },

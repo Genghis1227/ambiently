@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import type { StickyNoteItem, DashboardWidget } from '../../types/dashboard';
-import { CheckSquare, Square, Pin, Plus, Trash2, Clock, X } from 'lucide-react';
+import { CheckSquare, Square, Pin, Plus, Trash2, Clock, X, Maximize2, Minimize2 } from 'lucide-react';
 import { ClockWeatherWidget } from '../widgets/ClockWeatherWidget';
 import { ClockWidget } from '../widgets/ClockWidget';
 import { WeatherWidget } from '../widgets/WeatherWidget';
@@ -84,7 +84,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
     try {
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    } catch (_) {}
+    } catch {}
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
@@ -122,7 +122,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     if (e && e.currentTarget && e.pointerId !== undefined) {
       try {
         (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-      } catch (_) {}
+      } catch {}
     }
     setDraggingId(null);
   };
@@ -215,48 +215,105 @@ export const Corkboard: React.FC<CorkboardProps> = ({
           rotation: 0,
         };
 
+        const isFullScreen = Boolean(pos.isFullScreen);
         const isDragging = draggingId === widget.id;
         return (
           <div
             key={widget.id}
-            onPointerDown={(e) => handlePointerDown(e, widget.id, 'widget', pos)}
+            onPointerDown={(e) => !isFullScreen && handlePointerDown(e, widget.id, 'widget', pos)}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
-            style={{
-              position: 'absolute',
-              left: `${pos.xRatio * 100}%`,
-              top: `${pos.yRatio * 100}%`,
-              width: `${Math.max(280, pos.wRatio * 1000)}px`,
-              minHeight: '220px',
-              transform: `rotate(${pos.rotation}deg) ${isDragging ? 'scale(1.02)' : 'scale(1)'}`,
-              zIndex: isDragging ? 50 : pos.zIndex,
-              touchAction: 'none',
-              WebkitTouchCallout: 'none',
-              transition: isDragging ? 'none' : 'box-shadow 0.2s, transform 0.15s ease-out',
-            }}
-            className={`group rounded-2xl bg-gray-900/80 backdrop-blur-md border border-gray-800/90 p-4 shadow-2xl text-white cursor-grab active:cursor-grabbing touch-none select-none transition-shadow ${
+            style={
+              isFullScreen
+                ? {
+                    position: 'absolute',
+                    left: 0,
+                    top: 0,
+                    width: '100%',
+                    height: '100%',
+                    zIndex: isDragging ? 50 : (pos.zIndex || 1),
+                    touchAction: 'none',
+                    WebkitTouchCallout: 'none',
+                  }
+                : {
+                    position: 'absolute',
+                    left: `${pos.xRatio * 100}%`,
+                    top: `${pos.yRatio * 100}%`,
+                    width: `${Math.max(280, pos.wRatio * 1000)}px`,
+                    minHeight: '220px',
+                    transform: `rotate(${pos.rotation}deg) ${isDragging ? 'scale(1.02)' : 'scale(1)'}`,
+                    zIndex: isDragging ? 50 : pos.zIndex,
+                    touchAction: 'none',
+                    WebkitTouchCallout: 'none',
+                    transition: isDragging ? 'none' : 'box-shadow 0.2s, transform 0.15s ease-out',
+                  }
+            }
+            className={`group ${
+              isFullScreen
+                ? 'rounded-none border-0 p-0 overflow-hidden'
+                : 'rounded-2xl border border-gray-800/90 p-4'
+            } bg-gray-900/80 backdrop-blur-md shadow-2xl text-white cursor-grab active:cursor-grabbing touch-none select-none transition-shadow ${
               isDragging ? 'ring-2 ring-blue-500 shadow-blue-500/20' : 'hover:shadow-blue-500/10'
             } flex flex-col justify-between`}
           >
-            {/* Red Visual Pushpin */}
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center justify-center pointer-events-none z-10">
-              <div className="w-5 h-5 rounded-full bg-red-600 shadow-md border-2 border-red-700/60" />
-            </div>
-
-            {/* Remove Widget Button */}
-            {onRemoveWidget && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRemoveWidget(widget.id);
-                }}
-                onPointerDown={(e) => e.stopPropagation()}
-                title="Remove widget"
-                className="absolute top-2 right-2 z-20 opacity-0 group-hover:opacity-100 p-1.5 rounded-lg bg-black/60 hover:bg-red-500/80 text-gray-400 hover:text-white backdrop-blur-sm border border-white/10 transition-all cursor-pointer"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+            {/* Red Visual Pushpin (hidden when maximized) */}
+            {!isFullScreen && (
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center justify-center pointer-events-none z-10">
+                <div className="w-5 h-5 rounded-full bg-red-600 shadow-md border-2 border-red-700/60" />
+              </div>
             )}
+
+            {/* Top Right Widget Controls: Maximize/Restore & Remove */}
+            <div className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              {onUpdateWidgetPos && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (isFullScreen) {
+                      onUpdateWidgetPos(widget.id, widget.gridPos, {
+                        ...pos,
+                        xRatio: 0.1,
+                        yRatio: 0.1,
+                        wRatio: 0.45,
+                        hRatio: 0.5,
+                        rotation: 0,
+                        isFullScreen: false,
+                      });
+                    } else {
+                      onUpdateWidgetPos(widget.id, widget.gridPos, {
+                        ...pos,
+                        xRatio: 0,
+                        yRatio: 0,
+                        wRatio: 1,
+                        hRatio: 1,
+                        rotation: 0,
+                        isFullScreen: true,
+                      });
+                    }
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  title={isFullScreen ? 'Restore card size' : 'Fill full screen / canvas'}
+                  className="p-1.5 rounded-lg bg-black/60 hover:bg-gray-800 text-gray-300 hover:text-white backdrop-blur-sm border border-white/10 transition-all cursor-pointer"
+                >
+                  {isFullScreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+                </button>
+              )}
+
+              {onRemoveWidget && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemoveWidget(widget.id);
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  title="Remove widget"
+                  className="p-1.5 rounded-lg bg-black/60 hover:bg-red-500/80 text-gray-400 hover:text-white backdrop-blur-sm border border-white/10 transition-all cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
 
             {/* Widget Inner Renderers */}
             <div className="w-full h-full flex flex-col justify-between">
