@@ -9,7 +9,6 @@ import {
   Moon,
   Maximize2,
   Minimize2,
-  FolderSync,
   Plus,
   Home,
   Coffee,
@@ -43,8 +42,8 @@ interface NavigationDockProps {
   onToggleNightMode: () => void;
   onToggleFullscreen: () => void;
   isFullscreen: boolean;
-  onConnectFile: () => void;
-  hasFileBound: boolean;
+  onConnectFile?: () => void;
+  hasFileBound?: boolean;
   onOpenAddWidget?: () => void;
   onOpenAddCanvas?: () => void;
   onOpenCreateNote?: () => void;
@@ -84,8 +83,6 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
   onToggleNightMode,
   onToggleFullscreen,
   isFullscreen,
-  onConnectFile,
-  hasFileBound,
   onOpenAddWidget,
   onOpenAddCanvas,
   onOpenCreateNote,
@@ -242,18 +239,6 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
 
         {/* Quick Utilities / Kiosk controls */}
         <div className={`flex items-center gap-1.5 ${isVertical ? 'flex-col' : 'flex-row'}`}>
-          <button
-            onClick={onConnectFile}
-            title={hasFileBound ? 'PC Auto-Backup: Active' : 'Auto-Backup to PC (Optional)'}
-            className={`relative flex items-center justify-center w-10 h-10 rounded-xl transition-all cursor-pointer ${
-              hasFileBound
-                ? 'text-emerald-400 hover:bg-emerald-500/10'
-                : 'text-amber-400 hover:bg-amber-500/10'
-            }`}
-          >
-            <FolderSync className="w-4 h-4" />
-          </button>
-
           <button
             onClick={onToggleNightMode}
             title="Toggle Night Mode"
