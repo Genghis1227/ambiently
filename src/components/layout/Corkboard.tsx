@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { ClockWeatherWidget } from '../widgets/ClockWeatherWidget';
 import { ClockWidget } from '../widgets/ClockWidget';
+import { WorldClockWidget } from '../widgets/WorldClockWidget';
 import { WeatherWidget } from '../widgets/WeatherWidget';
 import { CountdownWidget } from '../widgets/CountdownWidget';
 import { QuotesWidget } from '../widgets/QuotesWidget';
@@ -793,6 +794,16 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 />
               ) : widget.type === 'clock' ? (
                 <ClockWidget
+                  title={widget.title}
+                  clockFace={widget.config?.clockFace || 'digital'}
+                  showSeconds={widget.config?.showSeconds ?? true}
+                  timezone={widget.config?.timezone}
+                  locationName={widget.config?.locationName}
+                />
+              ) : widget.type === 'world_clock' ? (
+                <WorldClockWidget
+                  title={widget.title}
+                  cities={widget.config?.cities}
                   clockFace={widget.config?.clockFace || 'digital'}
                   showSeconds={widget.config?.showSeconds ?? true}
                 />
@@ -803,6 +814,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   longitude={widget.config?.longitude}
                   unit={widget.config?.unit || 'F'}
                   clockFace={widget.config?.clockFace || widget.config?.face || 'digital'}
+                  showSeconds={widget.config?.showSeconds ?? true}
+                  timezone={widget.config?.timezone}
                 />
               ) : widget.type === 'countdown' ? (
                 <CountdownWidget

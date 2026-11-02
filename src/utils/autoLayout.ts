@@ -28,6 +28,7 @@ const WIDGET_PRIORITY: Record<string, number> = {
   sticky_notes: 5,
   weather: 6,
   clock: 7,
+  world_clock: 7,
   rss: 8,
   countdown: 9,
   quotes: 10,

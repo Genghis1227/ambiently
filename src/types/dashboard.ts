@@ -13,6 +13,7 @@ export type AutoOrganizeMode = 'bento' | 'pack' | 'split';
 export type WidgetType =
   | 'clock_weather'
   | 'clock'
+  | 'world_clock'
   | 'weather'
   | 'sticky_notes'
   | 'photo_frame'

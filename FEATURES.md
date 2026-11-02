@@ -81,8 +81,9 @@
 
 Every widget features a top-right **Tile Settings (`⚙️`)** button to customize its title and specific parameters:
 
-* **Clock & Weather Combo (`ClockWeatherWidget.tsx`), Standalone Clock (`ClockWidget.tsx`) & Weather (`WeatherWidget.tsx`):**
-  * Live clock supporting **Digital**, **Minimalist**, and **Analog Dial** faces with optional seconds ticker.
+* **Clock & Weather Combo (`ClockWeatherWidget.tsx`), Standalone Clock (`ClockWidget.tsx`), World Timezone Clock (`WorldClockWidget.tsx`) & Weather (`WeatherWidget.tsx`):**
+  * Live clock supporting **Digital**, **Minimalist**, and **Analog Dial** faces with a universal **Display Seconds (`showSeconds`)** toggle on all clock & time tiles.
+  * **City-Lookup World Timezone Clock (`WorldClockWidget.tsx`):** Search any global city (e.g., *Tokyo*, *London*, *Ho Chi Minh City*, *New York*) to automatically resolve its IANA timezone, displaying either a **Single-City Hero Timezone Clock** or a **Multi-City World Timezone Board** with day/night icons (`Sun` / `Moon`), timezone abbreviations, and relative hour offsets (`+15h ahead`, `-2h behind`).
   * Powered by **Open-Meteo API** (zero API key required) with a 1-click **City Geocoding Lookup** in Tile Settings, Fahrenheit/Celsius toggle, current temperature, "feels like", high/lows, and daily forecast strip.
 * **Multi-Source Calendar (`CalendarWidget.tsx`):**
   * Toggle between **Chronological Agenda View** and **Monthly Calendar Grid**.

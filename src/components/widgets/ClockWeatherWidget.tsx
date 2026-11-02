@@ -1,13 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { Sun, Cloud, CloudRain, CloudSun, CloudFog, CloudDrizzle, Snowflake, CloudLightning, RefreshCw, MapPin } from 'lucide-react';
+import {
+  Sun,
+  Cloud,
+  CloudRain,
+  CloudSun,
+  CloudFog,
+  CloudDrizzle,
+  Snowflake,
+  CloudLightning,
+  RefreshCw,
+  MapPin,
+} from 'lucide-react';
 import { fetchWeatherData, type WeatherData } from '../../services/weather';
+import { getFormattedTimeForZone } from './WorldClockWidget';
 
 interface ClockWeatherWidgetProps {
   locationName?: string;
   latitude?: number;
   longitude?: number;
   unit?: 'F' | 'C';
-  clockFace?: 'digital' | 'flip' | 'analog';
+  clockFace?: 'digital' | 'minimal' | 'flip' | 'analog';
+  showSeconds?: boolean;
+  timezone?: string;
 }
 
 const renderWeatherIcon = (code: number, isDay: boolean) => {
@@ -30,6 +44,8 @@ export const ClockWeatherWidget: React.FC<ClockWeatherWidgetProps> = ({
   longitude = -97.7431,
   unit = 'F',
   clockFace = 'digital',
+  showSeconds = true,
+  timezone,
 }) => {
   const [time, setTime] = useState(new Date());
   const [weather, setWeather] = useState<WeatherData | null>(null);
@@ -56,15 +72,11 @@ export const ClockWeatherWidget: React.FC<ClockWeatherWidgetProps> = ({
 
   useEffect(() => {
     loadWeather();
-    // Refresh weather every 15 minutes
     const interval = setInterval(loadWeather, 15 * 60 * 1000);
     return () => clearInterval(interval);
   }, [latitude, longitude, locationName, unit]);
 
-  const hours = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).split(' ')[0];
-  const ampm = time.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).slice(-2);
-  const seconds = time.getSeconds().toString().padStart(2, '0');
-  const dateStr = time.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+  const zt = getFormattedTimeForZone(time, timezone);
 
   return (
     <div className="w-full h-full flex flex-col justify-between select-none">
@@ -76,39 +88,50 @@ export const ClockWeatherWidget: React.FC<ClockWeatherWidgetProps> = ({
             <div
               className="absolute w-1 h-8 bg-white origin-bottom rounded-full"
               style={{
-                transform: `rotate(${(time.getHours() % 12) * 30 + time.getMinutes() * 0.5}deg)`,
+                transform: `rotate(${(zt.hour24 % 12) * 30 + zt.minuteNum * 0.5}deg)`,
                 bottom: '50%',
               }}
             />
             <div
               className="absolute w-0.5 h-11 bg-blue-400 origin-bottom rounded-full"
               style={{
-                transform: `rotate(${time.getMinutes() * 6}deg)`,
+                transform: `rotate(${zt.minuteNum * 6}deg)`,
                 bottom: '50%',
               }}
             />
-            <div
-              className="absolute w-px h-12 bg-red-500 origin-bottom"
-              style={{
-                transform: `rotate(${time.getSeconds() * 6}deg)`,
-                bottom: '50%',
-              }}
-            />
+            {showSeconds && (
+              <div
+                className="absolute w-px h-12 bg-red-500 origin-bottom"
+                style={{
+                  transform: `rotate(${zt.secondNum * 6}deg)`,
+                  bottom: '50%',
+                }}
+              />
+            )}
             <div className="w-2 h-2 rounded-full bg-white z-10" />
+          </div>
+        ) : clockFace === 'minimal' ? (
+          <div className="flex items-baseline gap-2.5">
+            <span className="text-5xl md:text-6xl font-sans font-bold tracking-tighter text-white">
+              {zt.hoursMinutes}
+            </span>
+            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-400">
+              {zt.ampm} {showSeconds ? `• ${zt.seconds}s` : ''}
+            </span>
           </div>
         ) : (
           <div className="flex items-baseline gap-2">
             <span className="text-5xl md:text-6xl font-light tracking-tight text-white font-mono">
-              {hours}
+              {zt.hoursMinutes}
             </span>
             <div className="flex flex-col text-xs text-gray-400 font-mono">
-              <span className="font-semibold text-blue-400">{ampm}</span>
-              <span className="text-gray-500">{seconds}s</span>
+              <span className="font-semibold text-blue-400">{zt.ampm}</span>
+              {showSeconds && <span className="text-gray-500">{zt.seconds}s</span>}
             </div>
           </div>
         )}
         <span className="text-xs md:text-sm text-gray-400 font-medium tracking-wide mt-1">
-          {dateStr}
+          {zt.dateStr}
         </span>
       </div>
 
