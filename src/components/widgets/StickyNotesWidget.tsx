@@ -6,6 +6,7 @@ import {
   Trash2,
   Clock,
   Archive,
+  Pin,
 } from 'lucide-react';
 import type { StickyNoteItem } from '../../types/dashboard';
 
@@ -333,10 +334,29 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
                       )}
                     </div>
 
-                    <div className="flex justify-end pt-2 border-t border-black/5 mt-1">
+                    <div className="flex items-center justify-between pt-2 border-t border-black/5 mt-1">
                       <button
+                        type="button"
+                        onClick={() => onUpdateNote(note.id, { isPinnedToCanvas: note.isPinnedToCanvas === false })}
+                        className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                          note.isPinnedToCanvas !== false
+                            ? 'bg-black/10 hover:bg-black/20 text-gray-800'
+                            : 'bg-blue-600/20 hover:bg-blue-600/30 text-blue-900 border border-blue-500/30 font-bold'
+                        }`}
+                        title={
+                          note.isPinnedToCanvas !== false
+                            ? 'Pinned on corkboard canvas (click to close from canvas)'
+                            : 'Closed from canvas (click to pin onto canvas)'
+                        }
+                      >
+                        <Pin className="w-2.5 h-2.5" />
+                        <span>{note.isPinnedToCanvas !== false ? 'On Canvas' : 'Pin to Board'}</span>
+                      </button>
+
+                      <button
+                        type="button"
                         onClick={() => onDeleteNote(note.id)}
-                        className="text-gray-700 hover:text-red-700 p-0.5 rounded transition-all"
+                        className="text-gray-700 hover:text-red-700 p-0.5 rounded transition-all cursor-pointer"
                         title="Archive note"
                       >
                         <Trash2 className="w-3.5 h-3.5" />

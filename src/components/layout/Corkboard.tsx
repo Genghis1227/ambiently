@@ -586,6 +586,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     : notes.filter((n) => {
         if (n.archivedAt) return false;
         if (n.expiresAt && new Date(n.expiresAt) <= now) return false;
+        if (n.isPinnedToCanvas === false) return false;
         return true;
       });
 
@@ -1161,6 +1162,19 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                     title="Edit note"
                   >
                     <Edit2 className="w-3 h-3" />
+                  </button>
+                  <button
+                    type="button"
+                    data-no-drag="true"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUpdateNote(note.id, { isPinnedToCanvas: false });
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className="p-1 rounded-md text-gray-700 hover:text-red-900 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
+                    title="Close from canvas (remains saved in Notes Tile)"
+                  >
+                    <X className="w-3 h-3" />
                   </button>
                 </div>
               </div>

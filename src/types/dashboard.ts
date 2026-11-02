@@ -90,6 +90,7 @@ export interface StickyNoteItem {
   giphyUrl?: string;
   expiresAt?: string | null; // ISO string or null for permanent
   archivedAt?: string | null; // soft deleted/trash
+  isPinnedToCanvas?: boolean; // when false, closed from canvas and contained in Notes Tile
   freeformPos?: FreeformPosition;
   updated_at: string;
   deleted_at?: string | null;
