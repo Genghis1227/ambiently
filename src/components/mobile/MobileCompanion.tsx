@@ -241,6 +241,24 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
                     )}
 
                     <div className="flex items-center gap-1.5">
+                      {/* 1-Click Pastel Color Dots */}
+                      <div className="flex items-center gap-1 mr-1">
+                        {['#fef08a', '#bbf7d0', '#bae6fd', '#fbcfe8', '#e9d5ff', '#fed7aa'].map(
+                          (color) => (
+                            <button
+                              key={color}
+                              type="button"
+                              onClick={() => onUpdateNote(note.id, { bgColor: color })}
+                              style={{ backgroundColor: color }}
+                              className={`w-3.5 h-3.5 rounded-full border ${
+                                (note.bgColor || '#fef08a') === color
+                                  ? 'border-gray-900 scale-110 ring-1 ring-gray-900/50'
+                                  : 'border-black/25'
+                              }`}
+                            />
+                          )
+                        )}
+                      </div>
                       {note.expiresAt && (
                         <span className="text-[10px] text-gray-700 bg-black/10 px-2 py-0.5 rounded-full flex items-center gap-1">
                           <Clock className="w-3 h-3" />

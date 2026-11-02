@@ -636,10 +636,9 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               isDragging || isRotating ? 'ring-2 ring-blue-500 shadow-blue-500/20' : 'hover:shadow-blue-500/10'
             } flex flex-col justify-between`}
           >
-            {/* Red Visual Pushpin + Grab-to-Rotate Handle (hidden when maximized) */}
+            {/* Top-Center Grab-to-Rotate Handle (hidden when maximized, appears on hover) */}
             {!isFullScreen && (
-              <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20">
-                <div className="w-5 h-5 rounded-full bg-red-600 shadow-md border-2 border-red-700/60 pointer-events-none" />
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20">
                 {onUpdateWidgetPos && (
                   <div
                     data-no-drag="true"
@@ -933,9 +932,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 : 'hover:shadow-yellow-500/10'
             } flex flex-col justify-between overflow-hidden`}
           >
-            {/* Red Visual Pushpin + Grab-to-Rotate Handle */}
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center gap-1 z-20">
-              <div className="w-4 h-4 rounded-full bg-red-600 shadow-md border-2 border-red-700/60 pointer-events-none" />
+            {/* Top-Center Grab-to-Rotate Handle (appears on hover) */}
+            <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 flex items-center gap-1 z-20">
               <div
                 data-no-drag="true"
                 onPointerDown={(e) => handleRotatePointerDown(e, note.id, 'note', pos)}
@@ -1003,24 +1001,31 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               )}
             </div>
 
-            {/* Note Bottom Actions: Tilt, Edit & Archive/Delete */}
-            <div className="flex items-center justify-between pt-1.5 border-t border-black/10 mt-1.5 opacity-60 group-hover:opacity-100 transition-opacity pr-4 shrink-0">
+            {/* Note Bottom Actions: 1-Click Color Swatches, Tilt, Edit & Archive/Delete */}
+            <div className="flex items-center justify-between gap-1 pt-1.5 border-t border-black/10 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity pr-4 shrink-0">
+              {/* 1-Click Inline Pastel Color Swatches */}
+              <div className="flex items-center gap-1">
+                {COLOR_PALETTE.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUpdateNote(note.id, { bgColor: color });
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    style={{ backgroundColor: color }}
+                    title="Change note color"
+                    className={`w-3.5 h-3.5 rounded-full border transition-transform cursor-pointer ${
+                      (note.bgColor || '#fef08a') === color
+                        ? 'border-gray-900 scale-125 ring-1 ring-gray-900/50'
+                        : 'border-black/25 hover:scale-110'
+                    }`}
+                  />
+                ))}
+              </div>
+
               <div className="flex items-center gap-0.5">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onUpdateNotePos(note.id, {
-                      ...pos,
-                      rotation: Math.max(-60, (pos.rotation || 0) - 3),
-                    });
-                  }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  className="p-1 rounded text-gray-700 hover:bg-black/10 transition-all cursor-pointer"
-                  title="Tilt counter-clockwise"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                </button>
                 <button
                   type="button"
                   onClick={(e) => {
@@ -1040,29 +1045,11 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onUpdateNotePos(note.id, {
-                      ...pos,
-                      rotation: Math.min(60, (pos.rotation || 0) + 3),
-                    });
-                  }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  className="p-1 rounded text-gray-700 hover:bg-black/10 transition-all cursor-pointer"
-                  title="Tilt clockwise"
-                >
-                  <RotateCw className="w-3 h-3" />
-                </button>
-              </div>
-
-              <div className="flex items-center gap-0.5">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
                     openNoteEditorForExisting(note);
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
                   className="p-1 rounded-lg text-gray-700 hover:text-blue-800 hover:bg-black/10 transition-all cursor-pointer"
-                  title="Edit note text, checklist, color, or canvas board"
+                  title="Edit note text, checklist, font size, or canvas board"
                 >
                   <Edit2 className="w-3.5 h-3.5" />
                 </button>
