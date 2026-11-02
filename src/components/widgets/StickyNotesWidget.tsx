@@ -111,39 +111,41 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
     <div className="w-full h-full flex flex-col justify-between overflow-hidden">
       {/* Header Tabs & Quick Actions */}
       <div className="flex items-center justify-between border-b border-gray-800/80 pb-2.5 mb-2">
-        <div className="flex items-center gap-1 bg-gray-950/60 p-0.5 rounded-lg border border-gray-800">
-          <button
-            onClick={() => setActiveTab('active')}
-            className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all ${
-              activeTab === 'active'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            Notes ({activeNotes.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('trash')}
-            className={`px-2 py-1 text-xs rounded-md font-medium transition-all flex items-center gap-1 ${
-              activeTab === 'trash'
-                ? 'bg-red-950/60 text-red-300 border border-red-800/50'
-                : 'text-gray-500 hover:text-gray-300'
-            }`}
-          >
-            <Archive className="w-3 h-3" />
-            Trash ({trashNotes.length})
-          </button>
-        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 bg-gray-950/60 p-0.5 rounded-lg border border-gray-800">
+            <button
+              onClick={() => setActiveTab('active')}
+              className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all cursor-pointer ${
+                activeTab === 'active'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Notes ({activeNotes.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('trash')}
+              className={`px-2 py-1 text-xs rounded-md font-medium transition-all flex items-center gap-1 cursor-pointer ${
+                activeTab === 'trash'
+                  ? 'bg-red-950/60 text-red-300 border border-red-800/50'
+                  : 'text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              <Archive className="w-3 h-3" />
+              Trash ({trashNotes.length})
+            </button>
+          </div>
 
-        {activeTab === 'active' && !isCreating && (
-          <button
-            onClick={() => setIsCreating(true)}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-white shadow-sm transition-all"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            New
-          </button>
-        )}
+          {activeTab === 'active' && !isCreating && (
+            <button
+              onClick={() => setIsCreating(true)}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-white shadow-sm transition-all cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              New Note
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Note Creator Drawer */}

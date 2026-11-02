@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Image as ImageIcon,
@@ -11,6 +11,32 @@ import {
   type PhotoDisplayStyle,
 } from '../../services/photos';
 import { PhotoSourcesModal } from '../photos/PhotoSourcesModal';
+
+
+interface PolaroidSlotDef {
+  top: string;
+  left: string;
+  defaultRotate: number;
+  width: string;
+  maxW: string;
+}
+
+const POLAROID_SLOTS: PolaroidSlotDef[] = [
+  { top: '8%', left: '5%', defaultRotate: -6, width: '28%', maxW: '230px' },
+  { top: '6%', left: '36%', defaultRotate: 4, width: '28%', maxW: '230px' },
+  { top: '9%', left: '67%', defaultRotate: -5, width: '28%', maxW: '230px' },
+  { top: '48%', left: '8%', defaultRotate: 5, width: '28%', maxW: '230px' },
+  { top: '45%', left: '38%', defaultRotate: -7, width: '28%', maxW: '230px' },
+  { top: '50%', left: '68%', defaultRotate: 6, width: '28%', maxW: '230px' },
+];
+
+interface ActivePolaroidItem {
+  slotIndex: number;
+  photo: PhotoItem;
+  rotation: number;
+  zIndex: number;
+  key: string;
+}
 
 interface PhotoFrameWidgetProps {
   initialStyle?: PhotoDisplayStyle;
@@ -35,6 +61,106 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [sourceLabel, setSourceLabel] = useState<string>(initialSourceLabel);
   const [isSourcesModalOpen, setIsSourcesModalOpen] = useState(false);
+
+  const [scatteredPolaroids, setScatteredPolaroids] = useState<ActivePolaroidItem[]>([]);
+  const topZIndexRef = useRef(20);
+
+  // Initialize scattered polaroids when photos change or mount
+  useEffect(() => {
+    if (!photos || photos.length === 0) return;
+    const initial: ActivePolaroidItem[] = POLAROID_SLOTS.map((slot, idx) => ({
+      slotIndex: idx,
+      photo: photos[idx % photos.length],
+      rotation: slot.defaultRotate + ((idx % 3) - 1) * 2,
+      zIndex: 10 + idx,
+      key: `slot-${idx}-${photos[idx % photos.length].id}-${Date.now()}`,
+    }));
+    setScatteredPolaroids(initial);
+    topZIndexRef.current = 20;
+  }, [photos]);
+
+  // Randomly update one polaroid at a time from source photos
+  useEffect(() => {
+    if (style !== 'polaroid' || photos.length === 0) return;
+
+    // Staggered shuffle interval between 3s and 7s
+    const shuffleMs = Math.max(3000, Math.min(7000, Math.round((intervalSec * 1000) / 2)));
+
+    const timer = setInterval(() => {
+      setScatteredPolaroids((prev) => {
+        if (prev.length === 0) return prev;
+
+        const randomSlotIdx = Math.floor(Math.random() * prev.length);
+        const currentSlotItem = prev[randomSlotIdx];
+
+        // Photos visible in other slots
+        const otherVisiblePhotoIds = new Set(
+          prev
+            .filter((_, idx) => idx !== randomSlotIdx)
+            .map((item) => item.photo.id)
+        );
+
+        // Pick photo not already shown elsewhere
+        const candidates = photos.filter((p) => !otherVisiblePhotoIds.has(p.id));
+        const pool = candidates.length > 0
+          ? candidates
+          : photos.filter((p) => p.id !== currentSlotItem.photo.id);
+        const finalPool = pool.length > 0 ? pool : photos;
+
+        const nextPhoto = finalPool[Math.floor(Math.random() * finalPool.length)];
+
+        topZIndexRef.current += 1;
+        const newZ = topZIndexRef.current;
+        const baseRotate = POLAROID_SLOTS[randomSlotIdx].defaultRotate;
+        const newRotate = baseRotate + (Math.random() * 8 - 4);
+
+        return prev.map((item, idx) => {
+          if (idx !== randomSlotIdx) return item;
+          return {
+            ...item,
+            photo: nextPhoto,
+            rotation: newRotate,
+            zIndex: newZ,
+            key: `slot-${idx}-${nextPhoto.id}-${Date.now()}`,
+          };
+        });
+      });
+    }, shuffleMs);
+
+    return () => clearInterval(timer);
+  }, [style, photos, intervalSec]);
+
+  const handleShufflePolaroid = (slotIdx: number) => {
+    setScatteredPolaroids((prev) => {
+      const currentSlotItem = prev[slotIdx];
+      if (!currentSlotItem) return prev;
+
+      const otherVisiblePhotoIds = new Set(
+        prev.filter((_, idx) => idx !== slotIdx).map((item) => item.photo.id)
+      );
+      const candidates = photos.filter((p) => !otherVisiblePhotoIds.has(p.id));
+      const pool = candidates.length > 0
+        ? candidates
+        : photos.filter((p) => p.id !== currentSlotItem.photo.id);
+      const finalPool = pool.length > 0 ? pool : photos;
+      const nextPhoto = finalPool[Math.floor(Math.random() * finalPool.length)];
+
+      topZIndexRef.current += 1;
+      const baseRotate = POLAROID_SLOTS[slotIdx].defaultRotate;
+
+      return prev.map((item, idx) => {
+        if (idx !== slotIdx) return item;
+        return {
+          ...item,
+          photo: nextPhoto,
+          rotation: baseRotate + (Math.random() * 8 - 4),
+          zIndex: topZIndexRef.current,
+          key: `slot-${idx}-${nextPhoto.id}-${Date.now()}`,
+        };
+      });
+    });
+  };
+
 
   // Sync props to state when widget config updates
   useEffect(() => {
@@ -150,28 +276,72 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
         </div>
       )}
 
-      {/* 3. Scattered Polaroid Stack Style */}
+      {/* 3. Scattered Polaroids Style (Multiple scattered photos with random updates) */}
       {style === 'polaroid' && (
-        <div className="absolute inset-0 flex items-center justify-center p-6 bg-[#0c1017]">
-          <div className="relative w-full max-w-[280px] aspect-[4/5] bg-white rounded-lg p-3 pb-8 shadow-2xl rotate-2 transition-transform hover:rotate-0">
-            <div className="w-full h-[78%] overflow-hidden rounded bg-gray-900">
-              <img
-                src={currentPhoto.url}
-                alt={currentPhoto.caption}
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <div className="mt-2 text-center">
-              <div className="font-handwriting font-bold text-gray-800 text-sm truncate">
-                {currentPhoto.caption || 'Captured Moment'}
-              </div>
-              {currentPhoto.author && (
-                <div className="text-[10px] text-gray-500 font-sans mt-0.5">
-                  by {currentPhoto.author}
+        <div className="absolute inset-0 overflow-hidden bg-gradient-to-br from-[#121622] via-[#0b0e16] to-[#07090f] p-3 select-none">
+          {/* Subtle ambient vignette */}
+          <div className="absolute inset-0 bg-radial from-transparent via-black/40 to-black/85 pointer-events-none" />
+
+          {/* Render Scattered Polaroid Cards */}
+          {scatteredPolaroids.map((item, idx) => {
+            const slotDef = POLAROID_SLOTS[idx] || POLAROID_SLOTS[0];
+            return (
+              <motion.div
+                key={item.key}
+                initial={{ opacity: 0, scale: 0.75, y: -24, rotate: item.rotation + 6 }}
+                animate={{ opacity: 1, scale: 1, y: 0, rotate: item.rotation }}
+                transition={{
+                  type: 'spring',
+                  damping: 17,
+                  stiffness: 130,
+                  mass: 0.85,
+                }}
+                whileHover={{
+                  scale: 1.12,
+                  rotate: 0,
+                  zIndex: 40,
+                  transition: { duration: 0.18 },
+                }}
+                whileTap={{ scale: 0.96 }}
+                onClick={() => handleShufflePolaroid(idx)}
+                title="Click to randomly shuffle this polaroid"
+                style={{
+                  position: 'absolute',
+                  top: slotDef.top,
+                  left: slotDef.left,
+                  width: slotDef.width,
+                  maxWidth: slotDef.maxW,
+                  zIndex: item.zIndex,
+                }}
+                className="aspect-[4/5] cursor-pointer touch-manipulation group"
+              >
+                {/* Washi tape decal */}
+                <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-8 sm:w-10 h-2.5 sm:h-3 bg-white/40 backdrop-blur-xs border border-white/50 shadow-xs z-10 pointer-events-none -rotate-2" />
+
+                {/* Classic white polaroid paper frame */}
+                <div className="relative w-full h-full bg-[#fdfbf7] p-1.5 sm:p-2 pb-5 sm:pb-7 rounded-sm shadow-2xl border border-black/15 flex flex-col justify-between transition-shadow group-hover:shadow-cyan-500/20">
+                  <div className="w-full flex-1 min-h-0 overflow-hidden rounded-xs bg-gray-900 relative">
+                    <img
+                      src={item.photo.url}
+                      alt={item.photo.caption || 'Polaroid moment'}
+                      className="w-full h-full object-cover select-none pointer-events-none"
+                      loading="lazy"
+                    />
+                  </div>
+                  <div className="mt-1 sm:mt-1.5 px-0.5 text-center shrink-0">
+                    <div className="font-handwriting font-bold text-gray-800 text-[10px] sm:text-xs truncate tracking-tight">
+                      {item.photo.caption || 'Captured Moment'}
+                    </div>
+                    {item.photo.author && (
+                      <div className="text-[8px] sm:text-[9px] text-gray-500 font-sans truncate">
+                        {item.photo.author}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
-          </div>
+              </motion.div>
+            );
+          })}
         </div>
       )}
 
@@ -214,7 +384,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                 style === s ? 'bg-blue-600 text-white shadow' : 'text-gray-300 hover:text-white'
               }`}
             >
-              {s === 'ken_burns' ? 'Ken Burns' : s}
+              {s === 'ken_burns' ? 'Ken Burns' : s === 'polaroid' ? 'Polaroids' : s}
             </button>
           ))}
           <button

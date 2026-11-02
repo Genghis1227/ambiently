@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.2] - 2026-11-02
+
+### Added
+* **Ambient Quick Command & Kiosk HUD Popover (`AmbientQuickMenu.tsx`, `NavigationDock.tsx`):**
+  * Turned the Ambiently brand logo in the Navigation Dock into an interactive trigger opening a floating kiosk HUD popover.
+  * Instant 1-tap toggles for **Night Mode**, **Fullscreen Kiosk**, **Tab Carousel (Auto-Rotate)**, and **Return to Home Board**.
+  * Shows live system status (`🟢 Local-First Engine`), clock, and release version badge linking directly to the Changelog modal.
+  * Direct shortcuts for **Connect Phone (Family QR Code)** and **Settings & Boards Manager**.
+* **Scattered Polaroids Multi-Photo Gallery (`PhotoFrameWidget.tsx`):**
+  * Redesigned the Polaroid display style into an organic 6-photo scattered collage with natural tilts (`-7°` to `+8°`), drop shadows, and vintage washi tape decals.
+  * Live random photo updates: continuously swaps in fresh, non-repeating photos from connected libraries (curated presets, Plex, local folders) with smooth spring drop animations.
+  * Interactive controls: hover to zoom in (`scale: 1.12`) and inspect at `0°`, or tap any individual Polaroid to immediately shuffle its photo.
+
+### Fixed
+* **Uncropped Sticky Note Rotate Handle (`Corkboard.tsx`):**
+  * Lifted the `overflow-hidden` restriction on sticky note card containers so the top-center rotate grab handle sits cleanly above the top border without being cut in half.
+  * Aligned the handle to `-top-3` with a crisp `w-6 h-6` circular pill matching widget tiles.
+* **Sticky Notes Tile Header Action Collision (`StickyNotesWidget.tsx`):**
+  * Relocated the **`+ New Note`** button to the left alongside the **`Notes (x)`** / **`Trash (x)`** tab cluster, preventing the top-right widget hover toolbar from covering it.
+  * Added clearance padding (`pr-28`) to **Calendar** and **RSS** tile headers to safeguard view toggle and refresh buttons from hover overlay collisions.
+
+### Removed
+* **Dock Auto-Backup Icon (`NavigationDock.tsx`):** Removed the redundant `FolderSync` auto-backup icon from the navigation dock toolbar (backup and auto-sync remain accessible in Settings under Backup & Sync).
+
+---
+
 ## [0.1.1] - 2026-11-02
 
 ### Added

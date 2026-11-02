@@ -5,9 +5,23 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.1.1';
+export const APP_VERSION = '0.1.2';
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.1.2",
+    date: "November 2, 2026",
+    title: "Ambient Quick Command HUD, Scattered Polaroids Gallery & UI Polish",
+    highlights: [
+      "Ambient Quick Command & Kiosk HUD popover: clicking the Ambiently logo in the Navigation Dock opens a 1-tap kiosk control center (Night Mode, Fullscreen, Carousel Pause/Resume, Home Board reset, QR invite, and What's New).",
+      "Scattered Polaroids photo gallery: upgraded Polaroid display into a live multi-photo arrangement of 6 organically tilted Polaroids with washi tape decals that continuously and randomly update from photo libraries.",
+      "Interactive Polaroid controls: hover to zoom/inspect with 0° alignment, and 1-tap instant photo shuffle.",
+      "Uncropped sticky note rotate grab handle: lifted outer overflow constraints so circular rotate handle sits cleanly on top edge.",
+      "Sticky note tile header polish: moved + New Note button beside tabs to eliminate collisions with widget hover toolbar.",
+      "Calendar & RSS header safety: added clearance padding to prevent widget hover toolbar overlap.",
+      "Navigation dock cleanup: removed redundant auto-backup icon from dock toolbar.",
+    ],
+  },
   {
     version: "v0.1.1",
     date: "November 2, 2026",

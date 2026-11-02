@@ -34,7 +34,7 @@ export const RssWidget: React.FC<RssWidgetProps> = ({
   return (
     <div className="w-full h-full flex flex-col justify-between overflow-hidden select-none">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-gray-800/80 pb-2 mb-2">
+      <div className="flex items-center justify-between border-b border-gray-800/80 pb-2 mb-2 pr-28">
         <div className="flex items-center gap-2 min-w-0">
           <Rss className="w-4 h-4 text-orange-400 shrink-0" />
           <span className="text-xs font-bold text-white uppercase tracking-wider truncate">

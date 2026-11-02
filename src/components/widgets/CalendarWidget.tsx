@@ -54,7 +54,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
   return (
     <div className="w-full h-full flex flex-col justify-between overflow-hidden select-none">
       {/* Widget Header */}
-      <div className="flex items-center justify-between border-b border-gray-800/80 pb-2 mb-2">
+      <div className="flex items-center justify-between border-b border-gray-800/80 pb-2 mb-2 pr-28">
         <div className="flex items-center gap-2">
           <CalendarIcon className="w-4 h-4 text-blue-400" />
           <span className="text-xs font-bold text-white uppercase tracking-wider">
