@@ -551,7 +551,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                           : 'text-gray-400 hover:text-white'
                       }`}
                     >
-                      {s === 'ken_burns' ? 'Ken Burns' : s}
+                      {s === 'ken_burns' ? 'Ken Burns' : s === 'polaroid' ? 'Polaroids' : s}
                     </button>
                   ))}
                 </div>

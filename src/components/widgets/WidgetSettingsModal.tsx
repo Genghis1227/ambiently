@@ -394,7 +394,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                   {[
                     { id: 'ken_burns', label: 'Ken Burns (Slow Pan)' },
                     { id: 'mosaic', label: 'Mosaic Collage' },
-                    { id: 'polaroid', label: 'Classic Polaroid' },
+                    { id: 'polaroid', label: 'Scattered Polaroids' },
                     { id: 'filmstrip', label: 'Filmstrip' },
                   ].map((s) => (
                     <button
