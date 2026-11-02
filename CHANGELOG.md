@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.1] - 2026-11-02
+
+### Added
+* **Unified Navigation Dock Action Cluster (`NavigationDock.tsx`):**
+  * Relocated **Pin New Sticky Note** (`Pin`), **Add Widget Tile** (`LayoutGrid`), **Auto-Organize / Auto-Tile** (`Wand2`), and **Trash / Archive Drawer** (`Archive` with badge) into the Navigation Dock to eliminate top-right button overlaps on full-bleed canvases.
+* **1-Click Auto-Organize & Auto-Tile Engine (`autoLayout.ts`, `dashboardStore.ts`, `Corkboard.tsx`):**
+  * **Smart Bento Grid:** Packs widgets into balanced golden-ratio columns (`60% / 40%`, `2×2`, or `3-column` grids) and aligns sticky notes cleanly below or beside.
+  * **Keep Current Sizes (Pack Only):** Uses a 2D shelf-packing algorithm to resolve overlaps while preserving custom user-resized tile dimensions, plus a 1-click `0°` rotation straightening option.
+  * **Widgets Left | Sticky Notes Right:** Splits the board into a `68%` structured widget zone on the left and a `30%` 2-column sticky note rail on the right.
+  * Includes **1-Click Undo (`Undo2`)** snapshot restoration, smooth `300ms` CSS layout transitions, and smart non-overlapping placement (`findOpenCanvasSpot`) when spawning new widgets or notes.
+* **Per-Canvas Background Themes, 4K/5K Picture Upload & Dim Slider (`canvasThemes.ts`, `imageUpload.ts`, `CreateCanvasModal.tsx`, `SettingsModal.tsx`):**
+  * 5 procedural surface themes (`Midnight Dots`, `Warm Cork`, `Pure OLED Black`, `Ambient Aurora`, `Glass Blueprint`).
+  * Custom picture background uploader with adaptive 1080p / 4K / 5K Ultra HD client-side WebP/JPEG compression (`3840×2160` / `5120×2880`) and 4 curated 4K presets.
+  * **Background Dim Level Slider (`0%` – `90%`)** per canvas with live preview to keep white widget typography legible over bright photos.
+* **Per-Canvas Sticky Note Isolation & Visibility Controls (`App.tsx`, `Corkboard.tsx`, `SettingsModal.tsx`, `MobileCompanion.tsx`):**
+  * Fixed note filtering so each canvas displays only its own notes (`tabId === activeTabId`) or global notes (`tabId === 'all'`).
+  * Added a **Canvas Board Selector** (including `📌 Pin to All Canvases`) inside the Note Creator/Editor modal and a per-canvas **Show / Hide Sticky Notes (`Eye` / `EyeOff`)** toggle in Settings.
+* **Sticky Note Resizing, Rotation, Inline Editing & Color Swatches (`Corkboard.tsx`, `MobileCompanion.tsx`):**
+  * Expanded sticky note resizing from compact `8% × 8%` mini post-its up to `100% × 100%` full-canvas posters.
+  * Added **Typography Size Pills (`S`, `M`, `L`, `XL`)**, a smooth **360° Grab-and-Rotate Handle (`↻`)** with `0°` magnetic snap, **Inline Note Editing** (`✏️` button or double-click), and **1-Click Inline Pastel Color Swatches** directly on the note hover bar and Mobile Companion cards.
+* **World Timezone Clock & Universal Display Seconds Toggle (`WorldClockWidget.tsx`, `ClockWidget.tsx`, `ClockWeatherWidget.tsx`, `WidgetSettingsModal.tsx`):**
+  * New **World Timezone Clock (`world_clock`)** widget with Open-Meteo city geocoding lookup supporting **Single-City Hero Clock** (digital, minimalist, or analog dial) and **Multi-City World Timezone List** modes with live day/night indicators and relative day badges (`Today`, `+1d`, `-1d`).
+  * Added **Display Seconds (`showSeconds`)** toggle and optional city timezone override across all Clock and Clock+Weather tiles.
+* **Ambient Stream & Web Embed Tile (`MediaEmbedWidget.tsx`) & Custom Family Affirmations (`QuotesWidget.tsx`):**
+  * Added **Ambient Stream & Web Embed (`media_embed`)** widget with 1-click presets (`Lofi Girl`, `Synthwave Radio`, `NASA ISS Live Earth`, `Monterey Bay Jellyfish Cam`, `Tokyo Night Walk`) and custom YouTube / HTTPS iframe support with persisted mute toggle.
+  * Upgraded **Daily Quotes & Affirmations (`QuotesWidget.tsx`)** to support custom family affirmations, house rules, and Wi-Fi reminders alongside curated philosophical quotes.
+
+### Removed
+* Removed the floating top-right Corkboard action buttons (`Corkboard.tsx`) in favor of the unified Navigation Dock action cluster.
+* Removed the decorative red pushpin dots (`bg-red-600`) from the top of Corkboard tiles and sticky notes for a cleaner modern aesthetic.
+
+---
+
 ## [0.1.0] - 2026-11-02
 
 ### Added

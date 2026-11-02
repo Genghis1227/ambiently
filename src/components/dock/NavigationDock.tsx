@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   LayoutGrid,
   Pin,
@@ -23,8 +23,15 @@ import {
   Tv,
   Folder,
   Clock,
+  Archive,
+  Wand2,
+  RotateCcw,
 } from 'lucide-react';
-import type { DashboardTab, DockPosition } from '../../types/dashboard';
+import type {
+  AutoOrganizeMode,
+  DashboardTab,
+  DockPosition,
+} from '../../types/dashboard';
 
 interface NavigationDockProps {
   tabs: DashboardTab[];
@@ -40,6 +47,12 @@ interface NavigationDockProps {
   hasFileBound: boolean;
   onOpenAddWidget?: () => void;
   onOpenAddCanvas?: () => void;
+  onOpenCreateNote?: () => void;
+  onOpenTrash?: () => void;
+  trashCount?: number;
+  onAutoOrganize?: (mode: AutoOrganizeMode) => void;
+  onUndoOrganize?: () => void;
+  canUndoOrganize?: boolean;
 }
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -75,8 +88,22 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
   hasFileBound,
   onOpenAddWidget,
   onOpenAddCanvas,
+  onOpenCreateNote,
+  onOpenTrash,
+  trashCount = 0,
+  onAutoOrganize,
+  onUndoOrganize,
+  canUndoOrganize = false,
 }) => {
   const isVertical = dockPosition === 'left' || dockPosition === 'right';
+  const [showOrganizeMenu, setShowOrganizeMenu] = useState(false);
+  const [activeMode, setActiveMode] = useState<AutoOrganizeMode>('bento');
+
+  useEffect(() => {
+    if (!showOrganizeMenu) return;
+    const timer = window.setTimeout(() => setShowOrganizeMenu(false), 6000);
+    return () => clearTimeout(timer);
+  }, [showOrganizeMenu, activeMode]);
 
   const positionClasses = {
     left: 'left-3 top-1/2 -translate-y-1/2 flex-col',
@@ -85,122 +112,222 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
     bottom: 'bottom-3 left-1/2 -translate-x-1/2 flex-row',
   }[dockPosition];
 
+  const popoverPositionClasses = {
+    left: 'left-16 top-1/2 -translate-y-1/2',
+    right: 'right-16 top-1/2 -translate-y-1/2',
+    top: 'top-16 left-1/2 -translate-x-1/2',
+    bottom: 'bottom-16 left-1/2 -translate-x-1/2',
+  }[dockPosition];
+
   return (
-    <nav
-      className={`fixed z-30 flex items-center gap-2 p-2 rounded-2xl bg-gray-900/80 backdrop-blur-xl border border-gray-800/90 shadow-2xl transition-all ${positionClasses}`}
-    >
-      {/* Brand Icon */}
-      <div className="flex items-center justify-center p-1">
-        <img
-          src="/logo.png"
-          alt="Ambiently"
-          className="w-7 h-7 rounded-lg object-cover shadow-sm border border-gray-700/60"
+    <>
+      <nav
+        className={`fixed z-30 flex items-center gap-2 p-2 rounded-2xl bg-gray-900/85 backdrop-blur-xl border border-gray-800/90 shadow-2xl transition-all ${positionClasses}`}
+      >
+        {/* Brand Icon */}
+        <div className="flex items-center justify-center p-1">
+          <img
+            src="/logo.png"
+            alt="Ambiently"
+            className="w-7 h-7 rounded-lg object-cover shadow-sm border border-gray-700/60"
+          />
+        </div>
+
+        <div
+          className={`bg-gray-800 ${isVertical ? 'w-6 h-px my-0.5' : 'h-6 w-px mx-0.5'}`}
         />
-      </div>
 
-      <div
-        className={`bg-gray-800 ${isVertical ? 'w-6 h-px my-0.5' : 'h-6 w-px mx-0.5'}`}
-      />
+        {/* Tab Switcher Icons */}
+        <div className={`flex items-center gap-1.5 ${isVertical ? 'flex-col' : 'flex-row'}`}>
+          {tabs.map((tab) => {
+            const isActive = tab.id === activeTabId;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => onSelectTab(tab.id)}
+                title={tab.name}
+                className={`relative flex items-center justify-center w-11 h-11 rounded-xl transition-all cursor-pointer ${
+                  isActive
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
+                    : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/70'
+                }`}
+              >
+                {tab.icon && iconMap[tab.icon] ? iconMap[tab.icon] : <LayoutGrid className="w-5 h-5" />}
+                {/* Active Dot indicator */}
+                {isActive && (
+                  <span
+                    className={`absolute w-1.5 h-1.5 rounded-full bg-white ${
+                      dockPosition === 'left'
+                        ? '-left-1'
+                        : dockPosition === 'right'
+                        ? '-right-1'
+                        : dockPosition === 'top'
+                        ? '-top-1'
+                        : '-bottom-1'
+                    }`}
+                  />
+                )}
+              </button>
+            );
+          })}
 
-      {/* Tab Switcher Icons */}
-      <div className={`flex items-center gap-1.5 ${isVertical ? 'flex-col' : 'flex-row'}`}>
-        {tabs.map((tab) => {
-          const isActive = tab.id === activeTabId;
-          return (
+          {/* Create New Canvas Button */}
+          {onOpenAddCanvas && (
             <button
-              key={tab.id}
-              onClick={() => onSelectTab(tab.id)}
-              title={tab.name}
-              className={`relative flex items-center justify-center w-11 h-11 rounded-xl transition-all ${
-                isActive
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/70'
+              onClick={onOpenAddCanvas}
+              title="Create New Canvas"
+              className="flex items-center justify-center w-10 h-10 rounded-xl text-emerald-400 hover:text-white hover:bg-emerald-600/30 transition-all border border-emerald-500/20 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        <div
+          className={`bg-gray-800 ${isVertical ? 'w-6 h-px my-0.5' : 'h-6 w-px mx-0.5'}`}
+        />
+
+        {/* Board Creation & Organization Actions: Pin Note, Add Tile, Auto-Organize & Trash */}
+        <div className={`flex items-center gap-1.5 ${isVertical ? 'flex-col' : 'flex-row'}`}>
+          {onOpenCreateNote && (
+            <button
+              onClick={onOpenCreateNote}
+              title="Pin New Sticky Note"
+              className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition-all cursor-pointer"
+            >
+              <Pin className="w-4 h-4" />
+            </button>
+          )}
+
+          {onOpenAddWidget && (
+            <button
+              onClick={onOpenAddWidget}
+              title="Add Widget Tile to Canvas"
+              className="flex items-center justify-center w-10 h-10 rounded-xl bg-blue-500/15 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 transition-all cursor-pointer"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+          )}
+
+          {onAutoOrganize && (
+            <button
+              onClick={() => {
+                onAutoOrganize(activeMode);
+                setShowOrganizeMenu(true);
+              }}
+              title="Auto-Organize / Auto-Tile (Zero Overlap)"
+              className="flex items-center justify-center w-10 h-10 rounded-xl bg-purple-500/15 hover:bg-purple-500/30 text-purple-300 border border-purple-500/30 transition-all cursor-pointer"
+            >
+              <Wand2 className="w-4 h-4" />
+            </button>
+          )}
+
+          {onOpenTrash && trashCount > 0 && (
+            <button
+              onClick={onOpenTrash}
+              title={`Archived & Expired Notes (${trashCount})`}
+              className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gray-800/80 hover:bg-gray-700 text-amber-400 border border-amber-500/30 transition-all cursor-pointer"
+            >
+              <Archive className="w-4 h-4" />
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 text-gray-950 font-mono font-bold text-[10px] flex items-center justify-center">
+                {trashCount}
+              </span>
+            </button>
+          )}
+        </div>
+
+        <div
+          className={`bg-gray-800 ${isVertical ? 'w-6 h-px my-0.5' : 'h-6 w-px mx-0.5'}`}
+        />
+
+        {/* Quick Utilities / Kiosk controls */}
+        <div className={`flex items-center gap-1.5 ${isVertical ? 'flex-col' : 'flex-row'}`}>
+          <button
+            onClick={onConnectFile}
+            title={hasFileBound ? 'PC Auto-Backup: Active' : 'Auto-Backup to PC (Optional)'}
+            className={`relative flex items-center justify-center w-10 h-10 rounded-xl transition-all cursor-pointer ${
+              hasFileBound
+                ? 'text-emerald-400 hover:bg-emerald-500/10'
+                : 'text-amber-400 hover:bg-amber-500/10'
+            }`}
+          >
+            <FolderSync className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={onToggleNightMode}
+            title="Toggle Night Mode"
+            className="flex items-center justify-center w-10 h-10 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-gray-800/70 transition-all cursor-pointer"
+          >
+            <Moon className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={onToggleFullscreen}
+            title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen Kiosk'}
+            className="flex items-center justify-center w-10 h-10 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-gray-800/70 transition-all cursor-pointer"
+          >
+            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+          </button>
+
+          <button
+            onClick={onOpenSettings}
+            title="Settings & Lock"
+            className="flex items-center justify-center w-10 h-10 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-gray-800/70 transition-all cursor-pointer"
+          >
+            {isLocked ? <Lock className="w-4 h-4 text-blue-400" /> : <Settings className="w-4 h-4" />}
+          </button>
+        </div>
+      </nav>
+
+      {/* Auto-Organize Mode Switcher & Undo Floating Bar */}
+      {showOrganizeMenu && onAutoOrganize && (
+        <div
+          className={`fixed z-40 flex items-center gap-1.5 p-2 rounded-2xl bg-gray-900/95 backdrop-blur-xl border border-purple-500/40 shadow-2xl ${popoverPositionClasses}`}
+        >
+          <span className="text-[10px] font-bold uppercase tracking-wider text-purple-300 px-1.5">
+            Layout:
+          </span>
+          {(
+            [
+              { id: 'bento', label: 'Bento Grid' },
+              { id: 'pack', label: 'Keep Sizes' },
+              { id: 'split', label: 'Split (Widgets | Notes)' },
+            ] as const
+          ).map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => {
+                setActiveMode(opt.id);
+                onAutoOrganize(opt.id);
+              }}
+              className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                activeMode === opt.id
+                  ? 'bg-purple-600 text-white shadow'
+                  : 'bg-gray-800 text-gray-300 hover:text-white'
               }`}
             >
-              {tab.icon && iconMap[tab.icon] ? iconMap[tab.icon] : <LayoutGrid className="w-5 h-5" />}
-              {/* Active Dot indicator */}
-              {isActive && (
-                <span
-                  className={`absolute w-1.5 h-1.5 rounded-full bg-white ${
-                    dockPosition === 'left'
-                      ? '-left-1'
-                      : dockPosition === 'right'
-                      ? '-right-1'
-                      : dockPosition === 'top'
-                      ? '-top-1'
-                      : '-bottom-1'
-                  }`}
-                />
-              )}
+              {opt.label}
             </button>
-          );
-        })}
+          ))}
 
-        {/* Add Canvas Button */}
-        {onOpenAddCanvas && (
-          <button
-            onClick={onOpenAddCanvas}
-            title="Create New Canvas"
-            className="flex items-center justify-center w-11 h-11 rounded-xl text-emerald-400 hover:text-white hover:bg-emerald-600/30 transition-all border border-emerald-500/20"
-          >
-            <Plus className="w-5 h-5" />
-          </button>
-        )}
-
-        {/* Add Widget Button */}
-        {onOpenAddWidget && (
-          <button
-            onClick={onOpenAddWidget}
-            title="Add Widget to Dashboard"
-            className="flex items-center justify-center w-11 h-11 rounded-xl text-blue-400 hover:text-white hover:bg-blue-600/30 transition-all border border-blue-500/20"
-          >
-            <Plus className="w-5 h-5" />
-          </button>
-        )}
-      </div>
-
-      <div
-        className={`bg-gray-800 ${isVertical ? 'w-6 h-px my-1' : 'h-6 w-px mx-1'}`}
-      />
-
-      {/* Quick Utilities / Kiosk controls */}
-      <div className={`flex items-center gap-1.5 ${isVertical ? 'flex-col' : 'flex-row'}`}>
-        <button
-          onClick={onConnectFile}
-          title={hasFileBound ? 'PC Auto-Backup: Active' : 'Auto-Backup to PC (Optional)'}
-          className={`relative flex items-center justify-center w-10 h-10 rounded-xl transition-all ${
-            hasFileBound
-              ? 'text-emerald-400 hover:bg-emerald-500/10'
-              : 'text-amber-400 hover:bg-amber-500/10'
-          }`}
-        >
-          <FolderSync className="w-4 h-4" />
-        </button>
-
-        <button
-          onClick={onToggleNightMode}
-          title="Toggle Night Mode"
-          className="flex items-center justify-center w-10 h-10 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-gray-800/70 transition-all"
-        >
-          <Moon className="w-4 h-4" />
-        </button>
-
-        <button
-          onClick={onToggleFullscreen}
-          title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen Kiosk'}
-          className="flex items-center justify-center w-10 h-10 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-gray-800/70 transition-all"
-        >
-          {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-        </button>
-
-        <button
-          onClick={onOpenSettings}
-          title="Settings & Lock"
-          className="flex items-center justify-center w-10 h-10 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-gray-800/70 transition-all"
-        >
-          {isLocked ? <Lock className="w-4 h-4 text-blue-400" /> : <Settings className="w-4 h-4" />}
-        </button>
-      </div>
-    </nav>
+          {canUndoOrganize && onUndoOrganize && (
+            <button
+              type="button"
+              onClick={() => {
+                onUndoOrganize();
+                setShowOrganizeMenu(false);
+              }}
+              title="Restore previous manual layout"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-semibold transition-all cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Undo</span>
+            </button>
+          )}
+        </div>
+      )}
+    </>
   );
 };

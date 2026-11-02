@@ -1,5 +1,10 @@
 import React, { useRef, useState } from 'react';
-import type { StickyNoteItem, DashboardWidget } from '../../types/dashboard';
+import type {
+  StickyNoteItem,
+  DashboardWidget,
+  CanvasBackgroundTheme,
+  DashboardTab,
+} from '../../types/dashboard';
 import {
   CheckSquare,
   Square,
@@ -14,9 +19,12 @@ import {
   Archive,
   RotateCcw,
   RotateCw,
+  Edit2,
+  Layers,
 } from 'lucide-react';
 import { ClockWeatherWidget } from '../widgets/ClockWeatherWidget';
 import { ClockWidget } from '../widgets/ClockWidget';
+import { WorldClockWidget } from '../widgets/WorldClockWidget';
 import { WeatherWidget } from '../widgets/WeatherWidget';
 import { CountdownWidget } from '../widgets/CountdownWidget';
 import { QuotesWidget } from '../widgets/QuotesWidget';
@@ -24,13 +32,26 @@ import { CalendarWidget } from '../widgets/CalendarWidget';
 import { RssWidget } from '../widgets/RssWidget';
 import { PhotoFrameWidget } from '../widgets/PhotoFrameWidget';
 import { StickyNotesWidget } from '../widgets/StickyNotesWidget';
+import { MediaEmbedWidget } from '../widgets/MediaEmbedWidget';
 import { WidgetSettingsModal } from '../widgets/WidgetSettingsModal';
 import { PhotoSourcesModal } from '../photos/PhotoSourcesModal';
+import { CANVAS_THEMES } from '../../data/canvasThemes';
 
 interface CorkboardProps {
   notes: StickyNoteItem[];
   widgets?: DashboardWidget[];
+  tabs?: DashboardTab[];
+  activeTabId?: string;
   dockPaddingClass: string;
+  backgroundTheme?: CanvasBackgroundTheme;
+  customWallpaperUrl?: string;
+  backgroundDimLevel?: number;
+  hideNotes?: boolean;
+  isCreatorOpen?: boolean;
+  onOpenCreator?: () => void;
+  onCloseCreator?: () => void;
+  isTrashOpen?: boolean;
+  onCloseTrash?: () => void;
   onUpdateNotePos: (noteId: string, pos: NonNullable<StickyNoteItem['freeformPos']>) => void;
   onUpdateWidgetPos?: (widgetId: string, gridPos: any, freeformPos: NonNullable<DashboardWidget['freeformPos']>) => void;
   onAddNote: (note: Partial<StickyNoteItem>) => void;
@@ -51,10 +72,28 @@ const COLOR_PALETTE = [
   '#fed7aa', // Orange
 ];
 
+const FONT_SIZE_CLASSES: Record<NonNullable<StickyNoteItem['fontSize']>, string> = {
+  sm: 'text-[11px] leading-snug',
+  base: 'text-xs leading-relaxed',
+  lg: 'text-sm md:text-base leading-relaxed font-medium',
+  xl: 'text-base md:text-xl leading-snug font-semibold',
+};
+
 export const Corkboard: React.FC<CorkboardProps> = ({
   notes,
   widgets = [],
+  tabs = [],
+  activeTabId = 'tab-corkboard',
   dockPaddingClass,
+  backgroundTheme = 'midnight_dots',
+  customWallpaperUrl,
+  backgroundDimLevel = 45,
+  hideNotes = false,
+  isCreatorOpen = false,
+  onOpenCreator,
+  onCloseCreator,
+  isTrashOpen = false,
+  onCloseTrash,
   onUpdateNotePos,
   onUpdateWidgetPos,
   onAddNote,
@@ -71,8 +110,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [editingWidget, setEditingWidget] = useState<DashboardWidget | null>(null);
   const [photoSourcesTargetWidget, setPhotoSourcesTargetWidget] = useState<DashboardWidget | null>(null);
-  const [isTrashOpen, setIsTrashOpen] = useState(false);
 
+  // Resizing state
   const [resizingId, setResizingId] = useState<string | null>(null);
   const [resizingType, setResizingType] = useState<'note' | 'widget'>('widget');
   const [resizeStart, setResizeStart] = useState<{ startX: number; startY: number; startW: number; startH: number }>({
@@ -82,12 +121,29 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     startH: 0,
   });
 
-  // Quick Note Modal / Creator on Corkboard
-  const [isCreatorOpen, setIsCreatorOpen] = useState(false);
+  // Grab-and-Rotate state
+  const [rotatingId, setRotatingId] = useState<string | null>(null);
+  const [rotatingType, setRotatingType] = useState<'note' | 'widget'>('note');
+  const [rotateStart, setRotateStart] = useState<{
+    centerX: number;
+    centerY: number;
+    startAngle: number;
+    startRotation: number;
+  }>({
+    centerX: 0,
+    centerY: 0,
+    startAngle: 0,
+    startRotation: 0,
+  });
+
+  // Note Creator & Inline Editor Modal State
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
   const [isChecklist, setIsChecklist] = useState(false);
   const [selectedColor, setSelectedColor] = useState(COLOR_PALETTE[0]);
+  const [selectedFontSize, setSelectedFontSize] = useState<NonNullable<StickyNoteItem['fontSize']>>('base');
+  const [selectedNoteTabId, setSelectedNoteTabId] = useState<string>(activeTabId);
   const [checklistItems, setChecklistItems] = useState<{ id: string; text: string; done: boolean }[]>([]);
   const [newItemText, setNewItemText] = useState('');
   const [expiryOption, setExpiryOption] = useState<'permanent' | '1day' | '3days' | 'custom'>('permanent');
@@ -99,6 +155,48 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     return Math.min(45, Math.max(widgetMax, noteMax) + 1);
   };
 
+  const openNoteEditorForExisting = (note: StickyNoteItem) => {
+    setEditingNoteId(note.id);
+    setNewTitle(note.title || '');
+    setNewContent(note.content || '');
+    setIsChecklist(Boolean(note.isChecklist));
+    setChecklistItems(note.checklistItems ? [...note.checklistItems] : []);
+    setSelectedColor(note.bgColor || COLOR_PALETTE[0]);
+    setSelectedFontSize(note.fontSize || 'base');
+    setSelectedNoteTabId(note.tabId || activeTabId);
+
+    if (note.expiresAt) {
+      setExpiryOption('custom');
+      try {
+        const d = new Date(note.expiresAt);
+        const isoLocal = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+          .toISOString()
+          .slice(0, 16);
+        setCustomExpiry(isoLocal);
+      } catch {
+        setCustomExpiry('');
+      }
+    } else {
+      setExpiryOption('permanent');
+      setCustomExpiry('');
+    }
+    onOpenCreator?.();
+  };
+
+  const resetNoteModal = () => {
+    setEditingNoteId(null);
+    setNewTitle('');
+    setNewContent('');
+    setIsChecklist(false);
+    setChecklistItems([]);
+    setSelectedColor(COLOR_PALETTE[0]);
+    setSelectedFontSize('base');
+    setSelectedNoteTabId(activeTabId);
+    setExpiryOption('permanent');
+    setCustomExpiry('');
+    onCloseCreator?.();
+  };
+
   const handleResizePointerDown = (
     e: React.PointerEvent,
     id: string,
@@ -108,13 +206,49 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     e.stopPropagation();
     if (!containerRef.current) return;
 
+    const cardEl = (e.currentTarget as HTMLElement).parentElement;
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const cardRect = cardEl?.getBoundingClientRect();
+
+    const fallbackWRatio = cardRect ? cardRect.width / containerRect.width : 0.26;
+    const fallbackHRatio = cardRect ? cardRect.height / containerRect.height : 0.3;
+
     setResizingId(id);
     setResizingType(type);
     setResizeStart({
       startX: e.clientX,
       startY: e.clientY,
-      startW: pos?.wRatio ?? 0.35,
-      startH: pos?.hRatio ?? 0.45,
+      startW: pos?.wRatio ?? fallbackWRatio,
+      startH: pos?.hRatio ?? fallbackHRatio,
+    });
+
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {}
+  };
+
+  const handleRotatePointerDown = (
+    e: React.PointerEvent,
+    id: string,
+    type: 'note' | 'widget',
+    pos?: NonNullable<DashboardWidget['freeformPos']>
+  ) => {
+    e.stopPropagation();
+    const cardEl = (e.currentTarget as HTMLElement).closest('[data-canvas-card="true"]');
+    if (!cardEl) return;
+
+    const cardRect = cardEl.getBoundingClientRect();
+    const centerX = cardRect.left + cardRect.width / 2;
+    const centerY = cardRect.top + cardRect.height / 2;
+    const startAngle = Math.atan2(e.clientY - centerY, e.clientX - centerX) * (180 / Math.PI);
+
+    setRotatingId(id);
+    setRotatingType(type);
+    setRotateStart({
+      centerX,
+      centerY,
+      startAngle,
+      startRotation: pos?.rotation || 0,
     });
 
     try {
@@ -128,8 +262,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     type: 'note' | 'widget',
     pos?: NonNullable<DashboardWidget['freeformPos']>
   ) => {
-    // Prevent drag when clicking buttons, inputs, links, or interactive elements
-    if ((e.target as HTMLElement).closest('button, input, textarea, select, a, [role="button"]')) return;
+    if ((e.target as HTMLElement).closest('button, input, textarea, select, a, [role="button"], [data-no-drag="true"]')) return;
 
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
@@ -139,7 +272,6 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     const currentX = (pos?.xRatio ?? 0.1) * rect.width;
     const currentY = (pos?.yRatio ?? 0.1) * rect.height;
 
-    // Bring card to front on interaction
     const nextZ = getNextZIndex();
     if (type === 'note' && pos) {
       onUpdateNotePos(id, { ...pos, zIndex: nextZ });
@@ -166,7 +298,56 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
 
-    // 1. Resizing in progress
+    // 1. Grab-and-Rotate in progress
+    if (rotatingId) {
+      const currentAngle =
+        Math.atan2(e.clientY - rotateStart.centerY, e.clientX - rotateStart.centerX) *
+        (180 / Math.PI);
+      let deltaAngle = currentAngle - rotateStart.startAngle;
+      if (deltaAngle > 180) deltaAngle -= 360;
+      if (deltaAngle < -180) deltaAngle += 360;
+
+      let nextRotation = Math.round(rotateStart.startRotation + deltaAngle);
+      if (Math.abs(nextRotation) <= 2.5) {
+        nextRotation = 0;
+      }
+      nextRotation = Math.max(-60, Math.min(60, nextRotation));
+
+      if (rotatingType === 'note') {
+        const note = notes.find((n) => n.id === rotatingId);
+        if (!note) return;
+        const pos = note.freeformPos || {
+          xRatio: 0.1,
+          yRatio: 0.1,
+          wRatio: 0.26,
+          hRatio: 0.3,
+          zIndex: 10,
+          rotation: 0,
+        };
+        onUpdateNotePos(note.id, {
+          ...pos,
+          rotation: nextRotation,
+        });
+      } else if (rotatingType === 'widget' && onUpdateWidgetPos) {
+        const widget = widgets.find((w) => w.id === rotatingId);
+        if (!widget) return;
+        const pos = widget.freeformPos || {
+          xRatio: 0.1,
+          yRatio: 0.1,
+          wRatio: 0.35,
+          hRatio: 0.45,
+          zIndex: 10,
+          rotation: 0,
+        };
+        onUpdateWidgetPos(widget.id, widget.gridPos, {
+          ...pos,
+          rotation: nextRotation,
+        });
+      }
+      return;
+    }
+
+    // 2. Resizing in progress
     if (resizingId) {
       const deltaX = e.clientX - resizeStart.startX;
       const deltaY = e.clientY - resizeStart.startY;
@@ -180,8 +361,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         const maxW = 1.0 - widget.freeformPos.xRatio;
         const maxH = 1.0 - widget.freeformPos.yRatio;
 
-        const newW = Math.max(0.18, Math.min(maxW, resizeStart.startW + deltaWRatio));
-        const newH = Math.max(0.18, Math.min(maxH, resizeStart.startH + deltaHRatio));
+        const newW = Math.max(0.14, Math.min(maxW, resizeStart.startW + deltaWRatio));
+        const newH = Math.max(0.14, Math.min(maxH, resizeStart.startH + deltaHRatio));
 
         onUpdateWidgetPos(widget.id, widget.gridPos, {
           ...widget.freeformPos,
@@ -190,16 +371,24 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         });
       } else if (resizingType === 'note') {
         const note = notes.find((n) => n.id === resizingId);
-        if (!note || !note.freeformPos) return;
+        if (!note) return;
+        const pos = note.freeformPos || {
+          xRatio: 0.1,
+          yRatio: 0.1,
+          wRatio: 0.26,
+          hRatio: 0.3,
+          zIndex: 10,
+          rotation: 0,
+        };
 
-        const maxW = 1.0 - note.freeformPos.xRatio;
-        const maxH = 1.0 - note.freeformPos.yRatio;
+        const maxW = 1.0 - pos.xRatio;
+        const maxH = 1.0 - pos.yRatio;
 
-        const newW = Math.max(0.18, Math.min(maxW, resizeStart.startW + deltaWRatio));
-        const newH = Math.max(0.18, Math.min(maxH, resizeStart.startH + deltaHRatio));
+        const newW = Math.max(0.08, Math.min(maxW, resizeStart.startW + deltaWRatio));
+        const newH = Math.max(0.08, Math.min(maxH, resizeStart.startH + deltaHRatio));
 
         onUpdateNotePos(note.id, {
-          ...note.freeformPos,
+          ...pos,
           wRatio: newW,
           hRatio: newH,
         });
@@ -207,14 +396,14 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       return;
     }
 
-    // 2. Dragging in progress
+    // 3. Dragging in progress
     if (!draggingId) return;
 
     const containerX = e.clientX - rect.left;
     const containerY = e.clientY - rect.top;
 
-    const newX = Math.max(0, Math.min(rect.width - 150, containerX - dragOffset.x));
-    const newY = Math.max(0, Math.min(rect.height - 150, containerY - dragOffset.y));
+    const newX = Math.max(0, Math.min(rect.width - 100, containerX - dragOffset.x));
+    const newY = Math.max(0, Math.min(rect.height - 80, containerY - dragOffset.y));
 
     if (draggingType === 'note') {
       const note = notes.find((n) => n.id === draggingId);
@@ -245,6 +434,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     }
     setDraggingId(null);
     setResizingId(null);
+    setRotatingId(null);
   };
 
   const handleAddChecklistItem = () => {
@@ -256,7 +446,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     setNewItemText('');
   };
 
-  const handleCreateNote = () => {
+  const handleSaveNoteModal = () => {
     if (!newTitle.trim() && !newContent.trim() && checklistItems.length === 0) return;
 
     let expiresAt: string | null = null;
@@ -268,30 +458,32 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       expiresAt = new Date(customExpiry).toISOString();
     }
 
-    onAddNote({
-      title: newTitle.trim() || undefined,
-      content: newContent,
-      isChecklist,
-      checklistItems: isChecklist ? checklistItems : undefined,
-      bgColor: selectedColor,
-      expiresAt,
-      freeformPos: {
-        xRatio: 0.2 + Math.random() * 0.3,
-        yRatio: 0.2 + Math.random() * 0.3,
-        wRatio: 0.28,
-        hRatio: 0.35,
-        zIndex: getNextZIndex(),
-        rotation: Math.floor(Math.random() * 6) - 3,
-      },
-    });
+    if (editingNoteId) {
+      onUpdateNote(editingNoteId, {
+        tabId: selectedNoteTabId || activeTabId,
+        title: newTitle.trim() || undefined,
+        content: newContent,
+        isChecklist,
+        checklistItems: isChecklist ? checklistItems : undefined,
+        bgColor: selectedColor,
+        fontSize: selectedFontSize,
+        expiresAt,
+      });
+    } else {
+      // Omit freeformPos so dashboardStore.addNote automatically finds an open non-overlapping spot!
+      onAddNote({
+        tabId: selectedNoteTabId || activeTabId,
+        title: newTitle.trim() || undefined,
+        content: newContent,
+        isChecklist,
+        checklistItems: isChecklist ? checklistItems : undefined,
+        bgColor: selectedColor,
+        fontSize: selectedFontSize,
+        expiresAt,
+      });
+    }
 
-    setIsCreatorOpen(false);
-    setNewTitle('');
-    setNewContent('');
-    setIsChecklist(false);
-    setChecklistItems([]);
-    setExpiryOption('permanent');
-    setCustomExpiry('');
+    resetNoteModal();
   };
 
   const toggleChecklistItem = (note: StickyNoteItem, itemId: string) => {
@@ -303,17 +495,24 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   };
 
   const now = new Date();
-  const activeNotes = notes.filter((n) => {
-    if (n.archivedAt) return false;
-    if (n.expiresAt && new Date(n.expiresAt) <= now) return false;
-    return true;
-  });
+  const activeNotes = hideNotes
+    ? []
+    : notes.filter((n) => {
+        if (n.archivedAt) return false;
+        if (n.expiresAt && new Date(n.expiresAt) <= now) return false;
+        return true;
+      });
 
   const trashNotes = notes.filter((n) => {
     if (n.archivedAt) return true;
     if (n.expiresAt && new Date(n.expiresAt) <= now) return true;
     return false;
   });
+
+  const activeThemeObj =
+    CANVAS_THEMES.find((t) => t.id === backgroundTheme) || CANVAS_THEMES[0];
+
+  const dimAlpha = Math.max(0, Math.min(0.92, (backgroundDimLevel ?? 45) / 100));
 
   return (
     <div
@@ -324,38 +523,56 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       style={{
         touchAction: 'none',
         WebkitTouchCallout: 'none',
+        ...(backgroundTheme === 'custom' && customWallpaperUrl
+          ? { backgroundImage: `url("${customWallpaperUrl}")` }
+          : {}),
       }}
-      className={`relative w-full h-screen overflow-hidden select-none touch-none bg-[radial-gradient(#1f2937_1px,transparent_1px)] [background-size:24px_24px] ${dockPaddingClass}`}
+      className={`relative w-full h-screen overflow-hidden select-none touch-none ${activeThemeObj.canvasClass} ${dockPaddingClass}`}
     >
-      {/* Floating Action Buttons on Corkboard */}
-      <div className="absolute top-4 right-4 z-40 flex items-center gap-2">
-        {trashNotes.length > 0 && (
-          <button
-            onClick={() => setIsTrashOpen(true)}
-            className="flex items-center gap-1.5 py-2 px-3 rounded-xl bg-gray-900/90 hover:bg-gray-800 text-xs font-semibold text-amber-300 border border-amber-500/30 shadow-xl backdrop-blur-md transition-all cursor-pointer"
-            title="View expired or archived sticky notes"
-          >
-            <Archive className="w-3.5 h-3.5 text-amber-400" />
-            <span>Trash ({trashNotes.length})</span>
-          </button>
-        )}
-        {onOpenAddWidget && (
-          <button
-            onClick={onOpenAddWidget}
-            className="flex items-center gap-1.5 py-2 px-3.5 rounded-xl bg-gray-900/90 hover:bg-gray-800 text-xs font-semibold text-gray-200 border border-gray-700 shadow-xl backdrop-blur-md transition-all cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5 text-blue-400" />
-            <span>Add Tile</span>
-          </button>
-        )}
-        <button
-          onClick={() => setIsCreatorOpen(true)}
-          className="flex items-center gap-2 py-2 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-xs font-bold text-white shadow-xl shadow-blue-500/25 transition-all cursor-pointer"
-        >
-          <Pin className="w-3.5 h-3.5" />
-          <span>Pin New Note</span>
-        </button>
-      </div>
+      {/* Dynamic Dim Overlay for Custom Picture Backgrounds */}
+      {backgroundTheme === 'custom' && customWallpaperUrl && (
+        <div
+          className="absolute inset-0 pointer-events-none transition-opacity duration-200"
+          style={{
+            backgroundColor: `rgba(9, 13, 22, ${dimAlpha})`,
+          }}
+        />
+      )}
+
+      {/* Empty Canvas Onboarding Prompt (when a new canvas has 0 tiles and 0 notes) */}
+      {widgets.length === 0 && activeNotes.length === 0 && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 p-6">
+          <div className="pointer-events-auto max-w-sm w-full rounded-2xl bg-gray-900/80 backdrop-blur-md border border-gray-800 p-6 text-center shadow-2xl space-y-4">
+            <p className="text-sm font-bold text-white">This Canvas is Empty</p>
+            <p className="text-xs text-gray-400 leading-relaxed">
+              Add live widgets (Weather, Photos, Calendar, Lofi Stream) or pin sticky notes to customize this board.
+            </p>
+            <div className="flex items-center justify-center gap-2.5 pt-1">
+              {onOpenAddWidget && (
+                <button
+                  onClick={onOpenAddWidget}
+                  className="flex items-center gap-1.5 py-2 px-3.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-semibold text-white border border-gray-700 transition-all cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Add Tile</span>
+                </button>
+              )}
+              {onOpenCreator && (
+                <button
+                  onClick={() => {
+                    setSelectedNoteTabId(activeTabId);
+                    onOpenCreator();
+                  }}
+                  className="flex items-center gap-1.5 py-2 px-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white shadow-lg shadow-blue-500/25 transition-all cursor-pointer"
+                >
+                  <Pin className="w-3.5 h-3.5" />
+                  <span>Pin Note</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Render Freeform Widgets on Corkboard */}
       {widgets.map((widget) => {
@@ -370,9 +587,13 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
         const isFullScreen = Boolean(pos.isFullScreen);
         const isDragging = draggingId === widget.id;
+        const isRotating = rotatingId === widget.id;
+        const isActiveManipulating = isDragging || resizingId === widget.id || isRotating;
+
         return (
           <div
             key={widget.id}
+            data-canvas-card="true"
             onPointerDown={(e) => !isFullScreen && handlePointerDown(e, widget.id, 'widget', pos)}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
@@ -384,7 +605,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                     top: 0,
                     width: '100%',
                     height: '100%',
-                    zIndex: isDragging || resizingId === widget.id ? 50 : (pos.zIndex || 1),
+                    zIndex: isActiveManipulating ? 50 : (pos.zIndex || 1),
                     touchAction: 'none',
                     WebkitTouchCallout: 'none',
                   }
@@ -394,15 +615,17 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                     top: `${pos.yRatio * 100}%`,
                     width: `${pos.wRatio * 100}%`,
                     height: `${pos.hRatio * 100}%`,
-                    minWidth: '260px',
-                    minHeight: '200px',
+                    minWidth: '180px',
+                    minHeight: '140px',
                     maxWidth: '100%',
                     maxHeight: '100%',
                     transform: `rotate(${pos.rotation}deg) ${isDragging ? 'scale(1.02)' : 'scale(1)'}`,
-                    zIndex: isDragging || resizingId === widget.id ? 50 : pos.zIndex,
+                    zIndex: isActiveManipulating ? 50 : pos.zIndex,
                     touchAction: 'none',
                     WebkitTouchCallout: 'none',
-                    transition: isDragging || resizingId === widget.id ? 'none' : 'box-shadow 0.2s, transform 0.15s ease-out',
+                    transition: isActiveManipulating
+                      ? 'none'
+                      : 'left 0.3s cubic-bezier(0.22, 1, 0.36, 1), top 0.3s cubic-bezier(0.22, 1, 0.36, 1), width 0.3s cubic-bezier(0.22, 1, 0.36, 1), height 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.25s ease-out, box-shadow 0.2s',
                   }
             }
             className={`group ${
@@ -410,18 +633,38 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 ? 'rounded-none border-0 p-0 overflow-hidden'
                 : 'rounded-2xl border border-gray-800/90 p-4'
             } bg-gray-900/80 backdrop-blur-md shadow-2xl text-white cursor-grab active:cursor-grabbing touch-none select-none transition-shadow ${
-              isDragging ? 'ring-2 ring-blue-500 shadow-blue-500/20' : 'hover:shadow-blue-500/10'
+              isDragging || isRotating ? 'ring-2 ring-blue-500 shadow-blue-500/20' : 'hover:shadow-blue-500/10'
             } flex flex-col justify-between`}
           >
-            {/* Red Visual Pushpin (hidden when maximized) */}
+            {/* Top-Center Grab-to-Rotate Handle (hidden when maximized, appears on hover) */}
             {!isFullScreen && (
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center justify-center pointer-events-none z-10">
-                <div className="w-5 h-5 rounded-full bg-red-600 shadow-md border-2 border-red-700/60" />
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20">
+                {onUpdateWidgetPos && (
+                  <div
+                    data-no-drag="true"
+                    onPointerDown={(e) => handleRotatePointerDown(e, widget.id, 'widget', pos)}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation();
+                      onUpdateWidgetPos(widget.id, widget.gridPos, { ...pos, rotation: 0 });
+                    }}
+                    title="Grab and drag to rotate tile (double-click to reset to 0°)"
+                    className={`w-6 h-6 rounded-full bg-gray-900/95 border border-gray-600 text-blue-300 hover:text-white hover:border-blue-400 shadow-lg flex items-center justify-center cursor-grab active:cursor-grabbing transition-opacity ${
+                      isRotating ? 'opacity-100 ring-2 ring-blue-400' : 'opacity-0 group-hover:opacity-100'
+                    }`}
+                  >
+                    <RotateCw className="w-3 h-3" />
+                  </div>
+                )}
+                {isRotating && (
+                  <span className="px-2 py-0.5 rounded-full bg-blue-600 text-white font-mono font-bold text-[10px] shadow-lg">
+                    {pos.rotation}°
+                  </span>
+                )}
               </div>
             )}
 
             {/* Top Right Widget Controls: Tilt, Settings, Maximize/Restore & Remove */}
-            <div className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="absolute top-2.5 right-2.5 z-30 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 backdrop-blur-md px-1.5 py-1 rounded-xl border border-white/10 shadow-xl">
               {!isFullScreen && onUpdateWidgetPos && (
                 <>
                   <button
@@ -430,12 +673,12 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                       e.stopPropagation();
                       onUpdateWidgetPos(widget.id, widget.gridPos, {
                         ...pos,
-                        rotation: Math.max(-15, (pos.rotation || 0) - 2),
+                        rotation: Math.max(-60, (pos.rotation || 0) - 3),
                       });
                     }}
                     onPointerDown={(e) => e.stopPropagation()}
                     title="Tilt counter-clockwise"
-                    className="p-1.5 rounded-lg bg-black/60 hover:bg-gray-800 text-gray-300 hover:text-white backdrop-blur-sm border border-white/10 transition-all cursor-pointer"
+                    className="p-1 rounded-lg hover:bg-gray-800 text-gray-300 hover:text-white transition-all cursor-pointer"
                   >
                     <RotateCcw className="w-3 h-3" />
                   </button>
@@ -445,12 +688,12 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                       e.stopPropagation();
                       onUpdateWidgetPos(widget.id, widget.gridPos, {
                         ...pos,
-                        rotation: Math.min(15, (pos.rotation || 0) + 2),
+                        rotation: Math.min(60, (pos.rotation || 0) + 3),
                       });
                     }}
                     onPointerDown={(e) => e.stopPropagation()}
                     title="Tilt clockwise"
-                    className="p-1.5 rounded-lg bg-black/60 hover:bg-gray-800 text-gray-300 hover:text-white backdrop-blur-sm border border-white/10 transition-all cursor-pointer"
+                    className="p-1 rounded-lg hover:bg-gray-800 text-gray-300 hover:text-white transition-all cursor-pointer"
                   >
                     <RotateCw className="w-3 h-3" />
                   </button>
@@ -465,7 +708,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
                   title="Configure tile title and settings"
-                  className="p-1.5 rounded-lg bg-black/60 hover:bg-gray-800 text-gray-300 hover:text-white backdrop-blur-sm border border-white/10 transition-all cursor-pointer"
+                  className="p-1 rounded-lg hover:bg-gray-800 text-gray-300 hover:text-white transition-all cursor-pointer"
                 >
                   <Settings className="w-3.5 h-3.5" />
                 </button>
@@ -499,7 +742,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
                   title={isFullScreen ? 'Restore card size' : 'Fill full screen / canvas'}
-                  className="p-1.5 rounded-lg bg-black/60 hover:bg-gray-800 text-gray-300 hover:text-white backdrop-blur-sm border border-white/10 transition-all cursor-pointer"
+                  className="p-1 rounded-lg hover:bg-gray-800 text-gray-300 hover:text-white transition-all cursor-pointer"
                 >
                   {isFullScreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
                 </button>
@@ -513,7 +756,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
                   title="Remove widget"
-                  className="p-1.5 rounded-lg bg-black/60 hover:bg-red-500/80 text-gray-400 hover:text-white backdrop-blur-sm border border-white/10 transition-all cursor-pointer"
+                  className="p-1 rounded-lg hover:bg-red-500/80 text-gray-400 hover:text-white transition-all cursor-pointer"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -523,6 +766,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             {/* Bottom Right Resize Handle */}
             {!isFullScreen && (
               <div
+                data-no-drag="true"
                 onPointerDown={(e) => handleResizePointerDown(e, widget.id, 'widget', pos)}
                 title="Drag to resize tile"
                 className="absolute bottom-1 right-1 p-1.5 cursor-nwse-resize z-20 opacity-40 group-hover:opacity-100 hover:opacity-100 touch-none text-gray-400 hover:text-white transition-opacity"
@@ -549,6 +793,16 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 />
               ) : widget.type === 'clock' ? (
                 <ClockWidget
+                  title={widget.title}
+                  clockFace={widget.config?.clockFace || 'digital'}
+                  showSeconds={widget.config?.showSeconds ?? true}
+                  timezone={widget.config?.timezone}
+                  locationName={widget.config?.locationName}
+                />
+              ) : widget.type === 'world_clock' ? (
+                <WorldClockWidget
+                  title={widget.title}
+                  cities={widget.config?.cities}
                   clockFace={widget.config?.clockFace || 'digital'}
                   showSeconds={widget.config?.showSeconds ?? true}
                 />
@@ -559,6 +813,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   longitude={widget.config?.longitude}
                   unit={widget.config?.unit || 'F'}
                   clockFace={widget.config?.clockFace || widget.config?.face || 'digital'}
+                  showSeconds={widget.config?.showSeconds ?? true}
+                  timezone={widget.config?.timezone}
                 />
               ) : widget.type === 'countdown' ? (
                 <CountdownWidget
@@ -566,7 +822,10 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   targetDate={widget.config?.targetDate}
                 />
               ) : widget.type === 'quotes' ? (
-                <QuotesWidget />
+                <QuotesWidget
+                  customQuotes={widget.config?.customQuotes}
+                  quoteMode={widget.config?.quoteMode}
+                />
               ) : widget.type === 'calendar' ? (
                 <CalendarWidget
                   sources={widget.config?.sources}
@@ -580,6 +839,21 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   rotationIntervalSec={widget.config?.rotationIntervalSec || 15}
                   customPhotos={widget.config?.customPhotos}
                   initialSourceLabel={widget.config?.sourceLabel}
+                  onUpdateConfig={(updates) => {
+                    if (onUpdateWidget) {
+                      onUpdateWidget(widget.id, {
+                        config: { ...widget.config, ...updates },
+                      });
+                    }
+                  }}
+                />
+              ) : widget.type === 'embed' ? (
+                <MediaEmbedWidget
+                  preset={widget.config?.preset || 'lofi'}
+                  customUrl={widget.config?.customUrl}
+                  muted={widget.config?.muted ?? true}
+                  latitude={widget.config?.latitude}
+                  longitude={widget.config?.longitude}
                   onUpdateConfig={(updates) => {
                     if (onUpdateWidget) {
                       onUpdateWidget(widget.id, {
@@ -606,83 +880,110 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         const pos = note.freeformPos || {
           xRatio: 0.1,
           yRatio: 0.1,
-          wRatio: 0.28,
-          hRatio: 0.35,
+          wRatio: 0.26,
+          hRatio: 0.3,
           zIndex: 1,
           rotation: 0,
         };
 
         const isDragging = draggingId === note.id;
+        const isRotating = rotatingId === note.id;
+        const isActiveManipulating = isDragging || resizingId === note.id || isRotating;
         const isExpiringSoon =
           note.expiresAt &&
           new Date(note.expiresAt).getTime() - now.getTime() < 12 * 60 * 60 * 1000;
+        const fontSizeClass = FONT_SIZE_CLASSES[note.fontSize || 'base'];
 
         return (
           <div
             key={note.id}
+            data-canvas-card="true"
             onPointerDown={(e) => handlePointerDown(e, note.id, 'note', pos)}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              openNoteEditorForExisting(note);
+            }}
             style={{
               position: 'absolute',
               left: `${pos.xRatio * 100}%`,
               top: `${pos.yRatio * 100}%`,
               width: `${pos.wRatio * 100}%`,
-              height: pos.hRatio ? `${pos.hRatio * 100}%` : 'auto',
-              minWidth: '220px',
-              minHeight: '160px',
+              height: `${(pos.hRatio || 0.3) * 100}%`,
+              minWidth: '110px',
+              minHeight: '90px',
               maxWidth: '100%',
               maxHeight: '100%',
-              transform: `rotate(${pos.rotation}deg) ${isDragging ? 'scale(1.04)' : 'scale(1)'}`,
+              transform: `rotate(${pos.rotation}deg) ${isDragging ? 'scale(1.03)' : 'scale(1)'}`,
               backgroundColor: note.bgColor || '#fef08a',
-              zIndex: isDragging || resizingId === note.id ? 50 : pos.zIndex,
+              zIndex: isActiveManipulating ? 50 : pos.zIndex,
               touchAction: 'none',
               WebkitTouchCallout: 'none',
-              transition: isDragging || resizingId === note.id ? 'none' : 'box-shadow 0.2s, transform 0.15s ease-out',
+              transition: isActiveManipulating
+                ? 'none'
+                : 'left 0.3s cubic-bezier(0.22, 1, 0.36, 1), top 0.3s cubic-bezier(0.22, 1, 0.36, 1), width 0.3s cubic-bezier(0.22, 1, 0.36, 1), height 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.25s ease-out, box-shadow 0.2s',
             }}
-            className={`group rounded-2xl p-5 shadow-2xl text-gray-900 cursor-grab active:cursor-grabbing border border-black/10 touch-none select-none transition-shadow ${
-              isDragging
+            className={`group rounded-2xl p-3.5 shadow-2xl text-gray-900 cursor-grab active:cursor-grabbing border border-black/10 touch-none select-none transition-shadow ${
+              isDragging || isRotating
                 ? 'ring-2 ring-blue-500/70 shadow-2xl'
                 : isExpiringSoon
                 ? 'ring-2 ring-amber-500 shadow-amber-500/20'
                 : 'hover:shadow-yellow-500/10'
-            } flex flex-col justify-between`}
+            } flex flex-col justify-between overflow-hidden`}
           >
-            {/* Red Visual Pushpin */}
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center justify-center pointer-events-none">
-              <div className="w-5 h-5 rounded-full bg-red-600 shadow-md border-2 border-red-700/60" />
+            {/* Top-Center Grab-to-Rotate Handle (appears on hover) */}
+            <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 flex items-center gap-1 z-20">
+              <div
+                data-no-drag="true"
+                onPointerDown={(e) => handleRotatePointerDown(e, note.id, 'note', pos)}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  onUpdateNotePos(note.id, { ...pos, rotation: 0 });
+                }}
+                title="Grab and drag in a circle to rotate note (double-click to reset to 0°)"
+                className={`w-5 h-5 rounded-full bg-gray-900/90 text-white shadow-md flex items-center justify-center cursor-grab active:cursor-grabbing transition-opacity ${
+                  isRotating ? 'opacity-100 ring-2 ring-blue-400' : 'opacity-0 group-hover:opacity-100'
+                }`}
+              >
+                <RotateCw className="w-2.5 h-2.5" />
+              </div>
+              {isRotating && (
+                <span className="px-1.5 py-0.5 rounded-full bg-gray-900 text-white font-mono font-bold text-[10px] shadow">
+                  {pos.rotation}°
+                </span>
+              )}
             </div>
 
-            <div>
+            <div className="flex-1 overflow-y-auto min-h-0 pr-0.5">
               {/* Note Title */}
               {note.title && (
-                <div className="font-bold text-sm mb-2 flex items-center justify-between border-b border-black/10 pb-1.5">
+                <div className="font-bold text-xs md:text-sm mb-1.5 flex items-center justify-between border-b border-black/10 pb-1">
                   <span className="truncate">{note.title}</span>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1 shrink-0">
                     {note.expiresAt && (
                       <span
                         title={`Expires: ${new Date(note.expiresAt).toLocaleString()}`}
-                        className={`text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                        className={`text-[9px] px-1.5 py-0.5 rounded-full flex items-center gap-0.5 ${
                           isExpiringSoon ? 'bg-amber-500/30 text-amber-950 font-bold' : 'bg-black/10 text-gray-700'
                         }`}
                       >
-                        <Clock className="w-3 h-3" />
+                        <Clock className="w-2.5 h-2.5" />
                         {new Date(note.expiresAt).toLocaleDateString([], { month: 'numeric', day: 'numeric' })}
                       </span>
                     )}
-                    <Pin className="w-3.5 h-3.5 text-gray-700/60" />
                   </div>
                 </div>
               )}
 
               {/* Note Content / Checklist */}
               {note.isChecklist && note.checklistItems ? (
-                <div className="space-y-2 mt-2">
+                <div className="space-y-1.5 mt-1">
                   {note.checklistItems.map((item) => (
                     <button
                       key={item.id}
                       onClick={() => toggleChecklistItem(note, item.id)}
-                      className="flex items-center gap-2 text-xs w-full text-left hover:opacity-80 transition-opacity"
+                      className={`flex items-center gap-2 w-full text-left hover:opacity-80 transition-opacity ${fontSizeClass}`}
                     >
                       {item.done ? (
                         <CheckSquare className="w-4 h-4 text-emerald-800 shrink-0" />
@@ -696,28 +997,35 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   ))}
                 </div>
               ) : (
-                <p className="text-xs leading-relaxed whitespace-pre-wrap">{note.content}</p>
+                <p className={`whitespace-pre-wrap break-words ${fontSizeClass}`}>{note.content}</p>
               )}
             </div>
 
-            {/* Note Bottom Actions: Tilt & Archive/Delete */}
-            <div className="flex items-center justify-between pt-2 border-t border-black/10 mt-2 opacity-50 group-hover:opacity-100 transition-opacity pr-4">
+            {/* Note Bottom Actions: 1-Click Color Swatches, Tilt, Edit & Archive/Delete */}
+            <div className="flex items-center justify-between gap-1 pt-1.5 border-t border-black/10 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity pr-4 shrink-0">
+              {/* 1-Click Inline Pastel Color Swatches */}
               <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onUpdateNotePos(note.id, {
-                      ...pos,
-                      rotation: Math.max(-15, (pos.rotation || 0) - 2),
-                    });
-                  }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  className="p-1 rounded text-gray-700 hover:bg-black/10 transition-all cursor-pointer"
-                  title="Tilt counter-clockwise"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                </button>
+                {COLOR_PALETTE.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUpdateNote(note.id, { bgColor: color });
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    style={{ backgroundColor: color }}
+                    title="Change note color"
+                    className={`w-3.5 h-3.5 rounded-full border transition-transform cursor-pointer ${
+                      (note.bgColor || '#fef08a') === color
+                        ? 'border-gray-900 scale-125 ring-1 ring-gray-900/50'
+                        : 'border-black/25 hover:scale-110'
+                    }`}
+                  />
+                ))}
+              </div>
+
+              <div className="flex items-center gap-0.5">
                 <button
                   type="button"
                   onClick={(e) => {
@@ -728,7 +1036,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                     });
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
-                  className="px-1.5 py-0.5 rounded text-[10px] font-mono text-gray-700 hover:bg-black/10 transition-all cursor-pointer"
+                  className="px-1 py-0.5 rounded text-[9px] font-mono text-gray-700 hover:bg-black/10 transition-all cursor-pointer"
                   title="Straighten note (0°)"
                 >
                   0°
@@ -737,37 +1045,35 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onUpdateNotePos(note.id, {
-                      ...pos,
-                      rotation: Math.min(15, (pos.rotation || 0) + 2),
-                    });
+                    openNoteEditorForExisting(note);
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
-                  className="p-1 rounded text-gray-700 hover:bg-black/10 transition-all cursor-pointer"
-                  title="Tilt clockwise"
+                  className="p-1 rounded-lg text-gray-700 hover:text-blue-800 hover:bg-black/10 transition-all cursor-pointer"
+                  title="Edit note text, checklist, font size, or canvas board"
                 >
-                  <RotateCw className="w-3.5 h-3.5" />
+                  <Edit2 className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteNote(note.id);
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="p-1 rounded-lg text-gray-700 hover:text-red-700 hover:bg-black/10 transition-all cursor-pointer"
+                  title="Archive note to Trash"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
-
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDeleteNote(note.id);
-                }}
-                onPointerDown={(e) => e.stopPropagation()}
-                className="p-1.5 rounded-lg text-gray-600 hover:text-red-700 hover:bg-black/10 transition-all cursor-pointer"
-                title="Archive note to Trash"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
             </div>
 
             {/* Bottom Right Resize Handle for Sticky Note */}
             <div
+              data-no-drag="true"
               onPointerDown={(e) => handleResizePointerDown(e, note.id, 'note', pos)}
-              title="Drag to resize note"
-              className="absolute bottom-1 right-1 p-1.5 cursor-nwse-resize z-20 opacity-40 group-hover:opacity-100 hover:opacity-100 touch-none text-gray-700 hover:text-black transition-opacity"
+              title="Drag to resize note (from mini post-it to full poster)"
+              className="absolute bottom-1 right-1 p-1.5 cursor-nwse-resize z-20 opacity-50 group-hover:opacity-100 hover:opacity-100 touch-none text-gray-700 hover:text-black transition-opacity"
             >
               <svg width="12" height="12" viewBox="0 0 12 12" className="fill-current">
                 <circle cx="10" cy="10" r="1.5" />
@@ -782,15 +1088,17 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         );
       })}
 
-      {/* Creator Modal for Family Board */}
+      {/* Creator & Inline Editor Modal for Sticky Notes */}
       {isCreatorOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl p-5 space-y-4">
+          <div className="w-full max-w-sm rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl p-5 space-y-3.5">
             <div className="flex items-center justify-between border-b border-gray-800 pb-3">
-              <span className="text-sm font-bold text-white">Pin Note to Family Board</span>
+              <span className="text-sm font-bold text-white">
+                {editingNoteId ? 'Edit Sticky Note' : 'Pin Note to Canvas'}
+              </span>
               <button
-                onClick={() => setIsCreatorOpen(false)}
-                className="text-gray-400 hover:text-white"
+                onClick={resetNoteModal}
+                className="text-gray-400 hover:text-white cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -805,7 +1113,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                     type="button"
                     onClick={() => setSelectedColor(color)}
                     style={{ backgroundColor: color }}
-                    className={`w-6 h-6 rounded-full transition-transform ${
+                    className={`w-6 h-6 rounded-full transition-transform cursor-pointer ${
                       selectedColor === color ? 'scale-125 ring-2 ring-white ring-offset-2 ring-offset-gray-900' : 'opacity-70'
                     }`}
                   />
@@ -836,12 +1144,63 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               />
             )}
 
+            {/* Canvas Board Selector & Font Size Selector */}
+            <div className="grid grid-cols-2 gap-2">
+              {tabs.length > 0 && (
+                <div className="flex items-center gap-1.5 bg-gray-950/60 px-2.5 py-1.5 rounded-xl border border-gray-800">
+                  <Layers className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <select
+                    value={selectedNoteTabId}
+                    onChange={(e) => setSelectedNoteTabId(e.target.value)}
+                    title="Choose which canvas this note appears on"
+                    className="w-full bg-transparent text-[11px] text-white focus:outline-none truncate"
+                  >
+                    {tabs.map((t) => (
+                      <option key={t.id} value={t.id} className="bg-gray-900 text-white">
+                        {t.name}
+                      </option>
+                    ))}
+                    <option value="all" className="bg-gray-900 text-amber-300">
+                      📌 Pin to All Canvases
+                    </option>
+                  </select>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between bg-gray-950/60 px-2.5 py-1.5 rounded-xl border border-gray-800">
+                <span className="text-[10px] text-gray-400 font-medium">Size:</span>
+                <div className="flex items-center gap-0.5">
+                  {(
+                    [
+                      { id: 'sm', label: 'S' },
+                      { id: 'base', label: 'M' },
+                      { id: 'lg', label: 'L' },
+                      { id: 'xl', label: 'XL' },
+                    ] as const
+                  ).map((sz) => (
+                    <button
+                      key={sz.id}
+                      type="button"
+                      onClick={() => setSelectedFontSize(sz.id)}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                        selectedFontSize === sz.id
+                          ? 'bg-blue-600 text-white'
+                          : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      {sz.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
             {/* Format Toggle: Message vs Checklist */}
             <div className="flex rounded-lg bg-gray-950 p-1 border border-gray-800 text-xs font-semibold">
               <button
                 type="button"
                 onClick={() => setIsChecklist(false)}
-                className={`flex-1 py-1.5 rounded-md text-center transition-all ${
+                className={`flex-1 py-1.5 rounded-md text-center transition-all cursor-pointer ${
                   !isChecklist ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'
                 }`}
               >
@@ -850,7 +1209,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               <button
                 type="button"
                 onClick={() => setIsChecklist(true)}
-                className={`flex-1 py-1.5 rounded-md text-center transition-all ${
+                className={`flex-1 py-1.5 rounded-md text-center transition-all cursor-pointer ${
                   isChecklist ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'
                 }`}
               >
@@ -890,24 +1249,35 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                     <button
                       type="button"
                       onClick={handleAddChecklistItem}
-                      className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold"
+                      className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold cursor-pointer"
                     >
                       Add
                     </button>
                   </div>
-                  <div className="max-h-28 overflow-y-auto space-y-1">
+                  <div className="max-h-32 overflow-y-auto space-y-1">
                     {checklistItems.map((item) => (
                       <div
                         key={item.id}
-                        className="flex items-center justify-between text-xs text-gray-300 bg-gray-950/60 p-1.5 rounded-lg border border-gray-800"
+                        className="flex items-center justify-between gap-2 text-xs text-gray-300 bg-gray-950/60 p-1.5 rounded-lg border border-gray-800"
                       >
-                        <span className="truncate">{item.text}</span>
+                        <input
+                          type="text"
+                          value={item.text}
+                          onChange={(e) =>
+                            setChecklistItems(
+                              checklistItems.map((i) =>
+                                i.id === item.id ? { ...i, text: e.target.value } : i
+                              )
+                            )
+                          }
+                          className="flex-1 bg-transparent text-xs text-gray-200 focus:outline-none"
+                        />
                         <button
                           type="button"
                           onClick={() =>
                             setChecklistItems(checklistItems.filter((i) => i.id !== item.id))
                           }
-                          className="text-gray-500 hover:text-red-400"
+                          className="text-gray-500 hover:text-red-400 cursor-pointer"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -920,10 +1290,10 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
             <button
               type="button"
-              onClick={handleCreateNote}
+              onClick={handleSaveNoteModal}
               className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-xs font-bold text-white shadow-lg shadow-blue-500/25 transition-all cursor-pointer"
             >
-              Pin Note to Board
+              {editingNoteId ? 'Save Note Changes' : 'Pin Note to Board'}
             </button>
           </div>
         </div>
@@ -941,7 +1311,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 </span>
               </div>
               <button
-                onClick={() => setIsTrashOpen(false)}
+                onClick={onCloseTrash}
                 className="text-gray-400 hover:text-white cursor-pointer"
               >
                 <X className="w-4 h-4" />

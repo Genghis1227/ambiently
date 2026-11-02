@@ -1,16 +1,27 @@
 export type DockPosition = 'left' | 'top' | 'right' | 'bottom';
 
+export type CanvasBackgroundTheme =
+  | 'midnight_dots'
+  | 'warm_cork'
+  | 'oled_black'
+  | 'aurora'
+  | 'blueprint'
+  | 'custom';
+
+export type AutoOrganizeMode = 'bento' | 'pack' | 'split';
 
 export type WidgetType =
   | 'clock_weather'
   | 'clock'
+  | 'world_clock'
   | 'weather'
   | 'sticky_notes'
   | 'photo_frame'
   | 'calendar'
   | 'countdown'
   | 'rss'
-  | 'quotes';
+  | 'quotes'
+  | 'embed';
 
 export interface GridDimensions {
   cols: number; // e.g., 12
@@ -30,7 +41,7 @@ export interface FreeformPosition {
   wRatio: number; // 0.05 to 1.0
   hRatio: number; // 0.05 to 1.0
   zIndex: number;
-  rotation: number; // degrees (-45 to 45)
+  rotation: number; // degrees (-60 to 60)
   isFullScreen?: boolean;
 }
 
@@ -39,6 +50,10 @@ export interface DashboardTab {
   name: string;
   icon?: string;
   order: number;
+  backgroundTheme?: CanvasBackgroundTheme;
+  customWallpaperUrl?: string;
+  backgroundDimLevel?: number; // 0 to 90 (percentage dark overlay on custom picture)
+  hideNotes?: boolean; // when true, hides sticky notes on this canvas
   layoutMode?: string;
   autoRotateDurationSec: number; // 0 = do not rotate, >0 = rotate after N seconds
   enabled?: boolean;

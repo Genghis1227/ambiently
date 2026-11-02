@@ -5,9 +5,26 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.1.0';
+export const APP_VERSION = '0.1.1';
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.1.1",
+    date: "November 2, 2026",
+    title: "Auto-Tile Engine, 4K Picture Backgrounds, World Timezone Clock & Sticky Note Polish",
+    highlights: [
+      "Unified Navigation Dock action cluster: Pin New Sticky Note, Add Widget Tile, Auto-Organize / Auto-Tile, and Trash / Archive drawer (eliminating top-right button overlaps).",
+      "1-Click Auto-Organize & Auto-Tile Engine with 3 non-overlapping layout modes (Smart Bento Grid, Keep Sizes & 2D Shelf-Pack, and Widgets Left | Notes Right), smooth 300ms glide transitions, and 1-click Undo.",
+      "Smart non-overlapping spawn placement when creating new widgets or sticky notes.",
+      "Per-canvas background themes (Midnight Dots, Warm Cork, Pure OLED Black, Ambient Aurora, Glass Blueprint) plus custom 4K/5K Ultra HD photo uploads and curated 4K presets.",
+      "Per-canvas Background Dim Level slider (0%–90%) with live preview to keep white widget typography crisp over bright wallpapers.",
+      "Strict per-canvas sticky note isolation with Canvas Board selector (including Pin to All Canvases) and per-canvas Show/Hide Sticky Notes toggle.",
+      "Sticky note polish: 1-click inline pastel color swatches on hover and in Mobile Companion, wide-range resizing (8%–100%), S/M/L/XL font scaling, smooth grab-and-rotate handle (↻), inline editing, and clean pushpin-free headers.",
+      "World Timezone Clock widget with Open-Meteo city lookup supporting Single-City Hero Clock and Multi-City World Timezone List modes.",
+      "Display Seconds toggle and optional city timezone selector across all Clock and Clock+Weather tiles.",
+      "Ambient Stream & Web Embed widget (Lofi Girl, NASA ISS, Monterey Bay Aquarium, custom YouTube/HTTPS embeds) and custom Family Affirmations in Quotes widget.",
+    ],
+  },
   {
     version: "v0.1.0",
     date: "November 2, 2026",

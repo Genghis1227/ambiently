@@ -3,6 +3,7 @@ import {
   X,
   CloudSun,
   Clock,
+  Globe,
   LayoutGrid,
   Image as ImageIcon,
   Calendar,
@@ -10,6 +11,7 @@ import {
   Timer,
   Quote,
   StickyNote,
+  Tv,
   Plus,
 } from 'lucide-react';
 import type { WidgetType, DashboardWidget } from '../../types/dashboard';
@@ -44,11 +46,26 @@ const WIDGET_TEMPLATES: WidgetTemplate[] = [
   {
     type: 'clock',
     title: 'Ambient Clock',
-    description: 'Minimalist live digital clock with date, seconds, and AM/PM indicators.',
+    description: 'Minimalist live digital, typographic, or analog dial clock with optional seconds and city timezone.',
     icon: Clock,
     defaultGridPos: { w: 4, h: 4 },
     defaultConfig: { clockFace: 'digital', showSeconds: true },
     color: 'from-blue-500/20 to-indigo-500/20 text-blue-400 border-blue-500/30',
+  },
+  {
+    type: 'world_clock',
+    title: 'World Timezone Clock',
+    description: 'City-lookup timezone tile showing live time, day/night status, and hour offset for 1 or more global cities.',
+    icon: Globe,
+    defaultGridPos: { w: 4, h: 4 },
+    defaultConfig: {
+      clockFace: 'digital',
+      showSeconds: true,
+      cities: [
+        { id: 'wc-tokyo', cityName: 'Tokyo', country: 'Japan', timezone: 'Asia/Tokyo' },
+      ],
+    },
+    color: 'from-teal-500/20 to-cyan-500/20 text-teal-400 border-teal-500/30',
   },
   {
     type: 'clock_weather',
@@ -56,7 +73,7 @@ const WIDGET_TEMPLATES: WidgetTemplate[] = [
     description: 'Dual tile showing the current time, day, date, and local temperature combined.',
     icon: LayoutGrid,
     defaultGridPos: { w: 4, h: 4 },
-    defaultConfig: { locationName: 'Austin, TX', latitude: 30.2672, longitude: -97.7431, unit: 'F' },
+    defaultConfig: { locationName: 'Austin, TX', latitude: 30.2672, longitude: -97.7431, unit: 'F', showSeconds: true },
     color: 'from-cyan-500/20 to-blue-500/20 text-cyan-400 border-cyan-500/30',
   },
   {
@@ -67,6 +84,15 @@ const WIDGET_TEMPLATES: WidgetTemplate[] = [
     defaultGridPos: { w: 4, h: 8 },
     defaultConfig: { displayStyle: 'ken_burns', rotationIntervalSec: 15 },
     color: 'from-purple-500/20 to-pink-500/20 text-purple-400 border-purple-500/30',
+  },
+  {
+    type: 'embed',
+    title: 'Ambient Stream & Web Embed',
+    description: '1-click Lofi Beats radio, 4K Cozy Fireplace, NASA Live Earth, Weather Radar, or custom URLs.',
+    icon: Tv,
+    defaultGridPos: { w: 4, h: 4 },
+    defaultConfig: { preset: 'lofi', muted: true, customUrl: '' },
+    color: 'from-pink-500/20 to-rose-500/20 text-pink-400 border-pink-500/30',
   },
   {
     type: 'calendar',
@@ -97,11 +123,11 @@ const WIDGET_TEMPLATES: WidgetTemplate[] = [
   },
   {
     type: 'quotes',
-    title: 'Daily Inspiration',
-    description: 'Rotating collection of timeless quotes, wisdom, and philosophical reflections.',
+    title: 'Daily Inspiration & Affirmations',
+    description: 'Rotating collection of timeless quotes, wisdom, and custom family affirmations.',
     icon: Quote,
     defaultGridPos: { w: 4, h: 4 },
-    defaultConfig: {},
+    defaultConfig: { quoteMode: 'both', customQuotes: [] },
     color: 'from-yellow-500/20 to-amber-500/20 text-yellow-400 border-yellow-500/30',
   },
   {
@@ -150,43 +176,38 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+            className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Catalog Grid */}
-        <div className="p-5 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-3">
+        {/* Grid of Available Widget Templates */}
+        <div className="p-4 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-3">
           {WIDGET_TEMPLATES.map((tpl) => {
             const Icon = tpl.icon;
             return (
-              <div
+              <button
                 key={tpl.type}
                 onClick={() => handleSelectTemplate(tpl)}
-                className={`p-4 rounded-xl border bg-gradient-to-br ${tpl.color} hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer flex flex-col justify-between group shadow-lg`}
+                className="flex items-start gap-3.5 p-3.5 rounded-xl bg-gray-800/40 hover:bg-gray-800/80 border border-gray-800 hover:border-gray-700 text-left transition-all cursor-pointer group"
               >
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2 font-bold text-sm text-white">
-                      <Icon className="w-4 h-4" />
-                      <span>{tpl.title}</span>
-                    </div>
-                    <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-black/40 text-gray-300">
-                      {tpl.defaultGridPos.w}x{tpl.defaultGridPos.h}
+                <div
+                  className={`p-3 rounded-xl bg-gradient-to-br border ${tpl.color} shrink-0 group-hover:scale-105 transition-transform`}
+                >
+                  <Icon className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-bold text-white group-hover:text-blue-400 transition-colors">
+                      {tpl.title}
                     </span>
                   </div>
-                  <p className="text-xs text-gray-300 leading-relaxed">
+                  <p className="text-xs text-gray-400 mt-1 leading-relaxed">
                     {tpl.description}
                   </p>
                 </div>
-
-                <div className="mt-3 flex items-center justify-end">
-                  <span className="text-xs font-bold text-white group-hover:underline flex items-center gap-1">
-                    <span>+ Add Tile</span>
-                  </span>
-                </div>
-              </div>
+              </button>
             );
           })}
         </div>

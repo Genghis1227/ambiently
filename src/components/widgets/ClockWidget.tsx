@@ -1,13 +1,20 @@
 import React, { useState, useEffect } from 'react';
+import { getFormattedTimeForZone } from './WorldClockWidget';
 
 interface ClockWidgetProps {
+  title?: string;
   clockFace?: 'digital' | 'minimal' | 'analog' | 'flip';
   showSeconds?: boolean;
+  timezone?: string;
+  locationName?: string;
 }
 
 export const ClockWidget: React.FC<ClockWidgetProps> = ({
+  title,
   clockFace = 'digital',
   showSeconds = true,
+  timezone,
+  locationName,
 }) => {
   const [time, setTime] = useState(new Date());
 
@@ -16,15 +23,19 @@ export const ClockWidget: React.FC<ClockWidgetProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  const hours = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).split(' ')[0];
-  const ampm = time.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).slice(-2);
-  const seconds = time.getSeconds().toString().padStart(2, '0');
-  const dateStr = time.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+  const zt = getFormattedTimeForZone(time, timezone);
 
   return (
     <div className="w-full h-full flex flex-col justify-between select-none p-1">
-      <div className="text-xs text-gray-400 font-medium uppercase tracking-wider">
-        Ambient Clock
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-xs text-gray-400 font-medium uppercase tracking-wider truncate">
+          {locationName || title || 'Ambient Clock'}
+        </div>
+        {timezone && (
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-300 border border-blue-500/30 shrink-0">
+            {zt.tzShort}
+          </span>
+        )}
       </div>
 
       <div className="my-auto py-2 flex flex-col items-center justify-center text-center">
@@ -44,7 +55,7 @@ export const ClockWidget: React.FC<ClockWidgetProps> = ({
             <div
               className="absolute w-1.5 h-9 bg-white origin-bottom rounded-full shadow"
               style={{
-                transform: `rotate(${(time.getHours() % 12) * 30 + time.getMinutes() * 0.5}deg)`,
+                transform: `rotate(${(zt.hour24 % 12) * 30 + zt.minuteNum * 0.5}deg)`,
                 bottom: '50%',
               }}
             />
@@ -52,7 +63,7 @@ export const ClockWidget: React.FC<ClockWidgetProps> = ({
             <div
               className="absolute w-1 h-12 bg-blue-400 origin-bottom rounded-full shadow"
               style={{
-                transform: `rotate(${time.getMinutes() * 6}deg)`,
+                transform: `rotate(${zt.minuteNum * 6}deg)`,
                 bottom: '50%',
               }}
             />
@@ -61,7 +72,7 @@ export const ClockWidget: React.FC<ClockWidgetProps> = ({
               <div
                 className="absolute w-0.5 h-14 bg-red-500 origin-bottom"
                 style={{
-                  transform: `rotate(${time.getSeconds() * 6}deg)`,
+                  transform: `rotate(${zt.secondNum * 6}deg)`,
                   bottom: '50%',
                 }}
               />
@@ -71,33 +82,33 @@ export const ClockWidget: React.FC<ClockWidgetProps> = ({
         ) : clockFace === 'minimal' ? (
           <div className="flex flex-col items-center">
             <span className="text-5xl md:text-6xl font-sans font-bold tracking-tighter text-white">
-              {hours}
+              {zt.hoursMinutes}
             </span>
             <span className="text-xs font-semibold uppercase tracking-[0.25em] text-blue-400 mt-1">
-              {ampm} {showSeconds ? `• ${seconds}s` : ''}
+              {zt.ampm} {showSeconds ? `• ${zt.seconds}s` : ''}
             </span>
           </div>
         ) : (
           <div className="flex items-baseline justify-center font-mono tracking-tight font-extralight text-white">
-            <span className="text-5xl md:text-7xl font-extralight">{hours}</span>
+            <span className="text-5xl md:text-7xl font-extralight">{zt.hoursMinutes}</span>
             {showSeconds && (
               <span className="text-2xl md:text-3xl text-gray-400 font-light ml-1.5 w-10 text-left">
-                :{seconds}
+                :{zt.seconds}
               </span>
             )}
             <span className="text-sm md:text-base font-medium text-blue-400 ml-2 uppercase">
-              {ampm}
+              {zt.ampm}
             </span>
           </div>
         )}
 
         <div className="text-sm md:text-base text-gray-300 font-medium mt-2">
-          {dateStr}
+          {zt.dateStr}
         </div>
       </div>
 
       <div className="text-[10px] text-gray-500 text-center font-mono">
-        Local Time
+        {timezone ? `${timezone} (${zt.diffLabel})` : 'Local Time'}
       </div>
     </div>
   );
