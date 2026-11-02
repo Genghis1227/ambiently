@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Moon,
   Maximize2,
@@ -59,6 +60,16 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
     return () => clearInterval(timer);
   }, []);
 
+  // Close on Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   // Position adjacent to the dock based on dockPosition
@@ -73,11 +84,14 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
 
   return (
     <>
-      {/* Click-outside backdrop */}
-      <div
-        className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px]"
-        onClick={onClose}
-      />
+      {/* Click-outside backdrop rendered at document.body level */}
+      {createPortal(
+        <div
+          className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px]"
+          onClick={onClose}
+        />,
+        document.body
+      )}
 
       {/* Floating Quick HUD Card */}
       <div
@@ -270,13 +284,19 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
       {/* Changelog Modal */}
       <ChangelogModal
         isOpen={isChangelogOpen}
-        onClose={() => setIsChangelogOpen(false)}
+        onClose={() => {
+          setIsChangelogOpen(false);
+          onClose();
+        }}
       />
 
       {/* Share / Mobile Companion QR Modal */}
       <ShareBoardModal
         isOpen={isShareModalOpen}
-        onClose={() => setIsShareModalOpen(false)}
+        onClose={() => {
+          setIsShareModalOpen(false);
+          onClose();
+        }}
       />
     </>
   );
