@@ -930,10 +930,10 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 : isExpiringSoon
                 ? 'ring-2 ring-amber-500 shadow-amber-500/20'
                 : 'hover:shadow-yellow-500/10'
-            } flex flex-col justify-between overflow-hidden`}
+            } flex flex-col justify-between`}
           >
             {/* Top-Center Grab-to-Rotate Handle (appears on hover) */}
-            <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 flex items-center gap-1 z-20">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center gap-1 z-20">
               <div
                 data-no-drag="true"
                 onPointerDown={(e) => handleRotatePointerDown(e, note.id, 'note', pos)}
@@ -942,11 +942,11 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   onUpdateNotePos(note.id, { ...pos, rotation: 0 });
                 }}
                 title="Grab and drag in a circle to rotate note (double-click to reset to 0°)"
-                className={`w-5 h-5 rounded-full bg-gray-900/90 text-white shadow-md flex items-center justify-center cursor-grab active:cursor-grabbing transition-opacity ${
+                className={`w-6 h-6 rounded-full bg-gray-900/95 border border-gray-700 text-white shadow-md flex items-center justify-center cursor-grab active:cursor-grabbing transition-opacity ${
                   isRotating ? 'opacity-100 ring-2 ring-blue-400' : 'opacity-0 group-hover:opacity-100'
                 }`}
               >
-                <RotateCw className="w-2.5 h-2.5" />
+                <RotateCw className="w-3 h-3" />
               </div>
               {isRotating && (
                 <span className="px-1.5 py-0.5 rounded-full bg-gray-900 text-white font-mono font-bold text-[10px] shadow">
