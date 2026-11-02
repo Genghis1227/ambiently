@@ -8,9 +8,13 @@ import {
   Trash2,
   Search,
   Calendar,
+  Tv,
+  Quote,
 } from 'lucide-react';
 import type { DashboardWidget } from '../../types/dashboard';
 import type { CalendarSource } from '../../services/feeds';
+import type { QuoteItem } from '../../services/quotes';
+import { EMBED_PRESETS, type EmbedPresetId } from './MediaEmbedWidget';
 
 interface WidgetSettingsModalProps {
   isOpen: boolean;
@@ -78,6 +82,17 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const [newCalUrl, setNewCalUrl] = useState('');
   const [newCalColor, setNewCalColor] = useState(CALENDAR_COLORS[0]);
 
+  // Embed states
+  const [embedPreset, setEmbedPreset] = useState<EmbedPresetId>('lofi');
+  const [embedCustomUrl, setEmbedCustomUrl] = useState('');
+  const [embedMuted, setEmbedMuted] = useState(true);
+
+  // Quotes states
+  const [quoteMode, setQuoteMode] = useState<'curated' | 'custom' | 'both'>('both');
+  const [customQuotes, setCustomQuotes] = useState<QuoteItem[]>([]);
+  const [newQuoteText, setNewQuoteText] = useState('');
+  const [newQuoteAuthor, setNewQuoteAuthor] = useState('');
+
   // Populate initial state when modal opens with a widget
   useEffect(() => {
     if (!widget) return;
@@ -121,6 +136,13 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
           ? widget.config.sources
           : DEFAULT_CALENDAR_SOURCES
       );
+    } else if (widget.type === 'embed') {
+      setEmbedPreset(widget.config?.preset || 'lofi');
+      setEmbedCustomUrl(widget.config?.customUrl || '');
+      setEmbedMuted(widget.config?.muted ?? true);
+    } else if (widget.type === 'quotes') {
+      setQuoteMode(widget.config?.quoteMode || 'both');
+      setCustomQuotes(Array.isArray(widget.config?.customQuotes) ? widget.config.customQuotes : []);
     }
   }, [widget, isOpen]);
 
@@ -179,6 +201,22 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     setCalendarSources(calendarSources.filter((s) => s.id !== id));
   };
 
+  const handleAddCustomQuote = () => {
+    if (!newQuoteText.trim()) return;
+    const item: QuoteItem = {
+      id: `cq-${Date.now()}`,
+      quote: newQuoteText.trim(),
+      author: newQuoteAuthor.trim() || 'Family Affirmation',
+    };
+    setCustomQuotes([item, ...customQuotes]);
+    setNewQuoteText('');
+    setNewQuoteAuthor('');
+  };
+
+  const handleRemoveCustomQuote = (id: string) => {
+    setCustomQuotes(customQuotes.filter((q) => q.id !== id));
+  };
+
   const handleSave = () => {
     const configUpdates: Record<string, any> = { ...widget.config };
 
@@ -207,6 +245,13 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     } else if (widget.type === 'calendar') {
       configUpdates.defaultView = calendarDefaultView;
       configUpdates.sources = calendarSources;
+    } else if (widget.type === 'embed') {
+      configUpdates.preset = embedPreset;
+      configUpdates.customUrl = embedCustomUrl.trim();
+      configUpdates.muted = embedMuted;
+    } else if (widget.type === 'quotes') {
+      configUpdates.quoteMode = quoteMode;
+      configUpdates.customQuotes = customQuotes;
     }
 
     onSave(widget.id, {
@@ -367,6 +412,165 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                       ➔
                     </span>
                   </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Ambient Stream & Web Embed Settings */}
+          {widget.type === 'embed' && (
+            <div className="space-y-4 pt-2 border-t border-gray-800">
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1.5 mb-2">
+                  <Tv className="w-3.5 h-3.5 text-pink-400" />
+                  <span>Ambient Stream Preset</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {EMBED_PRESETS.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setEmbedPreset(p.id)}
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                        embedPreset === p.id
+                          ? 'bg-pink-600/20 border-pink-500 text-pink-200'
+                          : 'bg-gray-950 border-gray-800 text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      <div className="text-xs font-bold">{p.label}</div>
+                      <div className="text-[10px] text-gray-400 mt-0.5">{p.description}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
+                  Custom YouTube Link or Web Embed URL
+                </label>
+                <input
+                  type="url"
+                  value={embedCustomUrl}
+                  onChange={(e) => {
+                    setEmbedCustomUrl(e.target.value);
+                    if (e.target.value.trim()) {
+                      setEmbedPreset('custom');
+                    }
+                  }}
+                  placeholder="https://www.youtube.com/watch?v=... or https://..."
+                  className="w-full rounded-xl bg-gray-950 border border-gray-800 p-2.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-pink-500"
+                />
+                <p className="text-[10px] text-gray-500 mt-1">
+                  Standard YouTube links are automatically converted to clean, ad-free embeds.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between p-3 rounded-xl bg-gray-950 border border-gray-800">
+                <span className="text-xs text-gray-300">Start Stream Muted (Recommended for Kiosks):</span>
+                <button
+                  type="button"
+                  onClick={() => setEmbedMuted(!embedMuted)}
+                  className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                    embedMuted ? 'bg-pink-600' : 'bg-gray-700'
+                  }`}
+                >
+                  <div
+                    className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                      embedMuted ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Custom Quotes & Family Affirmations Settings */}
+          {widget.type === 'quotes' && (
+            <div className="space-y-4 pt-2 border-t border-gray-800">
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
+                  Quote Rotation Source
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'both', label: 'Mix Both' },
+                    { id: 'custom', label: 'Custom Only' },
+                    { id: 'curated', label: 'Curated Only' },
+                  ].map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setQuoteMode(m.id as any)}
+                      className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        quoteMode === m.id
+                          ? 'bg-amber-600/30 border border-amber-500 text-amber-300'
+                          : 'bg-gray-950 border border-gray-800 text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Add Custom Quote Form */}
+              <div className="p-3 rounded-xl bg-gray-950/70 border border-gray-800 space-y-2.5">
+                <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                  <Quote className="w-3.5 h-3.5" />
+                  <span>+ Add Custom Quote, Family Motto, or Affirmation</span>
+                </span>
+                <textarea
+                  rows={2}
+                  value={newQuoteText}
+                  onChange={(e) => setNewQuoteText(e.target.value)}
+                  placeholder="Write a quote, affirmation, or family reminder..."
+                  className="w-full rounded-lg bg-gray-900 border border-gray-800 p-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-amber-500"
+                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newQuoteAuthor}
+                    onChange={(e) => setNewQuoteAuthor(e.target.value)}
+                    placeholder="Author / Family Member (e.g., Mom, Dad, Stoic Daily)"
+                    className="flex-1 rounded-lg bg-gray-900 border border-gray-800 p-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-amber-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddCustomQuote}
+                    disabled={!newQuoteText.trim()}
+                    className="px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-xs font-bold text-white flex items-center gap-1 cursor-pointer transition-all"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Existing Custom Quotes List */}
+              {customQuotes.length > 0 && (
+                <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 block">
+                    Saved Custom Quotes ({customQuotes.length})
+                  </span>
+                  {customQuotes.map((cq) => (
+                    <div
+                      key={cq.id}
+                      className="flex items-start justify-between gap-2 p-2.5 rounded-xl bg-gray-950 border border-gray-800 text-xs"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="text-gray-200 italic">"{cq.quote}"</div>
+                        <div className="text-[10px] text-amber-400/80 mt-0.5">— {cq.author}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveCustomQuote(cq.id)}
+                        className="p-1 text-gray-500 hover:text-red-400 transition-colors cursor-pointer"
+                        title="Remove quote"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

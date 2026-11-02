@@ -7,6 +7,9 @@ import {
   LayoutGrid,
   Monitor,
   Settings,
+  Edit2,
+  Check,
+  X,
 } from 'lucide-react';
 import type { DashboardTab, StickyNoteItem } from '../../types/dashboard';
 import { APP_VERSION } from '../../data/changelog';
@@ -36,6 +39,11 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
   const [newNoteText, setNewNoteText] = useState('');
   const [isChecklist, setIsChecklist] = useState(false);
   const [isChangelogOpen, setIsChangelogOpen] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const [addingChecklistNoteId, setAddingChecklistNoteId] = useState<string | null>(null);
+  const [newCheckItemText, setNewCheckItemText] = useState('');
 
   const activeNotes = notes.filter((n) => !n.archivedAt);
 
@@ -49,7 +57,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         title: 'Checklist',
         content: '',
         isChecklist: true,
-        checklistItems: [{ id: '1', text: newNoteText.trim(), done: false }],
+        checklistItems: [{ id: Date.now().toString(), text: newNoteText.trim(), done: false }],
         bgColor: '#bbf7d0',
       });
     } else {
@@ -71,6 +79,28 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
       item.id === itemId ? { ...item, done: !item.done } : item
     );
     onUpdateNote(note.id, { checklistItems: updated });
+  };
+
+  const handleAppendChecklistItem = (note: StickyNoteItem) => {
+    if (!newCheckItemText.trim()) return;
+    const existing = note.checklistItems || [];
+    onUpdateNote(note.id, {
+      isChecklist: true,
+      checklistItems: [
+        ...existing,
+        { id: Date.now().toString(), text: newCheckItemText.trim(), done: false },
+      ],
+    });
+    setNewCheckItemText('');
+    setAddingChecklistNoteId(null);
+  };
+
+  const handleSaveInlineEdit = (note: StickyNoteItem) => {
+    onUpdateNote(note.id, {
+      title: editTitle.trim() || undefined,
+      content: editContent,
+    });
+    setEditingNoteId(null);
   };
 
   return (
@@ -180,48 +210,127 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
               No active notes on display. Use the bar above to add one!
             </div>
           ) : (
-            activeNotes.map((note) => (
-              <div
-                key={note.id}
-                style={{ backgroundColor: note.bgColor || '#fef08a' }}
-                className="rounded-2xl p-4 shadow-lg text-gray-900 border border-black/10 transition-all"
-              >
-                {note.title && (
-                  <div className="font-bold text-xs mb-1.5 border-b border-black/10 pb-1 flex items-center justify-between">
-                    <span>{note.title}</span>
-                    {note.expiresAt && (
-                      <span className="text-[10px] text-gray-700 bg-black/10 px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {new Date(note.expiresAt).toLocaleDateString([], { month: 'numeric', day: 'numeric' })}
+            activeNotes.map((note) => {
+              const isEditingThis = editingNoteId === note.id;
+
+              return (
+                <div
+                  key={note.id}
+                  style={{ backgroundColor: note.bgColor || '#fef08a' }}
+                  className="rounded-2xl p-4 shadow-lg text-gray-900 border border-black/10 transition-all space-y-2"
+                >
+                  <div className="flex items-center justify-between border-b border-black/10 pb-1.5">
+                    {isEditingThis ? (
+                      <input
+                        type="text"
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        placeholder="Note title..."
+                        className="flex-1 bg-white/60 rounded px-2 py-0.5 text-xs font-bold text-gray-900 focus:outline-none"
+                      />
+                    ) : (
+                      <span className="font-bold text-xs">
+                        {note.title || (note.isChecklist ? 'Checklist' : 'Note')}
                       </span>
                     )}
-                  </div>
-                )}
 
-                {note.isChecklist && note.checklistItems ? (
-                  <div className="space-y-2 mt-1">
-                    {note.checklistItems.map((item) => (
-                      <button
-                        key={item.id}
-                        onClick={() => toggleItem(note, item.id)}
-                        className="flex items-center gap-2 text-xs w-full text-left"
-                      >
-                        {item.done ? (
-                          <CheckSquare className="w-4 h-4 text-emerald-800 shrink-0" />
-                        ) : (
-                          <Square className="w-4 h-4 text-gray-700 shrink-0" />
-                        )}
-                        <span className={item.done ? 'line-through opacity-50' : 'font-medium'}>
-                          {item.text}
+                    <div className="flex items-center gap-1.5">
+                      {note.expiresAt && (
+                        <span className="text-[10px] text-gray-700 bg-black/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {new Date(note.expiresAt).toLocaleDateString([], { month: 'numeric', day: 'numeric' })}
                         </span>
-                      </button>
-                    ))}
+                      )}
+                      {!isEditingThis ? (
+                        <button
+                          onClick={() => {
+                            setEditingNoteId(note.id);
+                            setEditTitle(note.title || '');
+                            setEditContent(note.content || '');
+                          }}
+                          className="p-1 rounded hover:bg-black/10 text-gray-700"
+                          title="Edit note"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handleSaveInlineEdit(note)}
+                            className="p-1 rounded bg-emerald-700 text-white"
+                          >
+                            <Check className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => setEditingNoteId(null)}
+                            className="p-1 rounded bg-black/20 text-gray-800"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                ) : (
-                  <p className="text-xs leading-relaxed whitespace-pre-wrap">{note.content}</p>
-                )}
-              </div>
-            ))
+
+                  {note.isChecklist && note.checklistItems ? (
+                    <div className="space-y-2 mt-1">
+                      {note.checklistItems.map((item) => (
+                        <button
+                          key={item.id}
+                          onClick={() => toggleItem(note, item.id)}
+                          className="flex items-center gap-2 text-xs w-full text-left"
+                        >
+                          {item.done ? (
+                            <CheckSquare className="w-4 h-4 text-emerald-800 shrink-0" />
+                          ) : (
+                            <Square className="w-4 h-4 text-gray-700 shrink-0" />
+                          )}
+                          <span className={item.done ? 'line-through opacity-50' : 'font-medium'}>
+                            {item.text}
+                          </span>
+                        </button>
+                      ))}
+
+                      {addingChecklistNoteId === note.id ? (
+                        <div className="flex gap-1.5 pt-1">
+                          <input
+                            type="text"
+                            value={newCheckItemText}
+                            onChange={(e) => setNewCheckItemText(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleAppendChecklistItem(note)}
+                            placeholder="New checklist item..."
+                            className="flex-1 bg-white/70 rounded-lg px-2 py-1 text-xs text-gray-900 focus:outline-none"
+                          />
+                          <button
+                            onClick={() => handleAppendChecklistItem(note)}
+                            className="px-2.5 py-1 bg-gray-900 text-white rounded-lg text-xs font-bold"
+                          >
+                            Add
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setAddingChecklistNoteId(note.id)}
+                          className="text-[11px] font-semibold text-gray-700 hover:text-black flex items-center gap-1 pt-1"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Add item</span>
+                        </button>
+                      )}
+                    </div>
+                  ) : isEditingThis ? (
+                    <textarea
+                      rows={3}
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      className="w-full bg-white/60 rounded-lg p-2 text-xs text-gray-900 focus:outline-none"
+                    />
+                  ) : (
+                    <p className="text-xs leading-relaxed whitespace-pre-wrap">{note.content}</p>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
       </div>

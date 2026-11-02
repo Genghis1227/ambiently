@@ -23,6 +23,7 @@ import {
   Tv,
   Folder,
   Clock,
+  Archive,
 } from 'lucide-react';
 import type { DashboardTab, DockPosition } from '../../types/dashboard';
 
@@ -40,6 +41,9 @@ interface NavigationDockProps {
   hasFileBound: boolean;
   onOpenAddWidget?: () => void;
   onOpenAddCanvas?: () => void;
+  onOpenCreateNote?: () => void;
+  onOpenTrash?: () => void;
+  trashCount?: number;
 }
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -75,6 +79,9 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
   hasFileBound,
   onOpenAddWidget,
   onOpenAddCanvas,
+  onOpenCreateNote,
+  onOpenTrash,
+  trashCount = 0,
 }) => {
   const isVertical = dockPosition === 'left' || dockPosition === 'right';
 
@@ -87,7 +94,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
 
   return (
     <nav
-      className={`fixed z-30 flex items-center gap-2 p-2 rounded-2xl bg-gray-900/80 backdrop-blur-xl border border-gray-800/90 shadow-2xl transition-all ${positionClasses}`}
+      className={`fixed z-30 flex items-center gap-2 p-2 rounded-2xl bg-gray-900/85 backdrop-blur-xl border border-gray-800/90 shadow-2xl transition-all ${positionClasses}`}
     >
       {/* Brand Icon */}
       <div className="flex items-center justify-center p-1">
@@ -111,7 +118,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
               key={tab.id}
               onClick={() => onSelectTab(tab.id)}
               title={tab.name}
-              className={`relative flex items-center justify-center w-11 h-11 rounded-xl transition-all ${
+              className={`relative flex items-center justify-center w-11 h-11 rounded-xl transition-all cursor-pointer ${
                 isActive
                   ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
                   : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/70'
@@ -136,31 +143,60 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
           );
         })}
 
-        {/* Add Canvas Button */}
+        {/* Create New Canvas Button */}
         {onOpenAddCanvas && (
           <button
             onClick={onOpenAddCanvas}
             title="Create New Canvas"
-            className="flex items-center justify-center w-11 h-11 rounded-xl text-emerald-400 hover:text-white hover:bg-emerald-600/30 transition-all border border-emerald-500/20"
+            className="flex items-center justify-center w-10 h-10 rounded-xl text-emerald-400 hover:text-white hover:bg-emerald-600/30 transition-all border border-emerald-500/20 cursor-pointer"
           >
-            <Plus className="w-5 h-5" />
-          </button>
-        )}
-
-        {/* Add Widget Button */}
-        {onOpenAddWidget && (
-          <button
-            onClick={onOpenAddWidget}
-            title="Add Widget to Dashboard"
-            className="flex items-center justify-center w-11 h-11 rounded-xl text-blue-400 hover:text-white hover:bg-blue-600/30 transition-all border border-blue-500/20"
-          >
-            <Plus className="w-5 h-5" />
+            <Plus className="w-4 h-4" />
           </button>
         )}
       </div>
 
       <div
-        className={`bg-gray-800 ${isVertical ? 'w-6 h-px my-1' : 'h-6 w-px mx-1'}`}
+        className={`bg-gray-800 ${isVertical ? 'w-6 h-px my-0.5' : 'h-6 w-px mx-0.5'}`}
+      />
+
+      {/* Board Creation Actions: Pin Note, Add Tile & Trash */}
+      <div className={`flex items-center gap-1.5 ${isVertical ? 'flex-col' : 'flex-row'}`}>
+        {onOpenCreateNote && (
+          <button
+            onClick={onOpenCreateNote}
+            title="Pin New Sticky Note"
+            className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition-all cursor-pointer"
+          >
+            <Pin className="w-4 h-4" />
+          </button>
+        )}
+
+        {onOpenAddWidget && (
+          <button
+            onClick={onOpenAddWidget}
+            title="Add Widget Tile to Canvas"
+            className="flex items-center justify-center w-10 h-10 rounded-xl bg-blue-500/15 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 transition-all cursor-pointer"
+          >
+            <LayoutGrid className="w-4 h-4" />
+          </button>
+        )}
+
+        {onOpenTrash && trashCount > 0 && (
+          <button
+            onClick={onOpenTrash}
+            title={`Archived & Expired Notes (${trashCount})`}
+            className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gray-800/80 hover:bg-gray-700 text-amber-400 border border-amber-500/30 transition-all cursor-pointer"
+          >
+            <Archive className="w-4 h-4" />
+            <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 text-gray-950 font-mono font-bold text-[10px] flex items-center justify-center">
+              {trashCount}
+            </span>
+          </button>
+        )}
+      </div>
+
+      <div
+        className={`bg-gray-800 ${isVertical ? 'w-6 h-px my-0.5' : 'h-6 w-px mx-0.5'}`}
       />
 
       {/* Quick Utilities / Kiosk controls */}
@@ -168,7 +204,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
         <button
           onClick={onConnectFile}
           title={hasFileBound ? 'PC Auto-Backup: Active' : 'Auto-Backup to PC (Optional)'}
-          className={`relative flex items-center justify-center w-10 h-10 rounded-xl transition-all ${
+          className={`relative flex items-center justify-center w-10 h-10 rounded-xl transition-all cursor-pointer ${
             hasFileBound
               ? 'text-emerald-400 hover:bg-emerald-500/10'
               : 'text-amber-400 hover:bg-amber-500/10'
@@ -180,7 +216,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
         <button
           onClick={onToggleNightMode}
           title="Toggle Night Mode"
-          className="flex items-center justify-center w-10 h-10 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-gray-800/70 transition-all"
+          className="flex items-center justify-center w-10 h-10 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-gray-800/70 transition-all cursor-pointer"
         >
           <Moon className="w-4 h-4" />
         </button>
@@ -188,7 +224,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
         <button
           onClick={onToggleFullscreen}
           title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen Kiosk'}
-          className="flex items-center justify-center w-10 h-10 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-gray-800/70 transition-all"
+          className="flex items-center justify-center w-10 h-10 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-gray-800/70 transition-all cursor-pointer"
         >
           {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
         </button>
@@ -196,7 +232,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
         <button
           onClick={onOpenSettings}
           title="Settings & Lock"
-          className="flex items-center justify-center w-10 h-10 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-gray-800/70 transition-all"
+          className="flex items-center justify-center w-10 h-10 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-gray-800/70 transition-all cursor-pointer"
         >
           {isLocked ? <Lock className="w-4 h-4 text-blue-400" /> : <Settings className="w-4 h-4" />}
         </button>

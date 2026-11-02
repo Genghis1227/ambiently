@@ -10,6 +10,7 @@ import {
   Timer,
   Quote,
   StickyNote,
+  Tv,
   Plus,
 } from 'lucide-react';
 import type { WidgetType, DashboardWidget } from '../../types/dashboard';
@@ -44,7 +45,7 @@ const WIDGET_TEMPLATES: WidgetTemplate[] = [
   {
     type: 'clock',
     title: 'Ambient Clock',
-    description: 'Minimalist live digital clock with date, seconds, and AM/PM indicators.',
+    description: 'Minimalist live digital, typographic, or analog dial clock with date and seconds.',
     icon: Clock,
     defaultGridPos: { w: 4, h: 4 },
     defaultConfig: { clockFace: 'digital', showSeconds: true },
@@ -67,6 +68,15 @@ const WIDGET_TEMPLATES: WidgetTemplate[] = [
     defaultGridPos: { w: 4, h: 8 },
     defaultConfig: { displayStyle: 'ken_burns', rotationIntervalSec: 15 },
     color: 'from-purple-500/20 to-pink-500/20 text-purple-400 border-purple-500/30',
+  },
+  {
+    type: 'embed',
+    title: 'Ambient Stream & Web Embed',
+    description: '1-click Lofi Beats radio, 4K Cozy Fireplace, NASA Live Earth, Weather Radar, or custom URLs.',
+    icon: Tv,
+    defaultGridPos: { w: 4, h: 4 },
+    defaultConfig: { preset: 'lofi', muted: true, customUrl: '' },
+    color: 'from-pink-500/20 to-rose-500/20 text-pink-400 border-pink-500/30',
   },
   {
     type: 'calendar',
@@ -97,11 +107,11 @@ const WIDGET_TEMPLATES: WidgetTemplate[] = [
   },
   {
     type: 'quotes',
-    title: 'Daily Inspiration',
-    description: 'Rotating collection of timeless quotes, wisdom, and philosophical reflections.',
+    title: 'Daily Inspiration & Affirmations',
+    description: 'Rotating collection of timeless quotes, wisdom, and custom family affirmations.',
     icon: Quote,
     defaultGridPos: { w: 4, h: 4 },
-    defaultConfig: {},
+    defaultConfig: { quoteMode: 'both', customQuotes: [] },
     color: 'from-yellow-500/20 to-amber-500/20 text-yellow-400 border-yellow-500/30',
   },
   {

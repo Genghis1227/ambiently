@@ -1,11 +1,18 @@
 import React, { useState } from 'react';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, Palette } from 'lucide-react';
 import { CANVAS_ICONS } from '../../data/canvasIcons';
+import { CANVAS_THEMES } from '../../data/canvasThemes';
+import type { CanvasBackgroundTheme } from '../../types/dashboard';
 
 interface CreateCanvasModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreateCanvas: (name: string, icon: string) => void;
+  onCreateCanvas: (
+    name: string,
+    icon: string,
+    backgroundTheme?: CanvasBackgroundTheme,
+    customWallpaperUrl?: string
+  ) => void;
 }
 
 export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
@@ -15,21 +22,30 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
 }) => {
   const [name, setName] = useState('');
   const [selectedIcon, setSelectedIcon] = useState('Pin');
+  const [selectedTheme, setSelectedTheme] = useState<CanvasBackgroundTheme>('midnight_dots');
+  const [customWallpaperUrl, setCustomWallpaperUrl] = useState('');
 
   if (!isOpen) return null;
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    onCreateCanvas(name.trim(), selectedIcon);
+    onCreateCanvas(
+      name.trim(),
+      selectedIcon,
+      selectedTheme,
+      selectedTheme === 'custom' ? customWallpaperUrl.trim() : undefined
+    );
     setName('');
     setSelectedIcon('Pin');
+    setSelectedTheme('midnight_dots');
+    setCustomWallpaperUrl('');
     onClose();
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 select-none">
-      <div className="w-full max-w-md rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl overflow-hidden flex flex-col">
+      <div className="w-full max-w-md rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl overflow-hidden flex flex-col max-h-[88vh]">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-950/60">
           <div className="flex items-center gap-2">
@@ -45,7 +61,7 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleCreate} className="p-5 space-y-4">
+        <form onSubmit={handleCreate} className="p-5 overflow-y-auto space-y-4">
           <div>
             <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
               Canvas / Board Name
@@ -64,7 +80,7 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
             <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
               Choose an Icon
             </label>
-            <div className="grid grid-cols-4 gap-2 max-h-56 overflow-y-auto p-1 bg-gray-950 rounded-xl border border-gray-800">
+            <div className="grid grid-cols-4 gap-2 max-h-44 overflow-y-auto p-1 bg-gray-950 rounded-xl border border-gray-800">
               {CANVAS_ICONS.map((item) => {
                 const IconComponent = item.icon;
                 const isSelected = selectedIcon === item.id;
@@ -73,19 +89,64 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
                     key={item.id}
                     type="button"
                     onClick={() => setSelectedIcon(item.id)}
-                    className={`flex flex-col items-center justify-center p-2.5 rounded-lg border transition-all cursor-pointer ${
+                    className={`flex flex-col items-center justify-center p-2 rounded-lg border transition-all cursor-pointer ${
                       isSelected
                         ? 'bg-emerald-600/30 border-emerald-500 text-emerald-300 shadow'
                         : 'border-transparent text-gray-400 hover:text-white hover:bg-gray-800/60'
                     }`}
                   >
-                    <IconComponent className="w-5 h-5 mb-1" />
+                    <IconComponent className="w-4 h-4 mb-1" />
                     <span className="text-[10px] font-medium">{item.label}</span>
                   </button>
                 );
               })}
             </div>
           </div>
+
+          {/* Canvas Background Theme Picker */}
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1.5 mb-1.5">
+              <Palette className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Canvas Background Theme</span>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {CANVAS_THEMES.map((theme) => {
+                const isSelected = selectedTheme === theme.id;
+                return (
+                  <button
+                    key={theme.id}
+                    type="button"
+                    onClick={() => setSelectedTheme(theme.id)}
+                    className={`flex items-center gap-2.5 p-2 rounded-xl border text-left transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-emerald-600/20 border-emerald-500 text-emerald-200'
+                        : 'bg-gray-950 border-gray-800 text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    <div className={`w-6 h-6 rounded-lg shrink-0 ${theme.previewClass}`} />
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold truncate">{theme.label}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {selectedTheme === 'custom' && (
+            <div>
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 block mb-1">
+                Custom Wallpaper Image URL
+              </label>
+              <input
+                type="url"
+                value={customWallpaperUrl}
+                onChange={(e) => setCustomWallpaperUrl(e.target.value)}
+                placeholder="https://images.unsplash.com/photo-..."
+                className="w-full rounded-xl bg-gray-950 border border-gray-800 p-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+          )}
 
           {/* Submit */}
           <div className="pt-2 flex items-center justify-end gap-2">

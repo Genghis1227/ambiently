@@ -12,6 +12,7 @@ import type {
   StickyNoteItem,
   AppSettings,
   DockPosition,
+  CanvasBackgroundTheme,
 } from '../types/dashboard';
 import { saveSnapshotToFile, hasActiveLocalFile } from '../services/fileSync';
 
@@ -32,7 +33,12 @@ interface DashboardState {
   // Actions
   initStore: () => Promise<void>;
   setActiveTabId: (tabId: string) => void;
-  addTab: (name: string, icon: string) => Promise<string>;
+  addTab: (
+    name: string,
+    icon: string,
+    backgroundTheme?: CanvasBackgroundTheme,
+    customWallpaperUrl?: string
+  ) => Promise<string>;
   updateTab: (tabId: string, updates: Partial<DashboardTab>) => Promise<void>;
   deleteTab: (tabId: string) => Promise<void>;
   reorderTabs: (orderedTabIds: string[]) => Promise<void>;
@@ -133,7 +139,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     get().pauseCarouselTemporarily();
   },
 
-  addTab: async (name, icon) => {
+  addTab: async (name, icon, backgroundTheme = 'midnight_dots', customWallpaperUrl) => {
     const newId = `tab-${Date.now()}`;
     const maxOrder = get().tabs.reduce((max, t) => Math.max(max, t.order), -1);
     const newTab: DashboardTab = {
@@ -141,6 +147,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       name: name.trim() || 'New Canvas',
       icon: icon || 'Pin',
       order: maxOrder + 1,
+      backgroundTheme,
+      customWallpaperUrl: customWallpaperUrl?.trim() || undefined,
       autoRotateDurationSec: 30,
       enabled: true,
       updated_at: new Date().toISOString(),
@@ -349,8 +357,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       freeformPos: newNote.freeformPos || {
         xRatio: 0.15 + Math.random() * 0.2,
         yRatio: 0.15 + Math.random() * 0.2,
-        wRatio: 0.3,
-        hRatio: 0.35,
+        wRatio: 0.26,
+        hRatio: 0.3,
         zIndex: 10,
         rotation: Math.floor(Math.random() * 6) - 3,
       },

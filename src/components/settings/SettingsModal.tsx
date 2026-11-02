@@ -39,6 +39,8 @@ import {
 } from '../../services/supabase';
 import { APP_VERSION } from '../../data/changelog';
 import { CANVAS_ICONS } from '../../data/canvasIcons';
+import { CANVAS_THEMES } from '../../data/canvasThemes';
+import type { CanvasBackgroundTheme } from '../../types/dashboard';
 import { CreateCanvasModal } from '../dock/CreateCanvasModal';
 import { ChangelogModal } from '../changelog/ChangelogModal';
 import { SupportPanel } from './SupportPanel';
@@ -88,6 +90,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editTabName, setEditTabName] = useState('');
   const [editTabIcon, setEditTabIcon] = useState('Pin');
+  const [editTabTheme, setEditTabTheme] = useState<CanvasBackgroundTheme>('midnight_dots');
+  const [editTabWallpaperUrl, setEditTabWallpaperUrl] = useState('');
 
   const handleMoveTab = async (index: number, direction: 'up' | 'down') => {
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
@@ -255,7 +259,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                     Canvases & Boards
                   </span>
                   <span className="text-[11px] text-gray-400">
-                    Reorder, rename, custom icons, or add new boards.
+                    Reorder, rename, custom icons, background themes, or add boards.
                   </span>
                 </div>
                 <button
@@ -274,9 +278,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   const isFirst = idx === 0;
                   const isLast = idx === tabs.length - 1;
 
-                  // Find Icon component
+                  // Find Icon & Theme
                   const matchedIconItem = CANVAS_ICONS.find((i) => i.id === tab.icon) || CANVAS_ICONS[0];
                   const IconComp = matchedIconItem.icon;
+                  const matchedTheme =
+                    CANVAS_THEMES.find((t) => t.id === (tab.backgroundTheme || 'midnight_dots')) ||
+                    CANVAS_THEMES[0];
 
                   return (
                     <div
@@ -293,8 +300,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                             <span className="text-xs font-bold text-white block">
                               {tab.name}
                             </span>
-                            <span className="text-[10px] text-gray-400">
-                              Corkboard Canvas
+                            <span className="text-[10px] text-gray-400 flex items-center gap-1.5">
+                              <span>{matchedTheme.label}</span>
                             </span>
                           </div>
                         </div>
@@ -323,7 +330,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                             <ChevronDown className="w-4 h-4" />
                           </button>
 
-                          {/* Edit / Rename */}
+                          {/* Edit / Rename / Theme */}
                           <button
                             type="button"
                             onClick={() => {
@@ -333,9 +340,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                 setEditingTabId(tab.id);
                                 setEditTabName(tab.name);
                                 setEditTabIcon(tab.icon || 'Pin');
+                                setEditTabTheme(tab.backgroundTheme || 'midnight_dots');
+                                setEditTabWallpaperUrl(tab.customWallpaperUrl || '');
                               }
                             }}
-                            title="Edit name and icon"
+                            title="Edit name, icon, and background theme"
                             className="p-1 rounded-md text-gray-400 hover:text-blue-300 hover:bg-blue-500/20 transition-colors"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
@@ -357,7 +366,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
                       {/* Inline Canvas Editor */}
                       {isEditingThis && (
-                        <div className="pt-2 border-t border-gray-800/80 space-y-2">
+                        <div className="pt-2 border-t border-gray-800/80 space-y-2.5">
                           <input
                             type="text"
                             value={editTabName}
@@ -366,6 +375,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                             className="w-full rounded-lg bg-gray-950 border border-gray-800 p-2 text-xs text-white focus:outline-none focus:border-blue-500"
                           />
 
+                          {/* Icon Picker */}
                           <div className="grid grid-cols-8 gap-1.5 p-1.5 bg-gray-950 rounded-lg border border-gray-800 max-h-32 overflow-y-auto">
                             {CANVAS_ICONS.map((item) => {
                               const IComp = item.icon;
@@ -386,6 +396,43 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                             })}
                           </div>
 
+                          {/* Background Theme Picker */}
+                          <div>
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 block mb-1">
+                              Canvas Background Theme:
+                            </span>
+                            <div className="grid grid-cols-3 gap-1.5">
+                              {CANVAS_THEMES.map((theme) => {
+                                const isCurTheme = editTabTheme === theme.id;
+                                return (
+                                  <button
+                                    key={theme.id}
+                                    type="button"
+                                    onClick={() => setEditTabTheme(theme.id)}
+                                    className={`flex items-center gap-1.5 p-1.5 rounded-lg border text-left transition-all cursor-pointer ${
+                                      isCurTheme
+                                        ? 'bg-emerald-600/20 border-emerald-500 text-emerald-200'
+                                        : 'bg-gray-950 border-gray-800 text-gray-400 hover:text-white'
+                                    }`}
+                                  >
+                                    <span className={`w-4 h-4 rounded shrink-0 ${theme.previewClass}`} />
+                                    <span className="text-[10px] font-semibold truncate">{theme.label}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {editTabTheme === 'custom' && (
+                            <input
+                              type="url"
+                              value={editTabWallpaperUrl}
+                              onChange={(e) => setEditTabWallpaperUrl(e.target.value)}
+                              placeholder="Custom Wallpaper Image URL (https://...)"
+                              className="w-full rounded-lg bg-gray-950 border border-gray-800 p-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                            />
+                          )}
+
                           <div className="flex justify-end gap-1.5">
                             <button
                               type="button"
@@ -401,6 +448,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                                   await updateTab(tab.id, {
                                     name: editTabName.trim(),
                                     icon: editTabIcon,
+                                    backgroundTheme: editTabTheme,
+                                    customWallpaperUrl:
+                                      editTabTheme === 'custom' ? editTabWallpaperUrl.trim() : undefined,
                                   });
                                 }
                                 setEditingTabId(null);
@@ -889,8 +939,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       <CreateCanvasModal
         isOpen={isCreateCanvasOpen}
         onClose={() => setIsCreateCanvasOpen(false)}
-        onCreateCanvas={(name, icon) => {
-          addTab(name, icon);
+        onCreateCanvas={(name, icon, theme, wallpaperUrl) => {
+          addTab(name, icon, theme, wallpaperUrl);
         }}
       />
 

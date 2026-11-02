@@ -45,6 +45,8 @@ export function App() {
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
   const [isAddWidgetOpen, setIsAddWidgetOpen] = useState(false);
   const [isCreateCanvasOpen, setIsCreateCanvasOpen] = useState(false);
+  const [isNoteCreatorOpen, setIsNoteCreatorOpen] = useState(false);
+  const [isTrashOpen, setIsTrashOpen] = useState(false);
   const [hasFileBound, setHasFileBound] = useState(false);
   const syncRemoteNoteChange = useDashboardStore((s) => s.syncRemoteNoteChange);
 
@@ -212,6 +214,12 @@ export function App() {
   const activeTab = visibleTabs.find((t) => t.id === activeTabId) || visibleTabs[0] || tabs[0];
   const tabWidgets = widgets.filter((w) => w.tabId === activeTab?.id);
   const tabNotes = notes.filter((n) => n.tabId === activeTab?.id);
+  const activeCanvasNotes = tabNotes.length > 0 ? tabNotes : notes;
+
+  const now = new Date();
+  const trashCount = activeCanvasNotes.filter(
+    (n) => n.archivedAt || (n.expiresAt && new Date(n.expiresAt) <= now)
+  ).length;
 
   // Dynamic padding based on Dock position
   const dockPaddingClasses = {
@@ -243,9 +251,16 @@ export function App() {
         }}
       >
         <Corkboard
-          notes={tabNotes.length > 0 ? tabNotes : notes}
+          notes={activeCanvasNotes}
           widgets={tabWidgets}
           dockPaddingClass={dockPaddingClasses}
+          backgroundTheme={activeTab?.backgroundTheme || 'midnight_dots'}
+          customWallpaperUrl={activeTab?.customWallpaperUrl}
+          isCreatorOpen={isNoteCreatorOpen}
+          onOpenCreator={() => setIsNoteCreatorOpen(true)}
+          onCloseCreator={() => setIsNoteCreatorOpen(false)}
+          isTrashOpen={isTrashOpen}
+          onCloseTrash={() => setIsTrashOpen(false)}
           onUpdateNotePos={updateNotePosition}
           onUpdateWidgetPos={updateWidgetPosition}
           onAddNote={addNote}
@@ -258,7 +273,7 @@ export function App() {
         />
       </div>
 
-      {/* Navigation Dock - Pinned at Viewport Level */}
+      {/* Navigation Dock - Pinned at Viewport Level (Never obscures canvas tiles) */}
       <NavigationDock
         tabs={visibleTabs}
         activeTabId={activeTab?.id || ''}
@@ -273,6 +288,9 @@ export function App() {
         hasFileBound={hasFileBound}
         onOpenAddWidget={() => setIsAddWidgetOpen(true)}
         onOpenAddCanvas={() => setIsCreateCanvasOpen(true)}
+        onOpenCreateNote={() => setIsNoteCreatorOpen(true)}
+        onOpenTrash={() => setIsTrashOpen(true)}
+        trashCount={trashCount}
       />
 
       {/* Night Mode Screen Overlay */}
@@ -310,8 +328,8 @@ export function App() {
       <CreateCanvasModal
         isOpen={isCreateCanvasOpen}
         onClose={() => setIsCreateCanvasOpen(false)}
-        onCreateCanvas={(name, icon) => {
-          addTab(name, icon);
+        onCreateCanvas={(name, icon, theme, wallpaperUrl) => {
+          addTab(name, icon, theme, wallpaperUrl);
         }}
       />
 
