@@ -166,8 +166,10 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
 
         {/* Tab Switcher Icons */}
         <div className={`flex items-center gap-1.5 ${isVertical ? 'flex-col' : 'flex-row'}`}>
-          {tabs.map((tab) => {
+          {tabs.map((tab, idx) => {
             const isActive = tab.id === activeTabId;
+            const hasExplicitHome = tabs.some((t) => t.isHome);
+            const isHome = tab.isHome || (!hasExplicitHome && idx === 0);
             return (
               <button
                 key={tab.id}
@@ -175,7 +177,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
                   setIsQuickMenuOpen(false);
                   onSelectTab(tab.id);
                 }}
-                title={tab.name}
+                title={isHome ? `${tab.name} (Home Board)` : tab.name}
                 className={`relative flex items-center justify-center w-11 h-11 rounded-xl transition-all cursor-pointer ${
                   isActive
                     ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
@@ -183,6 +185,13 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
                 }`}
               >
                 {tab.icon && iconMap[tab.icon] ? iconMap[tab.icon] : <LayoutGrid className="w-5 h-5" />}
+                {/* Home Indicator Dot (when inactive) */}
+                {isHome && !isActive && (
+                  <span
+                    className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-purple-400 shadow-[0_0_4px_rgba(192,132,252,0.8)]"
+                    title="Home Board"
+                  />
+                )}
                 {/* Active Dot indicator */}
                 {isActive && (
                   <span

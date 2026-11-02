@@ -54,6 +54,7 @@ export const DEFAULT_TABS: DashboardTab[] = [
     name: "Family Board",
     icon: "Pin",
     order: 0,
+    isHome: true,
     layoutMode: "freeform",
     autoRotateDurationSec: 30,
     enabled: true,

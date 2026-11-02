@@ -215,7 +215,8 @@ export function App() {
     );
   }
 
-  const activeTab = visibleTabs.find((t) => t.id === activeTabId) || visibleTabs[0] || tabs[0];
+  const homeTab = visibleTabs.find((t) => t.isHome) || visibleTabs[0] || tabs[0];
+  const activeTab = visibleTabs.find((t) => t.id === activeTabId) || homeTab;
   const activeTabIdResolved = activeTab?.id || 'tab-corkboard';
   const tabWidgets = widgets.filter((w) => w.tabId === activeTabIdResolved);
 

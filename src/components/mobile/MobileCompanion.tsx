@@ -11,6 +11,7 @@ import {
   Check,
   X,
   Trash2,
+  Home,
 } from 'lucide-react';
 import type { DashboardTab, StickyNoteItem } from '../../types/dashboard';
 import { APP_VERSION } from '../../data/changelog';
@@ -162,19 +163,24 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
 
         {/* Tab Switcher Pills */}
         <div className="flex items-center gap-2 overflow-x-auto pb-3 mb-3 no-scrollbar">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => onSelectTab(tab.id)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 transition-all ${
-                tab.id === activeTabId
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                  : 'bg-gray-800/60 text-gray-400 hover:text-gray-200'
-              }`}
-            >
-              {tab.name}
-            </button>
-          ))}
+          {tabs.map((tab, idx) => {
+            const hasExplicitHome = tabs.some((t) => t.isHome);
+            const isHome = tab.isHome || (!hasExplicitHome && idx === 0);
+            return (
+              <button
+                key={tab.id}
+                onClick={() => onSelectTab(tab.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 transition-all ${
+                  tab.id === activeTabId
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                    : 'bg-gray-800/60 text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                {isHome && <Home className="w-3 h-3 text-purple-400" />}
+                <span>{tab.name}</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Quick Add Sticky Note Bar */}
