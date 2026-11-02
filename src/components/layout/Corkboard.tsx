@@ -1,6 +1,20 @@
 import React, { useRef, useState } from 'react';
 import type { StickyNoteItem, DashboardWidget } from '../../types/dashboard';
-import { CheckSquare, Square, Pin, Plus, Trash2, Clock, X, Maximize2, Minimize2, Settings } from 'lucide-react';
+import {
+  CheckSquare,
+  Square,
+  Pin,
+  Plus,
+  Trash2,
+  Clock,
+  X,
+  Maximize2,
+  Minimize2,
+  Settings,
+  Archive,
+  RotateCcw,
+  RotateCw,
+} from 'lucide-react';
 import { ClockWeatherWidget } from '../widgets/ClockWeatherWidget';
 import { ClockWidget } from '../widgets/ClockWidget';
 import { WeatherWidget } from '../widgets/WeatherWidget';
@@ -9,6 +23,7 @@ import { QuotesWidget } from '../widgets/QuotesWidget';
 import { CalendarWidget } from '../widgets/CalendarWidget';
 import { RssWidget } from '../widgets/RssWidget';
 import { PhotoFrameWidget } from '../widgets/PhotoFrameWidget';
+import { StickyNotesWidget } from '../widgets/StickyNotesWidget';
 import { WidgetSettingsModal } from '../widgets/WidgetSettingsModal';
 import { PhotoSourcesModal } from '../photos/PhotoSourcesModal';
 
@@ -21,6 +36,7 @@ interface CorkboardProps {
   onAddNote: (note: Partial<StickyNoteItem>) => void;
   onUpdateNote: (noteId: string, updates: Partial<StickyNoteItem>) => void;
   onDeleteNote: (noteId: string) => void;
+  onPermanentlyDeleteNote?: (noteId: string) => void;
   onRemoveWidget?: (widgetId: string) => void;
   onOpenAddWidget?: () => void;
   onUpdateWidget?: (widgetId: string, updates: Partial<DashboardWidget>) => void;
@@ -44,6 +60,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   onAddNote,
   onUpdateNote,
   onDeleteNote,
+  onPermanentlyDeleteNote,
   onRemoveWidget,
   onOpenAddWidget,
   onUpdateWidget,
@@ -53,7 +70,9 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   const [draggingType, setDraggingType] = useState<'note' | 'widget'>('note');
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [editingWidget, setEditingWidget] = useState<DashboardWidget | null>(null);
-  const [isPhotoSourcesOpen, setIsPhotoSourcesOpen] = useState(false);
+  const [photoSourcesTargetWidget, setPhotoSourcesTargetWidget] = useState<DashboardWidget | null>(null);
+  const [isTrashOpen, setIsTrashOpen] = useState(false);
+
   const [resizingId, setResizingId] = useState<string | null>(null);
   const [resizingType, setResizingType] = useState<'note' | 'widget'>('widget');
   const [resizeStart, setResizeStart] = useState<{ startX: number; startY: number; startW: number; startH: number }>({
@@ -71,6 +90,14 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   const [selectedColor, setSelectedColor] = useState(COLOR_PALETTE[0]);
   const [checklistItems, setChecklistItems] = useState<{ id: string; text: string; done: boolean }[]>([]);
   const [newItemText, setNewItemText] = useState('');
+  const [expiryOption, setExpiryOption] = useState<'permanent' | '1day' | '3days' | 'custom'>('permanent');
+  const [customExpiry, setCustomExpiry] = useState('');
+
+  const getNextZIndex = () => {
+    const widgetMax = widgets.reduce((m, w) => Math.max(m, w.freeformPos?.zIndex || 1), 1);
+    const noteMax = notes.reduce((m, n) => Math.max(m, n.freeformPos?.zIndex || 1), 1);
+    return Math.min(45, Math.max(widgetMax, noteMax) + 1);
+  };
 
   const handleResizePointerDown = (
     e: React.PointerEvent,
@@ -99,7 +126,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     e: React.PointerEvent,
     id: string,
     type: 'note' | 'widget',
-    pos?: { xRatio: number; yRatio: number }
+    pos?: NonNullable<DashboardWidget['freeformPos']>
   ) => {
     // Prevent drag when clicking buttons, inputs, links, or interactive elements
     if ((e.target as HTMLElement).closest('button, input, textarea, select, a, [role="button"]')) return;
@@ -111,6 +138,17 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
     const currentX = (pos?.xRatio ?? 0.1) * rect.width;
     const currentY = (pos?.yRatio ?? 0.1) * rect.height;
+
+    // Bring card to front on interaction
+    const nextZ = getNextZIndex();
+    if (type === 'note' && pos) {
+      onUpdateNotePos(id, { ...pos, zIndex: nextZ });
+    } else if (type === 'widget' && pos && onUpdateWidgetPos) {
+      const w = widgets.find((item) => item.id === id);
+      if (w) {
+        onUpdateWidgetPos(id, w.gridPos, { ...pos, zIndex: nextZ });
+      }
+    }
 
     setDraggingId(id);
     setDraggingType(type);
@@ -221,18 +259,28 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   const handleCreateNote = () => {
     if (!newTitle.trim() && !newContent.trim() && checklistItems.length === 0) return;
 
+    let expiresAt: string | null = null;
+    if (expiryOption === '1day') {
+      expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    } else if (expiryOption === '3days') {
+      expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+    } else if (expiryOption === 'custom' && customExpiry) {
+      expiresAt = new Date(customExpiry).toISOString();
+    }
+
     onAddNote({
       title: newTitle.trim() || undefined,
       content: newContent,
       isChecklist,
       checklistItems: isChecklist ? checklistItems : undefined,
       bgColor: selectedColor,
+      expiresAt,
       freeformPos: {
         xRatio: 0.2 + Math.random() * 0.3,
         yRatio: 0.2 + Math.random() * 0.3,
         wRatio: 0.28,
         hRatio: 0.35,
-        zIndex: 20,
+        zIndex: getNextZIndex(),
         rotation: Math.floor(Math.random() * 6) - 3,
       },
     });
@@ -242,6 +290,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     setNewContent('');
     setIsChecklist(false);
     setChecklistItems([]);
+    setExpiryOption('permanent');
+    setCustomExpiry('');
   };
 
   const toggleChecklistItem = (note: StickyNoteItem, itemId: string) => {
@@ -252,7 +302,18 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     onUpdateNote(note.id, { checklistItems: updated });
   };
 
-  const activeNotes = notes.filter((n) => !n.archivedAt);
+  const now = new Date();
+  const activeNotes = notes.filter((n) => {
+    if (n.archivedAt) return false;
+    if (n.expiresAt && new Date(n.expiresAt) <= now) return false;
+    return true;
+  });
+
+  const trashNotes = notes.filter((n) => {
+    if (n.archivedAt) return true;
+    if (n.expiresAt && new Date(n.expiresAt) <= now) return true;
+    return false;
+  });
 
   return (
     <div
@@ -268,6 +329,16 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     >
       {/* Floating Action Buttons on Corkboard */}
       <div className="absolute top-4 right-4 z-40 flex items-center gap-2">
+        {trashNotes.length > 0 && (
+          <button
+            onClick={() => setIsTrashOpen(true)}
+            className="flex items-center gap-1.5 py-2 px-3 rounded-xl bg-gray-900/90 hover:bg-gray-800 text-xs font-semibold text-amber-300 border border-amber-500/30 shadow-xl backdrop-blur-md transition-all cursor-pointer"
+            title="View expired or archived sticky notes"
+          >
+            <Archive className="w-3.5 h-3.5 text-amber-400" />
+            <span>Trash ({trashNotes.length})</span>
+          </button>
+        )}
         {onOpenAddWidget && (
           <button
             onClick={onOpenAddWidget}
@@ -349,8 +420,42 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               </div>
             )}
 
-            {/* Top Right Widget Controls: Settings, Maximize/Restore & Remove */}
+            {/* Top Right Widget Controls: Tilt, Settings, Maximize/Restore & Remove */}
             <div className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              {!isFullScreen && onUpdateWidgetPos && (
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUpdateWidgetPos(widget.id, widget.gridPos, {
+                        ...pos,
+                        rotation: Math.max(-15, (pos.rotation || 0) - 2),
+                      });
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    title="Tilt counter-clockwise"
+                    className="p-1.5 rounded-lg bg-black/60 hover:bg-gray-800 text-gray-300 hover:text-white backdrop-blur-sm border border-white/10 transition-all cursor-pointer"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUpdateWidgetPos(widget.id, widget.gridPos, {
+                        ...pos,
+                        rotation: Math.min(15, (pos.rotation || 0) + 2),
+                      });
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    title="Tilt clockwise"
+                    className="p-1.5 rounded-lg bg-black/60 hover:bg-gray-800 text-gray-300 hover:text-white backdrop-blur-sm border border-white/10 transition-all cursor-pointer"
+                  >
+                    <RotateCw className="w-3 h-3" />
+                  </button>
+                </>
+              )}
               {onUpdateWidget && (
                 <button
                   type="button"
@@ -453,7 +558,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   latitude={widget.config?.latitude}
                   longitude={widget.config?.longitude}
                   unit={widget.config?.unit || 'F'}
-                  clockFace={widget.config?.face || 'digital'}
+                  clockFace={widget.config?.clockFace || widget.config?.face || 'digital'}
                 />
               ) : widget.type === 'countdown' ? (
                 <CountdownWidget
@@ -473,6 +578,22 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 <PhotoFrameWidget
                   initialStyle={widget.config?.displayStyle || 'ken_burns'}
                   rotationIntervalSec={widget.config?.rotationIntervalSec || 15}
+                  customPhotos={widget.config?.customPhotos}
+                  initialSourceLabel={widget.config?.sourceLabel}
+                  onUpdateConfig={(updates) => {
+                    if (onUpdateWidget) {
+                      onUpdateWidget(widget.id, {
+                        config: { ...widget.config, ...updates },
+                      });
+                    }
+                  }}
+                />
+              ) : widget.type === 'sticky_notes' ? (
+                <StickyNotesWidget
+                  notes={notes}
+                  onAddNote={onAddNote}
+                  onUpdateNote={onUpdateNote}
+                  onDeleteNote={onDeleteNote}
                 />
               ) : null}
             </div>
@@ -492,6 +613,10 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         };
 
         const isDragging = draggingId === note.id;
+        const isExpiringSoon =
+          note.expiresAt &&
+          new Date(note.expiresAt).getTime() - now.getTime() < 12 * 60 * 60 * 1000;
+
         return (
           <div
             key={note.id}
@@ -516,7 +641,11 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               transition: isDragging || resizingId === note.id ? 'none' : 'box-shadow 0.2s, transform 0.15s ease-out',
             }}
             className={`group rounded-2xl p-5 shadow-2xl text-gray-900 cursor-grab active:cursor-grabbing border border-black/10 touch-none select-none transition-shadow ${
-              isDragging ? 'ring-2 ring-blue-500/70 shadow-2xl' : 'hover:shadow-yellow-500/10'
+              isDragging
+                ? 'ring-2 ring-blue-500/70 shadow-2xl'
+                : isExpiringSoon
+                ? 'ring-2 ring-amber-500 shadow-amber-500/20'
+                : 'hover:shadow-yellow-500/10'
             } flex flex-col justify-between`}
           >
             {/* Red Visual Pushpin */}
@@ -531,7 +660,12 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   <span className="truncate">{note.title}</span>
                   <div className="flex items-center gap-1.5">
                     {note.expiresAt && (
-                      <span className="text-[10px] text-gray-700 bg-black/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <span
+                        title={`Expires: ${new Date(note.expiresAt).toLocaleString()}`}
+                        className={`text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                          isExpiringSoon ? 'bg-amber-500/30 text-amber-950 font-bold' : 'bg-black/10 text-gray-700'
+                        }`}
+                      >
                         <Clock className="w-3 h-3" />
                         {new Date(note.expiresAt).toLocaleDateString([], { month: 'numeric', day: 'numeric' })}
                       </span>
@@ -566,8 +700,56 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               )}
             </div>
 
-            {/* Note Bottom Actions */}
-            <div className="flex items-center justify-end pt-2 border-t border-black/10 mt-2 opacity-50 group-hover:opacity-100 transition-opacity">
+            {/* Note Bottom Actions: Tilt & Archive/Delete */}
+            <div className="flex items-center justify-between pt-2 border-t border-black/10 mt-2 opacity-50 group-hover:opacity-100 transition-opacity pr-4">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onUpdateNotePos(note.id, {
+                      ...pos,
+                      rotation: Math.max(-15, (pos.rotation || 0) - 2),
+                    });
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="p-1 rounded text-gray-700 hover:bg-black/10 transition-all cursor-pointer"
+                  title="Tilt counter-clockwise"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onUpdateNotePos(note.id, {
+                      ...pos,
+                      rotation: 0,
+                    });
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="px-1.5 py-0.5 rounded text-[10px] font-mono text-gray-700 hover:bg-black/10 transition-all cursor-pointer"
+                  title="Straighten note (0°)"
+                >
+                  0°
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onUpdateNotePos(note.id, {
+                      ...pos,
+                      rotation: Math.min(15, (pos.rotation || 0) + 2),
+                    });
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="p-1 rounded text-gray-700 hover:bg-black/10 transition-all cursor-pointer"
+                  title="Tilt clockwise"
+                >
+                  <RotateCw className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -575,10 +757,26 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
                 className="p-1.5 rounded-lg text-gray-600 hover:text-red-700 hover:bg-black/10 transition-all cursor-pointer"
-                title="Delete note"
+                title="Archive note to Trash"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
+            </div>
+
+            {/* Bottom Right Resize Handle for Sticky Note */}
+            <div
+              onPointerDown={(e) => handleResizePointerDown(e, note.id, 'note', pos)}
+              title="Drag to resize note"
+              className="absolute bottom-1 right-1 p-1.5 cursor-nwse-resize z-20 opacity-40 group-hover:opacity-100 hover:opacity-100 touch-none text-gray-700 hover:text-black transition-opacity"
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" className="fill-current">
+                <circle cx="10" cy="10" r="1.5" />
+                <circle cx="6" cy="10" r="1.5" />
+                <circle cx="10" cy="6" r="1.5" />
+                <circle cx="2" cy="10" r="1.5" />
+                <circle cx="6" cy="6" r="1.5" />
+                <circle cx="10" cy="2" r="1.5" />
+              </svg>
             </div>
           </div>
         );
@@ -598,20 +796,45 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               </button>
             </div>
 
-            {/* Color Palette Picker */}
-            <div className="flex items-center gap-2">
-              {COLOR_PALETTE.map((color) => (
-                <button
-                  key={color}
-                  type="button"
-                  onClick={() => setSelectedColor(color)}
-                  style={{ backgroundColor: color }}
-                  className={`w-7 h-7 rounded-full transition-transform ${
-                    selectedColor === color ? 'scale-125 ring-2 ring-white ring-offset-2 ring-offset-gray-900' : 'opacity-70'
-                  }`}
-                />
-              ))}
+            {/* Color Palette Picker & Expiration Selector */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {COLOR_PALETTE.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={() => setSelectedColor(color)}
+                    style={{ backgroundColor: color }}
+                    className={`w-6 h-6 rounded-full transition-transform ${
+                      selectedColor === color ? 'scale-125 ring-2 ring-white ring-offset-2 ring-offset-gray-900' : 'opacity-70'
+                    }`}
+                  />
+                ))}
+              </div>
+
+              <div className="flex items-center gap-1 text-xs text-gray-400">
+                <Clock className="w-3.5 h-3.5 text-blue-400" />
+                <select
+                  value={expiryOption}
+                  onChange={(e) => setExpiryOption(e.target.value as any)}
+                  className="bg-gray-950 border border-gray-800 rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none"
+                >
+                  <option value="permanent">Permanent</option>
+                  <option value="1day">Expire 24h</option>
+                  <option value="3days">Expire 3d</option>
+                  <option value="custom">Custom Date</option>
+                </select>
+              </div>
             </div>
+
+            {expiryOption === 'custom' && (
+              <input
+                type="datetime-local"
+                value={customExpiry}
+                onChange={(e) => setCustomExpiry(e.target.value)}
+                className="w-full rounded-xl bg-gray-950 border border-gray-800 p-2 text-xs text-white"
+              />
+            )}
 
             {/* Format Toggle: Message vs Checklist */}
             <div className="flex rounded-lg bg-gray-950 p-1 border border-gray-800 text-xs font-semibold">
@@ -706,6 +929,82 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         </div>
       )}
 
+      {/* Trash / Archive Recovery Drawer Modal */}
+      {isTrashOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-md rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl p-5 space-y-4 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-gray-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Archive className="w-4 h-4 text-amber-400" />
+                <span className="text-sm font-bold text-white">
+                  Archived & Expired Notes ({trashNotes.length})
+                </span>
+              </div>
+              <button
+                onClick={() => setIsTrashOpen(false)}
+                className="text-gray-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+              {trashNotes.length === 0 ? (
+                <div className="text-center py-8 text-xs text-gray-500">
+                  Trash is empty.
+                </div>
+              ) : (
+                trashNotes.map((note) => (
+                  <div
+                    key={note.id}
+                    className="p-3 rounded-xl bg-gray-950 border border-gray-800 flex items-center justify-between gap-3"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: note.bgColor || '#fef08a' }}
+                        />
+                        <span className="text-xs font-bold text-white truncate">
+                          {note.title || note.content || 'Checklist Note'}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-gray-500 mt-0.5">
+                        {note.expiresAt && new Date(note.expiresAt) <= now
+                          ? `Expired on ${new Date(note.expiresAt).toLocaleDateString()}`
+                          : 'Archived'}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onUpdateNote(note.id, { archivedAt: null, expiresAt: null })
+                        }
+                        className="px-2.5 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 text-xs font-semibold cursor-pointer transition-all"
+                      >
+                        Restore
+                      </button>
+                      {onPermanentlyDeleteNote && (
+                        <button
+                          type="button"
+                          onClick={() => onPermanentlyDeleteNote(note.id)}
+                          className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 cursor-pointer transition-all"
+                          title="Delete permanently"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tile Settings & Configuration Modal */}
       {editingWidget && (
         <WidgetSettingsModal
@@ -718,20 +1017,42 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             }
           }}
           onOpenPhotoSources={() => {
-            setIsPhotoSourcesOpen(true);
+            setPhotoSourcesTargetWidget(editingWidget);
           }}
         />
       )}
 
-      {/* Global Photo Sources Hub for Corkboard */}
+      {/* Per-Widget Photo Sources Hub opened from Tile Settings */}
       <PhotoSourcesModal
-        isOpen={isPhotoSourcesOpen}
-        onClose={() => setIsPhotoSourcesOpen(false)}
-        currentStyle="ken_burns"
-        onStyleChange={() => {}}
-        rotationIntervalSec={15}
-        onRotationIntervalChange={() => {}}
-        onPhotosLoaded={() => {}}
+        isOpen={photoSourcesTargetWidget !== null}
+        onClose={() => setPhotoSourcesTargetWidget(null)}
+        currentStyle={photoSourcesTargetWidget?.config?.displayStyle || 'ken_burns'}
+        onStyleChange={(newStyle) => {
+          if (photoSourcesTargetWidget && onUpdateWidget) {
+            onUpdateWidget(photoSourcesTargetWidget.id, {
+              config: { ...photoSourcesTargetWidget.config, displayStyle: newStyle },
+            });
+          }
+        }}
+        rotationIntervalSec={photoSourcesTargetWidget?.config?.rotationIntervalSec || 15}
+        onRotationIntervalChange={(newSec) => {
+          if (photoSourcesTargetWidget && onUpdateWidget) {
+            onUpdateWidget(photoSourcesTargetWidget.id, {
+              config: { ...photoSourcesTargetWidget.config, rotationIntervalSec: newSec },
+            });
+          }
+        }}
+        onPhotosLoaded={(newPhotos, sourceName) => {
+          if (photoSourcesTargetWidget && onUpdateWidget && newPhotos.length > 0) {
+            onUpdateWidget(photoSourcesTargetWidget.id, {
+              config: {
+                ...photoSourcesTargetWidget.config,
+                customPhotos: newPhotos,
+                sourceLabel: sourceName,
+              },
+            });
+          }
+        }}
       />
     </div>
   );

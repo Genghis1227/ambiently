@@ -43,6 +43,7 @@ interface DashboardState {
   setCarouselDuration: (seconds: number) => Promise<void>;
   pauseCarouselTemporarily: (durationMs?: number) => void;
   toggleNightModeManual: () => void;
+  updateSettings: (updates: Partial<AppSettings>) => Promise<void>;
   setPinLock: (pin: string | null) => Promise<void>;
   unlockKiosk: (enteredPin: string) => boolean;
   lockKiosk: () => void;
@@ -57,6 +58,7 @@ interface DashboardState {
   addNote: (note: Partial<StickyNoteItem>) => Promise<void>;
   updateNote: (noteId: string, updates: Partial<StickyNoteItem>) => Promise<void>;
   deleteNote: (noteId: string) => Promise<void>;
+  permanentlyDeleteNote: (noteId: string) => Promise<void>;
   updateWidgetPosition: (
     widgetId: string,
     gridPos?: DashboardWidget['gridPos'],
@@ -270,6 +272,17 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     });
   },
 
+  updateSettings: async (updates) => {
+    const updated: AppSettings = {
+      ...get().settings,
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+    await db.settings.put(updated);
+    set({ settings: updated });
+    get().saveLocalBackup();
+  },
+
   setPinLock: async (pin) => {
     let pinHash: string | null = null;
     let pinLockEnabled = false;
@@ -390,6 +403,21 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     await db.notes.put(updated);
     set({
       notes: get().notes.map((n) => (n.id === noteId ? updated : n)),
+    });
+    get().saveLocalBackup();
+  },
+
+  permanentlyDeleteNote: async (noteId) => {
+    const existing = get().notes.find((n) => n.id === noteId);
+    if (!existing) return;
+    const updated: StickyNoteItem = {
+      ...existing,
+      deleted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    await db.notes.put(updated);
+    set({
+      notes: get().notes.filter((n) => n.id !== noteId),
     });
     get().saveLocalBackup();
   },

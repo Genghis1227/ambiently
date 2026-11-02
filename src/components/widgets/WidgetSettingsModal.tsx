@@ -4,8 +4,13 @@ import {
   Settings,
   Check,
   Sliders,
+  Plus,
+  Trash2,
+  Search,
+  Calendar,
 } from 'lucide-react';
 import type { DashboardWidget } from '../../types/dashboard';
+import type { CalendarSource } from '../../services/feeds';
 
 interface WidgetSettingsModalProps {
   isOpen: boolean;
@@ -14,6 +19,25 @@ interface WidgetSettingsModalProps {
   onSave: (widgetId: string, updates: { title?: string; config: Record<string, any> }) => void;
   onOpenPhotoSources?: () => void;
 }
+
+const DEFAULT_CALENDAR_SOURCES: CalendarSource[] = [
+  {
+    id: 'us-holidays',
+    name: 'US Holidays',
+    url: 'https://calendar.google.com/calendar/ical/en.usa%23holiday%40group.v.calendar.google.com/public/basic.ics',
+    color: '#3b82f6',
+    enabled: true,
+  },
+];
+
+const CALENDAR_COLORS = [
+  '#3b82f6', // Blue
+  '#10b981', // Emerald
+  '#f59e0b', // Amber
+  '#ec4899', // Pink
+  '#8b5cf6', // Purple
+  '#ef4444', // Red
+];
 
 export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   isOpen,
@@ -37,9 +61,11 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const [tempUnit, setTempUnit] = useState<'F' | 'C'>('F');
   const [latitude, setLatitude] = useState<number>(30.2672);
   const [longitude, setLongitude] = useState<number>(-97.7431);
+  const [geoLoading, setGeoLoading] = useState(false);
+  const [geoStatus, setGeoStatus] = useState('');
 
   // Clock states
-  const [clockFace, setClockFace] = useState<'digital' | 'minimal'>('digital');
+  const [clockFace, setClockFace] = useState<'digital' | 'minimal' | 'analog'>('digital');
   const [showSeconds, setShowSeconds] = useState(true);
 
   // RSS states
@@ -47,12 +73,17 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
 
   // Calendar states
   const [calendarDefaultView, setCalendarDefaultView] = useState<'agenda' | 'month'>('agenda');
+  const [calendarSources, setCalendarSources] = useState<CalendarSource[]>(DEFAULT_CALENDAR_SOURCES);
+  const [newCalName, setNewCalName] = useState('');
+  const [newCalUrl, setNewCalUrl] = useState('');
+  const [newCalColor, setNewCalColor] = useState(CALENDAR_COLORS[0]);
 
   // Populate initial state when modal opens with a widget
   useEffect(() => {
     if (!widget) return;
 
     setTitle(widget.title || '');
+    setGeoStatus('');
 
     if (widget.type === 'countdown') {
       const targetStr = widget.config?.targetDate || '2026-12-25T00:00:00Z';
@@ -77,6 +108,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setTempUnit(widget.config?.unit || 'F');
       setLatitude(widget.config?.latitude ?? 30.2672);
       setLongitude(widget.config?.longitude ?? -97.7431);
+      setClockFace(widget.config?.clockFace || widget.config?.face || 'digital');
     } else if (widget.type === 'clock') {
       setClockFace(widget.config?.clockFace || 'digital');
       setShowSeconds(widget.config?.showSeconds ?? true);
@@ -84,10 +116,68 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setRssFeedUrl(widget.config?.feedUrl || 'https://news.ycombinator.com/rss');
     } else if (widget.type === 'calendar') {
       setCalendarDefaultView(widget.config?.defaultView || 'agenda');
+      setCalendarSources(
+        Array.isArray(widget.config?.sources) && widget.config.sources.length > 0
+          ? widget.config.sources
+          : DEFAULT_CALENDAR_SOURCES
+      );
     }
   }, [widget, isOpen]);
 
   if (!isOpen || !widget) return null;
+
+  const handleLookupCity = async () => {
+    if (!locationName.trim()) return;
+    setGeoLoading(true);
+    setGeoStatus('Searching coordinates...');
+    try {
+      const q = encodeURIComponent(locationName.trim().split(',')[0]);
+      const res = await fetch(
+        `https://geocoding-api.open-meteo.com/v1/search?name=${q}&count=1&language=en&format=json`
+      );
+      const data = await res.json();
+      if (data.results && data.results.length > 0) {
+        const hit = data.results[0];
+        const formatted = hit.admin1
+          ? `${hit.name}, ${hit.admin1}`
+          : `${hit.name}, ${hit.country || ''}`;
+        setLocationName(formatted);
+        setLatitude(Number(hit.latitude.toFixed(4)));
+        setLongitude(Number(hit.longitude.toFixed(4)));
+        setGeoStatus(`Found: ${formatted} (${hit.latitude.toFixed(2)}, ${hit.longitude.toFixed(2)})`);
+      } else {
+        setGeoStatus('City not found. Try just the city name (e.g., Seattle).');
+      }
+    } catch {
+      setGeoStatus('Failed to lookup coordinates.');
+    } finally {
+      setGeoLoading(false);
+    }
+  };
+
+  const handleAddCalendarSource = () => {
+    if (!newCalUrl.trim()) return;
+    const added: CalendarSource = {
+      id: `cal-${Date.now()}`,
+      name: newCalName.trim() || 'Custom Calendar',
+      url: newCalUrl.trim(),
+      color: newCalColor,
+      enabled: true,
+    };
+    setCalendarSources([...calendarSources, added]);
+    setNewCalName('');
+    setNewCalUrl('');
+  };
+
+  const handleToggleCalendarSource = (id: string) => {
+    setCalendarSources(
+      calendarSources.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s))
+    );
+  };
+
+  const handleRemoveCalendarSource = (id: string) => {
+    setCalendarSources(calendarSources.filter((s) => s.id !== id));
+  };
 
   const handleSave = () => {
     const configUpdates: Record<string, any> = { ...widget.config };
@@ -105,6 +195,10 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.unit = tempUnit;
       configUpdates.latitude = Number(latitude);
       configUpdates.longitude = Number(longitude);
+      if (widget.type === 'clock_weather') {
+        configUpdates.face = clockFace;
+        configUpdates.clockFace = clockFace;
+      }
     } else if (widget.type === 'clock') {
       configUpdates.clockFace = clockFace;
       configUpdates.showSeconds = showSeconds;
@@ -112,6 +206,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.feedUrl = rssFeedUrl.trim();
     } else if (widget.type === 'calendar') {
       configUpdates.defaultView = calendarDefaultView;
+      configUpdates.sources = calendarSources;
     }
 
     onSave(widget.id, {
@@ -282,15 +377,31 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
             <div className="space-y-4 pt-2 border-t border-gray-800">
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
-                  Location Name
+                  City / Location Name
                 </label>
-                <input
-                  type="text"
-                  value={locationName}
-                  onChange={(e) => setLocationName(e.target.value)}
-                  placeholder="e.g., Austin, TX"
-                  className="w-full rounded-xl bg-gray-950 border border-gray-800 p-2.5 text-xs text-white focus:outline-none focus:border-blue-500"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={locationName}
+                    onChange={(e) => setLocationName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleLookupCity()}
+                    placeholder="e.g., Austin, TX or Tokyo"
+                    className="flex-1 rounded-xl bg-gray-950 border border-gray-800 p-2.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleLookupCity}
+                    disabled={geoLoading}
+                    className="px-3 py-2 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all"
+                    title="Auto-lookup latitude and longitude for this city"
+                  >
+                    <Search className="w-3.5 h-3.5" />
+                    <span>{geoLoading ? 'Searching...' : 'Lookup City'}</span>
+                  </button>
+                </div>
+                {geoStatus && (
+                  <span className="text-[11px] text-cyan-400 mt-1 block">{geoStatus}</span>
+                )}
               </div>
 
               <div>
@@ -352,54 +463,175 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
             </div>
           )}
 
-          {/* Clock Settings */}
-          {widget.type === 'clock' && (
+          {/* Clock Settings (For both Clock and Clock + Weather Combo) */}
+          {(widget.type === 'clock' || widget.type === 'clock_weather') && (
             <div className="space-y-4 pt-2 border-t border-gray-800">
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
-                  Clock Face
+                  Clock Face Style
                 </label>
-                <div className="flex gap-2">
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'digital', label: 'Digital' },
+                    { id: 'minimal', label: 'Minimalist' },
+                    { id: 'analog', label: 'Analog Dial' },
+                  ].map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setClockFace(f.id as any)}
+                      className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        clockFace === f.id
+                          ? 'bg-blue-600/30 border border-blue-500 text-blue-300'
+                          : 'bg-gray-950 border border-gray-800 text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {widget.type === 'clock' && (
+                <div className="flex items-center justify-between p-3 rounded-xl bg-gray-950 border border-gray-800">
+                  <span className="text-xs text-gray-300">Show Seconds Hand / Ticker:</span>
                   <button
                     type="button"
-                    onClick={() => setClockFace('digital')}
-                    className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      clockFace === 'digital'
-                        ? 'bg-blue-600/30 border border-blue-500 text-blue-300'
-                        : 'bg-gray-950 border border-gray-800 text-gray-400'
+                    onClick={() => setShowSeconds(!showSeconds)}
+                    className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                      showSeconds ? 'bg-blue-600' : 'bg-gray-700'
                     }`}
                   >
-                    Digital (Standard)
+                    <div
+                      className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                        showSeconds ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Calendar Settings & Multi-Source iCal Feed Manager */}
+          {widget.type === 'calendar' && (
+            <div className="space-y-4 pt-2 border-t border-gray-800">
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
+                  Default Calendar View
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCalendarDefaultView('agenda')}
+                    className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      calendarDefaultView === 'agenda'
+                        ? 'bg-emerald-600/30 border border-emerald-500 text-emerald-300'
+                        : 'bg-gray-950 border border-gray-800 text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    Agenda Schedule
                   </button>
                   <button
                     type="button"
-                    onClick={() => setClockFace('minimal')}
-                    className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      clockFace === 'minimal'
-                        ? 'bg-blue-600/30 border border-blue-500 text-blue-300'
-                        : 'bg-gray-950 border border-gray-800 text-gray-400'
+                    onClick={() => setCalendarDefaultView('month')}
+                    className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      calendarDefaultView === 'month'
+                        ? 'bg-emerald-600/30 border border-emerald-500 text-emerald-300'
+                        : 'bg-gray-950 border border-gray-800 text-gray-400 hover:text-white'
                     }`}
                   >
-                    Minimalist
+                    Monthly Grid
                   </button>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between p-3 rounded-xl bg-gray-950 border border-gray-800">
-                <span className="text-xs text-gray-300">Show Seconds:</span>
-                <button
-                  type="button"
-                  onClick={() => setShowSeconds(!showSeconds)}
-                  className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
-                    showSeconds ? 'bg-blue-600' : 'bg-gray-700'
-                  }`}
-                >
-                  <div
-                    className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                      showSeconds ? 'translate-x-5' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
+              {/* Active Calendar Feeds List */}
+              <div className="space-y-2 pt-2 border-t border-gray-800/70">
+                <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Connected iCal / Webcal Feeds ({calendarSources.length})</span>
+                </label>
+
+                <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                  {calendarSources.map((src) => (
+                    <div
+                      key={src.id}
+                      className="flex items-center justify-between p-2.5 rounded-xl bg-gray-950 border border-gray-800 text-xs"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <input
+                          type="checkbox"
+                          checked={src.enabled}
+                          onChange={() => handleToggleCalendarSource(src.id)}
+                          className="rounded accent-emerald-500 cursor-pointer"
+                        />
+                        <span
+                          className="w-3 h-3 rounded-full shrink-0"
+                          style={{ backgroundColor: src.color }}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold text-gray-200 truncate">{src.name}</div>
+                          <div className="text-[10px] text-gray-500 truncate">{src.url}</div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveCalendarSource(src.id)}
+                        className="p-1.5 text-gray-500 hover:text-red-400 transition-colors cursor-pointer"
+                        title="Remove calendar feed"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Add New iCal / Webcal URL Form */}
+              <div className="p-3 rounded-xl bg-gray-950/70 border border-gray-800 space-y-2.5">
+                <span className="text-xs font-bold text-gray-200 block">
+                  + Add Google, Apple, or Outlook iCal Feed (.ics / webcal://)
+                </span>
+                <input
+                  type="text"
+                  value={newCalName}
+                  onChange={(e) => setNewCalName(e.target.value)}
+                  placeholder="Calendar Label (e.g., Family Schedule, Work)"
+                  className="w-full rounded-lg bg-gray-900 border border-gray-800 p-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
+                />
+                <input
+                  type="url"
+                  value={newCalUrl}
+                  onChange={(e) => setNewCalUrl(e.target.value)}
+                  placeholder="https://calendar.google.com/calendar/ical/.../basic.ics"
+                  className="w-full rounded-lg bg-gray-900 border border-gray-800 p-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
+                />
+                <div className="flex items-center justify-between pt-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] text-gray-400 mr-1">Color Tag:</span>
+                    {CALENDAR_COLORS.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setNewCalColor(c)}
+                        style={{ backgroundColor: c }}
+                        className={`w-5 h-5 rounded-full transition-transform cursor-pointer ${
+                          newCalColor === c ? 'scale-125 ring-2 ring-white' : 'opacity-70'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddCalendarSource}
+                    disabled={!newCalUrl.trim()}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-xs font-bold text-white flex items-center gap-1 cursor-pointer transition-all"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Feed</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}

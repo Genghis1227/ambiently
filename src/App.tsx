@@ -24,7 +24,10 @@ export function App() {
     setActiveTabId,
     unlockKiosk,
     isUnlocked,
+    isCarouselPaused,
+    pauseCarouselTemporarily,
     toggleNightModeManual,
+    updateSettings,
     updateNotePosition,
     updateWidgetPosition,
     addWidget,
@@ -33,6 +36,7 @@ export function App() {
     addNote,
     updateNote,
     deleteNote,
+    permanentlyDeleteNote,
     addTab,
   } = useDashboardStore();
 
@@ -134,13 +138,31 @@ export function App() {
     };
   }, [settings.wakeLockEnabled]);
 
+  // Scheduled Night Mode Checker (checks every 60s for exact start/end transitions)
+  useEffect(() => {
+    if (!settings.nightModeStart || !settings.nightModeEnd) return;
+
+    const checkSchedule = () => {
+      const now = new Date();
+      const currentHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      if (currentHHMM === settings.nightModeStart && !settings.nightModeEnabled) {
+        updateSettings({ nightModeEnabled: true });
+      } else if (currentHHMM === settings.nightModeEnd && settings.nightModeEnabled) {
+        updateSettings({ nightModeEnabled: false });
+      }
+    };
+
+    const timer = setInterval(checkSchedule, 60000);
+    return () => clearInterval(timer);
+  }, [settings.nightModeStart, settings.nightModeEnd, settings.nightModeEnabled, updateSettings]);
+
   const visibleTabs = tabs.filter((t) =>
     t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false
   );
 
-  // Tab auto-carousel rotation
+  // Tab auto-carousel rotation (pauses automatically when user interacts)
   useEffect(() => {
-    if (!settings.carouselEnabled || visibleTabs.length <= 1) return;
+    if (!settings.carouselEnabled || isCarouselPaused || visibleTabs.length <= 1) return;
 
     const currentTab = visibleTabs.find((t) => t.id === activeTabId);
     const duration = currentTab?.autoRotateDurationSec || settings.defaultRotateDurationSec || 30;
@@ -152,7 +174,7 @@ export function App() {
     }, duration * 1000);
 
     return () => clearInterval(interval);
-  }, [settings.carouselEnabled, settings.defaultRotateDurationSec, visibleTabs, activeTabId, setActiveTabId]);
+  }, [settings.carouselEnabled, isCarouselPaused, settings.defaultRotateDurationSec, visibleTabs, activeTabId, setActiveTabId]);
 
   if (!isInitialized) {
     return (
@@ -200,7 +222,14 @@ export function App() {
   }[settings.dockPosition];
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-[#090d16] select-none">
+    <div
+      onPointerDown={() => {
+        if (settings.carouselEnabled) {
+          pauseCarouselTemporarily(20000);
+        }
+      }}
+      className="relative w-screen h-screen overflow-hidden bg-[#090d16] select-none"
+    >
       {/* 
         ISOLATED CANVAS SCALER:
         Scale transform is applied ONLY to the board canvas.
@@ -222,6 +251,7 @@ export function App() {
           onAddNote={addNote}
           onUpdateNote={updateNote}
           onDeleteNote={deleteNote}
+          onPermanentlyDeleteNote={permanentlyDeleteNote}
           onRemoveWidget={removeWidget}
           onOpenAddWidget={() => setIsAddWidgetOpen(true)}
           onUpdateWidget={updateWidget}
