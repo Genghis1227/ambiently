@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Trash2, GripVertical, ArrowLeftRight } from 'lucide-react';
+import { Trash2, GripVertical, ArrowLeftRight, Settings } from 'lucide-react';
 import type { DashboardWidget, StickyNoteItem } from '../../types/dashboard';
 import { ClockWeatherWidget } from '../widgets/ClockWeatherWidget';
 import { ClockWidget } from '../widgets/ClockWidget';
@@ -10,6 +10,8 @@ import { StickyNotesWidget } from '../widgets/StickyNotesWidget';
 import { CalendarWidget } from '../widgets/CalendarWidget';
 import { RssWidget } from '../widgets/RssWidget';
 import { PhotoFrameWidget } from '../widgets/PhotoFrameWidget';
+import { WidgetSettingsModal } from '../widgets/WidgetSettingsModal';
+import { PhotoSourcesModal } from '../photos/PhotoSourcesModal';
 
 interface BentoGridProps {
   widgets: DashboardWidget[];
@@ -19,6 +21,7 @@ interface BentoGridProps {
   onUpdateNote: (noteId: string, updates: Partial<StickyNoteItem>) => void;
   onDeleteNote: (noteId: string) => void;
   onRemoveWidget?: (widgetId: string) => void;
+  onUpdateWidget?: (widgetId: string, updates: Partial<DashboardWidget>) => void;
   onUpdateWidgetPosition?: (
     widgetId: string,
     gridPos: DashboardWidget['gridPos'],
@@ -41,6 +44,7 @@ export const BentoGrid: React.FC<BentoGridProps> = ({
   onUpdateNote,
   onDeleteNote,
   onRemoveWidget,
+  onUpdateWidget,
   onUpdateWidgetPosition,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -49,6 +53,8 @@ export const BentoGrid: React.FC<BentoGridProps> = ({
     null
   );
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [editingWidget, setEditingWidget] = useState<DashboardWidget | null>(null);
+  const [isPhotoSourcesOpen, setIsPhotoSourcesOpen] = useState(false);
   const [resizingId, setResizingId] = useState<string | null>(null);
   const [resizePreview, setResizePreview] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
 
@@ -342,6 +348,18 @@ export const BentoGrid: React.FC<BentoGridProps> = ({
                 >
                   {w}×{h}
                 </button>
+
+                {/* Settings / Edit Button */}
+                {onUpdateWidget && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingWidget(widget)}
+                    title="Configure tile title and settings"
+                    className="p-1.5 rounded-lg bg-black/60 hover:bg-gray-800 text-gray-300 hover:text-white backdrop-blur-sm border border-white/10 transition-all cursor-pointer"
+                  >
+                    <Settings className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             )}
 
@@ -400,7 +418,7 @@ export const BentoGrid: React.FC<BentoGridProps> = ({
               />
             ) : widget.type === 'countdown' ? (
               <CountdownWidget
-                eventName={widget.config?.eventName}
+                eventName={widget.title || widget.config?.eventName}
                 targetDate={widget.config?.targetDate}
               />
             ) : widget.type === 'quotes' ? (
@@ -428,6 +446,34 @@ export const BentoGrid: React.FC<BentoGridProps> = ({
           </div>
         );
       })}
+
+      {/* Tile Settings & Configuration Modal */}
+      {editingWidget && (
+        <WidgetSettingsModal
+          isOpen={editingWidget !== null}
+          onClose={() => setEditingWidget(null)}
+          widget={editingWidget}
+          onSave={(widgetId, updates) => {
+            if (onUpdateWidget) {
+              onUpdateWidget(widgetId, updates);
+            }
+          }}
+          onOpenPhotoSources={() => {
+            setIsPhotoSourcesOpen(true);
+          }}
+        />
+      )}
+
+      {/* Global Photo Sources Hub for BentoGrid */}
+      <PhotoSourcesModal
+        isOpen={isPhotoSourcesOpen}
+        onClose={() => setIsPhotoSourcesOpen(false)}
+        currentStyle="ken_burns"
+        onStyleChange={() => {}}
+        rotationIntervalSec={15}
+        onRotationIntervalChange={() => {}}
+        onPhotosLoaded={() => {}}
+      />
     </div>
   );
 };

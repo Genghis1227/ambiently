@@ -29,6 +29,7 @@ export function App() {
     updateWidgetPosition,
     addWidget,
     removeWidget,
+    updateWidget,
     addNote,
     updateNote,
     deleteNote,
@@ -222,6 +223,7 @@ export function App() {
             onDeleteNote={deleteNote}
             onRemoveWidget={removeWidget}
             onOpenAddWidget={() => setIsAddWidgetOpen(true)}
+            onUpdateWidget={updateWidget}
           />
         ) : (
           <BentoGrid
@@ -233,6 +235,7 @@ export function App() {
             onDeleteNote={deleteNote}
             onRemoveWidget={removeWidget}
             onUpdateWidgetPosition={updateWidgetPosition}
+            onUpdateWidget={updateWidget}
           />
         )}
       </div>

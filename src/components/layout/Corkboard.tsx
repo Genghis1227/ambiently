@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import type { StickyNoteItem, DashboardWidget } from '../../types/dashboard';
-import { CheckSquare, Square, Pin, Plus, Trash2, Clock, X, Maximize2, Minimize2 } from 'lucide-react';
+import { CheckSquare, Square, Pin, Plus, Trash2, Clock, X, Maximize2, Minimize2, Settings } from 'lucide-react';
 import { ClockWeatherWidget } from '../widgets/ClockWeatherWidget';
 import { ClockWidget } from '../widgets/ClockWidget';
 import { WeatherWidget } from '../widgets/WeatherWidget';
@@ -9,6 +9,8 @@ import { QuotesWidget } from '../widgets/QuotesWidget';
 import { CalendarWidget } from '../widgets/CalendarWidget';
 import { RssWidget } from '../widgets/RssWidget';
 import { PhotoFrameWidget } from '../widgets/PhotoFrameWidget';
+import { WidgetSettingsModal } from '../widgets/WidgetSettingsModal';
+import { PhotoSourcesModal } from '../photos/PhotoSourcesModal';
 
 interface CorkboardProps {
   notes: StickyNoteItem[];
@@ -21,6 +23,7 @@ interface CorkboardProps {
   onDeleteNote: (noteId: string) => void;
   onRemoveWidget?: (widgetId: string) => void;
   onOpenAddWidget?: () => void;
+  onUpdateWidget?: (widgetId: string, updates: Partial<DashboardWidget>) => void;
 }
 
 const COLOR_PALETTE = [
@@ -43,11 +46,14 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   onDeleteNote,
   onRemoveWidget,
   onOpenAddWidget,
+  onUpdateWidget,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [draggingType, setDraggingType] = useState<'note' | 'widget'>('note');
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [editingWidget, setEditingWidget] = useState<DashboardWidget | null>(null);
+  const [isPhotoSourcesOpen, setIsPhotoSourcesOpen] = useState(false);
   const [resizingId, setResizingId] = useState<string | null>(null);
   const [resizingType, setResizingType] = useState<'note' | 'widget'>('widget');
   const [resizeStart, setResizeStart] = useState<{ startX: number; startY: number; startW: number; startH: number }>({
@@ -343,8 +349,22 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               </div>
             )}
 
-            {/* Top Right Widget Controls: Maximize/Restore & Remove */}
+            {/* Top Right Widget Controls: Settings, Maximize/Restore & Remove */}
             <div className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              {onUpdateWidget && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingWidget(widget);
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  title="Configure tile title and settings"
+                  className="p-1.5 rounded-lg bg-black/60 hover:bg-gray-800 text-gray-300 hover:text-white backdrop-blur-sm border border-white/10 transition-all cursor-pointer"
+                >
+                  <Settings className="w-3.5 h-3.5" />
+                </button>
+              )}
               {onUpdateWidgetPos && (
                 <button
                   type="button"
@@ -437,7 +457,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 />
               ) : widget.type === 'countdown' ? (
                 <CountdownWidget
-                  eventName={widget.config?.eventName}
+                  eventName={widget.title || widget.config?.eventName}
                   targetDate={widget.config?.targetDate}
                 />
               ) : widget.type === 'quotes' ? (
@@ -685,6 +705,34 @@ export const Corkboard: React.FC<CorkboardProps> = ({
           </div>
         </div>
       )}
+
+      {/* Tile Settings & Configuration Modal */}
+      {editingWidget && (
+        <WidgetSettingsModal
+          isOpen={editingWidget !== null}
+          onClose={() => setEditingWidget(null)}
+          widget={editingWidget}
+          onSave={(widgetId, updates) => {
+            if (onUpdateWidget) {
+              onUpdateWidget(widgetId, updates);
+            }
+          }}
+          onOpenPhotoSources={() => {
+            setIsPhotoSourcesOpen(true);
+          }}
+        />
+      )}
+
+      {/* Global Photo Sources Hub for Corkboard */}
+      <PhotoSourcesModal
+        isOpen={isPhotoSourcesOpen}
+        onClose={() => setIsPhotoSourcesOpen(false)}
+        currentStyle="ken_burns"
+        onStyleChange={() => {}}
+        rotationIntervalSec={15}
+        onRotationIntervalChange={() => {}}
+        onPhotosLoaded={() => {}}
+      />
     </div>
   );
 };

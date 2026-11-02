@@ -28,6 +28,15 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   const [sourceLabel, setSourceLabel] = useState<string>('Curated');
   const [isSourcesModalOpen, setIsSourcesModalOpen] = useState(false);
 
+  // Sync props to state when widget config updates
+  useEffect(() => {
+    if (initialStyle) setStyle(initialStyle);
+  }, [initialStyle]);
+
+  useEffect(() => {
+    if (rotationIntervalSec) setIntervalSec(rotationIntervalSec);
+  }, [rotationIntervalSec]);
+
   // Cache photos on mount for 0ms offline fallback
   useEffect(() => {
     cachePhotosLocally(photos);

@@ -50,6 +50,7 @@ interface DashboardState {
   // Widget / Note operations
   addWidget: (widget: Partial<DashboardWidget>) => Promise<void>;
   removeWidget: (widgetId: string) => Promise<void>;
+  updateWidget: (widgetId: string, updates: Partial<DashboardWidget>) => Promise<void>;
   updateWidgetConfig: (widgetId: string, configUpdates: Record<string, any>) => Promise<void>;
   addNote: (note: Partial<StickyNoteItem>) => Promise<void>;
   updateNote: (noteId: string, updates: Partial<StickyNoteItem>) => Promise<void>;
@@ -369,6 +370,22 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     await db.widgets.put(updated);
     set({
       widgets: get().widgets.filter((w) => w.id !== widgetId),
+    });
+    get().saveLocalBackup();
+  },
+
+  updateWidget: async (widgetId, updates) => {
+    const existing = get().widgets.find((w) => w.id === widgetId);
+    if (!existing) return;
+    const updated: DashboardWidget = {
+      ...existing,
+      ...updates,
+      config: updates.config ? { ...existing.config, ...updates.config } : existing.config,
+      updated_at: new Date().toISOString(),
+    };
+    await db.widgets.put(updated);
+    set({
+      widgets: get().widgets.map((w) => (w.id === widgetId ? updated : w)),
     });
     get().saveLocalBackup();
   },
