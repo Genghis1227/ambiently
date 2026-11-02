@@ -31,6 +31,7 @@ import type {
   DashboardTab,
   DockPosition,
 } from '../../types/dashboard';
+import { AmbientQuickMenu } from './AmbientQuickMenu';
 
 interface NavigationDockProps {
   tabs: DashboardTab[];
@@ -94,6 +95,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
 }) => {
   const isVertical = dockPosition === 'left' || dockPosition === 'right';
   const [showOrganizeMenu, setShowOrganizeMenu] = useState(false);
+  const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(false);
   const [activeMode, setActiveMode] = useState<AutoOrganizeMode>('bento');
 
   useEffect(() => {
@@ -121,12 +123,37 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
       <nav
         className={`fixed z-30 flex items-center gap-2 p-2 rounded-2xl bg-gray-900/85 backdrop-blur-xl border border-gray-800/90 shadow-2xl transition-all ${positionClasses}`}
       >
-        {/* Brand Icon */}
-        <div className="flex items-center justify-center p-1">
-          <img
-            src="/logo.png"
-            alt="Ambiently"
-            className="w-7 h-7 rounded-lg object-cover shadow-sm border border-gray-700/60"
+        {/* Brand Icon & Quick HUD Trigger */}
+        <div className="relative flex items-center justify-center p-1">
+          <button
+            type="button"
+            onClick={() => setIsQuickMenuOpen(!isQuickMenuOpen)}
+            title="Ambiently Quick Hub & Kiosk Controls"
+            className={`rounded-xl p-0.5 transition-all cursor-pointer group active:scale-95 ${
+              isQuickMenuOpen
+                ? 'ring-2 ring-blue-500 shadow-lg shadow-blue-500/30'
+                : 'hover:ring-1 hover:ring-blue-400/50'
+            }`}
+          >
+            <img
+              src="/logo.png"
+              alt="Ambiently"
+              className="w-7 h-7 rounded-lg object-cover shadow-sm border border-gray-700/60 group-hover:scale-105 transition-transform"
+            />
+          </button>
+
+          {/* Ambient Quick Command Popover */}
+          <AmbientQuickMenu
+            dockPosition={dockPosition}
+            isOpen={isQuickMenuOpen}
+            onClose={() => setIsQuickMenuOpen(false)}
+            onSelectTab={(tabId) => {
+              setIsQuickMenuOpen(false);
+              onSelectTab(tabId);
+            }}
+            onOpenSettings={onOpenSettings}
+            onToggleFullscreen={onToggleFullscreen}
+            isFullscreen={isFullscreen}
           />
         </div>
 
@@ -141,7 +168,10 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
             return (
               <button
                 key={tab.id}
-                onClick={() => onSelectTab(tab.id)}
+                onClick={() => {
+                  setIsQuickMenuOpen(false);
+                  onSelectTab(tab.id);
+                }}
                 title={tab.name}
                 className={`relative flex items-center justify-center w-11 h-11 rounded-xl transition-all cursor-pointer ${
                   isActive
