@@ -83,7 +83,7 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
     bottom: 'bottom-full left-0 mb-3',
   }[dockPosition];
 
-  const primaryTab = tabs[0];
+  const homeTab = tabs.find((t) => t.isHome) || tabs[0];
 
   return (
     <>
@@ -217,19 +217,19 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
           <button
             type="button"
             onClick={() => {
-              if (primaryTab) onSelectTab(primaryTab.id);
+              if (homeTab) onSelectTab(homeTab.id);
               onClose();
             }}
-            className="p-2.5 rounded-xl border border-gray-800 bg-gray-900/90 hover:bg-gray-800 text-gray-300 flex flex-col items-start gap-1 transition-all cursor-pointer text-left"
+            className="p-2.5 rounded-xl border border-gray-800 bg-gray-900/90 hover:bg-gray-800 text-gray-300 flex flex-col items-start gap-1 transition-all cursor-pointer text-left group"
           >
             <div className="flex items-center justify-between w-full">
-              <Home className="w-4 h-4 text-purple-400" />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
-                1-Tap
+              <Home className="w-4 h-4 text-purple-400 group-hover:scale-110 transition-transform" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">
+                Home
               </span>
             </div>
-            <span className="text-xs font-semibold truncate max-w-full">
-              Home Board
+            <span className="text-xs font-semibold truncate max-w-full text-white">
+              {homeTab?.name || 'Home Board'}
             </span>
           </button>
         </div>

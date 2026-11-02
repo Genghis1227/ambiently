@@ -51,6 +51,7 @@ export interface DashboardTab {
   name: string;
   icon?: string;
   order: number;
+  isHome?: boolean; // when true, designated as default home canvas
   backgroundTheme?: CanvasBackgroundTheme;
   customWallpaperUrl?: string;
   backgroundDimLevel?: number; // 0 to 90 (percentage dark overlay on custom picture)

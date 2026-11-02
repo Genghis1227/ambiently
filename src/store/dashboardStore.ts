@@ -51,6 +51,7 @@ interface DashboardState {
     backgroundDimLevel?: number
   ) => Promise<string>;
   updateTab: (tabId: string, updates: Partial<DashboardTab>) => Promise<void>;
+  setHomeTab: (tabId: string) => Promise<void>;
   deleteTab: (tabId: string) => Promise<void>;
   reorderTabs: (orderedTabIds: string[]) => Promise<void>;
   setDockPosition: (pos: DockPosition) => Promise<void>;
@@ -164,7 +165,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const loadedNotes = (await db.notes.toArray()).filter((n) => !n.deleted_at);
 
     const tabsToUse = loadedTabs.length > 0 ? loadedTabs : DEFAULT_TABS;
+    const explicitHome = tabsToUse.find((t) => t.isHome && (t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false));
     const initialTab =
+      explicitHome ||
       tabsToUse.find((t) => (t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false)) ||
       tabsToUse[0];
     const initialTabId = initialTab?.id || 'tab-corkboard';
@@ -231,6 +234,19 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     get().saveLocalBackup();
   },
 
+  setHomeTab: async (tabId) => {
+    const currentTabs = get().tabs;
+    const now = new Date().toISOString();
+    const updatedTabs = currentTabs.map((t) => ({
+      ...t,
+      isHome: t.id === tabId,
+      updated_at: now,
+    }));
+    await db.tabs.bulkPut(updatedTabs);
+    set({ tabs: updatedTabs });
+    get().saveLocalBackup();
+  },
+
   deleteTab: async (tabId) => {
     if (get().tabs.length <= 1) return;
     const tab = get().tabs.find((t) => t.id === tabId);
@@ -245,8 +261,16 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       nextActiveTabId = remainingTabs[0]?.id || '';
     }
 
+    let updatedRemainingTabs = remainingTabs;
+    if (tab.isHome && remainingTabs.length > 0) {
+      updatedRemainingTabs = remainingTabs.map((t, idx) =>
+        idx === 0 ? { ...t, isHome: true, updated_at: new Date().toISOString() } : t
+      );
+      await db.tabs.bulkPut(updatedRemainingTabs);
+    }
+
     set({
-      tabs: remainingTabs,
+      tabs: updatedRemainingTabs,
       activeTabId: nextActiveTabId,
     });
     get().saveLocalBackup();

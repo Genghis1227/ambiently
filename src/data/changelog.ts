@@ -5,9 +5,23 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.1.4';
+export const APP_VERSION = '0.1.5';
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.1.5",
+    date: "November 2, 2026",
+    title: "Selectable Default Home Board & Canvases Manager Polish",
+    highlights: [
+      "Selectable Home Board: designate any canvas as the default Home Board with a single click, independent of canvas ordering in the dock.",
+      "Canvases & Boards Manager Home indicator: prominent purple [Home Board] badge on the designated canvas.",
+      "1-click Home selector button (🏠) and inline canvas editor toggle in Settings & Boards Manager.",
+      "Dynamic Ambient Command Hub Home button: automatically reflects your selected Home Board's name and jumps directly to it.",
+      "Subtle purple Home indicator dot and tooltip on inactive Home Board icons in the Navigation Dock.",
+      "Mobile Companion indicator: tab pills display a Home icon on the default Home Board.",
+      "Seamless persistence across IndexedDB local storage, export/import backups, and startup initialization.",
+    ],
+  },
   {
     version: "v0.1.4",
     date: "November 2, 2026",

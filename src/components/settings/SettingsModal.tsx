@@ -24,6 +24,7 @@ import {
   Eye,
   EyeOff,
   SunDim,
+  Home,
 } from 'lucide-react';
 import { db } from '../../services/db';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -75,6 +76,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     saveLocalBackup,
     addTab,
     updateTab,
+    setHomeTab,
     deleteTab,
     reorderTabs,
   } = useDashboardStore();
@@ -297,6 +299,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   const isEditingThis = editingTabId === tab.id;
                   const isFirst = idx === 0;
                   const isLast = idx === tabs.length - 1;
+                  const hasExplicitHome = tabs.some((t) => t.isHome);
+                  const isHome = tab.isHome || (!hasExplicitHome && idx === 0);
 
                   const matchedIconItem = CANVAS_ICONS.find((i) => i.id === tab.icon) || CANVAS_ICONS[0];
                   const IconComp = matchedIconItem.icon;
@@ -315,9 +319,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                             <IconComp className="w-4 h-4" />
                           </div>
                           <div>
-                            <span className="text-xs font-bold text-white block">
-                              {tab.name}
-                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-xs font-bold text-white block">
+                                {tab.name}
+                              </span>
+                              {isHome && (
+                                <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center gap-1 shadow-sm">
+                                  <Home className="w-2.5 h-2.5" />
+                                  Home Board
+                                </span>
+                              )}
+                            </div>
                             <span className="text-[10px] text-gray-400 flex items-center gap-1.5">
                               <span>{matchedTheme.label}</span>
                               {tab.backgroundTheme === 'custom' && (
@@ -334,7 +346,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                           </div>
                         </div>
 
-                        {/* Reorder, Show/Hide Notes, Edit & Action Controls */}
+                        {/* Reorder, Home Canvas, Show/Hide Notes, Edit & Action Controls */}
                         <div className="flex items-center gap-1">
                           {/* Quick Toggle Show/Hide Sticky Notes on this Canvas */}
                           <button
@@ -356,6 +368,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                             ) : (
                               <Eye className="w-3.5 h-3.5" />
                             )}
+                          </button>
+
+                          {/* Set as Home Canvas */}
+                          <button
+                            type="button"
+                            onClick={() => setHomeTab(tab.id)}
+                            title={isHome ? 'Default Home Board (Active)' : 'Set as Default Home Board'}
+                            className={`p-1 rounded-md transition-colors cursor-pointer ${
+                              isHome
+                                ? 'text-purple-300 bg-purple-500/25 border border-purple-500/40 shadow-sm'
+                                : 'text-gray-400 hover:text-purple-300 hover:bg-purple-500/15'
+                            }`}
+                          >
+                            <Home className="w-3.5 h-3.5" />
                           </button>
 
                           {/* Move Up */}
@@ -600,6 +626,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                               <div
                                 className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
                                   editTabHideNotes ? 'translate-x-5' : 'translate-x-0'
+                                }`}
+                              />
+                            </button>
+                          </div>
+
+                          {/* Default Home Board Toggle */}
+                          <div className="flex items-center justify-between pt-1">
+                            <div className="flex items-center gap-1.5">
+                              <Home className="w-3.5 h-3.5 text-purple-400" />
+                              <span className="text-xs text-gray-300">
+                                Default Home Board:
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setHomeTab(tab.id)}
+                              className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                                isHome ? 'bg-purple-600' : 'bg-gray-700 hover:bg-gray-600'
+                              }`}
+                            >
+                              <div
+                                className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                                  isHome ? 'translate-x-5' : 'translate-x-0'
                                 }`}
                               />
                             </button>
