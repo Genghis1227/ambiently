@@ -14,6 +14,9 @@ import {
   Trash2,
   Download,
   Upload,
+  LayoutGrid,
+  Pin,
+  Image,
 } from 'lucide-react';
 import { db } from '../../services/db';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -54,6 +57,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setCarouselDuration,
     setPinLock,
     saveLocalBackup,
+    toggleTabEnabled,
   } = useDashboardStore();
 
   const [pinInput, setPinInput] = useState('');
@@ -220,6 +224,89 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           </div>
 
           <div className="space-y-6">
+            {/* Active Views & Tabs Configuration */}
+            <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800">
+              <div className="mb-3">
+                <span className="text-sm font-semibold text-white block">
+                  Dashboard Views & Tabs
+                </span>
+                <span className="text-[11px] text-gray-400">
+                  Select which views appear as tabs in the navigation dock and ambient carousel.
+                </span>
+              </div>
+
+              <div className="space-y-2.5">
+                {tabs.map((tab) => {
+                  const isEnabled = tab.id === 'tab-overview' ? Boolean(tab.enabled) : tab.enabled !== false;
+                  const enabledCount = tabs.filter((t) =>
+                    t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false
+                  ).length;
+                  const canToggle = !isEnabled || enabledCount > 1;
+
+                  const tabMeta: Record<string, { label: string; desc: string; icon: React.ReactNode }> = {
+                    'tab-corkboard': {
+                      label: 'Family Board (Corkboard)',
+                      desc: 'Freeform canvas for notes, checklists, widgets, and photos',
+                      icon: <Pin className="w-4 h-4 text-emerald-400" />,
+                    },
+                    'tab-photos': {
+                      label: 'Ambient Memories (Photos)',
+                      desc: 'Rotating photo screensaver from Plex, Local NAS, or Web',
+                      icon: <Image className="w-4 h-4 text-purple-400" />,
+                    },
+                    'tab-overview': {
+                      label: 'Overview (Bento Grid)',
+                      desc: 'Structured 12×8 grid command center with draggable tiles',
+                      icon: <LayoutGrid className="w-4 h-4 text-blue-400" />,
+                    },
+                  };
+
+                  const meta = tabMeta[tab.id] || {
+                    label: tab.name,
+                    desc: `${tab.layoutMode === 'grid' ? 'Grid layout' : 'Freeform canvas'}`,
+                    icon: <LayoutGrid className="w-4 h-4 text-gray-400" />,
+                  };
+
+                  return (
+                    <div
+                      key={tab.id}
+                      className="flex items-center justify-between p-2.5 rounded-lg bg-gray-900/60 border border-gray-800/80"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 rounded-lg bg-black/40 border border-white/5">
+                          {meta.icon}
+                        </div>
+                        <div>
+                          <span className="text-xs font-semibold text-white block">
+                            {meta.label}
+                          </span>
+                          <span className="text-[10px] text-gray-400 line-clamp-1">
+                            {meta.desc}
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        disabled={!canToggle}
+                        onClick={() => toggleTabEnabled(tab.id, !isEnabled)}
+                        title={!canToggle ? 'At least one view must remain active' : undefined}
+                        className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors duration-200 ease-in-out ${
+                          !canToggle ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                        } ${isEnabled ? 'bg-blue-600' : 'bg-gray-700'}`}
+                      >
+                        <div
+                          className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${
+                            isEnabled ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Automated Tab Carousel Section */}
             <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800">
               <div className="flex items-center justify-between mb-3">

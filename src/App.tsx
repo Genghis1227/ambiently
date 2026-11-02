@@ -131,21 +131,25 @@ export function App() {
     };
   }, [settings.wakeLockEnabled]);
 
+  const visibleTabs = tabs.filter((t) =>
+    t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false
+  );
+
   // Tab auto-carousel rotation
   useEffect(() => {
-    if (!settings.carouselEnabled || tabs.length <= 1) return;
+    if (!settings.carouselEnabled || visibleTabs.length <= 1) return;
 
-    const currentTab = tabs.find((t) => t.id === activeTabId);
+    const currentTab = visibleTabs.find((t) => t.id === activeTabId);
     const duration = currentTab?.autoRotateDurationSec || settings.defaultRotateDurationSec || 30;
 
     const interval = setInterval(() => {
-      const currentIndex = tabs.findIndex((t) => t.id === activeTabId);
-      const nextIndex = (currentIndex + 1) % tabs.length;
-      setActiveTabId(tabs[nextIndex].id);
+      const currentIndex = visibleTabs.findIndex((t) => t.id === activeTabId);
+      const nextIndex = (currentIndex + 1) % visibleTabs.length;
+      setActiveTabId(visibleTabs[nextIndex].id);
     }, duration * 1000);
 
     return () => clearInterval(interval);
-  }, [settings.carouselEnabled, settings.defaultRotateDurationSec, tabs, activeTabId, setActiveTabId]);
+  }, [settings.carouselEnabled, settings.defaultRotateDurationSec, visibleTabs, activeTabId, setActiveTabId]);
 
   if (!isInitialized) {
     return (
@@ -163,7 +167,7 @@ export function App() {
     return (
       <>
         <MobileCompanion
-          tabs={tabs}
+          tabs={visibleTabs}
           activeTabId={activeTabId}
           notes={notes}
           onSelectTab={setActiveTabId}
@@ -180,7 +184,7 @@ export function App() {
     );
   }
 
-  const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
+  const activeTab = visibleTabs.find((t) => t.id === activeTabId) || visibleTabs[0] || tabs[0];
   const tabWidgets = widgets.filter((w) => w.tabId === activeTab?.id);
   const tabNotes = notes.filter((n) => n.tabId === activeTab?.id);
 
@@ -235,7 +239,7 @@ export function App() {
 
       {/* Navigation Dock - Pinned at Viewport Level */}
       <NavigationDock
-        tabs={tabs}
+        tabs={visibleTabs}
         activeTabId={activeTab?.id || ''}
         dockPosition={settings.dockPosition}
         isLocked={!isUnlocked}
@@ -277,7 +281,7 @@ export function App() {
       <AddWidgetModal
         isOpen={isAddWidgetOpen}
         onClose={() => setIsAddWidgetOpen(false)}
-        activeTabId={activeTab?.id || 'tab-overview'}
+        activeTabId={activeTab?.id || 'tab-corkboard'}
         onAddWidget={addWidget}
       />
 

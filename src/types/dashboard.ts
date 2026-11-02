@@ -32,6 +32,7 @@ export interface FreeformPosition {
   hRatio: number; // 0.05 to 1.0
   zIndex: number;
   rotation: number; // degrees (-45 to 45)
+  isFullScreen?: boolean;
 }
 
 export interface DashboardTab {
@@ -41,6 +42,7 @@ export interface DashboardTab {
   order: number;
   layoutMode: LayoutMode;
   autoRotateDurationSec: number; // 0 = do not rotate, >0 = rotate after N seconds
+  enabled?: boolean;
   updated_at: string;
   deleted_at?: string | null;
 }
