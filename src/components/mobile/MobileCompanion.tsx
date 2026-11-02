@@ -10,6 +10,7 @@ import {
   Edit2,
   Check,
   X,
+  Trash2,
 } from 'lucide-react';
 import type { DashboardTab, StickyNoteItem } from '../../types/dashboard';
 import { APP_VERSION } from '../../data/changelog';
@@ -22,6 +23,7 @@ interface MobileCompanionProps {
   onSelectTab: (tabId: string) => void;
   onAddNote: (note: Partial<StickyNoteItem>) => void;
   onUpdateNote: (noteId: string, updates: Partial<StickyNoteItem>) => void;
+  onDeleteNote?: (noteId: string) => void;
   onToggleDesktopView: () => void;
   onOpenSettings: () => void;
 }
@@ -33,6 +35,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
   onSelectTab,
   onAddNote,
   onUpdateNote,
+  onDeleteNote,
   onToggleDesktopView,
   onOpenSettings,
 }) => {
@@ -99,6 +102,12 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
     });
     setNewCheckItemText('');
     setAddingChecklistNoteId(null);
+  };
+
+  const handleDeleteChecklistItem = (note: StickyNoteItem, itemId: string) => {
+    if (!note.checklistItems) return;
+    const updated = note.checklistItems.filter((item) => item.id !== itemId);
+    onUpdateNote(note.id, { checklistItems: updated });
   };
 
   const handleSaveInlineEdit = (note: StickyNoteItem) => {
@@ -282,15 +291,29 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
                           <button
                             onClick={() => handleSaveInlineEdit(note)}
                             className="p-1 rounded bg-emerald-700 text-white"
+                            title="Save changes"
                           >
                             <Check className="w-3 h-3" />
                           </button>
                           <button
                             onClick={() => setEditingNoteId(null)}
                             className="p-1 rounded bg-black/20 text-gray-800"
+                            title="Cancel"
                           >
                             <X className="w-3 h-3" />
                           </button>
+                          {onDeleteNote && (
+                            <button
+                              onClick={() => {
+                                onDeleteNote(note.id);
+                                setEditingNoteId(null);
+                              }}
+                              className="p-1 rounded bg-red-600/20 text-red-700 hover:bg-red-600/30"
+                              title="Delete note"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -299,20 +322,31 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
                   {note.isChecklist && note.checklistItems ? (
                     <div className="space-y-2 mt-1">
                       {note.checklistItems.map((item) => (
-                        <button
-                          key={item.id}
-                          onClick={() => toggleItem(note, item.id)}
-                          className="flex items-center gap-2 text-xs w-full text-left"
-                        >
-                          {item.done ? (
-                            <CheckSquare className="w-4 h-4 text-emerald-800 shrink-0" />
-                          ) : (
-                            <Square className="w-4 h-4 text-gray-700 shrink-0" />
+                        <div key={item.id} className="flex items-center justify-between gap-1.5">
+                          <button
+                            onClick={() => toggleItem(note, item.id)}
+                            className="flex items-center gap-2 text-xs flex-1 text-left"
+                          >
+                            {item.done ? (
+                              <CheckSquare className="w-4 h-4 text-emerald-800 shrink-0" />
+                            ) : (
+                              <Square className="w-4 h-4 text-gray-700 shrink-0" />
+                            )}
+                            <span className={item.done ? 'line-through opacity-50' : 'font-medium'}>
+                              {item.text}
+                            </span>
+                          </button>
+                          {isEditingThis && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteChecklistItem(note, item.id)}
+                              className="p-1 text-red-700 hover:text-red-900 cursor-pointer shrink-0"
+                              title="Delete checklist item"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
                           )}
-                          <span className={item.done ? 'line-through opacity-50' : 'font-medium'}>
-                            {item.text}
-                          </span>
-                        </button>
+                        </div>
                       ))}
 
                       {addingChecklistNoteId === note.id ? (

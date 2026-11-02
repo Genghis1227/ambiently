@@ -53,6 +53,7 @@ interface NavigationDockProps {
   onAutoOrganize?: (mode: AutoOrganizeMode) => void;
   onUndoOrganize?: () => void;
   canUndoOrganize?: boolean;
+  onToggleMobileCompanion?: () => void;
 }
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -92,6 +93,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
   onAutoOrganize,
   onUndoOrganize,
   canUndoOrganize = false,
+  onToggleMobileCompanion,
 }) => {
   const isVertical = dockPosition === 'left' || dockPosition === 'right';
   const [showOrganizeMenu, setShowOrganizeMenu] = useState(false);
@@ -154,6 +156,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
             onOpenSettings={onOpenSettings}
             onToggleFullscreen={onToggleFullscreen}
             isFullscreen={isFullscreen}
+            onToggleMobileCompanion={onToggleMobileCompanion}
           />
         </div>
 

@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.4] - 2026-11-02
+
+### Added
+* **Text Box & Canvas Heading Widget (`TextBoxWidget.tsx`, `AddWidgetModal.tsx`, `WidgetSettingsModal.tsx`, `Corkboard.tsx`, `types/dashboard.ts`):**
+  * New dedicated `textbox` widget type designed for clean text, messages, announcements, and titles floating directly on the screen without looking like a sticky note or standard tile box.
+  * **Background Modes:** Clean / Transparent (no card box, no border, text floating directly over wallpaper), Frosted Glass, and Solid Dark card styles.
+  * **Typography & Styling:** 9 font sizes (`XS` to `5XL` hero display headings), 5 font weights, Left/Center/Right alignment, 4 font families (Clean Sans, Editorial Serif, Modern Mono, Cursive Script), letter spacing, text transform (UPPERCASE, Capitalize).
+  * **Text Color & High-Contrast Shadow:** 9 curated pastel & vibrant colors plus custom hex color picker, with high-contrast drop shadow toggle for readability over wallpapers.
+  * **Markdown & Editing:** Supports markdown formatting (`# Header 1`, `## Header 2`, `**Bold**`, `*Italic*`, `__Underline__`, `- Bullet points`), double-click inline editing on the canvas with `Esc` / `Ctrl+Enter`, and full visual customizer with WYSIWYG preview in tile settings.
+* **1-Tap Switch to Mobile Companion (`AmbientQuickMenu.tsx`, `NavigationDock.tsx`, `App.tsx`):**
+  * Added a dedicated **"Switch to Mobile Companion"** button inside the Ambiently Command Hub menu on mobile viewports.
+  * Enables instant 1-tap switching back to Mobile Companion mode from Kiosk view without having to reload the browser.
+
+### Fixed
+* **Mobile Sticky Note Hold-and-Drag Movement (`Corkboard.tsx`):**
+  * Fixed checklist item row element trapping touch pointer events by refactoring checklist items to `<div>` rows and isolating `<button>` to the checkbox toggle icon.
+  * Applied `touchAction: 'none'`, `WebkitUserSelect: 'none'`, and `userSelect: 'none'` across sticky note card containers, eliminating scroll-gesture cancellation (`pointercancel`) on mobile browsers.
+  * Added window-level touch pointer listeners with `{ passive: false }` and non-blocking 60 FPS local drag state, committing once on release (`pointerup`).
+* **Mobile Sticky Note Editing (`Corkboard.tsx`, `MobileCompanion.tsx`, `App.tsx`):**
+  * Updated note action bar to `opacity-90 md:opacity-0 md:group-hover:opacity-100`, making Edit pencil, Trash, 0° Straighten, and Pastel Color Swatches always visible on mobile touchscreens while preserving sleek desktop hover behavior.
+  * Added a direct Edit pencil icon in the note header for 1-tap editing on mobile.
+  * Added touch double-tap gesture detection (`< 350ms`) to open the note editor on touchscreens.
+  * Added note deletion and individual checklist item removal when editing in Mobile Companion mode.
+* **Blurry Screen on Dock Menu Open (`AmbientQuickMenu.tsx`):**
+  * Removed `bg-black/20 backdrop-blur-[1px]` from the click-outside dismisser in `AmbientQuickMenu.tsx`. The background canvas remains 100% crisp and sharp when opening the menu on mobile.
+
+---
+
 ## [0.1.3] - 2026-11-02
 
 ### Added

@@ -11,12 +11,16 @@ import {
   Tv,
   Quote,
   Globe,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
 } from 'lucide-react';
 import type { DashboardWidget } from '../../types/dashboard';
 import type { CalendarSource } from '../../services/feeds';
 import type { QuoteItem } from '../../services/quotes';
 import { EMBED_PRESETS, type EmbedPresetId } from './MediaEmbedWidget';
 import { DEFAULT_WORLD_CITIES, type WorldClockCity } from './WorldClockWidget';
+import type { TextBoxConfig } from './TextBoxWidget';
 
 interface WidgetSettingsModalProps {
   isOpen: boolean;
@@ -111,6 +115,18 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const [newQuoteText, setNewQuoteText] = useState('');
   const [newQuoteAuthor, setNewQuoteAuthor] = useState('');
 
+  // Text Box states
+  const [textContent, setTextContent] = useState('');
+  const [textFontSize, setTextFontSize] = useState<NonNullable<TextBoxConfig['fontSize']>>('2xl');
+  const [textFontWeight, setTextFontWeight] = useState<NonNullable<TextBoxConfig['fontWeight']>>('bold');
+  const [textAlignment, setTextAlignment] = useState<NonNullable<TextBoxConfig['textAlign']>>('center');
+  const [textFamily, setTextFamily] = useState<NonNullable<TextBoxConfig['fontFamily']>>('sans');
+  const [textColor, setTextColor] = useState('#ffffff');
+  const [textShadow, setTextShadow] = useState(true);
+  const [textTransform, setTextTransform] = useState<NonNullable<TextBoxConfig['textTransform']>>('none');
+  const [letterSpacing, setLetterSpacing] = useState<NonNullable<TextBoxConfig['letterSpacing']>>('normal');
+  const [textBgStyle, setTextBgStyle] = useState<NonNullable<TextBoxConfig['bgStyle']>>('transparent');
+
   // Populate initial state when modal opens with a widget
   useEffect(() => {
     if (!widget) return;
@@ -177,6 +193,17 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     } else if (widget.type === 'quotes') {
       setQuoteMode(widget.config?.quoteMode || 'both');
       setCustomQuotes(Array.isArray(widget.config?.customQuotes) ? widget.config.customQuotes : []);
+    } else if (widget.type === 'textbox') {
+      setTextContent(widget.config?.content ?? 'Welcome to Ambiently\nSmart Display & Dashboard');
+      setTextFontSize(widget.config?.fontSize || '2xl');
+      setTextFontWeight(widget.config?.fontWeight || 'bold');
+      setTextAlignment(widget.config?.textAlign || 'center');
+      setTextFamily(widget.config?.fontFamily || 'sans');
+      setTextColor(widget.config?.textColor || '#ffffff');
+      setTextShadow(widget.config?.textShadow ?? true);
+      setTextTransform(widget.config?.textTransform || 'none');
+      setLetterSpacing(widget.config?.letterSpacing || 'normal');
+      setTextBgStyle(widget.config?.bgStyle || 'transparent');
     }
   }, [widget, isOpen]);
 
@@ -307,6 +334,17 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     } else if (widget.type === 'quotes') {
       configUpdates.quoteMode = quoteMode;
       configUpdates.customQuotes = customQuotes;
+    } else if (widget.type === 'textbox') {
+      configUpdates.content = textContent;
+      configUpdates.fontSize = textFontSize;
+      configUpdates.fontWeight = textFontWeight;
+      configUpdates.textAlign = textAlignment;
+      configUpdates.fontFamily = textFamily;
+      configUpdates.textColor = textColor;
+      configUpdates.textShadow = textShadow;
+      configUpdates.textTransform = textTransform;
+      configUpdates.letterSpacing = letterSpacing;
+      configUpdates.bgStyle = textBgStyle;
     }
 
     onSave(widget.id, {
@@ -1199,6 +1237,331 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                   placeholder="https://news.ycombinator.com/rss"
                   className="w-full rounded-xl bg-gray-950 border border-gray-800 p-2.5 text-xs text-white focus:outline-none focus:border-blue-500"
                 />
+              </div>
+            </div>
+          )}
+
+          {/* Text Box & Canvas Heading Settings */}
+          {widget.type === 'textbox' && (
+            <div className="space-y-4 pt-2 border-t border-gray-800">
+              {/* Live Preview Box */}
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5 flex items-center justify-between">
+                  <span>Live Preview</span>
+                  <span className="text-[10px] text-gray-500 font-normal">WYSIWYG on canvas</span>
+                </label>
+                <div
+                  className={`w-full min-h-[90px] rounded-xl p-4 flex flex-col justify-center border transition-all ${
+                    textBgStyle === 'glass'
+                      ? 'bg-gray-950/40 backdrop-blur-md border-white/10'
+                      : textBgStyle === 'solid'
+                      ? 'bg-gray-900 border-gray-800'
+                      : 'bg-black/30 border-dashed border-gray-700/60'
+                  }`}
+                >
+                  <div
+                    className={`w-full leading-snug break-words ${
+                      textAlignment === 'left'
+                        ? 'text-left'
+                        : textAlignment === 'right'
+                        ? 'text-right'
+                        : 'text-center'
+                    } ${
+                      textFamily === 'serif'
+                        ? 'font-serif'
+                        : textFamily === 'mono'
+                        ? 'font-mono'
+                        : textFamily === 'script'
+                        ? 'font-serif italic'
+                        : 'font-sans'
+                    } ${
+                      textFontSize === 'xs'
+                        ? 'text-xs'
+                        : textFontSize === 'sm'
+                        ? 'text-sm'
+                        : textFontSize === 'base'
+                        ? 'text-base'
+                        : textFontSize === 'lg'
+                        ? 'text-lg'
+                        : textFontSize === 'xl'
+                        ? 'text-xl'
+                        : textFontSize === '3xl'
+                        ? 'text-3xl'
+                        : textFontSize === '4xl'
+                        ? 'text-4xl'
+                        : textFontSize === '5xl'
+                        ? 'text-5xl'
+                        : 'text-2xl'
+                    } ${
+                      textFontWeight === 'normal'
+                        ? 'font-normal'
+                        : textFontWeight === 'medium'
+                        ? 'font-medium'
+                        : textFontWeight === 'semibold'
+                        ? 'font-semibold'
+                        : textFontWeight === 'extrabold'
+                        ? 'font-extrabold'
+                        : 'font-bold'
+                    } ${
+                      letterSpacing === 'wide'
+                        ? 'tracking-wide'
+                        : letterSpacing === 'widest'
+                        ? 'tracking-widest'
+                        : 'tracking-normal'
+                    }`}
+                    style={{
+                      color: textColor,
+                      textTransform: textTransform !== 'none' ? textTransform : undefined,
+                      ...(textShadow
+                        ? {
+                            textShadow:
+                              '0 2px 8px rgba(0,0,0,0.85), 0 1px 2px rgba(0,0,0,0.95)',
+                          }
+                        : {}),
+                    }}
+                  >
+                    {textContent || (
+                      <span className="opacity-40 italic font-normal text-sm">
+                        Enter your message below...
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Text Content Editor */}
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5 flex items-center justify-between">
+                  <span>Text Content</span>
+                  <span className="text-[10px] text-gray-500 font-normal">Supports multi-line & Markdown</span>
+                </label>
+                <textarea
+                  rows={3}
+                  value={textContent}
+                  onChange={(e) => setTextContent(e.target.value)}
+                  placeholder="Enter message, heading, or notes..."
+                  className="w-full rounded-xl bg-gray-950 border border-gray-800 p-3 text-xs text-white focus:outline-none focus:border-blue-500 leading-relaxed font-sans"
+                />
+                {/* Markdown Shortcut Helper Chips */}
+                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                  <span className="text-[10px] text-gray-500 mr-0.5">Quick Tags:</span>
+                  {[
+                    { label: '# Header 1', prefix: '# ' },
+                    { label: '## Header 2', prefix: '## ' },
+                    { label: '**Bold**', wrap: '**' },
+                    { label: '*Italic*', wrap: '*' },
+                    { label: '__Underline__', wrap: '__' },
+                    { label: '- Bullet', prefix: '- ' },
+                  ].map((tag) => (
+                    <button
+                      key={tag.label}
+                      type="button"
+                      onClick={() => {
+                        if (tag.wrap) {
+                          setTextContent((prev) => `${prev} ${tag.wrap}text${tag.wrap}`);
+                        } else if (tag.prefix) {
+                          setTextContent((prev) => (prev ? `${prev}\n${tag.prefix}` : tag.prefix));
+                        }
+                      }}
+                      className="px-2 py-0.5 rounded-md bg-gray-800 hover:bg-gray-700 text-[10px] font-mono text-gray-300 transition-colors cursor-pointer"
+                    >
+                      {tag.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Font Size Selector */}
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
+                  Font Size
+                </label>
+                <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5">
+                  {(['xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl', '4xl'] as const).map((sz) => (
+                    <button
+                      key={sz}
+                      type="button"
+                      onClick={() => setTextFontSize(sz)}
+                      className={`py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        textFontSize === sz
+                          ? 'bg-blue-600/30 border border-blue-500 text-blue-300'
+                          : 'bg-gray-950 border border-gray-800 text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      {sz.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Typography Family & Weight */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
+                    Font Style
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {[
+                      { id: 'sans', label: 'Clean Sans' },
+                      { id: 'serif', label: 'Serif' },
+                      { id: 'mono', label: 'Mono' },
+                      { id: 'script', label: 'Script' },
+                    ].map((f) => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => setTextFamily(f.id as any)}
+                        className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                          textFamily === f.id
+                            ? 'bg-blue-600/30 border border-blue-500 text-blue-300'
+                            : 'bg-gray-950 border border-gray-800 text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
+                    Weight
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {[
+                      { id: 'normal', label: 'Regular' },
+                      { id: 'medium', label: 'Medium' },
+                      { id: 'bold', label: 'Bold' },
+                      { id: 'extrabold', label: 'Heavy' },
+                    ].map((w) => (
+                      <button
+                        key={w.id}
+                        type="button"
+                        onClick={() => setTextFontWeight(w.id as any)}
+                        className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                          textFontWeight === w.id
+                            ? 'bg-blue-600/30 border border-blue-500 text-blue-300'
+                            : 'bg-gray-950 border border-gray-800 text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        {w.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Text Alignment & Background Mode */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
+                    Alignment
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    {[
+                      { id: 'left', icon: AlignLeft, label: 'Left' },
+                      { id: 'center', icon: AlignCenter, label: 'Center' },
+                      { id: 'right', icon: AlignRight, label: 'Right' },
+                    ].map((al) => {
+                      const Icon = al.icon;
+                      return (
+                        <button
+                          key={al.id}
+                          type="button"
+                          onClick={() => setTextAlignment(al.id as any)}
+                          title={al.label}
+                          className={`flex-1 py-2 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+                            textAlignment === al.id
+                              ? 'bg-blue-600/30 border border-blue-500 text-blue-300'
+                              : 'bg-gray-950 border border-gray-800 text-gray-400 hover:text-white'
+                          }`}
+                        >
+                          <Icon className="w-4 h-4" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
+                    Background Style
+                  </label>
+                  <div className="grid grid-cols-3 gap-1">
+                    {[
+                      { id: 'transparent', label: 'Clean' },
+                      { id: 'glass', label: 'Glass' },
+                      { id: 'solid', label: 'Dark' },
+                    ].map((bg) => (
+                      <button
+                        key={bg.id}
+                        type="button"
+                        onClick={() => setTextBgStyle(bg.id as any)}
+                        className={`py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                          textBgStyle === bg.id
+                            ? 'bg-blue-600/30 border border-blue-500 text-blue-300'
+                            : 'bg-gray-950 border border-gray-800 text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        {bg.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Text Color Swatches & Drop Shadow */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                    Text Color
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={textShadow}
+                      onChange={(e) => setTextShadow(e.target.checked)}
+                      className="rounded bg-gray-950 border-gray-800 text-blue-600"
+                    />
+                    <span>High-Contrast Shadow</span>
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  {[
+                    { label: 'White', color: '#ffffff' },
+                    { label: 'Slate', color: '#cbd5e1' },
+                    { label: 'Cyan', color: '#38bdf8' },
+                    { label: 'Amber', color: '#fbbf24' },
+                    { label: 'Emerald', color: '#34d399' },
+                    { label: 'Rose', color: '#f472b6' },
+                    { label: 'Purple', color: '#c084fc' },
+                    { label: 'Coral', color: '#f87171' },
+                    { label: 'Yellow', color: '#facc15' },
+                  ].map((c) => (
+                    <button
+                      key={c.color}
+                      type="button"
+                      onClick={() => setTextColor(c.color)}
+                      style={{ backgroundColor: c.color }}
+                      title={c.label}
+                      className={`w-6 h-6 rounded-full border transition-transform cursor-pointer ${
+                        textColor === c.color
+                          ? 'scale-125 ring-2 ring-white ring-offset-2 ring-offset-gray-900 border-black/40'
+                          : 'border-white/20 hover:scale-110 opacity-80 hover:opacity-100'
+                      }`}
+                    />
+                  ))}
+                  <div className="flex items-center gap-1 ml-auto">
+                    <span className="text-[10px] text-gray-500 font-mono">Custom:</span>
+                    <input
+                      type="color"
+                      value={textColor}
+                      onChange={(e) => setTextColor(e.target.value)}
+                      className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           )}

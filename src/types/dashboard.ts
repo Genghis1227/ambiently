@@ -21,7 +21,8 @@ export type WidgetType =
   | 'countdown'
   | 'rss'
   | 'quotes'
-  | 'embed';
+  | 'embed'
+  | 'textbox';
 
 export interface GridDimensions {
   cols: number; // e.g., 12

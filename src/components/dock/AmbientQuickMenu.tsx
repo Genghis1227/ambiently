@@ -12,6 +12,7 @@ import {
   QrCode,
   Sparkles,
   Layers,
+  Smartphone,
 } from 'lucide-react';
 import type { DockPosition } from '../../types/dashboard';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -27,6 +28,7 @@ interface AmbientQuickMenuProps {
   onOpenSettings: () => void;
   onToggleFullscreen: () => void;
   isFullscreen: boolean;
+  onToggleMobileCompanion?: () => void;
 }
 
 export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
@@ -37,6 +39,7 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
   onOpenSettings,
   onToggleFullscreen,
   isFullscreen,
+  onToggleMobileCompanion,
 }) => {
   const [isChangelogOpen, setIsChangelogOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -84,10 +87,10 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
 
   return (
     <>
-      {/* Click-outside backdrop rendered at document.body level */}
+      {/* Click-outside transparent backdrop rendered at document.body level */}
       {createPortal(
         <div
-          className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px]"
+          className="fixed inset-0 z-40"
           onClick={onClose}
         />,
         document.body
@@ -233,6 +236,25 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
 
         {/* Action Shortcuts */}
         <div className="space-y-1.5 mb-3">
+          {onToggleMobileCompanion && (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onToggleMobileCompanion();
+              }}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-xs font-semibold text-blue-300 transition-all cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <Smartphone className="w-4 h-4 text-blue-400" />
+                <span>Switch to Mobile Companion</span>
+              </div>
+              <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded-full font-mono">
+                Remote
+              </span>
+            </button>
+          )}
+
           {/* Share Board / Mobile QR */}
           <button
             type="button"

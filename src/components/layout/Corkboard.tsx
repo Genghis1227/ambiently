@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import type {
   StickyNoteItem,
   DashboardWidget,
@@ -28,6 +28,7 @@ import { WorldClockWidget } from '../widgets/WorldClockWidget';
 import { WeatherWidget } from '../widgets/WeatherWidget';
 import { CountdownWidget } from '../widgets/CountdownWidget';
 import { QuotesWidget } from '../widgets/QuotesWidget';
+import { TextBoxWidget } from '../widgets/TextBoxWidget';
 import { CalendarWidget } from '../widgets/CalendarWidget';
 import { RssWidget } from '../widgets/RssWidget';
 import { PhotoFrameWidget } from '../widgets/PhotoFrameWidget';
@@ -108,12 +109,30 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [draggingType, setDraggingType] = useState<'note' | 'widget'>('note');
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [dragPos, setDragPos] = useState<{ xRatio: number; yRatio: number } | null>(null);
+  const dragPosRef = useRef<{ xRatio: number; yRatio: number } | null>(null);
+  const dragStartPointerRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const dragTargetInitialPosRef = useRef<NonNullable<DashboardWidget['freeformPos']> | null>(null);
+  const isDraggingRef = useRef(false);
+  const nextZIndexRef = useRef(1);
+  const lastTapRef = useRef<{ id: string; time: number }>({ id: '', time: 0 });
+
+  const notesRef = useRef(notes);
+  const widgetsRef = useRef(widgets);
+
+  useEffect(() => {
+    notesRef.current = notes;
+    widgetsRef.current = widgets;
+  }, [notes, widgets]);
+
   const [editingWidget, setEditingWidget] = useState<DashboardWidget | null>(null);
   const [photoSourcesTargetWidget, setPhotoSourcesTargetWidget] = useState<DashboardWidget | null>(null);
 
   // Resizing state
   const [resizingId, setResizingId] = useState<string | null>(null);
   const [resizingType, setResizingType] = useState<'note' | 'widget'>('widget');
+  const [resizeRatio, setResizeRatio] = useState<{ wRatio: number; hRatio: number } | null>(null);
+  const resizeRatioRef = useRef<{ wRatio: number; hRatio: number } | null>(null);
   const [resizeStart, setResizeStart] = useState<{ startX: number; startY: number; startW: number; startH: number }>({
     startX: 0,
     startY: 0,
@@ -124,6 +143,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   // Grab-and-Rotate state
   const [rotatingId, setRotatingId] = useState<string | null>(null);
   const [rotatingType, setRotatingType] = useState<'note' | 'widget'>('note');
+  const [rotateAngle, setRotateAngle] = useState<number | null>(null);
+  const rotateAngleRef = useRef<number | null>(null);
   const [rotateStart, setRotateStart] = useState<{
     centerX: number;
     centerY: number;
@@ -206,20 +227,25 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     e.stopPropagation();
     if (!containerRef.current) return;
 
-    const cardEl = (e.currentTarget as HTMLElement).parentElement;
+    const cardEl = (e.currentTarget as HTMLElement).closest('[data-canvas-card="true"]');
     const containerRect = containerRef.current.getBoundingClientRect();
     const cardRect = cardEl?.getBoundingClientRect();
 
     const fallbackWRatio = cardRect ? cardRect.width / containerRect.width : 0.26;
     const fallbackHRatio = cardRect ? cardRect.height / containerRect.height : 0.3;
 
+    dragTargetInitialPosRef.current = pos || null;
     setResizingId(id);
     setResizingType(type);
+    const initialW = pos?.wRatio ?? fallbackWRatio;
+    const initialH = pos?.hRatio ?? fallbackHRatio;
+    setResizeRatio({ wRatio: initialW, hRatio: initialH });
+    resizeRatioRef.current = { wRatio: initialW, hRatio: initialH };
     setResizeStart({
       startX: e.clientX,
       startY: e.clientY,
-      startW: pos?.wRatio ?? fallbackWRatio,
-      startH: pos?.hRatio ?? fallbackHRatio,
+      startW: initialW,
+      startH: initialH,
     });
 
     try {
@@ -242,13 +268,17 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     const centerY = cardRect.top + cardRect.height / 2;
     const startAngle = Math.atan2(e.clientY - centerY, e.clientX - centerX) * (180 / Math.PI);
 
+    dragTargetInitialPosRef.current = pos || null;
     setRotatingId(id);
     setRotatingType(type);
+    const initialRot = pos?.rotation || 0;
+    setRotateAngle(initialRot);
+    rotateAngleRef.current = initialRot;
     setRotateStart({
       centerX,
       centerY,
       startAngle,
-      startRotation: pos?.rotation || 0,
+      startRotation: initialRot,
     });
 
     try {
@@ -273,33 +303,34 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     const currentY = (pos?.yRatio ?? 0.1) * rect.height;
 
     const nextZ = getNextZIndex();
-    if (type === 'note' && pos) {
-      onUpdateNotePos(id, { ...pos, zIndex: nextZ });
-    } else if (type === 'widget' && pos && onUpdateWidgetPos) {
-      const w = widgets.find((item) => item.id === id);
-      if (w) {
-        onUpdateWidgetPos(id, w.gridPos, { ...pos, zIndex: nextZ });
-      }
-    }
+    nextZIndexRef.current = nextZ;
+    dragTargetInitialPosRef.current = pos || null;
+    dragStartPointerRef.current = { x: e.clientX, y: e.clientY };
+    isDraggingRef.current = false;
 
     setDraggingId(id);
     setDraggingType(type);
-    setDragOffset({
+    const initialOffset = {
       x: containerX - currentX,
       y: containerY - currentY,
-    });
+    };
+    setDragOffset(initialOffset);
+    const initialPos = pos ? { xRatio: pos.xRatio, yRatio: pos.yRatio } : null;
+    setDragPos(initialPos);
+    dragPosRef.current = initialPos;
 
     try {
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     } catch {}
   };
 
-  const handlePointerMove = (e: React.PointerEvent) => {
+  const handlePointerMove = (e: React.PointerEvent | PointerEvent) => {
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
 
     // 1. Grab-and-Rotate in progress
     if (rotatingId) {
+      if (e.cancelable) e.preventDefault();
       const currentAngle =
         Math.atan2(e.clientY - rotateStart.centerY, e.clientX - rotateStart.centerX) *
         (180 / Math.PI);
@@ -313,129 +344,184 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       }
       nextRotation = Math.max(-60, Math.min(60, nextRotation));
 
-      if (rotatingType === 'note') {
-        const note = notes.find((n) => n.id === rotatingId);
-        if (!note) return;
-        const pos = note.freeformPos || {
-          xRatio: 0.1,
-          yRatio: 0.1,
-          wRatio: 0.26,
-          hRatio: 0.3,
-          zIndex: 10,
-          rotation: 0,
-        };
-        onUpdateNotePos(note.id, {
-          ...pos,
-          rotation: nextRotation,
-        });
-      } else if (rotatingType === 'widget' && onUpdateWidgetPos) {
-        const widget = widgets.find((w) => w.id === rotatingId);
-        if (!widget) return;
-        const pos = widget.freeformPos || {
-          xRatio: 0.1,
-          yRatio: 0.1,
-          wRatio: 0.35,
-          hRatio: 0.45,
-          zIndex: 10,
-          rotation: 0,
-        };
-        onUpdateWidgetPos(widget.id, widget.gridPos, {
-          ...pos,
-          rotation: nextRotation,
-        });
-      }
+      rotateAngleRef.current = nextRotation;
+      setRotateAngle(nextRotation);
       return;
     }
 
     // 2. Resizing in progress
     if (resizingId) {
+      if (e.cancelable) e.preventDefault();
       const deltaX = e.clientX - resizeStart.startX;
       const deltaY = e.clientY - resizeStart.startY;
       const deltaWRatio = deltaX / rect.width;
       const deltaHRatio = deltaY / rect.height;
 
-      if (resizingType === 'widget' && onUpdateWidgetPos) {
-        const widget = widgets.find((w) => w.id === resizingId);
-        if (!widget || !widget.freeformPos) return;
+      const minW = resizingType === 'widget' ? 0.14 : 0.08;
+      const minH = resizingType === 'widget' ? 0.14 : 0.08;
+      const initialPos = dragTargetInitialPosRef.current;
+      const maxW = 1.0 - (initialPos?.xRatio || 0.1);
+      const maxH = 1.0 - (initialPos?.yRatio || 0.1);
 
-        const maxW = 1.0 - widget.freeformPos.xRatio;
-        const maxH = 1.0 - widget.freeformPos.yRatio;
+      const newW = Math.max(minW, Math.min(maxW, resizeStart.startW + deltaWRatio));
+      const newH = Math.max(minH, Math.min(maxH, resizeStart.startH + deltaHRatio));
 
-        const newW = Math.max(0.14, Math.min(maxW, resizeStart.startW + deltaWRatio));
-        const newH = Math.max(0.14, Math.min(maxH, resizeStart.startH + deltaHRatio));
-
-        onUpdateWidgetPos(widget.id, widget.gridPos, {
-          ...widget.freeformPos,
-          wRatio: newW,
-          hRatio: newH,
-        });
-      } else if (resizingType === 'note') {
-        const note = notes.find((n) => n.id === resizingId);
-        if (!note) return;
-        const pos = note.freeformPos || {
-          xRatio: 0.1,
-          yRatio: 0.1,
-          wRatio: 0.26,
-          hRatio: 0.3,
-          zIndex: 10,
-          rotation: 0,
-        };
-
-        const maxW = 1.0 - pos.xRatio;
-        const maxH = 1.0 - pos.yRatio;
-
-        const newW = Math.max(0.08, Math.min(maxW, resizeStart.startW + deltaWRatio));
-        const newH = Math.max(0.08, Math.min(maxH, resizeStart.startH + deltaHRatio));
-
-        onUpdateNotePos(note.id, {
-          ...pos,
-          wRatio: newW,
-          hRatio: newH,
-        });
-      }
+      resizeRatioRef.current = { wRatio: newW, hRatio: newH };
+      setResizeRatio({ wRatio: newW, hRatio: newH });
       return;
     }
 
     // 3. Dragging in progress
-    if (!draggingId) return;
+    if (draggingId) {
+      if (e.cancelable) e.preventDefault();
+      const dist = Math.hypot(
+        e.clientX - dragStartPointerRef.current.x,
+        e.clientY - dragStartPointerRef.current.y
+      );
+      if (dist > 3) {
+        isDraggingRef.current = true;
+      }
 
-    const containerX = e.clientX - rect.left;
-    const containerY = e.clientY - rect.top;
+      const containerX = e.clientX - rect.left;
+      const containerY = e.clientY - rect.top;
 
-    const newX = Math.max(0, Math.min(rect.width - 100, containerX - dragOffset.x));
-    const newY = Math.max(0, Math.min(rect.height - 80, containerY - dragOffset.y));
+      const newX = Math.max(0, Math.min(rect.width - 60, containerX - dragOffset.x));
+      const newY = Math.max(0, Math.min(rect.height - 60, containerY - dragOffset.y));
 
-    if (draggingType === 'note') {
-      const note = notes.find((n) => n.id === draggingId);
-      if (!note || !note.freeformPos) return;
+      const nextXRatio = newX / rect.width;
+      const nextYRatio = newY / rect.height;
 
-      onUpdateNotePos(draggingId, {
-        ...note.freeformPos,
-        xRatio: newX / rect.width,
-        yRatio: newY / rect.height,
-      });
-    } else if (draggingType === 'widget' && onUpdateWidgetPos) {
-      const widget = widgets.find((w) => w.id === draggingId);
-      if (!widget || !widget.freeformPos) return;
-
-      onUpdateWidgetPos(draggingId, widget.gridPos, {
-        ...widget.freeformPos,
-        xRatio: newX / rect.width,
-        yRatio: newY / rect.height,
-      });
+      dragPosRef.current = { xRatio: nextXRatio, yRatio: nextYRatio };
+      setDragPos({ xRatio: nextXRatio, yRatio: nextYRatio });
+      return;
     }
   };
 
-  const handlePointerUp = (e?: React.PointerEvent) => {
-    if (e && e.currentTarget && e.pointerId !== undefined) {
+  const handlePointerUp = (e?: React.PointerEvent | PointerEvent) => {
+    if (e && 'currentTarget' in e && (e as any).currentTarget && (e as any).pointerId !== undefined) {
       try {
-        (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+        ((e as any).currentTarget as HTMLElement).releasePointerCapture((e as any).pointerId);
       } catch {}
     }
-    setDraggingId(null);
-    setResizingId(null);
-    setRotatingId(null);
+
+    // 1. Commit drag
+    if (draggingId) {
+      const finalPos = dragPosRef.current;
+      const initialPos = dragTargetInitialPosRef.current;
+      const targetZ = nextZIndexRef.current || (initialPos?.zIndex || 1);
+
+      if (isDraggingRef.current && finalPos && initialPos) {
+        if (draggingType === 'note') {
+          onUpdateNotePos(draggingId, {
+            ...initialPos,
+            xRatio: finalPos.xRatio,
+            yRatio: finalPos.yRatio,
+            zIndex: targetZ,
+          });
+        } else if (draggingType === 'widget' && onUpdateWidgetPos) {
+          const widget = widgetsRef.current.find((w) => w.id === draggingId);
+          if (widget) {
+            onUpdateWidgetPos(draggingId, widget.gridPos, {
+              ...initialPos,
+              xRatio: finalPos.xRatio,
+              yRatio: finalPos.yRatio,
+              zIndex: targetZ,
+            });
+          }
+        }
+      } else if (initialPos && targetZ !== initialPos.zIndex) {
+        if (draggingType === 'note') {
+          onUpdateNotePos(draggingId, { ...initialPos, zIndex: targetZ });
+        } else if (draggingType === 'widget' && onUpdateWidgetPos) {
+          const widget = widgetsRef.current.find((w) => w.id === draggingId);
+          if (widget) {
+            onUpdateWidgetPos(draggingId, widget.gridPos, { ...initialPos, zIndex: targetZ });
+          }
+        }
+      }
+
+      setDraggingId(null);
+      setDragPos(null);
+      dragPosRef.current = null;
+      dragTargetInitialPosRef.current = null;
+      setTimeout(() => {
+        isDraggingRef.current = false;
+      }, 100);
+    }
+
+    // 2. Commit rotate
+    if (rotatingId) {
+      if (rotateAngleRef.current !== null) {
+        const nextRotation = rotateAngleRef.current;
+        if (rotatingType === 'note') {
+          const note = notesRef.current.find((n) => n.id === rotatingId);
+          if (note && note.freeformPos) {
+            onUpdateNotePos(rotatingId, { ...note.freeformPos, rotation: nextRotation });
+          }
+        } else if (rotatingType === 'widget' && onUpdateWidgetPos) {
+          const widget = widgetsRef.current.find((w) => w.id === rotatingId);
+          if (widget && widget.freeformPos) {
+            onUpdateWidgetPos(rotatingId, widget.gridPos, { ...widget.freeformPos, rotation: nextRotation });
+          }
+        }
+      }
+      setRotatingId(null);
+      setRotateAngle(null);
+      rotateAngleRef.current = null;
+    }
+
+    // 3. Commit resize
+    if (resizingId) {
+      if (resizeRatioRef.current !== null) {
+        const { wRatio, hRatio } = resizeRatioRef.current;
+        if (resizingType === 'note') {
+          const note = notesRef.current.find((n) => n.id === resizingId);
+          if (note && note.freeformPos) {
+            onUpdateNotePos(resizingId, { ...note.freeformPos, wRatio, hRatio });
+          }
+        } else if (resizingType === 'widget' && onUpdateWidgetPos) {
+          const widget = widgetsRef.current.find((w) => w.id === resizingId);
+          if (widget && widget.freeformPos) {
+            onUpdateWidgetPos(resizingId, widget.gridPos, { ...widget.freeformPos, wRatio, hRatio });
+          }
+        }
+      }
+      setResizingId(null);
+      setResizeRatio(null);
+      resizeRatioRef.current = null;
+    }
   };
+
+  const handlePointerMoveRef = useRef(handlePointerMove);
+  const handlePointerUpRef = useRef(handlePointerUp);
+
+  useEffect(() => {
+    handlePointerMoveRef.current = handlePointerMove;
+    handlePointerUpRef.current = handlePointerUp;
+  });
+
+  // Window-level Pointer Event Listeners (ensures gestures are never lost on mobile)
+  useEffect(() => {
+    if (!draggingId && !rotatingId && !resizingId) return;
+
+    const handleWindowPointerMove = (e: PointerEvent) => {
+      handlePointerMoveRef.current(e);
+    };
+
+    const handleWindowPointerUp = (e: PointerEvent) => {
+      handlePointerUpRef.current(e);
+    };
+
+    window.addEventListener('pointermove', handleWindowPointerMove, { passive: false });
+    window.addEventListener('pointerup', handleWindowPointerUp);
+    window.addEventListener('pointercancel', handleWindowPointerUp);
+
+    return () => {
+      window.removeEventListener('pointermove', handleWindowPointerMove);
+      window.removeEventListener('pointerup', handleWindowPointerUp);
+      window.removeEventListener('pointercancel', handleWindowPointerUp);
+    };
+  }, [draggingId, rotatingId, resizingId]);
 
   const handleAddChecklistItem = () => {
     if (!newItemText.trim()) return;
@@ -588,13 +674,27 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         const isFullScreen = Boolean(pos.isFullScreen);
         const isDragging = draggingId === widget.id;
         const isRotating = rotatingId === widget.id;
-        const isActiveManipulating = isDragging || resizingId === widget.id || isRotating;
+        const isResizing = resizingId === widget.id;
+        const isActiveManipulating = isDragging || isResizing || isRotating;
+        const isTransparentTextbox =
+          widget.type === 'textbox' &&
+          (!widget.config?.bgStyle || widget.config?.bgStyle === 'transparent');
+
+        const displayPos = {
+          ...pos,
+          xRatio: isDragging && dragPos ? dragPos.xRatio : pos.xRatio,
+          yRatio: isDragging && dragPos ? dragPos.yRatio : pos.yRatio,
+          wRatio: isResizing && resizeRatio ? resizeRatio.wRatio : pos.wRatio,
+          hRatio: isResizing && resizeRatio ? resizeRatio.hRatio : pos.hRatio,
+          rotation: isRotating && rotateAngle !== null ? rotateAngle : pos.rotation,
+        };
 
         return (
           <div
             key={widget.id}
             data-canvas-card="true"
             onPointerDown={(e) => !isFullScreen && handlePointerDown(e, widget.id, 'widget', pos)}
+            onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
             style={
@@ -608,21 +708,25 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                     zIndex: isActiveManipulating ? 50 : (pos.zIndex || 1),
                     touchAction: 'none',
                     WebkitTouchCallout: 'none',
+                    userSelect: 'none',
+                    WebkitUserSelect: 'none',
                   }
                 : {
                     position: 'absolute',
-                    left: `${pos.xRatio * 100}%`,
-                    top: `${pos.yRatio * 100}%`,
-                    width: `${pos.wRatio * 100}%`,
-                    height: `${pos.hRatio * 100}%`,
+                    left: `${displayPos.xRatio * 100}%`,
+                    top: `${displayPos.yRatio * 100}%`,
+                    width: `${displayPos.wRatio * 100}%`,
+                    height: `${displayPos.hRatio * 100}%`,
                     minWidth: '180px',
-                    minHeight: '140px',
+                    minHeight: isTransparentTextbox ? '60px' : '140px',
                     maxWidth: '100%',
                     maxHeight: '100%',
-                    transform: `rotate(${pos.rotation}deg) ${isDragging ? 'scale(1.02)' : 'scale(1)'}`,
+                    transform: `rotate(${displayPos.rotation}deg) ${isDragging ? 'scale(1.02)' : 'scale(1)'}`,
                     zIndex: isActiveManipulating ? 50 : pos.zIndex,
                     touchAction: 'none',
                     WebkitTouchCallout: 'none',
+                    userSelect: 'none',
+                    WebkitUserSelect: 'none',
                     transition: isActiveManipulating
                       ? 'none'
                       : 'left 0.3s cubic-bezier(0.22, 1, 0.36, 1), top 0.3s cubic-bezier(0.22, 1, 0.36, 1), width 0.3s cubic-bezier(0.22, 1, 0.36, 1), height 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.25s ease-out, box-shadow 0.2s',
@@ -631,9 +735,19 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             className={`group ${
               isFullScreen
                 ? 'rounded-none border-0 p-0 overflow-hidden'
+                : isTransparentTextbox
+                ? 'rounded-2xl border border-dashed border-transparent hover:border-white/20 p-2'
                 : 'rounded-2xl border border-gray-800/90 p-4'
-            } bg-gray-900/80 backdrop-blur-md shadow-2xl text-white cursor-grab active:cursor-grabbing touch-none select-none transition-shadow ${
-              isDragging || isRotating ? 'ring-2 ring-blue-500 shadow-blue-500/20' : 'hover:shadow-blue-500/10'
+            } ${
+              isTransparentTextbox
+                ? 'bg-transparent text-white'
+                : 'bg-gray-900/80 backdrop-blur-md shadow-2xl text-white'
+            } cursor-grab active:cursor-grabbing touch-none select-none transition-shadow ${
+              isDragging || isRotating
+                ? 'ring-2 ring-blue-500 shadow-blue-500/20'
+                : isTransparentTextbox
+                ? 'hover:bg-white/5'
+                : 'hover:shadow-blue-500/10'
             } flex flex-col justify-between`}
           >
             {/* Top-Center Grab-to-Rotate Handle (hidden when maximized, appears on hover) */}
@@ -864,6 +978,26 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                     }
                   }}
                 />
+              ) : widget.type === 'textbox' ? (
+                <TextBoxWidget
+                  content={widget.config?.content}
+                  fontSize={widget.config?.fontSize}
+                  fontWeight={widget.config?.fontWeight}
+                  textAlign={widget.config?.textAlign}
+                  fontFamily={widget.config?.fontFamily}
+                  textColor={widget.config?.textColor}
+                  textShadow={widget.config?.textShadow}
+                  textTransform={widget.config?.textTransform}
+                  letterSpacing={widget.config?.letterSpacing}
+                  bgStyle={widget.config?.bgStyle}
+                  onUpdateConfig={(updates) => {
+                    if (onUpdateWidget) {
+                      onUpdateWidget(widget.id, {
+                        config: { ...widget.config, ...updates },
+                      });
+                    }
+                  }}
+                />
               ) : widget.type === 'sticky_notes' ? (
                 <StickyNotesWidget
                   notes={notes}
@@ -890,18 +1024,40 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
         const isDragging = draggingId === note.id;
         const isRotating = rotatingId === note.id;
-        const isActiveManipulating = isDragging || resizingId === note.id || isRotating;
+        const isResizing = resizingId === note.id;
+        const isActiveManipulating = isDragging || isResizing || isRotating;
         const isExpiringSoon =
           note.expiresAt &&
           new Date(note.expiresAt).getTime() - now.getTime() < 12 * 60 * 60 * 1000;
         const fontSizeClass = FONT_SIZE_CLASSES[note.fontSize || 'base'];
+
+        const displayPos = {
+          ...pos,
+          xRatio: isDragging && dragPos ? dragPos.xRatio : pos.xRatio,
+          yRatio: isDragging && dragPos ? dragPos.yRatio : pos.yRatio,
+          wRatio: isResizing && resizeRatio ? resizeRatio.wRatio : pos.wRatio,
+          hRatio: isResizing && resizeRatio ? resizeRatio.hRatio : (pos.hRatio || 0.3),
+          rotation: isRotating && rotateAngle !== null ? rotateAngle : pos.rotation,
+        };
 
         return (
           <div
             key={note.id}
             data-canvas-card="true"
             onPointerDown={(e) => handlePointerDown(e, note.id, 'note', pos)}
-            onPointerUp={handlePointerUp}
+            onPointerMove={handlePointerMove}
+            onPointerUp={(e) => {
+              handlePointerUp(e);
+              if (!isDraggingRef.current) {
+                const now = Date.now();
+                if (lastTapRef.current.id === note.id && now - lastTapRef.current.time < 350) {
+                  openNoteEditorForExisting(note);
+                  lastTapRef.current = { id: '', time: 0 };
+                } else {
+                  lastTapRef.current = { id: note.id, time: now };
+                }
+              }
+            }}
             onPointerCancel={handlePointerUp}
             onDoubleClick={(e) => {
               e.stopPropagation();
@@ -909,19 +1065,21 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             }}
             style={{
               position: 'absolute',
-              left: `${pos.xRatio * 100}%`,
-              top: `${pos.yRatio * 100}%`,
-              width: `${pos.wRatio * 100}%`,
-              height: `${(pos.hRatio || 0.3) * 100}%`,
+              left: `${displayPos.xRatio * 100}%`,
+              top: `${displayPos.yRatio * 100}%`,
+              width: `${displayPos.wRatio * 100}%`,
+              height: `${(displayPos.hRatio || 0.3) * 100}%`,
               minWidth: '110px',
               minHeight: '90px',
               maxWidth: '100%',
               maxHeight: '100%',
-              transform: `rotate(${pos.rotation}deg) ${isDragging ? 'scale(1.03)' : 'scale(1)'}`,
+              transform: `rotate(${displayPos.rotation}deg) ${isDragging ? 'scale(1.03)' : 'scale(1)'}`,
               backgroundColor: note.bgColor || '#fef08a',
               zIndex: isActiveManipulating ? 50 : pos.zIndex,
               touchAction: 'none',
               WebkitTouchCallout: 'none',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
               transition: isActiveManipulating
                 ? 'none'
                 : 'left 0.3s cubic-bezier(0.22, 1, 0.36, 1), top 0.3s cubic-bezier(0.22, 1, 0.36, 1), width 0.3s cubic-bezier(0.22, 1, 0.36, 1), height 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.25s ease-out, box-shadow 0.2s',
@@ -952,65 +1110,127 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               </div>
               {isRotating && (
                 <span className="px-1.5 py-0.5 rounded-full bg-gray-900 text-white font-mono font-bold text-[10px] shadow">
-                  {pos.rotation}°
+                  {displayPos.rotation}°
                 </span>
               )}
             </div>
 
-            <div className="flex-1 overflow-y-auto min-h-0 pr-0.5">
-              {/* Note Title */}
-              {note.title && (
-                <div className="font-bold text-xs md:text-sm mb-1.5 flex items-center justify-between border-b border-black/10 pb-1">
-                  <span className="truncate">{note.title}</span>
-                  <div className="flex items-center gap-1 shrink-0">
-                    {note.expiresAt && (
-                      <span
-                        title={`Expires: ${new Date(note.expiresAt).toLocaleString()}`}
-                        className={`text-[9px] px-1.5 py-0.5 rounded-full flex items-center gap-0.5 ${
-                          isExpiringSoon ? 'bg-amber-500/30 text-amber-950 font-bold' : 'bg-black/10 text-gray-700'
-                        }`}
-                      >
-                        <Clock className="w-2.5 h-2.5" />
-                        {new Date(note.expiresAt).toLocaleDateString([], { month: 'numeric', day: 'numeric' })}
-                      </span>
-                    )}
-                  </div>
+            <div
+              className="flex-1 overflow-y-auto min-h-0 pr-0.5 select-none touch-none"
+              style={{
+                touchAction: 'none',
+                WebkitUserSelect: 'none',
+                WebkitTouchCallout: 'none',
+                userSelect: 'none',
+              }}
+            >
+              {/* Note Title & Header Edit Button */}
+              <div
+                className="font-bold text-xs md:text-sm mb-1.5 flex items-center justify-between border-b border-black/10 pb-1 select-none touch-none"
+                style={{
+                  touchAction: 'none',
+                  WebkitUserSelect: 'none',
+                  WebkitTouchCallout: 'none',
+                  userSelect: 'none',
+                }}
+              >
+                <span className="truncate select-none touch-none">
+                  {note.title || (note.isChecklist ? 'Checklist' : 'Note')}
+                </span>
+                <div className="flex items-center gap-1 shrink-0 select-none touch-none">
+                  {note.expiresAt && (
+                    <span
+                      title={`Expires: ${new Date(note.expiresAt).toLocaleString()}`}
+                      className={`text-[9px] px-1.5 py-0.5 rounded-full flex items-center gap-0.5 select-none touch-none ${
+                        isExpiringSoon ? 'bg-amber-500/30 text-amber-950 font-bold' : 'bg-black/10 text-gray-700'
+                      }`}
+                    >
+                      <Clock className="w-2.5 h-2.5" />
+                      {new Date(note.expiresAt).toLocaleDateString([], { month: 'numeric', day: 'numeric' })}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    data-no-drag="true"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openNoteEditorForExisting(note);
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className="p-1 rounded-md text-gray-700 hover:text-blue-900 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
+                    title="Edit note"
+                  >
+                    <Edit2 className="w-3 h-3" />
+                  </button>
                 </div>
-              )}
+              </div>
 
               {/* Note Content / Checklist */}
               {note.isChecklist && note.checklistItems ? (
-                <div className="space-y-1.5 mt-1">
+                <div className="space-y-1.5 mt-1 select-none touch-none">
                   {note.checklistItems.map((item) => (
-                    <button
+                    <div
                       key={item.id}
-                      onClick={() => toggleChecklistItem(note, item.id)}
-                      className={`flex items-center gap-2 w-full text-left hover:opacity-80 transition-opacity ${fontSizeClass}`}
+                      className={`flex items-center gap-2 w-full text-left select-none touch-none ${fontSizeClass}`}
                     >
-                      {item.done ? (
-                        <CheckSquare className="w-4 h-4 text-emerald-800 shrink-0" />
-                      ) : (
-                        <Square className="w-4 h-4 text-gray-700 shrink-0" />
-                      )}
-                      <span className={item.done ? 'line-through opacity-50' : 'font-medium'}>
+                      <button
+                        type="button"
+                        data-no-drag="true"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleChecklistItem(note, item.id);
+                        }}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                        }}
+                        title={item.done ? 'Mark as incomplete' : 'Mark as complete'}
+                        className="p-0.5 -m-0.5 hover:opacity-80 transition-opacity shrink-0 cursor-pointer text-gray-700 hover:text-gray-900"
+                      >
+                        {item.done ? (
+                          <CheckSquare className="w-4 h-4 text-emerald-800 shrink-0" />
+                        ) : (
+                          <Square className="w-4 h-4 text-gray-700 shrink-0" />
+                        )}
+                      </button>
+                      <span
+                        onClick={() => {
+                          if (!isDraggingRef.current) {
+                            toggleChecklistItem(note, item.id);
+                          }
+                        }}
+                        className={`flex-1 select-none touch-none cursor-pointer ${
+                          item.done ? 'line-through opacity-50' : 'font-medium'
+                        }`}
+                      >
                         {item.text}
                       </span>
-                    </button>
+                    </div>
                   ))}
                 </div>
               ) : (
-                <p className={`whitespace-pre-wrap break-words ${fontSizeClass}`}>{note.content}</p>
+                <p
+                  className={`whitespace-pre-wrap break-words select-none touch-none ${fontSizeClass}`}
+                  style={{
+                    touchAction: 'none',
+                    WebkitUserSelect: 'none',
+                    WebkitTouchCallout: 'none',
+                    userSelect: 'none',
+                  }}
+                >
+                  {note.content}
+                </p>
               )}
             </div>
 
             {/* Note Bottom Actions: 1-Click Color Swatches, Tilt, Edit & Archive/Delete */}
-            <div className="flex items-center justify-between gap-1 pt-1.5 border-t border-black/10 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity pr-4 shrink-0">
+            <div className="flex items-center justify-between gap-1 pt-1.5 border-t border-black/10 mt-1.5 opacity-90 md:opacity-0 md:group-hover:opacity-100 transition-opacity pr-3 shrink-0">
               {/* 1-Click Inline Pastel Color Swatches */}
               <div className="flex items-center gap-1">
                 {COLOR_PALETTE.map((color) => (
                   <button
                     key={color}
                     type="button"
+                    data-no-drag="true"
                     onClick={(e) => {
                       e.stopPropagation();
                       onUpdateNote(note.id, { bgColor: color });
@@ -1030,6 +1250,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               <div className="flex items-center gap-0.5">
                 <button
                   type="button"
+                  data-no-drag="true"
                   onClick={(e) => {
                     e.stopPropagation();
                     onUpdateNotePos(note.id, {
@@ -1045,24 +1266,26 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 </button>
                 <button
                   type="button"
+                  data-no-drag="true"
                   onClick={(e) => {
                     e.stopPropagation();
                     openNoteEditorForExisting(note);
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
-                  className="p-1 rounded-lg text-gray-700 hover:text-blue-800 hover:bg-black/10 transition-all cursor-pointer"
+                  className="p-1.5 rounded-lg text-gray-700 hover:text-blue-800 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
                   title="Edit note text, checklist, font size, or canvas board"
                 >
                   <Edit2 className="w-3.5 h-3.5" />
                 </button>
                 <button
                   type="button"
+                  data-no-drag="true"
                   onClick={(e) => {
                     e.stopPropagation();
                     onDeleteNote(note.id);
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
-                  className="p-1 rounded-lg text-gray-700 hover:text-red-700 hover:bg-black/10 transition-all cursor-pointer"
+                  className="p-1.5 rounded-lg text-gray-700 hover:text-red-700 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
                   title="Archive note to Trash"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
