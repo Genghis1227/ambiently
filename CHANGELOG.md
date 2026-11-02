@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.0.11] - 2026-11-01
+
+### Added
+* **Dashboard Views & Tabs Manager (`SettingsModal.tsx`):**
+  * Added a dedicated "Dashboard Views & Tabs" selector in Settings to toggle visible tabs in the Navigation Dock and ambient carousel.
+  * Overview (Bento Grid) is now an optional tab that users can enable on demand, keeping the dashboard unified around Corkboard.
+  * Built-in safeguards prevent users from disabling all views.
+* **1-Click Fullscreen / Canvas Fill on Corkboard (`Corkboard.tsx`):**
+  * Added a Maximize / Restore button to all widget tiles on Corkboard.
+  * Allows expanding the Photo Frame (or any widget) to 100% borderless display, turning Corkboard into an edge-to-edge photo streamer.
+* **Interactive Bento Grid Touch Dragging & Swapping (`BentoGrid.tsx`):**
+  * Added pointer drag handles with live blue drop-preview box.
+  * Automatic collision detection swaps grid tile coordinates when dragging one tile over another.
+  * Added a 1-click quick-swap button on each tile header for fast adjacent reordering on tablets.
+
+### Changed
+* **Corkboard as Primary View:** Default fresh installations start on Family Board (Corkboard) as the primary ambient display.
+* **Support & Donate Panel Relocation:** Moved Support & Donate to the bottom of the Settings modal above the Danger Zone.
+* **User-Friendly Cloud Sync Terminology:** Replaced technical "Supabase" and "Magic Link" terminology with "Cloud Sync & Multi-Device Backup".
+
+---
+
 ## [0.0.10] - 2026-11-01
 
 ### Fixed

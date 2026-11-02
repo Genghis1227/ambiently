@@ -5,9 +5,23 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.0.10';
+export const APP_VERSION = '0.0.11';
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.0.11",
+    date: "November 1, 2026",
+    title: "Views Manager, Corkboard Fullscreen Tiles & Bento Touch Movement",
+    highlights: [
+      "Dashboard Views & Tabs Manager in Settings to select visible tabs (Overview Bento Grid is now an optional tab).",
+      "Corkboard set as the unified primary smart-display board for freeform notes, checklists, and widgets.",
+      "1-Click Fullscreen / Canvas Fill toggle on Corkboard widgets (expand Photo Frame or others to 100% borderless display).",
+      "Interactive touch and pointer drag-and-drop tile reordering and collision swapping on Bento Grid.",
+      "1-Click quick-swap button on Bento Grid tiles for effortless reordering on touchscreens.",
+      "Relocated Support & Donate panel to the bottom of the Settings modal above Danger Zone.",
+      "Replaced technical Supabase and Magic Link jargon with user-friendly Cloud Sync & Multi-Device Backup wording.",
+    ],
+  },
   {
     version: "v0.0.10",
     date: "November 1, 2026",
