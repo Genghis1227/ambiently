@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.5] - 2026-11-02
+
+### Added
+* **Selectable Default Home Board (`types/dashboard.ts`, `store/dashboardStore.ts`, `services/db.ts`):**
+  * Added `isHome?: boolean` to `DashboardTab`, allowing users to explicitly designate any canvas as the default Home Board without having to shift it to position #1.
+  * Added `setHomeTab(tabId)` action to `dashboardStore` that persists to Dexie DB and updates local backups.
+  * Updated app initialization to prioritize explicitly designated Home Boards when loading dashboards.
+  * Added deletion fallback to reassign home status gracefully if the current Home Board is deleted.
+* **Canvases & Boards Manager Polish (`SettingsModal.tsx`):**
+  * Added prominent purple `[🏠 Home Board]` badge next to the canvas name for instant identification.
+  * Added 1-click `Home` icon button (`🏠`) in the canvas action controls row for rapid 1-tap assignment.
+  * Added **"Default Home Board"** toggle switch inside the inline canvas editor.
+* **Ambient Command Hub & Navigation Dock Indicators (`AmbientQuickMenu.tsx`, `NavigationDock.tsx`, `App.tsx`):**
+  * Ambient Command Hub popover now dynamically displays the actual name of your configured Home Board on the Home button and navigates directly to it.
+  * Navigation Dock shows a subtle purple glowing indicator dot on inactive Home Board icons and appends `(Home Board)` to the tooltip.
+* **Mobile Companion Tab Indicator (`MobileCompanion.tsx`):**
+  * Mobile companion tab switcher pills display a subtle Home icon (`🏠`) beside the Home Board.
+
+---
+
 ## [0.1.4] - 2026-11-02
 
 ### Added
