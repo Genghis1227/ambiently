@@ -12,7 +12,6 @@ import type {
   StickyNoteItem,
   AppSettings,
   DockPosition,
-  LayoutMode,
 } from '../types/dashboard';
 import { saveSnapshotToFile, hasActiveLocalFile } from '../services/fileSync';
 
@@ -33,12 +32,11 @@ interface DashboardState {
   // Actions
   initStore: () => Promise<void>;
   setActiveTabId: (tabId: string) => void;
-  addTab: (name: string, icon: string, layoutMode?: LayoutMode) => Promise<string>;
+  addTab: (name: string, icon: string) => Promise<string>;
   updateTab: (tabId: string, updates: Partial<DashboardTab>) => Promise<void>;
   deleteTab: (tabId: string) => Promise<void>;
   reorderTabs: (orderedTabIds: string[]) => Promise<void>;
   setDockPosition: (pos: DockPosition) => Promise<void>;
-  setLayoutMode: (tabId: string, mode: LayoutMode) => Promise<void>;
   toggleTabEnabled: (tabId: string, enabled: boolean) => Promise<void>;
   setDisplayDensity: (density: 0.75 | 1.0 | 1.25 | 1.5) => Promise<void>;
   setCarouselEnabled: (enabled: boolean) => Promise<void>;
@@ -133,7 +131,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     get().pauseCarouselTemporarily();
   },
 
-  addTab: async (name, icon, layoutMode = 'freeform') => {
+  addTab: async (name, icon) => {
     const newId = `tab-${Date.now()}`;
     const maxOrder = get().tabs.reduce((max, t) => Math.max(max, t.order), -1);
     const newTab: DashboardTab = {
@@ -141,7 +139,6 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       name: name.trim() || 'New Canvas',
       icon: icon || 'Pin',
       order: maxOrder + 1,
-      layoutMode,
       autoRotateDurationSec: 30,
       enabled: true,
       updated_at: new Date().toISOString(),
@@ -208,17 +205,6 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const updated = { ...get().settings, dockPosition, updated_at: new Date().toISOString() };
     await db.settings.put(updated);
     set({ settings: updated });
-    get().saveLocalBackup();
-  },
-
-  setLayoutMode: async (tabId, layoutMode) => {
-    const tab = get().tabs.find((t) => t.id === tabId);
-    if (!tab) return;
-    const updatedTab = { ...tab, layoutMode, updated_at: new Date().toISOString() };
-    await db.tabs.put(updatedTab);
-    set({
-      tabs: get().tabs.map((t) => (t.id === tabId ? updatedTab : t)),
-    });
     get().saveLocalBackup();
   },
 

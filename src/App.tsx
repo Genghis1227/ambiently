@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useDashboardStore } from './store/dashboardStore';
 import { NavigationDock } from './components/dock/NavigationDock';
-import { BentoGrid } from './components/layout/BentoGrid';
 import { Corkboard } from './components/layout/Corkboard';
 import { PinOverlay } from './components/kiosk/PinOverlay';
 import { NightMode } from './components/kiosk/NightMode';
@@ -214,33 +213,19 @@ export function App() {
           transform: `scale(${settings.displayDensity})`,
         }}
       >
-        {activeTab?.layoutMode === 'freeform' ? (
-          <Corkboard
-            notes={tabNotes.length > 0 ? tabNotes : notes}
-            widgets={tabWidgets}
-            dockPaddingClass={dockPaddingClasses}
-            onUpdateNotePos={updateNotePosition}
-            onUpdateWidgetPos={updateWidgetPosition}
-            onAddNote={addNote}
-            onUpdateNote={updateNote}
-            onDeleteNote={deleteNote}
-            onRemoveWidget={removeWidget}
-            onOpenAddWidget={() => setIsAddWidgetOpen(true)}
-            onUpdateWidget={updateWidget}
-          />
-        ) : (
-          <BentoGrid
-            widgets={tabWidgets.length > 0 ? tabWidgets : widgets}
-            notes={notes}
-            dockPaddingClass={dockPaddingClasses}
-            onAddNote={addNote}
-            onUpdateNote={updateNote}
-            onDeleteNote={deleteNote}
-            onRemoveWidget={removeWidget}
-            onUpdateWidgetPosition={updateWidgetPosition}
-            onUpdateWidget={updateWidget}
-          />
-        )}
+        <Corkboard
+          notes={tabNotes.length > 0 ? tabNotes : notes}
+          widgets={tabWidgets}
+          dockPaddingClass={dockPaddingClasses}
+          onUpdateNotePos={updateNotePosition}
+          onUpdateWidgetPos={updateWidgetPosition}
+          onAddNote={addNote}
+          onUpdateNote={updateNote}
+          onDeleteNote={deleteNote}
+          onRemoveWidget={removeWidget}
+          onOpenAddWidget={() => setIsAddWidgetOpen(true)}
+          onUpdateWidget={updateWidget}
+        />
       </div>
 
       {/* Navigation Dock - Pinned at Viewport Level */}
@@ -295,8 +280,8 @@ export function App() {
       <CreateCanvasModal
         isOpen={isCreateCanvasOpen}
         onClose={() => setIsCreateCanvasOpen(false)}
-        onCreateCanvas={(name, icon, layoutMode) => {
-          addTab(name, icon, layoutMode);
+        onCreateCanvas={(name, icon) => {
+          addTab(name, icon);
         }}
       />
 

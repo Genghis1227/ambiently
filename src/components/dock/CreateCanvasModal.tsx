@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 import { X, Plus } from 'lucide-react';
-import type { LayoutMode } from '../../types/dashboard';
 import { CANVAS_ICONS } from '../../data/canvasIcons';
 
 interface CreateCanvasModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreateCanvas: (name: string, icon: string, layoutMode: LayoutMode) => void;
+  onCreateCanvas: (name: string, icon: string) => void;
 }
 
 export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
@@ -16,17 +15,15 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
 }) => {
   const [name, setName] = useState('');
   const [selectedIcon, setSelectedIcon] = useState('Pin');
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>('freeform');
 
   if (!isOpen) return null;
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    onCreateCanvas(name.trim(), selectedIcon, layoutMode);
+    onCreateCanvas(name.trim(), selectedIcon);
     setName('');
     setSelectedIcon('Pin');
-    setLayoutMode('freeform');
     onClose();
   };
 
@@ -58,7 +55,7 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Living Room, Photos, Chores, Kitchen..."
+              placeholder="e.g. Photos, Living Room, Kitchen Display, Office..."
               className="w-full rounded-xl bg-gray-950 border border-gray-800 p-2.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
             />
           </div>
@@ -67,7 +64,7 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
             <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
               Choose an Icon
             </label>
-            <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto p-1 bg-gray-950 rounded-xl border border-gray-800">
+            <div className="grid grid-cols-4 gap-2 max-h-56 overflow-y-auto p-1 bg-gray-950 rounded-xl border border-gray-800">
               {CANVAS_ICONS.map((item) => {
                 const IconComponent = item.icon;
                 const isSelected = selectedIcon === item.id;
@@ -87,36 +84,6 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
                   </button>
                 );
               })}
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
-              Canvas Layout
-            </label>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setLayoutMode('freeform')}
-                className={`flex-1 py-2 px-3 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
-                  layoutMode === 'freeform'
-                    ? 'bg-emerald-600/20 border-emerald-500 text-emerald-300'
-                    : 'border-gray-800 bg-gray-950 text-gray-400'
-                }`}
-              >
-                📌 Corkboard (Freeform)
-              </button>
-              <button
-                type="button"
-                onClick={() => setLayoutMode('grid')}
-                className={`flex-1 py-2 px-3 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
-                  layoutMode === 'grid'
-                    ? 'bg-emerald-600/20 border-emerald-500 text-emerald-300'
-                    : 'border-gray-800 bg-gray-950 text-gray-400'
-                }`}
-              >
-                🍱 Bento Grid (12×8)
-              </button>
             </div>
           </div>
 

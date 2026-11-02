@@ -290,7 +290,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                               {tab.name}
                             </span>
                             <span className="text-[10px] text-gray-400">
-                              {tab.layoutMode === 'grid' ? 'Bento Grid' : 'Corkboard Canvas'}
+                              Corkboard Canvas
                             </span>
                           </div>
                         </div>
@@ -753,8 +753,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       <CreateCanvasModal
         isOpen={isCreateCanvasOpen}
         onClose={() => setIsCreateCanvasOpen(false)}
-        onCreateCanvas={(name, icon, layoutMode) => {
-          addTab(name, icon, layoutMode);
+        onCreateCanvas={(name, icon) => {
+          addTab(name, icon);
         }}
       />
 
