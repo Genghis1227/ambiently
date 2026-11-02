@@ -59,32 +59,12 @@ export const DEFAULT_TABS: DashboardTab[] = [
     enabled: true,
     updated_at: new Date().toISOString(),
   },
-  {
-    id: "tab-photos",
-    name: "Photos",
-    icon: "Image",
-    order: 1,
-    layoutMode: "grid",
-    autoRotateDurationSec: 45,
-    enabled: true,
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: "tab-overview",
-    name: "Overview (Bento Grid)",
-    icon: "LayoutGrid",
-    order: 2,
-    layoutMode: "grid",
-    autoRotateDurationSec: 30,
-    enabled: false,
-    updated_at: new Date().toISOString(),
-  },
 ];
 
 export const DEFAULT_WIDGETS: DashboardWidget[] = [
   {
     id: 'widget-clock',
-    tabId: 'tab-overview',
+    tabId: 'tab-corkboard',
     type: 'clock_weather',
     title: 'Clock & Weather',
     gridPos: { x: 0, y: 0, w: 4, h: 4 },
@@ -94,7 +74,7 @@ export const DEFAULT_WIDGETS: DashboardWidget[] = [
   },
   {
     id: 'widget-notes-tile',
-    tabId: 'tab-overview',
+    tabId: 'tab-corkboard',
     type: 'sticky_notes',
     title: 'Quick Reminders',
     gridPos: { x: 4, y: 0, w: 4, h: 8 },
@@ -104,7 +84,7 @@ export const DEFAULT_WIDGETS: DashboardWidget[] = [
   },
   {
     id: 'widget-photo-tile',
-    tabId: 'tab-overview',
+    tabId: 'tab-corkboard',
     type: 'photo_frame',
     title: 'Ambient Memories',
     gridPos: { x: 8, y: 0, w: 4, h: 8 },
@@ -114,7 +94,7 @@ export const DEFAULT_WIDGETS: DashboardWidget[] = [
   },
   {
     id: 'widget-countdown-tile',
-    tabId: 'tab-overview',
+    tabId: 'tab-corkboard',
     type: 'countdown',
     title: 'Upcoming Milestone',
     gridPos: { x: 0, y: 4, w: 4, h: 4 },

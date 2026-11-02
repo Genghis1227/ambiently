@@ -14,9 +14,10 @@ import {
   Trash2,
   Download,
   Upload,
-  LayoutGrid,
-  Pin,
-  Image,
+  ChevronUp,
+  ChevronDown,
+  Edit2,
+  Plus,
 } from 'lucide-react';
 import { db } from '../../services/db';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -34,6 +35,8 @@ import {
   pullFromCloud,
 } from '../../services/supabase';
 import { APP_VERSION } from '../../data/changelog';
+import { CANVAS_ICONS } from '../../data/canvasIcons';
+import { CreateCanvasModal } from '../dock/CreateCanvasModal';
 import { ChangelogModal } from '../changelog/ChangelogModal';
 import { SupportPanel } from './SupportPanel';
 import { ShareBoardModal } from './ShareBoardModal';
@@ -57,7 +60,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setCarouselDuration,
     setPinLock,
     saveLocalBackup,
-    toggleTabEnabled,
+    addTab,
+    updateTab,
+    deleteTab,
+    reorderTabs,
   } = useDashboardStore();
 
   const [pinInput, setPinInput] = useState('');
@@ -74,6 +80,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [isResetting, setIsResetting] = useState(false);
   const [backupStatus, setBackupStatus] = useState<string>('');
   const restoreFileRef = React.useRef<HTMLInputElement>(null);
+  const [isCreateCanvasOpen, setIsCreateCanvasOpen] = useState(false);
+  const [editingTabId, setEditingTabId] = useState<string | null>(null);
+  const [editTabName, setEditTabName] = useState('');
+  const [editTabIcon, setEditTabIcon] = useState('Pin');
+
+  const handleMoveTab = async (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= tabs.length) return;
+    const newTabs = [...tabs];
+    const [moved] = newTabs.splice(index, 1);
+    newTabs.splice(targetIndex, 0, moved);
+    await reorderTabs(newTabs.map((t) => t.id));
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -224,83 +243,171 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           </div>
 
           <div className="space-y-6">
-            {/* Active Views & Tabs Configuration */}
+            {/* Canvases & Boards Manager */}
             <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800">
-              <div className="mb-3">
-                <span className="text-sm font-semibold text-white block">
-                  Dashboard Views & Tabs
-                </span>
-                <span className="text-[11px] text-gray-400">
-                  Select which views appear as tabs in the navigation dock and ambient carousel.
-                </span>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <span className="text-sm font-semibold text-white block">
+                    Canvases & Boards
+                  </span>
+                  <span className="text-[11px] text-gray-400">
+                    Reorder, rename, custom icons, or add new boards.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsCreateCanvasOpen(true)}
+                  className="px-2.5 py-1.5 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>New Canvas</span>
+                </button>
               </div>
 
-              <div className="space-y-2.5">
-                {tabs.map((tab) => {
-                  const isEnabled = tab.id === 'tab-overview' ? Boolean(tab.enabled) : tab.enabled !== false;
-                  const enabledCount = tabs.filter((t) =>
-                    t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false
-                  ).length;
-                  const canToggle = !isEnabled || enabledCount > 1;
+              <div className="space-y-2">
+                {tabs.map((tab, idx) => {
+                  const isEditingThis = editingTabId === tab.id;
+                  const isFirst = idx === 0;
+                  const isLast = idx === tabs.length - 1;
 
-                  const tabMeta: Record<string, { label: string; desc: string; icon: React.ReactNode }> = {
-                    'tab-corkboard': {
-                      label: 'Family Board (Corkboard)',
-                      desc: 'Freeform canvas for notes, checklists, widgets, and photos',
-                      icon: <Pin className="w-4 h-4 text-emerald-400" />,
-                    },
-                    'tab-photos': {
-                      label: 'Ambient Memories (Photos)',
-                      desc: 'Rotating photo screensaver from Plex, Local NAS, or Web',
-                      icon: <Image className="w-4 h-4 text-purple-400" />,
-                    },
-                    'tab-overview': {
-                      label: 'Overview (Bento Grid)',
-                      desc: 'Structured 12×8 grid command center with draggable tiles',
-                      icon: <LayoutGrid className="w-4 h-4 text-blue-400" />,
-                    },
-                  };
-
-                  const meta = tabMeta[tab.id] || {
-                    label: tab.name,
-                    desc: `${tab.layoutMode === 'grid' ? 'Grid layout' : 'Freeform canvas'}`,
-                    icon: <LayoutGrid className="w-4 h-4 text-gray-400" />,
-                  };
+                  // Find Icon component
+                  const matchedIconItem = CANVAS_ICONS.find((i) => i.id === tab.icon) || CANVAS_ICONS[0];
+                  const IconComp = matchedIconItem.icon;
 
                   return (
                     <div
                       key={tab.id}
-                      className="flex items-center justify-between p-2.5 rounded-lg bg-gray-900/60 border border-gray-800/80"
+                      className="p-2.5 rounded-lg bg-gray-900/80 border border-gray-800/90 space-y-2"
                     >
-                      <div className="flex items-center gap-2.5">
-                        <div className="p-2 rounded-lg bg-black/40 border border-white/5">
-                          {meta.icon}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          {/* Icon Badge */}
+                          <div className="p-2 rounded-lg bg-black/50 border border-white/10 text-emerald-400">
+                            <IconComp className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold text-white block">
+                              {tab.name}
+                            </span>
+                            <span className="text-[10px] text-gray-400">
+                              Corkboard Canvas
+                            </span>
+                          </div>
                         </div>
-                        <div>
-                          <span className="text-xs font-semibold text-white block">
-                            {meta.label}
-                          </span>
-                          <span className="text-[10px] text-gray-400 line-clamp-1">
-                            {meta.desc}
-                          </span>
+
+                        {/* Reorder, Edit & Action Controls */}
+                        <div className="flex items-center gap-1">
+                          {/* Move Up */}
+                          <button
+                            type="button"
+                            disabled={isFirst}
+                            onClick={() => handleMoveTab(idx, 'up')}
+                            title="Move tab up/earlier in order"
+                            className="p-1 rounded-md text-gray-400 hover:text-white hover:bg-gray-800 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
+                          >
+                            <ChevronUp className="w-4 h-4" />
+                          </button>
+
+                          {/* Move Down */}
+                          <button
+                            type="button"
+                            disabled={isLast}
+                            onClick={() => handleMoveTab(idx, 'down')}
+                            title="Move tab down/later in order"
+                            className="p-1 rounded-md text-gray-400 hover:text-white hover:bg-gray-800 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
+                          >
+                            <ChevronDown className="w-4 h-4" />
+                          </button>
+
+                          {/* Edit / Rename */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (isEditingThis) {
+                                setEditingTabId(null);
+                              } else {
+                                setEditingTabId(tab.id);
+                                setEditTabName(tab.name);
+                                setEditTabIcon(tab.icon || 'Pin');
+                              }
+                            }}
+                            title="Edit name and icon"
+                            className="p-1 rounded-md text-gray-400 hover:text-blue-300 hover:bg-blue-500/20 transition-colors"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Delete Tab */}
+                          {tabs.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => deleteTab(tab.id)}
+                              title="Delete this canvas"
+                              className="p-1 rounded-md text-gray-400 hover:text-red-400 hover:bg-red-500/20 transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        disabled={!canToggle}
-                        onClick={() => toggleTabEnabled(tab.id, !isEnabled)}
-                        title={!canToggle ? 'At least one view must remain active' : undefined}
-                        className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors duration-200 ease-in-out ${
-                          !canToggle ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-                        } ${isEnabled ? 'bg-blue-600' : 'bg-gray-700'}`}
-                      >
-                        <div
-                          className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${
-                            isEnabled ? 'translate-x-5' : 'translate-x-0'
-                          }`}
-                        />
-                      </button>
+                      {/* Inline Canvas Editor */}
+                      {isEditingThis && (
+                        <div className="pt-2 border-t border-gray-800/80 space-y-2">
+                          <input
+                            type="text"
+                            value={editTabName}
+                            onChange={(e) => setEditTabName(e.target.value)}
+                            placeholder="Canvas Name"
+                            className="w-full rounded-lg bg-gray-950 border border-gray-800 p-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                          />
+
+                          <div className="grid grid-cols-8 gap-1.5 p-1.5 bg-gray-950 rounded-lg border border-gray-800 max-h-32 overflow-y-auto">
+                            {CANVAS_ICONS.map((item) => {
+                              const IComp = item.icon;
+                              const isCur = editTabIcon === item.id;
+                              return (
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  onClick={() => setEditTabIcon(item.id)}
+                                  className={`p-1.5 rounded flex items-center justify-center transition-all cursor-pointer ${
+                                    isCur ? 'bg-emerald-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                                  }`}
+                                  title={item.label}
+                                >
+                                  <IComp className="w-3.5 h-3.5" />
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          <div className="flex justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setEditingTabId(null)}
+                              className="px-2.5 py-1 rounded text-[11px] text-gray-400 hover:text-white"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (editTabName.trim()) {
+                                  await updateTab(tab.id, {
+                                    name: editTabName.trim(),
+                                    icon: editTabIcon,
+                                  });
+                                }
+                                setEditingTabId(null);
+                              }}
+                              className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-[11px] font-bold text-white shadow"
+                            >
+                              Save Changes
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -641,6 +748,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           </div>
         </div>
       </div>
+
+      {/* Create Canvas Modal */}
+      <CreateCanvasModal
+        isOpen={isCreateCanvasOpen}
+        onClose={() => setIsCreateCanvasOpen(false)}
+        onCreateCanvas={(name, icon) => {
+          addTab(name, icon);
+        }}
+      />
 
       {/* Dedicated Changelog Modal */}
       <ChangelogModal

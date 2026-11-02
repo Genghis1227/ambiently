@@ -1,6 +1,5 @@
 export type DockPosition = 'left' | 'top' | 'right' | 'bottom';
 
-export type LayoutMode = 'grid' | 'freeform';
 
 export type WidgetType =
   | 'clock_weather'
@@ -40,7 +39,7 @@ export interface DashboardTab {
   name: string;
   icon?: string;
   order: number;
-  layoutMode: LayoutMode;
+  layoutMode?: string;
   autoRotateDurationSec: number; // 0 = do not rotate, >0 = rotate after N seconds
   enabled?: boolean;
   updated_at: string;

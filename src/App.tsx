@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useDashboardStore } from './store/dashboardStore';
 import { NavigationDock } from './components/dock/NavigationDock';
-import { BentoGrid } from './components/layout/BentoGrid';
 import { Corkboard } from './components/layout/Corkboard';
 import { PinOverlay } from './components/kiosk/PinOverlay';
 import { NightMode } from './components/kiosk/NightMode';
@@ -9,6 +8,7 @@ import { SettingsModal } from './components/settings/SettingsModal';
 import { LocalBackupModal } from './components/kiosk/LocalBackupModal';
 import { MobileCompanion } from './components/mobile/MobileCompanion';
 import { AddWidgetModal } from './components/widgets/AddWidgetModal';
+import { CreateCanvasModal } from './components/dock/CreateCanvasModal';
 import { openLocalFileBinding } from './services/fileSync';
 import { subscribeToRealtimeBoard, joinBoardByCode } from './services/supabase';
 
@@ -29,15 +29,18 @@ export function App() {
     updateWidgetPosition,
     addWidget,
     removeWidget,
+    updateWidget,
     addNote,
     updateNote,
     deleteNote,
+    addTab,
   } = useDashboardStore();
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
   const [isAddWidgetOpen, setIsAddWidgetOpen] = useState(false);
+  const [isCreateCanvasOpen, setIsCreateCanvasOpen] = useState(false);
   const [hasFileBound, setHasFileBound] = useState(false);
   const syncRemoteNoteChange = useDashboardStore((s) => s.syncRemoteNoteChange);
 
@@ -210,31 +213,19 @@ export function App() {
           transform: `scale(${settings.displayDensity})`,
         }}
       >
-        {activeTab?.layoutMode === 'freeform' ? (
-          <Corkboard
-            notes={tabNotes.length > 0 ? tabNotes : notes}
-            widgets={tabWidgets}
-            dockPaddingClass={dockPaddingClasses}
-            onUpdateNotePos={updateNotePosition}
-            onUpdateWidgetPos={updateWidgetPosition}
-            onAddNote={addNote}
-            onUpdateNote={updateNote}
-            onDeleteNote={deleteNote}
-            onRemoveWidget={removeWidget}
-            onOpenAddWidget={() => setIsAddWidgetOpen(true)}
-          />
-        ) : (
-          <BentoGrid
-            widgets={tabWidgets.length > 0 ? tabWidgets : widgets}
-            notes={notes}
-            dockPaddingClass={dockPaddingClasses}
-            onAddNote={addNote}
-            onUpdateNote={updateNote}
-            onDeleteNote={deleteNote}
-            onRemoveWidget={removeWidget}
-            onUpdateWidgetPosition={updateWidgetPosition}
-          />
-        )}
+        <Corkboard
+          notes={tabNotes.length > 0 ? tabNotes : notes}
+          widgets={tabWidgets}
+          dockPaddingClass={dockPaddingClasses}
+          onUpdateNotePos={updateNotePosition}
+          onUpdateWidgetPos={updateWidgetPosition}
+          onAddNote={addNote}
+          onUpdateNote={updateNote}
+          onDeleteNote={deleteNote}
+          onRemoveWidget={removeWidget}
+          onOpenAddWidget={() => setIsAddWidgetOpen(true)}
+          onUpdateWidget={updateWidget}
+        />
       </div>
 
       {/* Navigation Dock - Pinned at Viewport Level */}
@@ -251,6 +242,7 @@ export function App() {
         onConnectFile={() => setIsBackupModalOpen(true)}
         hasFileBound={hasFileBound}
         onOpenAddWidget={() => setIsAddWidgetOpen(true)}
+        onOpenAddCanvas={() => setIsCreateCanvasOpen(true)}
       />
 
       {/* Night Mode Screen Overlay */}
@@ -283,6 +275,14 @@ export function App() {
         onClose={() => setIsAddWidgetOpen(false)}
         activeTabId={activeTab?.id || 'tab-corkboard'}
         onAddWidget={addWidget}
+      />
+
+      <CreateCanvasModal
+        isOpen={isCreateCanvasOpen}
+        onClose={() => setIsCreateCanvasOpen(false)}
+        onCreateCanvas={(name, icon) => {
+          addTab(name, icon);
+        }}
       />
 
       {/* Settings Modal */}

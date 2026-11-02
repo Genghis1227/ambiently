@@ -12,7 +12,6 @@ import type {
   StickyNoteItem,
   AppSettings,
   DockPosition,
-  LayoutMode,
 } from '../types/dashboard';
 import { saveSnapshotToFile, hasActiveLocalFile } from '../services/fileSync';
 
@@ -33,8 +32,11 @@ interface DashboardState {
   // Actions
   initStore: () => Promise<void>;
   setActiveTabId: (tabId: string) => void;
+  addTab: (name: string, icon: string) => Promise<string>;
+  updateTab: (tabId: string, updates: Partial<DashboardTab>) => Promise<void>;
+  deleteTab: (tabId: string) => Promise<void>;
+  reorderTabs: (orderedTabIds: string[]) => Promise<void>;
   setDockPosition: (pos: DockPosition) => Promise<void>;
-  setLayoutMode: (tabId: string, mode: LayoutMode) => Promise<void>;
   toggleTabEnabled: (tabId: string, enabled: boolean) => Promise<void>;
   setDisplayDensity: (density: 0.75 | 1.0 | 1.25 | 1.5) => Promise<void>;
   setCarouselEnabled: (enabled: boolean) => Promise<void>;
@@ -50,6 +52,7 @@ interface DashboardState {
   // Widget / Note operations
   addWidget: (widget: Partial<DashboardWidget>) => Promise<void>;
   removeWidget: (widgetId: string) => Promise<void>;
+  updateWidget: (widgetId: string, updates: Partial<DashboardWidget>) => Promise<void>;
   updateWidgetConfig: (widgetId: string, configUpdates: Record<string, any>) => Promise<void>;
   addNote: (note: Partial<StickyNoteItem>) => Promise<void>;
   updateNote: (noteId: string, updates: Partial<StickyNoteItem>) => Promise<void>;
@@ -128,21 +131,80 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     get().pauseCarouselTemporarily();
   },
 
+  addTab: async (name, icon) => {
+    const newId = `tab-${Date.now()}`;
+    const maxOrder = get().tabs.reduce((max, t) => Math.max(max, t.order), -1);
+    const newTab: DashboardTab = {
+      id: newId,
+      name: name.trim() || 'New Canvas',
+      icon: icon || 'Pin',
+      order: maxOrder + 1,
+      autoRotateDurationSec: 30,
+      enabled: true,
+      updated_at: new Date().toISOString(),
+    };
+    await db.tabs.add(newTab);
+    set({
+      tabs: [...get().tabs, newTab],
+      activeTabId: newId,
+    });
+    get().saveLocalBackup();
+    return newId;
+  },
+
+  updateTab: async (tabId, updates) => {
+    const tab = get().tabs.find((t) => t.id === tabId);
+    if (!tab) return;
+    const updated = {
+      ...tab,
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+    await db.tabs.put(updated);
+    set({
+      tabs: get().tabs.map((t) => (t.id === tabId ? updated : t)),
+    });
+    get().saveLocalBackup();
+  },
+
+  deleteTab: async (tabId) => {
+    if (get().tabs.length <= 1) return;
+    const tab = get().tabs.find((t) => t.id === tabId);
+    if (!tab) return;
+
+    const updated = { ...tab, deleted_at: new Date().toISOString() };
+    await db.tabs.put(updated);
+
+    const remainingTabs = get().tabs.filter((t) => t.id !== tabId);
+    let nextActiveTabId = get().activeTabId;
+    if (get().activeTabId === tabId) {
+      nextActiveTabId = remainingTabs[0]?.id || '';
+    }
+
+    set({
+      tabs: remainingTabs,
+      activeTabId: nextActiveTabId,
+    });
+    get().saveLocalBackup();
+  },
+
+  reorderTabs: async (orderedTabIds) => {
+    const updatedTabs = get().tabs
+      .map((t) => {
+        const idx = orderedTabIds.indexOf(t.id);
+        return idx !== -1 ? { ...t, order: idx, updated_at: new Date().toISOString() } : t;
+      })
+      .sort((a, b) => a.order - b.order);
+
+    await db.tabs.bulkPut(updatedTabs);
+    set({ tabs: updatedTabs });
+    get().saveLocalBackup();
+  },
+
   setDockPosition: async (dockPosition) => {
     const updated = { ...get().settings, dockPosition, updated_at: new Date().toISOString() };
     await db.settings.put(updated);
     set({ settings: updated });
-    get().saveLocalBackup();
-  },
-
-  setLayoutMode: async (tabId, layoutMode) => {
-    const tab = get().tabs.find((t) => t.id === tabId);
-    if (!tab) return;
-    const updatedTab = { ...tab, layoutMode, updated_at: new Date().toISOString() };
-    await db.tabs.put(updatedTab);
-    set({
-      tabs: get().tabs.map((t) => (t.id === tabId ? updatedTab : t)),
-    });
     get().saveLocalBackup();
   },
 
@@ -369,6 +431,22 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     await db.widgets.put(updated);
     set({
       widgets: get().widgets.filter((w) => w.id !== widgetId),
+    });
+    get().saveLocalBackup();
+  },
+
+  updateWidget: async (widgetId, updates) => {
+    const existing = get().widgets.find((w) => w.id === widgetId);
+    if (!existing) return;
+    const updated: DashboardWidget = {
+      ...existing,
+      ...updates,
+      config: updates.config ? { ...existing.config, ...updates.config } : existing.config,
+      updated_at: new Date().toISOString(),
+    };
+    await db.widgets.put(updated);
+    set({
+      widgets: get().widgets.map((w) => (w.id === widgetId ? updated : w)),
     });
     get().saveLocalBackup();
   },
