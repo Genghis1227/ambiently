@@ -98,7 +98,7 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
 
       {/* Floating Quick HUD Card */}
       <div
-        className={`absolute z-50 w-80 rounded-2xl bg-gray-950/95 backdrop-blur-2xl border border-gray-800 p-4 shadow-2xl text-white select-none transition-all animate-in fade-in zoom-in-95 duration-150 ${positionClasses}`}
+        className={`absolute z-50 w-80 max-w-[calc(100vw-5rem)] rounded-2xl bg-gray-950/95 backdrop-blur-2xl border border-gray-800 p-4 shadow-2xl text-white select-none transition-all animate-in fade-in zoom-in-95 duration-150 pointer-events-auto ${positionClasses}`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header: Brand, Title, Version Pill & Close */}
