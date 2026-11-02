@@ -5,9 +5,22 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.1.2';
+export const APP_VERSION = '0.1.3';
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.1.3",
+    date: "November 2, 2026",
+    title: "Full-Screen Polaroid Collage, Varied Card Sizing & Modal Portals",
+    highlights: [
+      "Fixed Changelog & Share modals by portaling them directly to document.body, eliminating the CSS transform clipping bug where release notes appeared trapped as a vertical strip on the dock edge.",
+      "Added click-outside backdrop dismissal and Escape key support to Changelog, Share Board, and Ambient Quick HUD.",
+      "Configurable Polaroid photo density: choose between 6 (Light), 12 (Desk), 18 (Dense), 24 (Wall), and 32 (Fill Complete Screen), or use the continuous slider (4 to 36 photos).",
+      "Varied & random card sizing: Polaroid gallery now dynamically scatters an authentic mix of Hero Large Prints, Classic Medium Polaroids, and Compact Snapshots.",
+      "1-tap on-tile controls on the Photo Frame header to adjust photo count and toggle between Random Sizes and Uniform styling on the fly.",
+      "Faster dynamic photo updates on dense collage boards to keep the screen continuously fresh.",
+    ],
+  },
   {
     version: "v0.1.2",
     date: "November 2, 2026",

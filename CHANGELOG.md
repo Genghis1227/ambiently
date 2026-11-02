@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.3] - 2026-11-02
+
+### Added
+* **Configurable Polaroid Photo Density & Full-Screen Collage (`PhotoFrameWidget.tsx`, `WidgetSettingsModal.tsx`, `PhotoSourcesModal.tsx`):**
+  * Added user-configurable photo counts: `6 (Light)`, `12 (Desk)`, `18 (Dense)`, `24 (Wall Collage)`, and `32 (Fill Complete Screen)`, plus a continuous `4`–`36` photo slider.
+  * When set to Fill Screen, polaroids generously overlap across 100% of the canvas surface for a rich tabletop or memory wall appearance.
+  * 1-tap quick pill controls on the widget header to adjust count (`Count: 6 | 12 | 18 | 24 | Fill`) and size mode on the fly.
+* **Varied & Random Polaroid Sizing (`PhotoFrameWidget.tsx`):**
+  * Added **Random / Mixed Sizes** mode, scattering an authentic assortment of **Hero Large Prints** (`280px–310px`), **Classic Medium Polaroids** (`200px–230px`), and **Compact Snapshots** (`135px–165px`).
+  * Supports **Uniform Medium**, **Compact Snapshots**, and **Large Hero Prints** presets in settings.
+  * Faster dynamic photo swapping on dense collages to keep high-count boards continuously refreshed.
+
+### Fixed
+* **Trapped Release Notes & Share Modals (`ChangelogModal.tsx`, `ShareBoardModal.tsx`, `AmbientQuickMenu.tsx`):**
+  * Wrapped `ChangelogModal`, `ShareBoardModal`, and the quick menu click-outside backdrop in `createPortal(..., document.body)` with `z-[100]`.
+  * Eliminates the CSS transform clipping bug where modals opened from the dock were trapped within the 48px-wide dock column.
+  * Added click-outside backdrop dismissal and `Escape` key listeners to seamlessly close modals.
+
+---
+
 ## [0.1.2] - 2026-11-02
 
 ### Added
