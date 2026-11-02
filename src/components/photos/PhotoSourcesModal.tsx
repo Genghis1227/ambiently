@@ -43,6 +43,10 @@ interface PhotoSourcesModalProps {
   rotationIntervalSec: number;
   onRotationIntervalChange: (sec: number) => void;
   onPhotosLoaded: (photos: PhotoItem[], sourceName: string) => void;
+  polaroidCount?: number;
+  onPolaroidCountChange?: (count: number) => void;
+  polaroidSizeMode?: 'mixed' | 'uniform' | 'small' | 'large';
+  onPolaroidSizeModeChange?: (mode: 'mixed' | 'uniform' | 'small' | 'large') => void;
 }
 
 export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
@@ -53,6 +57,10 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   rotationIntervalSec,
   onRotationIntervalChange,
   onPhotosLoaded,
+  polaroidCount = 12,
+  onPolaroidCountChange,
+  polaroidSizeMode = 'mixed',
+  onPolaroidSizeModeChange,
 }) => {
   const [activeTab, setActiveTab] = useState<'plex' | 'local' | 'web' | 'curated'>('plex');
 
@@ -556,6 +564,55 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                   ))}
                 </div>
               </div>
+
+            {currentStyle === 'polaroid' && onPolaroidCountChange && (
+              <div className="col-span-2 pt-2 border-t border-gray-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] text-gray-400">Polaroid Count / Density</label>
+                  <div className="flex items-center gap-1">
+                    {([6, 12, 18, 24, 32] as const).map((cnt) => (
+                      <button
+                        key={cnt}
+                        type="button"
+                        onClick={() => onPolaroidCountChange(cnt)}
+                        className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                          polaroidCount === cnt
+                            ? 'bg-blue-600 text-white shadow'
+                            : 'bg-gray-900 border border-gray-800 text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        {cnt === 32 ? 'Fill' : cnt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {onPolaroidSizeModeChange && (
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] text-gray-400">Card Sizes</label>
+                    <div className="flex items-center gap-1">
+                      {[
+                        { id: 'mixed', label: 'Random / Mixed Sizes' },
+                        { id: 'uniform', label: 'Uniform Size' },
+                      ].map((m) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => onPolaroidSizeModeChange(m.id as any)}
+                          className={`px-2 py-0.5 rounded text-[10px] font-medium transition-all cursor-pointer ${
+                            polaroidSizeMode === m.id
+                              ? 'bg-purple-600/30 border border-purple-500 text-purple-200'
+                              : 'bg-gray-900 border border-gray-800 text-gray-400 hover:text-white'
+                          }`}
+                        >
+                          {m.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
               <div>
                 <label className="text-[11px] text-gray-400 block mb-1">Photo Rotation Speed</label>

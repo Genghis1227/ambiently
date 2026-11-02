@@ -839,6 +839,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   rotationIntervalSec={widget.config?.rotationIntervalSec || 15}
                   customPhotos={widget.config?.customPhotos}
                   initialSourceLabel={widget.config?.sourceLabel}
+                  initialPolaroidCount={widget.config?.polaroidCount || 12}
+                  initialPolaroidSizeMode={widget.config?.polaroidSizeMode || 'mixed'}
                   onUpdateConfig={(updates) => {
                     if (onUpdateWidget) {
                       onUpdateWidget(widget.id, {

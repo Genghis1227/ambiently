@@ -71,6 +71,8 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   // Photo Frame states
   const [photoStyle, setPhotoStyle] = useState<string>('ken_burns');
   const [photoIntervalSec, setPhotoIntervalSec] = useState<number>(15);
+  const [polaroidCount, setPolaroidCount] = useState<number>(widget?.config?.polaroidCount || 12);
+  const [polaroidSizeMode, setPolaroidSizeMode] = useState<'mixed' | 'uniform' | 'small' | 'large'>(widget?.config?.polaroidSizeMode || 'mixed');
 
   // Weather & Clock states
   const [locationName, setLocationName] = useState('Austin, TX');
@@ -135,6 +137,8 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     } else if (widget.type === 'photo_frame') {
       setPhotoStyle(widget.config?.displayStyle || 'ken_burns');
       setPhotoIntervalSec(widget.config?.rotationIntervalSec || 15);
+      setPolaroidCount(widget.config?.polaroidCount || 12);
+      setPolaroidSizeMode(widget.config?.polaroidSizeMode || 'mixed');
     } else if (widget.type === 'weather' || widget.type === 'clock_weather') {
       setLocationName(widget.config?.locationName || 'Austin, TX');
       setTempUnit(widget.config?.unit || 'F');
@@ -269,6 +273,8 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     } else if (widget.type === 'photo_frame') {
       configUpdates.displayStyle = photoStyle;
       configUpdates.rotationIntervalSec = photoIntervalSec;
+      configUpdates.polaroidCount = polaroidCount;
+      configUpdates.polaroidSizeMode = polaroidSizeMode;
     } else if (widget.type === 'weather' || widget.type === 'clock_weather') {
       configUpdates.locationName = locationName.trim();
       configUpdates.unit = tempUnit;
@@ -412,6 +418,80 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                   ))}
                 </div>
               </div>
+
+              {photoStyle === 'polaroid' && (
+                <div className="p-3.5 rounded-xl bg-gray-950 border border-gray-800 space-y-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-semibold text-gray-300">
+                        Polaroids Density & Count ({polaroidCount} Photos)
+                      </label>
+                      <span className="text-[10px] font-mono text-cyan-400">
+                        {polaroidCount >= 30 ? 'Fill Complete Screen' : `${polaroidCount} Scattered`}
+                      </span>
+                    </div>
+                    <div className="flex gap-1.5 mb-2">
+                      {[
+                        { count: 6, label: '6 (Light)' },
+                        { count: 12, label: '12 (Desk)' },
+                        { count: 18, label: '18 (Dense)' },
+                        { count: 24, label: '24 (Wall)' },
+                        { count: 32, label: '32 (Fill Screen)' },
+                      ].map((item) => (
+                        <button
+                          key={item.count}
+                          type="button"
+                          onClick={() => setPolaroidCount(item.count)}
+                          className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+                            polaroidCount === item.count
+                              ? 'bg-blue-600 text-white shadow'
+                              : 'bg-gray-900 border border-gray-800 text-gray-400 hover:text-white'
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      type="range"
+                      min="4"
+                      max="36"
+                      step="2"
+                      value={polaroidCount}
+                      onChange={(e) => setPolaroidCount(Number(e.target.value))}
+                      className="w-full accent-blue-500 cursor-pointer"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-gray-300 block mb-1.5">
+                      Card Size Variation
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { id: 'mixed', label: 'Random / Mixed Sizes', desc: 'Mix of S, M, and L hero prints' },
+                        { id: 'uniform', label: 'Uniform Medium', desc: 'All matching classic size' },
+                        { id: 'small', label: 'Compact Snapshots', desc: 'Mini polaroids for high density' },
+                        { id: 'large', label: 'Large Hero Prints', desc: 'Prominent, high-visibility cards' },
+                      ].map((mode) => (
+                        <button
+                          key={mode.id}
+                          type="button"
+                          onClick={() => setPolaroidSizeMode(mode.id as any)}
+                          className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                            polaroidSizeMode === mode.id
+                              ? 'bg-purple-600/20 border-purple-500 text-purple-200'
+                              : 'border-gray-800 bg-gray-900 text-gray-400 hover:text-white'
+                          }`}
+                        >
+                          <div className="text-xs font-semibold text-white">{mode.label}</div>
+                          <div className="text-[10px] text-gray-500">{mode.desc}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
