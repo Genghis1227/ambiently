@@ -11,6 +11,18 @@ import {
   Minimize2,
   FolderSync,
   Plus,
+  Home,
+  Coffee,
+  Heart,
+  Star,
+  Music,
+  Sun,
+  CheckSquare,
+  Sparkles,
+  Smile,
+  Tv,
+  Folder,
+  Clock,
 } from 'lucide-react';
 import type { DashboardTab, DockPosition } from '../../types/dashboard';
 
@@ -27,6 +39,7 @@ interface NavigationDockProps {
   onConnectFile: () => void;
   hasFileBound: boolean;
   onOpenAddWidget?: () => void;
+  onOpenAddCanvas?: () => void;
 }
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -34,6 +47,18 @@ const iconMap: Record<string, React.ReactNode> = {
   Pin: <Pin className="w-5 h-5" />,
   Image: <Image className="w-5 h-5" />,
   Calendar: <Calendar className="w-5 h-5" />,
+  Home: <Home className="w-5 h-5" />,
+  Coffee: <Coffee className="w-5 h-5" />,
+  Heart: <Heart className="w-5 h-5" />,
+  Star: <Star className="w-5 h-5" />,
+  Music: <Music className="w-5 h-5" />,
+  Sun: <Sun className="w-5 h-5" />,
+  CheckSquare: <CheckSquare className="w-5 h-5" />,
+  Sparkles: <Sparkles className="w-5 h-5" />,
+  Smile: <Smile className="w-5 h-5" />,
+  Tv: <Tv className="w-5 h-5" />,
+  Folder: <Folder className="w-5 h-5" />,
+  Clock: <Clock className="w-5 h-5" />,
 };
 
 export const NavigationDock: React.FC<NavigationDockProps> = ({
@@ -49,6 +74,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
   onConnectFile,
   hasFileBound,
   onOpenAddWidget,
+  onOpenAddCanvas,
 }) => {
   const isVertical = dockPosition === 'left' || dockPosition === 'right';
 
@@ -109,6 +135,17 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
             </button>
           );
         })}
+
+        {/* Add Canvas Button */}
+        {onOpenAddCanvas && (
+          <button
+            onClick={onOpenAddCanvas}
+            title="Create New Canvas"
+            className="flex items-center justify-center w-11 h-11 rounded-xl text-emerald-400 hover:text-white hover:bg-emerald-600/30 transition-all border border-emerald-500/20"
+          >
+            <Plus className="w-5 h-5" />
+          </button>
+        )}
 
         {/* Add Widget Button */}
         {onOpenAddWidget && (

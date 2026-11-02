@@ -9,6 +9,7 @@ import { SettingsModal } from './components/settings/SettingsModal';
 import { LocalBackupModal } from './components/kiosk/LocalBackupModal';
 import { MobileCompanion } from './components/mobile/MobileCompanion';
 import { AddWidgetModal } from './components/widgets/AddWidgetModal';
+import { CreateCanvasModal } from './components/dock/CreateCanvasModal';
 import { openLocalFileBinding } from './services/fileSync';
 import { subscribeToRealtimeBoard, joinBoardByCode } from './services/supabase';
 
@@ -33,12 +34,14 @@ export function App() {
     addNote,
     updateNote,
     deleteNote,
+    addTab,
   } = useDashboardStore();
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
   const [isAddWidgetOpen, setIsAddWidgetOpen] = useState(false);
+  const [isCreateCanvasOpen, setIsCreateCanvasOpen] = useState(false);
   const [hasFileBound, setHasFileBound] = useState(false);
   const syncRemoteNoteChange = useDashboardStore((s) => s.syncRemoteNoteChange);
 
@@ -254,6 +257,7 @@ export function App() {
         onConnectFile={() => setIsBackupModalOpen(true)}
         hasFileBound={hasFileBound}
         onOpenAddWidget={() => setIsAddWidgetOpen(true)}
+        onOpenAddCanvas={() => setIsCreateCanvasOpen(true)}
       />
 
       {/* Night Mode Screen Overlay */}
@@ -286,6 +290,14 @@ export function App() {
         onClose={() => setIsAddWidgetOpen(false)}
         activeTabId={activeTab?.id || 'tab-corkboard'}
         onAddWidget={addWidget}
+      />
+
+      <CreateCanvasModal
+        isOpen={isCreateCanvasOpen}
+        onClose={() => setIsCreateCanvasOpen(false)}
+        onCreateCanvas={(name, icon, layoutMode) => {
+          addTab(name, icon, layoutMode);
+        }}
       />
 
       {/* Settings Modal */}

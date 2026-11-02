@@ -33,6 +33,10 @@ interface DashboardState {
   // Actions
   initStore: () => Promise<void>;
   setActiveTabId: (tabId: string) => void;
+  addTab: (name: string, icon: string, layoutMode?: LayoutMode) => Promise<string>;
+  updateTab: (tabId: string, updates: Partial<DashboardTab>) => Promise<void>;
+  deleteTab: (tabId: string) => Promise<void>;
+  reorderTabs: (orderedTabIds: string[]) => Promise<void>;
   setDockPosition: (pos: DockPosition) => Promise<void>;
   setLayoutMode: (tabId: string, mode: LayoutMode) => Promise<void>;
   toggleTabEnabled: (tabId: string, enabled: boolean) => Promise<void>;
@@ -127,6 +131,77 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   setActiveTabId: (tabId) => {
     set({ activeTabId: tabId });
     get().pauseCarouselTemporarily();
+  },
+
+  addTab: async (name, icon, layoutMode = 'freeform') => {
+    const newId = `tab-${Date.now()}`;
+    const maxOrder = get().tabs.reduce((max, t) => Math.max(max, t.order), -1);
+    const newTab: DashboardTab = {
+      id: newId,
+      name: name.trim() || 'New Canvas',
+      icon: icon || 'Pin',
+      order: maxOrder + 1,
+      layoutMode,
+      autoRotateDurationSec: 30,
+      enabled: true,
+      updated_at: new Date().toISOString(),
+    };
+    await db.tabs.add(newTab);
+    set({
+      tabs: [...get().tabs, newTab],
+      activeTabId: newId,
+    });
+    get().saveLocalBackup();
+    return newId;
+  },
+
+  updateTab: async (tabId, updates) => {
+    const tab = get().tabs.find((t) => t.id === tabId);
+    if (!tab) return;
+    const updated = {
+      ...tab,
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+    await db.tabs.put(updated);
+    set({
+      tabs: get().tabs.map((t) => (t.id === tabId ? updated : t)),
+    });
+    get().saveLocalBackup();
+  },
+
+  deleteTab: async (tabId) => {
+    if (get().tabs.length <= 1) return;
+    const tab = get().tabs.find((t) => t.id === tabId);
+    if (!tab) return;
+
+    const updated = { ...tab, deleted_at: new Date().toISOString() };
+    await db.tabs.put(updated);
+
+    const remainingTabs = get().tabs.filter((t) => t.id !== tabId);
+    let nextActiveTabId = get().activeTabId;
+    if (get().activeTabId === tabId) {
+      nextActiveTabId = remainingTabs[0]?.id || '';
+    }
+
+    set({
+      tabs: remainingTabs,
+      activeTabId: nextActiveTabId,
+    });
+    get().saveLocalBackup();
+  },
+
+  reorderTabs: async (orderedTabIds) => {
+    const updatedTabs = get().tabs
+      .map((t) => {
+        const idx = orderedTabIds.indexOf(t.id);
+        return idx !== -1 ? { ...t, order: idx, updated_at: new Date().toISOString() } : t;
+      })
+      .sort((a, b) => a.order - b.order);
+
+    await db.tabs.bulkPut(updatedTabs);
+    set({ tabs: updatedTabs });
+    get().saveLocalBackup();
   },
 
   setDockPosition: async (dockPosition) => {
