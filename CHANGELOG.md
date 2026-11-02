@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.0.12] - 2026-11-01
+
+### Added
+* **Pure Dynamic Canvas Platform:**
+  * Sunmsetted BentoGrid (`BentoGrid.tsx`) and hardcoded Photos tabs in favor of a 100% unified Corkboard canvas architecture.
+  * Every board is a flexible canvas capable of hosting freeform widgets, sticky notes, or full-screen photo streamers.
+* **Canvas Creator & Icon Picker (`CreateCanvasModal.tsx`):**
+  * Added `+` button to the Navigation Dock and Settings to create unlimited custom canvases.
+  * 16 custom icon choices: Pin, Photos, Home, Calendar, Coffee, Heart, Star, Music, Sun, Tasks, Sparkles, Smile, Display, Folder, Clock, and Grid.
+* **1-Click Tab Reordering (`SettingsModal.tsx`):**
+  * Added Move Up (`▲`) and Move Down (`▼`) controls to reorder tabs in the dock and auto-rotate carousel.
+  * Inline canvas renaming and icon customization.
+* **Interactive Tile Resizing (`Corkboard.tsx`):**
+  * Bottom-right corner drag handles on all widgets and sticky notes with live fluid canvas scaling.
+* **Dedicated Tile Settings Modal (`WidgetSettingsModal.tsx`):**
+  * ⚙️ Edit button on all tile headers to configure titles, countdown dates, photo slideshow transition styles, speeds, and weather/clock settings.
+
+---
+
 ## [0.0.11] - 2026-11-01
 
 ### Added

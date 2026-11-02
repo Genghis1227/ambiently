@@ -5,9 +5,22 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.0.11';
+export const APP_VERSION = '0.0.12';
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.0.12",
+    date: "November 1, 2026",
+    title: "Pure Dynamic Canvas Platform, Tile Resizing & Settings",
+    highlights: [
+      "Unified platform into a pure dynamic canvas architecture, sunsetting BentoGrid and hardcoded Photos tabs.",
+      "Every board is now a customizable Corkboard canvas supporting widgets, sticky notes, and full-screen photo displays.",
+      "+ Add Canvas creator modal with 16 custom icons (Pin, Photos, Home, Calendar, Coffee, Heart, Star, Music, and more).",
+      "Tab reordering in Settings with 1-click Move Up and Move Down controls.",
+      "Interactive corner resize handles on every widget and sticky note for fluid canvas scaling.",
+      "Dedicated Tile Settings Modal (⚙️) to customize titles, dates, slideshow styles, and weather/clock preferences.",
+    ],
+  },
   {
     version: "v0.0.11",
     date: "November 1, 2026",
