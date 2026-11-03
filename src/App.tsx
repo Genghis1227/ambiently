@@ -252,18 +252,8 @@ export function App() {
       }}
       className="relative w-screen h-screen overflow-hidden bg-[#090d16] select-none"
     >
-      {/* 
-        ISOLATED CANVAS SCALER:
-        Scale transform is applied ONLY to the board canvas.
-        The Navigation Dock and Modals remain pinned at true 100% viewport resolution,
-        preventing zoom traps!
-      */}
-      <div
-        className="w-full h-full origin-center transition-transform duration-200"
-        style={{
-          transform: `scale(${settings.displayDensity})`,
-        }}
-      >
+      {/* Full native 1:1 Canvas */}
+      <div className="w-full h-full">
         <Corkboard
           notes={activeCanvasNotes}
           widgets={tabWidgets}

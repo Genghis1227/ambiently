@@ -43,7 +43,7 @@ flowchart TB
 ## 2. Local-First Data Layer (`src/services/db.ts`)
 
 Ambiently uses **Dexie.js** over browser `IndexedDB` (`AmbientlyDB`) with 5 core object stores:
-1. `settings`: Global kiosk configuration (`dockPosition`, `displayDensity`, `carouselEnabled`, `nightModeStyle`, `nightModeStart`, `nightModeEnd`, `wakeLockEnabled`, `pinHash`).
+1. `settings`: Global kiosk configuration (`dockPosition`, `carouselEnabled`, `nightModeStyle`, `nightModeStart`, `nightModeEnd`, `wakeLockEnabled`, `pinHash`).
 2. `tabs`: Ordered canvas definitions (`id`, `name`, `icon`, `order`, `autoRotateDurationSec`, `isHome`, `enabled`).
 3. `widgets`: Widget instances scoped by `tabId`, storing normalized freeform canvas coordinates (`freeformPos: { xRatio, yRatio, wRatio, hRatio, zIndex, rotation, isFullScreen }`), mobile display ordering (`mobileOrder`), and widget-specific `config` (e.g., calendar `.ics` sources, weather coordinates, photo settings, quote intervals).
 4. `notes`: Sticky notes & checklists scoped by `tabId`, supporting soft-deletion (`archivedAt`), automatic expiration (`expiresAt`), canvas pinning status (`isPinnedToCanvas`), and freeform coordinates.
@@ -51,11 +51,12 @@ Ambiently uses **Dexie.js** over browser `IndexedDB` (`AmbientlyDB`) with 5 core
 
 ---
 
-## 3. Isolated Canvas Resolution Scaling (`src/App.tsx`)
+## 3. Responsive Proportional Canvas Architecture (`src/App.tsx`)
 
-To support 1080p tablets, 1440p monitors, and 4K TVs without causing "zoom traps" where settings buttons or navigation docks get clipped off-screen:
-* The `transform: scale(displayDensity)` CSS transform is applied **exclusively to the inner `<Corkboard />` canvas container**.
-* The `<NavigationDock />`, `<SettingsModal />`, and all configuration overlays remain pinned at the root `100%` viewport layer.
+To support 1080p tablets, 1440p monitors, and 4K TVs cleanly:
+* The canvas renders at crisp native 1:1 resolution (`w-full h-full`) without artificial CSS zoom scaling or rasterization blur.
+* Widget positions and dimensions use normalized viewport ratios (`xRatio`, `yRatio`, `wRatio`, `hRatio`), ensuring perfect responsiveness across arbitrary aspect ratios while preventing edge clipping.
+* The `<NavigationDock />`, `<SettingsModal />`, and all configuration overlays remain pinned at the root viewport layer with dismiss-on-backdrop and fixed sticky headers.
 
 ---
 
