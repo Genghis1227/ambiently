@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.6] - 2026-11-02
+
+### Added
+* **Mobile Companion Vertical Tile Stream (`MobileCompanion.tsx`, `App.tsx`, `types/dashboard.ts`):**
+  * Replaced the notes-only mobile companion view with a full single-column vertical tile stream of the active canvas.
+  * Every widget tile (Clock & Weather, Countdown, Photos, RSS Headlines, Quotes, Text Boxes, Media Embeds, and Notes) displays a clean mobile-responsive card with live preview.
+  * **Persistent View Option**: 3-way segmented filter pills (`All Tiles` | `Widgets` | `Notes & Tasks`) automatically persisted in `localStorage`.
+  * **Independent Mobile Reordering (`▲ / ▼`)**: Added move buttons on each widget card modifying an isolated `mobileOrder` property with zero impact on the non-mobile desktop/kiosk layout.
+  * **Mobile Tile Customizer & Creation**: 1-tap `⚙️` button opens `WidgetSettingsModal` on mobile to adjust weather cities, milestone dates, photo densities, font styling, or RSS feeds. Added an `+ Add Tile` button to add widgets from your phone.
+* **Close Individual Sticky Notes & Pop Out from Tile (`Corkboard.tsx`, `StickyNotesWidget.tsx`, `types/dashboard.ts`):**
+  * Added an `X` button in the header of every floating sticky note on the corkboard canvas.
+  * Clicking `X` removes that specific note from the corkboard without deleting it. It remains safely saved, checkable, and active in the Notes Tile widget (`isPinnedToCanvas: false`).
+  * In the Notes Tile widget list, added a `📌 Pin to Board` / `📌 On Canvas` status toggle button to pop notes back onto the corkboard with one tap.
+
+### Fixed
+* **Command Hub Click Registration (`NavigationDock.tsx`, `AmbientQuickMenu.tsx`, Modals):**
+  * Elevated the Navigation Dock and Command Hub menu to `z-50`, placing them strictly above the `z-40` transparent click-outside backdrop so all 4 kiosk controls and shortcuts immediately respond to clicks and touches.
+  * Added `max-w-[calc(100vw-5rem)]` and `pointer-events-auto` for narrow mobile screens.
+  * Re-layered fullscreen modals to `z-[70]`–`z-[100]`.
+
+---
+
 ## [0.1.5] - 2026-11-02
 
 ### Added

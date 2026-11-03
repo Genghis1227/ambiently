@@ -123,7 +123,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
   return (
     <>
       <nav
-        className={`fixed z-30 flex items-center gap-2 p-2 rounded-2xl bg-gray-900/85 backdrop-blur-xl border border-gray-800/90 shadow-2xl transition-all ${positionClasses}`}
+        className={`fixed z-50 flex items-center gap-2 p-2 rounded-2xl bg-gray-900/85 backdrop-blur-xl border border-gray-800/90 shadow-2xl transition-all ${positionClasses}`}
       >
         {/* Brand Icon & Quick HUD Trigger */}
         <div className="relative flex items-center justify-center p-1">

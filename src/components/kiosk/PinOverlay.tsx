@@ -55,7 +55,7 @@ export const PinOverlay: React.FC<PinOverlayProps> = ({ onUnlock, onForgotChalle
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
       <div className="w-full max-w-sm rounded-2xl bg-gray-900 border border-gray-800 p-6 shadow-2xl flex flex-col items-center text-center">
         <div className="w-14 h-14 rounded-full bg-blue-500/10 border border-blue-500/30 flex items-center justify-center mb-4 text-blue-400">
           <ShieldAlert className="w-7 h-7" />

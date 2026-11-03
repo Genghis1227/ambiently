@@ -586,6 +586,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     : notes.filter((n) => {
         if (n.archivedAt) return false;
         if (n.expiresAt && new Date(n.expiresAt) <= now) return false;
+        if (n.isPinnedToCanvas === false) return false;
         return true;
       });
 
@@ -1162,6 +1163,19 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   >
                     <Edit2 className="w-3 h-3" />
                   </button>
+                  <button
+                    type="button"
+                    data-no-drag="true"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUpdateNote(note.id, { isPinnedToCanvas: false });
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className="p-1 rounded-md text-gray-700 hover:text-red-900 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
+                    title="Close from canvas (remains saved in Notes Tile)"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
                 </div>
               </div>
 
@@ -1315,7 +1329,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
       {/* Creator & Inline Editor Modal for Sticky Notes */}
       {isCreatorOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
           <div className="w-full max-w-sm rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl p-5 space-y-3.5">
             <div className="flex items-center justify-between border-b border-gray-800 pb-3">
               <span className="text-sm font-bold text-white">
@@ -1526,7 +1540,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
       {/* Trash / Archive Recovery Drawer Modal */}
       {isTrashOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
           <div className="w-full max-w-md rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl p-5 space-y-4 max-h-[80vh] flex flex-col">
             <div className="flex items-center justify-between border-b border-gray-800 pb-3">
               <div className="flex items-center gap-2">
