@@ -41,7 +41,7 @@ export const NightMode: React.FC<NightModeProps> = ({
     return (
       <div
         onClick={onWake}
-        className="fixed inset-0 z-40 bg-black cursor-pointer flex flex-col items-center justify-center select-none"
+        className="fixed inset-0 z-[60] bg-black cursor-pointer flex flex-col items-center justify-center select-none"
       >
         <div
           className="transition-transform duration-1000 ease-out flex flex-col items-center"
@@ -61,14 +61,14 @@ export const NightMode: React.FC<NightModeProps> = ({
     );
   }
 
-  // Dim overlay style
+  // Dim overlay style (covers canvas and navigation dock at z-[60])
   return (
     <div
       onClick={onWake}
-      className="fixed inset-0 z-40 bg-black pointer-events-auto cursor-pointer transition-opacity duration-700 flex items-end justify-end p-6"
-      style={{ opacity: dimOpacity }}
+      className="fixed inset-0 z-[60] pointer-events-auto cursor-pointer transition-opacity duration-700 flex items-end justify-end p-6 select-none"
+      style={{ backgroundColor: `rgba(0, 0, 0, ${dimOpacity})` }}
     >
-      <div className="flex items-center gap-2 text-xs text-gray-400 bg-gray-900/60 px-3 py-1.5 rounded-full border border-gray-800">
+      <div className="flex items-center gap-2 text-xs text-gray-400 bg-gray-900/80 px-3 py-1.5 rounded-full border border-gray-800 shadow-xl pointer-events-none">
         <Moon className="w-3.5 h-3.5 text-blue-400" />
         <span>Night Mode (Tap to wake)</span>
       </div>

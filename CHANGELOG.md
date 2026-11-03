@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.11] - 2026-11-03
+
+### Added
+* **Hideable Navigation Toolbar (`NavigationDock.tsx`, `App.tsx`, `AmbientQuickMenu.tsx`, `SettingsModal.tsx`):**
+  * Added off-screen sliding animation to hide the navigation toolbar for immersive full-screen smart-display and kiosk setups.
+  * Added an unobtrusive edge restore handle with a directional chevron anchored at the dock's edge position for 1-click reveal.
+  * Added keyboard shortcut `\` (backslash) and quick toggles in the dock utilities, Quick HUD menu, and Settings modal.
+  * Automatically removed dock canvas padding when hidden, allowing widgets and notes to utilize 100% of the display edge-to-edge.
+* **Snap-to-Grid Bento Alignment (`Corkboard.tsx`, `SettingsModal.tsx`, `AmbientQuickMenu.tsx`, `store/dashboardStore.ts`):**
+  * Implemented a real-time 24×16 grid snapping engine (`1/24` X step, `1/16` Y step) for dragging and resizing widgets and sticky notes.
+  * Added an ambient blue alignment grid overlay with an active status badge that appears dynamically during pointer drag and resize actions.
+* **Clean Picture Mode (`WidgetSettingsModal.tsx`, `PhotoFrameWidget.tsx`, `Corkboard.tsx`, `MobileCompanion.tsx`):**
+  * Added a `showCaptions` toggle option in Tile Settings allowing users to remove album titles, numbering, and captions across Ken Burns, Mosaic, Polaroids, and Filmstrip modes.
+* **Clock & Weather Center Alignment (`ClockWeatherWidget.tsx`, `WidgetSettingsModal.tsx`):**
+  * Center-justified clock and date display by default with a user-configurable text alignment selector (`left`, `center`, `right`) in Tile Settings.
+* **Sticky Note Toolbar Icon (`NavigationDock.tsx`):**
+  * Replaced the ambiguous pin icon on the navigation dock with a dedicated sticky note icon for immediate recognition.
+
+### Fixed
+* **Night Mode Navigation Dock Dimming (`NightMode.tsx`):**
+  * Elevated the night mode dim overlay to `z-[9999]` above the fixed navigation dock to ensure the dock dims evenly and prevents OLED light bleed in dark environments.
+* **Google Photos Broken Images & 429 Recovery (`index.html`, `services/photos.ts`, `PhotoFrameWidget.tsx`):**
+  * Added `<meta name="referrer" content="no-referrer" />` and explicit `referrerPolicy="no-referrer"` to resolve HTTP 403 Forbidden hotlink blocks from `lh3.googleusercontent.com`.
+  * Implemented dynamic resolution scaling (`=w600` for polaroids, `=w800` for mosaic/filmstrip) to prevent HTTP 429 rate limits.
+  * Added auto-healing fallback error handlers that retry failed image URLs with alternative sizing tokens.
+* **Google Photos Link Persistence in Sources Modal (`PhotoSourcesModal.tsx`, `PhotoFrameWidget.tsx`, `Corkboard.tsx`):**
+  * Persisted configured Google Photos and Google Drive shared URLs in widget configuration, automatically populating the textarea and displaying an active album badge when reopening the sources dialog.
+* **Filmstrip Center Image Enlargement (`PhotoFrameWidget.tsx`):**
+  * Enlarged the active center image to 1.42x scale with increased offset stride (`70%`) and enhanced drop shadow for a more dramatic spotlight effect.
+
+---
+
 ## [0.1.10] - 2026-11-02
 
 ### Added

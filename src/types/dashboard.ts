@@ -113,6 +113,10 @@ export interface AppSettings {
   nightModeStyle: 'dim' | 'oled_clock';
   nightDimOpacity: number; // 0.0 - 0.95
 
+  // Canvas & Dock Options
+  snapToGrid?: boolean;
+  isDockHidden?: boolean;
+
   // PIN Protection
   pinLockEnabled: boolean;
   pinHash?: string | null; // SHA-256 hex

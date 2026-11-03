@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   LayoutGrid,
   Pin,
+  StickyNote,
   Image,
   Calendar,
   Settings,
@@ -25,6 +26,11 @@ import {
   Archive,
   Wand2,
   RotateCcw,
+  EyeOff,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 import type {
   AutoOrganizeMode,
@@ -54,11 +60,14 @@ interface NavigationDockProps {
   onUndoOrganize?: () => void;
   canUndoOrganize?: boolean;
   onToggleMobileCompanion?: () => void;
+  isDockHidden?: boolean;
+  onToggleDockHidden?: () => void;
 }
 
 const iconMap: Record<string, React.ReactNode> = {
   LayoutGrid: <LayoutGrid className="w-5 h-5" />,
   Pin: <Pin className="w-5 h-5" />,
+  StickyNote: <StickyNote className="w-5 h-5" />,
   Image: <Image className="w-5 h-5" />,
   Calendar: <Calendar className="w-5 h-5" />,
   Home: <Home className="w-5 h-5" />,
@@ -94,6 +103,8 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
   onUndoOrganize,
   canUndoOrganize = false,
   onToggleMobileCompanion,
+  isDockHidden = false,
+  onToggleDockHidden,
 }) => {
   const isVertical = dockPosition === 'left' || dockPosition === 'right';
   const [showOrganizeMenu, setShowOrganizeMenu] = useState(false);
@@ -107,10 +118,26 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
   }, [showOrganizeMenu, activeMode]);
 
   const positionClasses = {
-    left: 'left-3 top-1/2 -translate-y-1/2 flex-col',
-    right: 'right-3 top-1/2 -translate-y-1/2 flex-col',
-    top: 'top-3 left-1/2 -translate-x-1/2 flex-row',
-    bottom: 'bottom-3 left-1/2 -translate-x-1/2 flex-row',
+    left: `left-3 top-1/2 flex-col ${
+      isDockHidden
+        ? '-translate-y-1/2 -translate-x-[220%] opacity-0 pointer-events-none'
+        : '-translate-y-1/2 translate-x-0 opacity-100'
+    }`,
+    right: `right-3 top-1/2 flex-col ${
+      isDockHidden
+        ? '-translate-y-1/2 translate-x-[220%] opacity-0 pointer-events-none'
+        : '-translate-y-1/2 translate-x-0 opacity-100'
+    }`,
+    top: `top-3 left-1/2 flex-row ${
+      isDockHidden
+        ? '-translate-x-1/2 -translate-y-[220%] opacity-0 pointer-events-none'
+        : '-translate-x-1/2 translate-y-0 opacity-100'
+    }`,
+    bottom: `bottom-3 left-1/2 flex-row ${
+      isDockHidden
+        ? '-translate-x-1/2 translate-y-[220%] opacity-0 pointer-events-none'
+        : '-translate-x-1/2 translate-y-0 opacity-100'
+    }`,
   }[dockPosition];
 
   const popoverPositionClasses = {
@@ -122,8 +149,31 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
 
   return (
     <>
+      {/* Edge Handle to Restore Hidden Toolbar */}
+      {isDockHidden && onToggleDockHidden && (
+        <button
+          type="button"
+          onClick={onToggleDockHidden}
+          title="Show Navigation Toolbar (Shortcut: \)"
+          className={`fixed z-50 flex items-center justify-center p-2.5 bg-gray-900/90 hover:bg-gray-800 text-gray-300 hover:text-white backdrop-blur-xl border border-gray-700/80 shadow-2xl transition-all cursor-pointer group active:scale-95 ${
+            dockPosition === 'left'
+              ? 'left-0 top-1/2 -translate-y-1/2 rounded-r-2xl border-l-0 shadow-[4px_0_15px_rgba(0,0,0,0.5)]'
+              : dockPosition === 'right'
+              ? 'right-0 top-1/2 -translate-y-1/2 rounded-l-2xl border-r-0 shadow-[-4px_0_15px_rgba(0,0,0,0.5)]'
+              : dockPosition === 'top'
+              ? 'top-0 left-1/2 -translate-x-1/2 rounded-b-2xl border-t-0 shadow-[0_4px_15px_rgba(0,0,0,0.5)]'
+              : 'bottom-0 left-1/2 -translate-x-1/2 rounded-t-2xl border-b-0 shadow-[0_-4px_15px_rgba(0,0,0,0.5)]'
+          }`}
+        >
+          {dockPosition === 'left' && <ChevronRight className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" />}
+          {dockPosition === 'right' && <ChevronLeft className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" />}
+          {dockPosition === 'top' && <ChevronDown className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" />}
+          {dockPosition === 'bottom' && <ChevronUp className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" />}
+        </button>
+      )}
+
       <nav
-        className={`fixed z-50 flex items-center gap-2 p-2 rounded-2xl bg-gray-900/85 backdrop-blur-xl border border-gray-800/90 shadow-2xl transition-all ${positionClasses}`}
+        className={`fixed z-50 flex items-center gap-2 p-2 rounded-2xl bg-gray-900/85 backdrop-blur-xl border border-gray-800/90 shadow-2xl transition-all duration-300 ease-in-out ${positionClasses}`}
       >
         {/* Brand Icon & Quick HUD Trigger */}
         <div className="relative flex items-center justify-center p-1">
@@ -231,10 +281,10 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
           {onOpenCreateNote && (
             <button
               onClick={onOpenCreateNote}
-              title="Pin New Sticky Note"
+              title="New Sticky Note"
               className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition-all cursor-pointer"
             >
-              <Pin className="w-4 h-4" />
+              <StickyNote className="w-4 h-4" />
             </button>
           )}
 
@@ -304,6 +354,16 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
           >
             {isLocked ? <Lock className="w-4 h-4 text-blue-400" /> : <Settings className="w-4 h-4" />}
           </button>
+
+          {onToggleDockHidden && (
+            <button
+              onClick={onToggleDockHidden}
+              title="Hide Navigation Toolbar (Shortcut: \)"
+              className="flex items-center justify-center w-10 h-10 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-gray-800/70 transition-all cursor-pointer"
+            >
+              <EyeOff className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </nav>
 

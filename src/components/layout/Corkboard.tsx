@@ -64,7 +64,13 @@ interface CorkboardProps {
   onOpenAddWidget?: () => void;
   onUpdateWidget?: (widgetId: string, updates: Partial<DashboardWidget>) => void;
   onUpdateTab?: (tabId: string, updates: Partial<DashboardTab>) => void;
+  snapToGrid?: boolean;
 }
+
+const SNAP_COLUMNS = 24;
+const SNAP_ROWS = 16;
+const SNAP_STEP_X = 1 / SNAP_COLUMNS;
+const SNAP_STEP_Y = 1 / SNAP_ROWS;
 
 const COLOR_PALETTE = [
   '#fef08a', // Amber/Yellow
@@ -107,6 +113,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   onOpenAddWidget,
   onUpdateWidget,
   onUpdateTab,
+  snapToGrid = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -445,8 +452,13 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       const maxW = 1.0 - (initialPos?.xRatio || 0.1);
       const maxH = 1.0 - (initialPos?.yRatio || 0.1);
 
-      const newW = Math.max(minW, Math.min(maxW, resizeStart.startW + deltaWRatio));
-      const newH = Math.max(minH, Math.min(maxH, resizeStart.startH + deltaHRatio));
+      let newW = Math.max(minW, Math.min(maxW, resizeStart.startW + deltaWRatio));
+      let newH = Math.max(minH, Math.min(maxH, resizeStart.startH + deltaHRatio));
+
+      if (snapToGrid) {
+        newW = Math.max(minW, Math.min(maxW, Math.round(newW / SNAP_STEP_X) * SNAP_STEP_X));
+        newH = Math.max(minH, Math.min(maxH, Math.round(newH / SNAP_STEP_Y) * SNAP_STEP_Y));
+      }
 
       resizeRatioRef.current = { wRatio: newW, hRatio: newH };
       setResizeRatio({ wRatio: newW, hRatio: newH });
@@ -470,8 +482,15 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       const newX = Math.max(0, Math.min(rect.width - 60, containerX - dragOffset.x));
       const newY = Math.max(0, Math.min(rect.height - 60, containerY - dragOffset.y));
 
-      const nextXRatio = newX / rect.width;
-      const nextYRatio = newY / rect.height;
+      let nextXRatio = newX / rect.width;
+      let nextYRatio = newY / rect.height;
+
+      if (snapToGrid) {
+        nextXRatio = Math.round(nextXRatio / SNAP_STEP_X) * SNAP_STEP_X;
+        nextYRatio = Math.round(nextYRatio / SNAP_STEP_Y) * SNAP_STEP_Y;
+        nextXRatio = Math.max(0, Math.min(1.0 - SNAP_STEP_X, nextXRatio));
+        nextYRatio = Math.max(0, Math.min(1.0 - SNAP_STEP_Y, nextYRatio));
+      }
 
       dragPosRef.current = { xRatio: nextXRatio, yRatio: nextYRatio };
       setDragPos({ xRatio: nextXRatio, yRatio: nextYRatio });
@@ -493,11 +512,17 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       const targetZ = nextZIndexRef.current || (initialPos?.zIndex || 1);
 
       if (isDraggingRef.current && finalPos && initialPos) {
+        let targetX = finalPos.xRatio;
+        let targetY = finalPos.yRatio;
+        if (snapToGrid) {
+          targetX = Math.max(0, Math.min(1.0 - SNAP_STEP_X, Math.round(targetX / SNAP_STEP_X) * SNAP_STEP_X));
+          targetY = Math.max(0, Math.min(1.0 - SNAP_STEP_Y, Math.round(targetY / SNAP_STEP_Y) * SNAP_STEP_Y));
+        }
         if (draggingType === 'note') {
           onUpdateNotePos(draggingId, {
             ...initialPos,
-            xRatio: finalPos.xRatio,
-            yRatio: finalPos.yRatio,
+            xRatio: targetX,
+            yRatio: targetY,
             zIndex: targetZ,
           });
         } else if (draggingType === 'widget' && onUpdateWidgetPos) {
@@ -505,8 +530,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
           if (widget) {
             onUpdateWidgetPos(draggingId, widget.gridPos, {
               ...initialPos,
-              xRatio: finalPos.xRatio,
-              yRatio: finalPos.yRatio,
+              xRatio: targetX,
+              yRatio: targetY,
               zIndex: targetZ,
             });
           }
@@ -555,7 +580,13 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     // 3. Commit resize
     if (resizingId) {
       if (resizeRatioRef.current !== null) {
-        const { wRatio, hRatio } = resizeRatioRef.current;
+        let { wRatio, hRatio } = resizeRatioRef.current;
+        if (snapToGrid) {
+          const minW = resizingType === 'widget' ? 0.14 : 0.08;
+          const minH = resizingType === 'widget' ? 0.14 : 0.08;
+          wRatio = Math.max(minW, Math.round(wRatio / SNAP_STEP_X) * SNAP_STEP_X);
+          hRatio = Math.max(minH, Math.round(hRatio / SNAP_STEP_Y) * SNAP_STEP_Y);
+        }
         if (resizingType === 'note') {
           const note = notesRef.current.find((n) => n.id === resizingId);
           if (note && note.freeformPos) {
@@ -706,6 +737,25 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             backgroundColor: `rgba(9, 13, 22, ${dimAlpha})`,
           }}
         />
+      )}
+
+      {/* Snap-to-Grid Ambient Alignment Guide */}
+      {snapToGrid && (Boolean(draggingId) || Boolean(resizingId)) && (
+        <div
+          className="absolute inset-0 pointer-events-none z-10 transition-opacity duration-200"
+          style={{
+            backgroundImage: `
+              linear-gradient(to right, rgba(59, 130, 246, 0.14) 1px, transparent 1px),
+              linear-gradient(to bottom, rgba(59, 130, 246, 0.14) 1px, transparent 1px)
+            `,
+            backgroundSize: `${(100 / SNAP_COLUMNS).toFixed(4)}% ${(100 / SNAP_ROWS).toFixed(4)}%`,
+          }}
+        >
+          <div className="absolute top-4 right-4 px-2.5 py-1 rounded-full bg-blue-600/85 backdrop-blur text-white text-[10px] font-semibold tracking-wider uppercase shadow-lg flex items-center gap-1.5 border border-blue-400/30">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-300 animate-pulse" />
+            Snap to Grid (24×16)
+          </div>
+        </div>
       )}
 
       {/* Empty Canvas Onboarding Prompt (when a new canvas has 0 tiles and 0 notes) */}
@@ -1012,6 +1062,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   clockFace={widget.config?.clockFace || widget.config?.face || 'digital'}
                   showSeconds={widget.config?.showSeconds ?? true}
                   timezone={widget.config?.timezone}
+                  clockAlign={widget.config?.clockAlign || 'center'}
                 />
               ) : widget.type === 'countdown' ? (
                 <CountdownWidget
@@ -1041,6 +1092,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   initialPolaroidCount={widget.config?.polaroidCount || 12}
                   initialPolaroidSizeMode={widget.config?.polaroidSizeMode || 'mixed'}
                   photoOrder={widget.config?.photoOrder || 'random'}
+                  showCaptions={widget.config?.showCaptions ?? true}
                   onUpdateConfig={(updates) => {
                     if (onUpdateWidget) {
                       onUpdateWidget(widget.id, {
@@ -1724,13 +1776,25 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       <PhotoSourcesModal
         isOpen={photoSourcesTargetWidget !== null}
         onClose={() => setPhotoSourcesTargetWidget(null)}
-        onPhotosLoaded={(newPhotos, sourceName) => {
+        initialWebUrls={photoSourcesTargetWidget?.config?.sourceUrl || ''}
+        currentSourceLabel={photoSourcesTargetWidget?.config?.sourceLabel}
+        currentSourceType={
+          photoSourcesTargetWidget?.config?.sourceType ||
+          (photoSourcesTargetWidget?.config?.sourceUrl ||
+           photoSourcesTargetWidget?.config?.customPhotos?.[0]?.url?.includes('googleusercontent.com')
+            ? 'web'
+            : undefined)
+        }
+        currentPhotoCount={photoSourcesTargetWidget?.config?.customPhotos?.length}
+        onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType) => {
           if (photoSourcesTargetWidget && onUpdateWidget && newPhotos.length > 0) {
             onUpdateWidget(photoSourcesTargetWidget.id, {
               config: {
                 ...photoSourcesTargetWidget.config,
                 customPhotos: newPhotos,
                 sourceLabel: sourceName,
+                sourceUrl: sourceUrl !== undefined ? sourceUrl : photoSourcesTargetWidget.config?.sourceUrl,
+                sourceType: sourceType !== undefined ? sourceType : photoSourcesTargetWidget.config?.sourceType,
               },
             });
           }

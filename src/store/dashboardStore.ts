@@ -55,6 +55,10 @@ interface DashboardState {
   deleteTab: (tabId: string) => Promise<void>;
   reorderTabs: (orderedTabIds: string[]) => Promise<void>;
   setDockPosition: (pos: DockPosition) => Promise<void>;
+  setSnapToGrid: (snapToGrid: boolean) => Promise<void>;
+  toggleSnapToGrid: () => Promise<void>;
+  setDockHidden: (isDockHidden: boolean) => Promise<void>;
+  toggleDockHidden: () => Promise<void>;
   toggleTabEnabled: (tabId: string, enabled: boolean) => Promise<void>;
   setDisplayDensity: (density: 0.75 | 1.0 | 1.25 | 1.5) => Promise<void>;
   setCarouselEnabled: (enabled: boolean) => Promise<void>;
@@ -294,6 +298,30 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     await db.settings.put(updated);
     set({ settings: updated });
     get().saveLocalBackup();
+  },
+
+  setSnapToGrid: async (snapToGrid) => {
+    const updated = { ...get().settings, snapToGrid, updated_at: new Date().toISOString() };
+    await db.settings.put(updated);
+    set({ settings: updated });
+    get().saveLocalBackup();
+  },
+
+  toggleSnapToGrid: async () => {
+    const current = Boolean(get().settings.snapToGrid);
+    await get().setSnapToGrid(!current);
+  },
+
+  setDockHidden: async (isDockHidden) => {
+    const updated = { ...get().settings, isDockHidden, updated_at: new Date().toISOString() };
+    await db.settings.put(updated);
+    set({ settings: updated });
+    get().saveLocalBackup();
+  },
+
+  toggleDockHidden: async () => {
+    const current = Boolean(get().settings.isDockHidden);
+    await get().setDockHidden(!current);
   },
 
   toggleTabEnabled: async (tabId, enabled) => {

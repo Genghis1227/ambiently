@@ -35,6 +35,7 @@ import {
   parseFileListToPhotos,
   cachePhotosLocally,
   resolveWebAndCloudPhotoUrls,
+  getOptimizedPhotoUrl,
   type PhotoItem,
   type PhotoDisplayStyle,
 } from '../../services/photos';
@@ -48,7 +49,16 @@ interface SelectedFolderInfo {
 interface PhotoSourcesModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onPhotosLoaded: (photos: PhotoItem[], sourceName: string) => void;
+  onPhotosLoaded: (
+    photos: PhotoItem[],
+    sourceName: string,
+    sourceUrl?: string,
+    sourceType?: 'plex' | 'local' | 'web' | 'curated'
+  ) => void;
+  initialWebUrls?: string;
+  currentSourceLabel?: string;
+  currentSourceType?: 'plex' | 'local' | 'web' | 'curated';
+  currentPhotoCount?: number;
   // Backward compatibility optional props (styled in Tile Settings)
   currentStyle?: PhotoDisplayStyle;
   onStyleChange?: (style: PhotoDisplayStyle) => void;
@@ -64,6 +74,10 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   isOpen,
   onClose,
   onPhotosLoaded,
+  initialWebUrls = '',
+  currentSourceLabel,
+  currentSourceType,
+  currentPhotoCount,
 }) => {
   const [activeTab, setActiveTab] = useState<'plex' | 'local' | 'web' | 'curated'>('plex');
 
@@ -200,7 +214,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
         selectedSectionKey
       );
       if (photos.length > 0) {
-        onPhotosLoaded(photos, `Plex (${selectedServer.name})`);
+        onPhotosLoaded(photos, `Plex (${selectedServer.name})`, undefined, 'plex');
         cachePhotosLocally(photos);
         setStatusMessage(`Successfully loaded ${photos.length} photos from Plex!`);
         setTimeout(() => onClose(), 1200);
@@ -286,7 +300,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
         ? `Local (${selectedFolders[0].name})`
         : `Local (${selectedFolders.length} Folders)`;
 
-    onPhotosLoaded(allPhotos, sourceLabel);
+    onPhotosLoaded(allPhotos, sourceLabel, undefined, 'local');
     cachePhotosLocally(allPhotos);
     setStatusMessage(`Applied ${allPhotos.length} photos from ${selectedFolders.length} folder(s)!`);
     setTimeout(() => onClose(), 1000);
@@ -299,7 +313,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
     try {
       const res = await resolveWebAndCloudPhotoUrls(webUrlsText);
       if (res.photos.length > 0) {
-        onPhotosLoaded(res.photos, res.sourceTitle || 'Google Photos & Web');
+        onPhotosLoaded(res.photos, res.sourceTitle || 'Google Photos & Web', webUrlsText, 'web');
         cachePhotosLocally(res.photos);
         const countText =
           res.totalAlbumCount && res.totalAlbumCount > res.photos.length
@@ -317,11 +331,23 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
 
   // Curated Preset
   const handleApplyCurated = () => {
-    onPhotosLoaded(CURATED_AMBIENT_PHOTOS, 'Curated Ambient');
+    onPhotosLoaded(CURATED_AMBIENT_PHOTOS, 'Curated Ambient', undefined, 'curated');
     cachePhotosLocally(CURATED_AMBIENT_PHOTOS);
     setStatusMessage('Curated ambient scenery loaded.');
     setTimeout(() => onClose(), 1000);
   };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (initialWebUrls) {
+      setWebUrlsText(initialWebUrls);
+    }
+    if (currentSourceType) {
+      setActiveTab(currentSourceType);
+    } else if (initialWebUrls) {
+      setActiveTab('web');
+    }
+  }, [isOpen, initialWebUrls, currentSourceType]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -699,9 +725,13 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                           {folder.photos.slice(0, 3).map((photo) => (
                             <img
                               key={photo.id}
-                              src={photo.url}
+                              src={getOptimizedPhotoUrl(photo.url, 120)}
                               alt=""
+                              referrerPolicy="no-referrer"
                               className="w-7 h-7 rounded object-cover border border-white/10 bg-gray-800"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLElement).style.display = 'none';
+                              }}
                             />
                           ))}
                           {folder.photos.length > 3 && (
@@ -786,6 +816,24 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                 </div>
               </div>
 
+              {/* Active Configured Album Banner */}
+              {currentSourceLabel && (
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-blue-950/40 border border-blue-500/30 text-xs">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <div>
+                      <span className="text-gray-400">Currently Active: </span>
+                      <span className="text-white font-semibold">{currentSourceLabel}</span>
+                      {currentPhotoCount != null && currentPhotoCount > 0 && (
+                        <span className="text-blue-300 ml-1.5 font-mono">
+                          ({currentPhotoCount.toLocaleString()} photos)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <textarea
                 value={webUrlsText}
                 onChange={(e) => setWebUrlsText(e.target.value)}
@@ -808,7 +856,11 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                 ) : (
                   <>
                     <Globe className="w-4 h-4" />
-                    <span>Load Google Photos & Web Images</span>
+                    <span>
+                      {initialWebUrls && initialWebUrls.trim() === webUrlsText.trim()
+                        ? 'Reload & Sync Album Photos'
+                        : 'Load Google Photos & Web Images'}
+                    </span>
                   </>
                 )}
               </button>

@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Image as ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   CURATED_AMBIENT_PHOTOS,
   cachePhotosLocally,
+  getOptimizedPhotoUrl,
   type PhotoItem,
   type PhotoDisplayStyle,
 } from '../../services/photos';
@@ -201,6 +202,7 @@ interface PhotoFrameWidgetProps {
   initialPolaroidCount?: number;
   initialPolaroidSizeMode?: PolaroidSizeMode;
   photoOrder?: 'random' | 'sequential';
+  showCaptions?: boolean;
   onUpdateConfig?: (updates: Record<string, any>) => void;
 }
 
@@ -213,6 +215,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   initialPolaroidCount = 12,
   initialPolaroidSizeMode = 'mixed',
   photoOrder = 'random',
+  showCaptions = true,
   onUpdateConfig: _onUpdateConfig,
 }) => {
   const stateKey = widgetId || `photo-state-${initialSourceLabel || 'ambient'}`;
@@ -359,6 +362,43 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     });
   };
 
+  // Self-healing photo failure tracking: auto-replaces failed/throttled photos with fresh candidates
+  const failedPhotoIdsRef = useRef<Set<string>>(new Set());
+
+  const handlePolaroidError = useCallback((slotIdx: number, photoId: string) => {
+    failedPhotoIdsRef.current.add(photoId);
+    setScatteredPolaroids((prev) => {
+      const currentSlotItem = prev[slotIdx];
+      if (!currentSlotItem) return prev;
+      const slotDef = polaroidSlots[slotIdx] || polaroidSlots[0];
+
+      const otherVisiblePhotoIds = new Set(
+        prev.filter((_, idx) => idx !== slotIdx).map((item) => item.photo.id)
+      );
+      const candidates = photos.filter(
+        (p) => !otherVisiblePhotoIds.has(p.id) && !failedPhotoIdsRef.current.has(p.id)
+      );
+      const pool = candidates.length > 0
+        ? candidates
+        : photos.filter((p) => p.id !== photoId && !failedPhotoIdsRef.current.has(p.id));
+      const finalPool = pool.length > 0 ? pool : photos;
+      const nextPhoto = finalPool[Math.floor(Math.random() * finalPool.length)];
+
+      topZIndexRef.current += 1;
+
+      return prev.map((item, idx) => {
+        if (idx !== slotIdx) return item;
+        return {
+          ...item,
+          photo: nextPhoto,
+          rotation: (slotDef?.rotate || 0) + Math.round((Math.random() * 6 - 3)),
+          zIndex: topZIndexRef.current,
+          key: `slot-${idx}-${nextPhoto.id}-${Date.now()}`,
+        };
+      });
+    });
+  }, [photos, polaroidSlots]);
+
   // Mosaic active quadrant photos & auto-rotation
   const [mosaicPhotos, setMosaicPhotos] = useState<PhotoItem[]>(() => {
     if (savedState?.mosaicPhotos && savedState.mosaicPhotos.length >= 4) {
@@ -412,16 +452,17 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     return () => clearInterval(timer);
   }, [style, photos, intervalSec, photoOrder]);
 
-  const handleShuffleMosaicSlot = (slotIdx: number) => {
+  const handleShuffleMosaicSlot = useCallback((slotIdx: number) => {
     if (photos.length <= 1) return;
     setMosaicPhotos((prev) => {
       const currentSlots = prev.length >= 4 ? prev : photos.slice(0, 4);
       let nextPhoto: PhotoItem;
       if (photoOrder === 'random') {
         const currentIds = new Set(currentSlots.map((p) => p.id));
-        const candidates = photos.filter((p) => !currentIds.has(p.id));
-        const pool = candidates.length > 0 ? candidates : photos;
-        nextPhoto = pool[Math.floor(Math.random() * pool.length)];
+        const candidates = photos.filter((p) => !currentIds.has(p.id) && !failedPhotoIdsRef.current.has(p.id));
+        const pool = candidates.length > 0 ? candidates : photos.filter((p) => !failedPhotoIdsRef.current.has(p.id));
+        const finalPool = pool.length > 0 ? pool : photos;
+        nextPhoto = finalPool[Math.floor(Math.random() * finalPool.length)];
       } else {
         const nextIdx = mosaicIndexRef.current % photos.length;
         nextPhoto = photos[nextIdx];
@@ -432,7 +473,33 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
       updated[slotIdx] = nextPhoto;
       return updated;
     });
-  };
+  }, [photos, photoOrder]);
+
+  const handleMosaicError = useCallback((slotIdx: number, photoId: string) => {
+    failedPhotoIdsRef.current.add(photoId);
+    handleShuffleMosaicSlot(slotIdx);
+  }, [handleShuffleMosaicSlot]);
+
+  const handleKenBurnsError = useCallback((photoId: string) => {
+    failedPhotoIdsRef.current.add(photoId);
+    if (photos.length <= 1) return;
+    if (photoOrder === 'random') {
+      setCurrentIndex((prev) => {
+        let next = Math.floor(Math.random() * photos.length);
+        if (photos.length > 1 && next === prev) {
+          next = (next + 1) % photos.length;
+        }
+        return next;
+      });
+    } else {
+      setCurrentIndex((prev) => (prev + 1) % photos.length);
+    }
+  }, [photos, photoOrder]);
+
+  const handleFilmstripError = useCallback((photoId: string) => {
+    failedPhotoIdsRef.current.add(photoId);
+    setFilmstripIndex((prev) => prev + 1);
+  }, []);
 
   // Sync props to state when widget config updates
   useEffect(() => {
@@ -538,12 +605,20 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                 opacity: { duration: 1.2 },
               }}
               style={{
-                backgroundImage: `url(${currentPhoto.url})`,
+                backgroundImage: `url(${getOptimizedPhotoUrl(currentPhoto.url, 1920)})`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
               }}
               className="absolute inset-0 w-full h-full"
-            />
+            >
+              <img
+                src={getOptimizedPhotoUrl(currentPhoto.url, 1920)}
+                alt=""
+                referrerPolicy="no-referrer"
+                className="hidden"
+                onError={() => handleKenBurnsError(currentPhoto.id)}
+              />
+            </motion.div>
           </AnimatePresence>
           {/* Subtle vignette gradient */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 pointer-events-none" />
@@ -570,14 +645,18 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   className="absolute inset-0 w-full h-full"
                 >
                   <img
-                    src={p.url}
+                    src={getOptimizedPhotoUrl(p.url, 800)}
                     alt={p.caption || 'Photo'}
+                    referrerPolicy="no-referrer"
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                     loading="lazy"
+                    onError={() => handleMosaicError(idx, p.id)}
                   />
-                  <div className="absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black/85 via-black/40 to-transparent text-[11px] text-white truncate font-medium">
-                    {p.caption || p.author || 'Captured Moment'}
-                  </div>
+                  {showCaptions && (
+                    <div className="absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black/85 via-black/40 to-transparent text-[11px] text-white truncate font-medium">
+                      {p.caption || p.author || 'Captured Moment'}
+                    </div>
+                  )}
                 </motion.div>
               </AnimatePresence>
             </div>
@@ -631,34 +710,38 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                 <div
                   className={`relative w-full h-full bg-[#fdfbf7] rounded-sm shadow-2xl border border-black/15 flex flex-col justify-between transition-shadow group-hover:shadow-cyan-500/30 ${
                     isHero
-                      ? 'p-2 sm:p-3 pb-6 sm:pb-9 ring-1 ring-black/5'
+                      ? showCaptions ? 'p-2 sm:p-3 pb-6 sm:pb-9 ring-1 ring-black/5' : 'p-2 sm:p-3 pb-3 ring-1 ring-black/5'
                       : isSmall
-                      ? 'p-1 pb-4'
-                      : 'p-1.5 sm:p-2 pb-5 sm:pb-7'
+                      ? showCaptions ? 'p-1 pb-4' : 'p-1'
+                      : showCaptions ? 'p-1.5 sm:p-2 pb-5 sm:pb-7' : 'p-1.5 sm:p-2'
                   }`}
                 >
                   <div className="w-full flex-1 min-h-0 overflow-hidden rounded-xs bg-gray-900 relative">
                     <img
-                      src={item.photo.url}
+                      src={getOptimizedPhotoUrl(item.photo.url, isHero ? 800 : 600)}
                       alt={item.photo.caption || 'Polaroid moment'}
+                      referrerPolicy="no-referrer"
                       className="w-full h-full object-cover select-none pointer-events-none"
                       loading="lazy"
+                      onError={() => handlePolaroidError(idx, item.photo.id)}
                     />
                   </div>
-                  <div className="mt-1 sm:mt-1.5 px-0.5 text-center shrink-0">
-                    <div
-                      className={`font-handwriting font-bold text-gray-800 truncate tracking-tight ${
-                        isHero ? 'text-xs sm:text-sm font-extrabold' : isSmall ? 'text-[9px]' : 'text-[10px] sm:text-xs'
-                      }`}
-                    >
-                      {item.photo.caption || 'Captured Moment'}
-                    </div>
-                    {item.photo.author && !isSmall && (
-                      <div className="text-[8px] sm:text-[9px] text-gray-500 font-sans truncate">
-                        {item.photo.author}
+                  {showCaptions && (
+                    <div className="mt-1 sm:mt-1.5 px-0.5 text-center shrink-0">
+                      <div
+                        className={`font-handwriting font-bold text-gray-800 truncate tracking-tight ${
+                          isHero ? 'text-xs sm:text-sm font-extrabold' : isSmall ? 'text-[9px]' : 'text-[10px] sm:text-xs'
+                        }`}
+                      >
+                        {item.photo.caption || 'Captured Moment'}
                       </div>
-                    )}
-                  </div>
+                      {item.photo.author && !isSmall && (
+                        <div className="text-[8px] sm:text-[9px] text-gray-500 font-sans truncate">
+                          {item.photo.author}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </motion.div>
             );
@@ -731,31 +814,33 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   }
                 }}
                 animate={{
-                  x: `${offset * 62}%`,
-                  scale: isCenter ? 1.15 : Math.abs(offset) === 1 ? 0.78 : Math.abs(offset) === 2 ? 0.62 : 0.48,
-                  opacity: isCenter ? 1 : Math.abs(offset) === 1 ? 0.5 : Math.abs(offset) === 2 ? 0.2 : 0,
-                  zIndex: isCenter ? 20 : 10 - Math.abs(offset),
-                  filter: isCenter ? 'brightness(100%)' : 'brightness(65%)',
+                  x: `${offset * 70}%`,
+                  scale: isCenter ? 1.42 : Math.abs(offset) === 1 ? 0.72 : Math.abs(offset) === 2 ? 0.52 : 0.38,
+                  opacity: isCenter ? 1 : Math.abs(offset) === 1 ? 0.55 : Math.abs(offset) === 2 ? 0.22 : 0,
+                  zIndex: isCenter ? 32 : 10 - Math.abs(offset),
+                  filter: isCenter ? 'brightness(105%) contrast(102%)' : 'brightness(60%)',
                 }}
                 transition={{
                   duration: 0.85,
                   ease: [0.25, 1, 0.5, 1],
                 }}
-                className={`absolute w-[52%] max-w-[460px] aspect-[16/10] rounded-xl overflow-hidden cursor-pointer shadow-2xl ${
+                className={`absolute w-[50%] max-w-[480px] aspect-[16/10] rounded-xl overflow-hidden cursor-pointer shadow-2xl ${
                   isCenter
-                    ? 'ring-2 ring-blue-500/90 shadow-[0_20px_50px_rgba(0,0,0,0.9)]'
+                    ? 'ring-2 ring-blue-500/90 shadow-[0_25px_60px_rgba(0,0,0,0.95)]'
                     : 'border border-white/10 hover:opacity-75'
                 }`}
                 title={isCenter ? p.caption : 'Click to center this photo'}
               >
                 <img
-                  src={p.url}
+                  src={getOptimizedPhotoUrl(p.url, 800)}
                   alt={p.caption || 'Film frame'}
+                  referrerPolicy="no-referrer"
                   className="w-full h-full object-cover select-none pointer-events-none"
                   loading="lazy"
+                  onError={() => handleFilmstripError(p.id)}
                 />
 
-                {isCenter && (
+                {isCenter && showCaptions && (
                   <div className="absolute bottom-0 inset-x-0 p-3 bg-gradient-to-t from-black/95 via-black/60 to-transparent text-center">
                     <div className="text-xs sm:text-sm font-bold text-white truncate drop-shadow-md">
                       {p.caption || 'Captured Moment'}
@@ -774,20 +859,22 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
       )}
 
       {/* Ambient Top Caption Pill */}
-      <div className="relative z-40 p-3 flex items-center justify-between text-white drop-shadow-md pointer-events-none pr-24">
-        <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-xs">
-          <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
-          <span className="font-medium truncate max-w-[160px]">
-            {currentPhoto.caption || sourceLabel}
-          </span>
-          <span className="text-[10px] text-gray-400 font-mono">
-            ({activeDisplayIndex + 1}/{photos.length})
-          </span>
+      {showCaptions && (
+        <div className="relative z-40 p-3 flex items-center justify-between text-white drop-shadow-md pointer-events-none pr-24">
+          <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-xs">
+            <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
+            <span className="font-medium truncate max-w-[160px]">
+              {currentPhoto.caption || sourceLabel}
+            </span>
+            <span className="text-[10px] text-gray-400 font-mono">
+              ({activeDisplayIndex + 1}/{photos.length})
+            </span>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Subtle Bottom Photo Attribution (for Ken Burns and Mosaic) */}
-      {style !== 'filmstrip' && currentPhoto.author && (
+      {showCaptions && style !== 'filmstrip' && currentPhoto.author && (
         <div className="relative z-10 p-3 flex items-end justify-end text-white pointer-events-none drop-shadow-lg">
           <div className="text-[11px] text-gray-400 text-right bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full border border-white/10">
             Photo: <span className="text-gray-200 font-medium">{currentPhoto.author}</span>

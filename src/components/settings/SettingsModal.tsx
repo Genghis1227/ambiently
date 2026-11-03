@@ -25,6 +25,7 @@ import {
   EyeOff,
   SunDim,
   Home,
+  Grid,
 } from 'lucide-react';
 import { db } from '../../services/db';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -68,6 +69,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     widgets,
     notes,
     setDockPosition,
+    setDockHidden,
+    setSnapToGrid,
     setCarouselEnabled,
     setCarouselDuration,
     updateSettings,
@@ -902,6 +905,58 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Dock Visibility Toggle */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-gray-800/40 border border-gray-800">
+              <div className="space-y-0.5 max-w-[80%]">
+                <div className="flex items-center gap-2">
+                  <EyeOff className="w-4 h-4 text-amber-400" />
+                  <span className="text-sm font-medium text-gray-200">Hide Navigation Toolbar</span>
+                </div>
+                <p className="text-xs text-gray-400">
+                  Hides the toolbar for full-screen immersion. Restore via edge handle or shortcut <kbd className="px-1.5 py-0.5 rounded bg-gray-800 text-[11px] font-mono text-gray-300 border border-gray-700">\</kbd>.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDockHidden(!settings.isDockHidden)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                  settings.isDockHidden ? 'bg-amber-600' : 'bg-gray-700'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    settings.isDockHidden ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Snap to Grid Setting */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-gray-800/40 border border-gray-800">
+              <div className="space-y-0.5 max-w-[80%]">
+                <div className="flex items-center gap-2">
+                  <Grid className="w-4 h-4 text-blue-400" />
+                  <span className="text-sm font-medium text-gray-200">Snap to Grid</span>
+                </div>
+                <p className="text-xs text-gray-400">
+                  Align tiles and sticky notes to a 24×16 grid while dragging or resizing, with real-time visual alignment guides.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSnapToGrid(!settings.snapToGrid)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                  settings.snapToGrid ? 'bg-blue-600' : 'bg-gray-700'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    settings.snapToGrid ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
             </div>
 
             {/* Cloud SaaS Sync Section */}

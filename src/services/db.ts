@@ -42,6 +42,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   nightModeEnd: '07:00',
   nightModeStyle: 'dim',
   nightDimOpacity: 0.85,
+  snapToGrid: false,
+  isDockHidden: false,
   pinLockEnabled: false,
   pinHash: null,
   isLocked: false,

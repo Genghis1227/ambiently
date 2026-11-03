@@ -13,6 +13,8 @@ import {
   Sparkles,
   Layers,
   Smartphone,
+  Grid,
+  EyeOff,
 } from 'lucide-react';
 import type { DockPosition } from '../../types/dashboard';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -48,6 +50,8 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
   const settings = useDashboardStore((s) => s.settings);
   const toggleNightModeManual = useDashboardStore((s) => s.toggleNightModeManual);
   const setCarouselEnabled = useDashboardStore((s) => s.setCarouselEnabled);
+  const toggleSnapToGrid = useDashboardStore((s) => s.toggleSnapToGrid);
+  const toggleDockHidden = useDashboardStore((s) => s.toggleDockHidden);
   const tabs = useDashboardStore((s) => s.tabs);
 
   // Live clock display in header
@@ -254,6 +258,47 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
               </span>
             </button>
           )}
+
+          {/* Snap to Grid Shortcut */}
+          <button
+            type="button"
+            onClick={() => {
+              toggleSnapToGrid();
+            }}
+            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+              settings.snapToGrid
+                ? 'bg-blue-600/20 hover:bg-blue-600/30 border-blue-500/40 text-blue-300'
+                : 'bg-gray-900/80 hover:bg-gray-800/90 border-gray-800 text-gray-300'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Grid className="w-4 h-4 text-blue-400" />
+              <span>Snap to Grid (24×16)</span>
+            </div>
+            <span
+              className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${
+                settings.snapToGrid ? 'bg-blue-500/30 text-blue-200' : 'text-gray-500'
+              }`}
+            >
+              {settings.snapToGrid ? 'Active' : 'Off'}
+            </span>
+          </button>
+
+          {/* Hide Toolbar Shortcut */}
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              toggleDockHidden();
+            }}
+            className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-gray-900/80 hover:bg-gray-800/90 border border-gray-800 text-xs font-medium text-gray-200 transition-all cursor-pointer"
+          >
+            <div className="flex items-center gap-2">
+              <EyeOff className="w-4 h-4 text-amber-400" />
+              <span>Hide Navigation Toolbar</span>
+            </div>
+            <span className="text-[10px] text-gray-500 font-mono">\</span>
+          </button>
 
           {/* Share Board / Mobile QR */}
           <button
