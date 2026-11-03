@@ -383,9 +383,9 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
 
   return (
     <>
-      <div className="fixed inset-0 w-full h-[100dvh] bg-[#090d16] text-white flex flex-col p-4 pb-36 mobile-companion-scroll overscroll-y-contain z-30">
+      <div className="fixed inset-0 w-full h-[100dvh] bg-[#090d16] text-white flex flex-col px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-36 mobile-companion-scroll overscroll-y-contain z-30">
         {/* Top Mobile Bar with Clickable Version Tag */}
-        <div className="flex items-center justify-between border-b border-gray-800 pb-3 mb-3">
+        <div className="flex items-center justify-between border-b border-gray-800 pb-3 mb-3 shrink-0">
           <div className="flex items-center gap-2.5">
             <img src="/logo.png" alt="Ambiently" className="w-8 h-8 rounded-lg shadow-sm" />
             <div>
@@ -425,7 +425,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         </div>
 
         {/* Tab Switcher Pills */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-2.5 mb-2.5 no-scrollbar">
+        <div className="flex items-center gap-2 overflow-x-auto py-1.5 mb-2.5 no-scrollbar shrink-0 min-h-[44px]">
           {tabs.map((tab, idx) => {
             const hasExplicitHome = tabs.some((t) => t.isHome);
             const isHome = tab.isHome || (!hasExplicitHome && idx === 0);
@@ -433,13 +433,13 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
               <button
                 key={tab.id}
                 onClick={() => onSelectTab(tab.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold shrink-0 transition-all cursor-pointer ${
                   tab.id === activeTabId
                     ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
                     : 'bg-gray-800/60 text-gray-400 hover:text-gray-200'
                 }`}
               >
-                {isHome && <Home className="w-3 h-3 text-purple-400" />}
+                {isHome && <Home className="w-3.5 h-3.5 text-purple-400" />}
                 <span>{tab.name}</span>
               </button>
             );
@@ -447,7 +447,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         </div>
 
         {/* Persistent View Option Filter: All Tiles | Widgets | Notes & Tasks */}
-        <div className="flex items-center justify-between bg-gray-900/90 p-1 rounded-xl border border-gray-800 mb-3">
+        <div className="flex items-center justify-between bg-gray-900/90 p-1 rounded-xl border border-gray-800 mb-3 shrink-0">
           {(
             [
               { id: 'all', label: 'All Tiles', count: sortedWidgets.length + activeNotes.length },
@@ -479,7 +479,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
 
         {/* Quick Add Sticky Note Bar (Visible in 'all' and 'notes' view modes) */}
         {(viewMode === 'all' || viewMode === 'notes') && (
-          <div className="p-3 rounded-2xl bg-gray-900/80 border border-gray-800 shadow-xl mb-4">
+          <div className="p-3 rounded-2xl bg-gray-900/80 border border-gray-800 shadow-xl mb-4 shrink-0">
             <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-2">
               Quick Add Note / Task
             </span>
@@ -516,7 +516,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         )}
 
         {/* Unified Vertical Stream Container */}
-        <div className="space-y-4 flex-1">
+        <div className="space-y-4 w-full shrink-0">
           {/* SECTION 1: WIDGET TILES (Shown if in 'all' or 'widgets' view) */}
           {(viewMode === 'all' || viewMode === 'widgets') && (
             <div className="space-y-3">
