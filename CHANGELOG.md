@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.10] - 2026-11-02
+
+### Added
+* **Default Random Photo Playback (`PhotoFrameWidget.tsx`, `WidgetSettingsModal.tsx`):**
+  * Configured random shuffle as default across Ken Burns, Mosaic, Filmstrip, and Polaroids to ensure ambient smart-displays always show fresh, non-repetitive photos.
+  * Added a dedicated **Photo Playback Order** setting in Tile Settings (`🔀 Random Shuffle (Default)` vs `➡️ Sequential Order`).
+* **Continuous Photo Rotation & Carousel Persistence (`PhotoFrameWidget.tsx`, `Corkboard.tsx`, `MobileCompanion.tsx`):**
+  * Implemented persistent runtime state caching keyed by widget instance and photo collection signature.
+  * Preserved photo indices across canvas switches, preventing frames from restarting at photo #1 every time the board carousel scrolls into view.
+* **Infinite Centered Filmstrip Reel (`PhotoFrameWidget.tsx`):**
+  * Overhauled filmstrip presentation into an always-centered hero stage with scale elevation (`scale: 1.15`), drop shadow, and bottom caption bar.
+  * Added smooth physics-based decelerate transitions (`ease: [0.25, 1, 0.5, 1]`) that shrink the current photo and slide it left while gliding the incoming photo into the center.
+  * Added perforated film rails, edge vignettes, hover navigation chevrons, and infinite modulo loop streaming.
+
+### Fixed
+* **Auto-Rotating Mosaic Collage (`PhotoFrameWidget.tsx`):**
+  * Fixed static 4-photo limitation by introducing an active quadrant rotation queue that continually cross-fades fresh photos into the collage at the configured interval.
+* **Polaroid Polish (`PhotoFrameWidget.tsx`):**
+  * Removed faux washi tape decals from Scattered Polaroids for authentic white photo paper prints with natural drop shadows.
+* **Photo Sources Hub Cleanup (`PhotoSourcesModal.tsx`):**
+  * Removed redundant presentation style, density, and speed controls from the media picker, establishing Tile Settings as the single source of truth.
+* **Canvas Resolution & Display Density (`App.tsx`, `SettingsModal.tsx`, `ARCHITECTURE.md`):**
+  * Removed artificial CSS canvas scaling (`displayDensity`) in favor of crisp native 1:1 proportional rendering without edge clipping or distortion.
+* **Modal UX & Dismissal (`SettingsModal.tsx`, `WidgetSettingsModal.tsx`, `PhotoSourcesModal.tsx`, `AddWidgetModal.tsx`, `CreateCanvasModal.tsx`):**
+  * Added click-outside backdrop dismissal and `Escape` key close across all system dialogs.
+  * Pinned the settings modal header with title and close button (`✕`) so users never have to scroll up to close.
+
+---
+
 ## [0.1.9] - 2026-11-02
 
 ### Added
