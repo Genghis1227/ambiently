@@ -5,9 +5,23 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.1.5';
+export const APP_VERSION = '0.1.6';
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.1.6",
+    date: "November 2, 2026",
+    title: "Mobile Vertical Tile Stream, Sticky Note Canvas Close, & Command Hub Click Fix",
+    highlights: [
+      "Mobile Companion Vertical Tile Stream: structured single-column vertical feed rendering all canvas widgets (Clock & Weather, Countdown, Photos, Feeds, Quotes, Text Boxes, and Media) with responsive live previews.",
+      "Persistent View Option: 3-way segmented filter pills (All Tiles | Widgets | Notes & Tasks) automatically remembered in localStorage.",
+      "Independent Mobile Tile Reordering: added ▲ / ▼ move buttons on each widget card modifying an isolated mobileOrder property with zero impact on the desktop/kiosk layout.",
+      "Mobile Tile Customizer & Creation: 1-tap ⚙️ button opens the full widget customizer on mobile, plus '+ Add Tile' button to add widgets from your phone.",
+      "Close Individual Sticky Notes: added an X button to floating notes to unpin them from the corkboard without deleting them, keeping them safe in the Notes Tile widget.",
+      "Pop Out Notes from Tile: added 'Pin to Board' / 'On Canvas' toggle in the Notes Tile widget to pop notes back onto the corkboard with one tap.",
+      "Fixed Command Hub click registration: elevated dock and menu z-index to 50 above the transparent backdrop so all kiosk controls and shortcuts immediately respond to clicks and touches.",
+    ],
+  },
   {
     version: "v0.1.5",
     date: "November 2, 2026",
