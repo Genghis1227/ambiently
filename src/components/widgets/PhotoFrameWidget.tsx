@@ -271,6 +271,56 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     });
   };
 
+  // Mosaic active quadrant photos & auto-rotation
+  const [mosaicPhotos, setMosaicPhotos] = useState<PhotoItem[]>(() => photos.slice(0, 4));
+  const mosaicSlotRef = useRef(0);
+  const mosaicIndexRef = useRef(4);
+
+  useEffect(() => {
+    if (!photos || photos.length === 0) return;
+    setMosaicPhotos(photos.slice(0, 4));
+    mosaicSlotRef.current = 0;
+    mosaicIndexRef.current = 4 % photos.length;
+  }, [photos]);
+
+  useEffect(() => {
+    if (style !== 'mosaic' || photos.length <= 1) return;
+
+    // Staggered quadrant rotation: swap one photo every rotation interval
+    const timer = setInterval(() => {
+      setMosaicPhotos((prev) => {
+        if (photos.length <= 1) return prev;
+        const currentSlots = prev.length >= 4 ? prev : photos.slice(0, 4);
+        const nextIdx = mosaicIndexRef.current % photos.length;
+        const nextPhoto = photos[nextIdx];
+        mosaicIndexRef.current = (nextIdx + 1) % photos.length;
+
+        const slotToReplace = mosaicSlotRef.current % 4;
+        mosaicSlotRef.current = (mosaicSlotRef.current + 1) % 4;
+
+        const updated = [...currentSlots];
+        updated[slotToReplace] = nextPhoto;
+        return updated;
+      });
+    }, intervalSec * 1000);
+
+    return () => clearInterval(timer);
+  }, [style, photos, intervalSec]);
+
+  const handleShuffleMosaicSlot = (slotIdx: number) => {
+    if (photos.length <= 1) return;
+    setMosaicPhotos((prev) => {
+      const currentSlots = prev.length >= 4 ? prev : photos.slice(0, 4);
+      const nextIdx = mosaicIndexRef.current % photos.length;
+      const nextPhoto = photos[nextIdx];
+      mosaicIndexRef.current = (nextIdx + 1) % photos.length;
+
+      const updated = [...currentSlots];
+      updated[slotIdx] = nextPhoto;
+      return updated;
+    });
+  };
+
 
   // Sync props to state when widget config updates
   useEffect(() => {
@@ -338,20 +388,36 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
         </div>
       )}
 
-      {/* 2. Mosaic / Collage Grid Style */}
+      {/* 2. Mosaic / Collage Grid Style (4-quadrant auto-rotating collection) */}
       {style === 'mosaic' && (
         <div className="absolute inset-0 p-2 grid grid-cols-2 grid-rows-2 gap-2 bg-gray-950">
-          {photos.slice(0, 4).map((p, idx) => (
+          {(mosaicPhotos.length >= 4 ? mosaicPhotos : photos.slice(0, 4)).map((p, idx) => (
             <div
-              key={p.id}
-              className={`relative rounded-xl overflow-hidden shadow-md ${
-                idx === currentIndex % 4 ? 'ring-2 ring-blue-500' : ''
-              }`}
+              key={`mosaic-slot-${idx}`}
+              onClick={() => handleShuffleMosaicSlot(idx)}
+              className="relative rounded-xl overflow-hidden shadow-md bg-gray-900 group cursor-pointer"
+              title="Click to advance this photo"
             >
-              <img src={p.url} alt={p.caption} className="w-full h-full object-cover" />
-              <div className="absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black/80 to-transparent text-[11px] text-white truncate font-medium">
-                {p.caption}
-              </div>
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={p.id}
+                  initial={{ opacity: 0, scale: 1.04 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.8, ease: 'easeInOut' }}
+                  className="absolute inset-0 w-full h-full"
+                >
+                  <img
+                    src={p.url}
+                    alt={p.caption || 'Photo'}
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    loading="lazy"
+                  />
+                  <div className="absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black/85 via-black/40 to-transparent text-[11px] text-white truncate font-medium">
+                    {p.caption || p.author || 'Captured Moment'}
+                  </div>
+                </motion.div>
+              </AnimatePresence>
             </div>
           ))}
         </div>
@@ -399,13 +465,6 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                 }}
                 className="aspect-[4/5] cursor-pointer touch-manipulation group"
               >
-                {/* Washi tape decal */}
-                <div
-                  className={`absolute -top-2 left-1/2 -translate-x-1/2 bg-white/40 backdrop-blur-xs border border-white/50 shadow-xs z-10 pointer-events-none -rotate-2 ${
-                    isHero ? 'w-10 sm:w-12 h-3 sm:h-3.5' : isSmall ? 'w-6 h-2' : 'w-8 sm:w-10 h-2.5 sm:h-3'
-                  }`}
-                />
-
                 {/* Classic white polaroid paper frame */}
                 <div
                   className={`relative w-full h-full bg-[#fdfbf7] rounded-sm shadow-2xl border border-black/15 flex flex-col justify-between transition-shadow group-hover:shadow-cyan-500/30 ${
