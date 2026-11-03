@@ -233,20 +233,29 @@ export function isGooglePhotosUrl(url: string): boolean {
   return /photos\.(app\.goo\.gl|google\.com)/i.test(url);
 }
 
-export async function fetchGooglePhotosAlbum(albumUrl: string): Promise<{
+export async function fetchGooglePhotosAlbum(
+  albumUrl: string,
+  maxPhotos: number = 10000
+): Promise<{
   title: string;
+  count: number;
+  totalAlbumCount: number;
   photos: PhotoItem[];
   error?: string;
 }> {
   const trimmed = albumUrl.trim();
-  if (!trimmed) return { title: '', photos: [], error: 'Empty URL' };
+  if (!trimmed) return { title: '', count: 0, totalAlbumCount: 0, photos: [], error: 'Empty URL' };
 
   try {
-    const res = await fetch(`/functions/api/gphotos?url=${encodeURIComponent(trimmed)}`);
+    const res = await fetch(
+      `/functions/api/gphotos?url=${encodeURIComponent(trimmed)}&maxPhotos=${maxPhotos}`
+    );
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       return {
         title: '',
+        count: 0,
+        totalAlbumCount: 0,
         photos: [],
         error: errData.error || `Failed to fetch Google Photos album (HTTP ${res.status}).`,
       };
@@ -256,6 +265,8 @@ export async function fetchGooglePhotosAlbum(albumUrl: string): Promise<{
     if (!data.photos || data.photos.length === 0) {
       return {
         title: data.title || 'Google Photos Album',
+        count: 0,
+        totalAlbumCount: data.totalAlbumCount || 0,
         photos: [],
         error: 'No photos found in this Google Photos album. Make sure the album is set to Shared/Anyone with the link.',
       };
@@ -263,11 +274,15 @@ export async function fetchGooglePhotosAlbum(albumUrl: string): Promise<{
 
     return {
       title: data.title || 'Google Photos Album',
+      count: data.photos.length,
+      totalAlbumCount: data.totalAlbumCount || data.photos.length,
       photos: data.photos,
     };
   } catch (err: any) {
     return {
       title: '',
+      count: 0,
+      totalAlbumCount: 0,
       photos: [],
       error: `Network error connecting to Google Photos service: ${err.message}`,
     };
@@ -301,9 +316,13 @@ export function parseWebPhotoUrls(text: string): PhotoItem[] {
 }
 
 // Resolves both Google Photos shared albums, Google Drive links, and direct web images
-export async function resolveWebAndCloudPhotoUrls(text: string): Promise<{
+export async function resolveWebAndCloudPhotoUrls(
+  text: string,
+  maxPhotos: number = 10000
+): Promise<{
   photos: PhotoItem[];
   sourceTitle: string;
+  totalAlbumCount?: number;
   error?: string;
 }> {
   if (!text.trim()) return { photos: [], sourceTitle: '' };
@@ -314,12 +333,18 @@ export async function resolveWebAndCloudPhotoUrls(text: string): Promise<{
     .filter((l) => l.length > 5);
 
   const directItems: PhotoItem[] = [];
-  const gphotoPromises: Promise<{ title: string; photos: PhotoItem[]; error?: string }>[] = [];
+  const gphotoPromises: Promise<{
+    title: string;
+    count: number;
+    totalAlbumCount: number;
+    photos: PhotoItem[];
+    error?: string;
+  }>[] = [];
 
   for (let idx = 0; idx < lines.length; idx++) {
     const line = lines[idx];
     if (isGooglePhotosUrl(line)) {
-      gphotoPromises.push(fetchGooglePhotosAlbum(line));
+      gphotoPromises.push(fetchGooglePhotosAlbum(line, maxPhotos));
     } else {
       const gdriveResolved = parseGoogleDriveLink(line);
       const finalUrl = gdriveResolved || line;
@@ -336,12 +361,16 @@ export async function resolveWebAndCloudPhotoUrls(text: string): Promise<{
   const gphotoResults = await Promise.all(gphotoPromises);
   const gphotoItems: PhotoItem[] = [];
   let gphotoAlbumTitle = '';
+  let highestAlbumTotal = 0;
 
   for (const res of gphotoResults) {
     if (res.photos && res.photos.length > 0) {
       gphotoItems.push(...res.photos);
       if (!gphotoAlbumTitle && res.title) {
         gphotoAlbumTitle = res.title;
+      }
+      if (res.totalAlbumCount && res.totalAlbumCount > highestAlbumTotal) {
+        highestAlbumTotal = res.totalAlbumCount;
       }
     }
   }
@@ -362,7 +391,11 @@ export async function resolveWebAndCloudPhotoUrls(text: string): Promise<{
       ? `Google Photos (${gphotoAlbumTitle})`
       : gphotoAlbumTitle
       ? `${gphotoAlbumTitle} & Web`
-      : 'Web & Cloud';
+      : `Web Images (${combined.length})`;
 
-  return { photos: combined, sourceTitle };
+  return {
+    photos: combined,
+    sourceTitle,
+    totalAlbumCount: highestAlbumTotal,
+  };
 }

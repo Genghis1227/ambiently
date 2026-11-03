@@ -306,13 +306,17 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   // Web / Google Photos & Drive URLs
   const handleApplyWebUrls = async () => {
     setIsWebLoading(true);
-    setStatusMessage('Resolving Google Photos album & web links...');
+    setStatusMessage('Resolving Google Photos album & web links (retrieving full library)...');
     try {
       const res = await resolveWebAndCloudPhotoUrls(webUrlsText);
       if (res.photos.length > 0) {
         onPhotosLoaded(res.photos, res.sourceTitle || 'Google Photos & Web');
         cachePhotosLocally(res.photos);
-        setStatusMessage(`Loaded ${res.photos.length} photos from ${res.sourceTitle}!`);
+        const countText =
+          res.totalAlbumCount && res.totalAlbumCount > res.photos.length
+            ? `Loaded ${res.photos.length} of ${res.totalAlbumCount} photos`
+            : `Loaded ${res.photos.length} photos`;
+        setStatusMessage(`${countText} from ${res.sourceTitle}!`);
         setTimeout(() => onClose(), 1200);
       } else {
         setStatusMessage(res.error || 'Please enter at least one valid Google Photos, Google Drive, or image link.');
@@ -716,6 +720,10 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                 <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">
                   Paste public <strong>Google Photos shared album links (<code className="text-blue-400">https://photos.app.goo.gl/...</code>)</strong>, Google Drive image links, or direct image URLs (<code className="text-gray-300">.jpg, .png, .webp</code>), one per line:
                 </p>
+                <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-blue-300 bg-blue-950/40 border border-blue-800/40 px-2.5 py-1 rounded-lg">
+                  <span className="shrink-0">⚡</span>
+                  <span>Deep pagination active: large shared albums with 7,000+ photos are automatically resolved in full.</span>
+                </div>
               </div>
 
               <textarea
