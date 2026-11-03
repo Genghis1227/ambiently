@@ -842,22 +842,6 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         <PhotoSourcesModal
           isOpen={Boolean(photoSourcesTargetWidget)}
           onClose={() => setPhotoSourcesTargetWidget(null)}
-          currentStyle={photoSourcesTargetWidget.config?.displayStyle || 'ken_burns'}
-          onStyleChange={(newStyle) => {
-            if (photoSourcesTargetWidget && onUpdateWidget) {
-              onUpdateWidget(photoSourcesTargetWidget.id, {
-                config: { ...photoSourcesTargetWidget.config, displayStyle: newStyle },
-              });
-            }
-          }}
-          rotationIntervalSec={photoSourcesTargetWidget.config?.rotationIntervalSec || 15}
-          onRotationIntervalChange={(newSec) => {
-            if (photoSourcesTargetWidget && onUpdateWidget) {
-              onUpdateWidget(photoSourcesTargetWidget.id, {
-                config: { ...photoSourcesTargetWidget.config, rotationIntervalSec: newSec },
-              });
-            }
-          }}
           onPhotosLoaded={(newPhotos, sourceName) => {
             if (photoSourcesTargetWidget && onUpdateWidget && newPhotos.length > 0) {
               onUpdateWidget(photoSourcesTargetWidget.id, {
@@ -866,22 +850,6 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
                   customPhotos: newPhotos,
                   sourceLabel: sourceName,
                 },
-              });
-            }
-          }}
-          polaroidCount={photoSourcesTargetWidget.config?.polaroidCount || 12}
-          onPolaroidCountChange={(cnt) => {
-            if (photoSourcesTargetWidget && onUpdateWidget) {
-              onUpdateWidget(photoSourcesTargetWidget.id, {
-                config: { ...photoSourcesTargetWidget.config, polaroidCount: cnt },
-              });
-            }
-          }}
-          polaroidSizeMode={photoSourcesTargetWidget.config?.polaroidSizeMode || 'mixed'}
-          onPolaroidSizeModeChange={(mode) => {
-            if (photoSourcesTargetWidget && onUpdateWidget) {
-              onUpdateWidget(photoSourcesTargetWidget.id, {
-                config: { ...photoSourcesTargetWidget.config, polaroidSizeMode: mode },
               });
             }
           }}

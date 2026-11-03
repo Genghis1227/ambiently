@@ -1722,22 +1722,6 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       <PhotoSourcesModal
         isOpen={photoSourcesTargetWidget !== null}
         onClose={() => setPhotoSourcesTargetWidget(null)}
-        currentStyle={photoSourcesTargetWidget?.config?.displayStyle || 'ken_burns'}
-        onStyleChange={(newStyle) => {
-          if (photoSourcesTargetWidget && onUpdateWidget) {
-            onUpdateWidget(photoSourcesTargetWidget.id, {
-              config: { ...photoSourcesTargetWidget.config, displayStyle: newStyle },
-            });
-          }
-        }}
-        rotationIntervalSec={photoSourcesTargetWidget?.config?.rotationIntervalSec || 15}
-        onRotationIntervalChange={(newSec) => {
-          if (photoSourcesTargetWidget && onUpdateWidget) {
-            onUpdateWidget(photoSourcesTargetWidget.id, {
-              config: { ...photoSourcesTargetWidget.config, rotationIntervalSec: newSec },
-            });
-          }
-        }}
         onPhotosLoaded={(newPhotos, sourceName) => {
           if (photoSourcesTargetWidget && onUpdateWidget && newPhotos.length > 0) {
             onUpdateWidget(photoSourcesTargetWidget.id, {

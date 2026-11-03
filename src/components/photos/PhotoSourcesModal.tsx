@@ -11,8 +11,7 @@ import {
   Globe,
   RefreshCw,
   ExternalLink,
-  Sliders,
-  Image as ImageIcon,
+  ImageIcon,
   Loader2,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
@@ -49,11 +48,12 @@ interface SelectedFolderInfo {
 interface PhotoSourcesModalProps {
   isOpen: boolean;
   onClose: () => void;
-  currentStyle: PhotoDisplayStyle;
-  onStyleChange: (style: PhotoDisplayStyle) => void;
-  rotationIntervalSec: number;
-  onRotationIntervalChange: (sec: number) => void;
   onPhotosLoaded: (photos: PhotoItem[], sourceName: string) => void;
+  // Backward compatibility optional props (styled in Tile Settings)
+  currentStyle?: PhotoDisplayStyle;
+  onStyleChange?: (style: PhotoDisplayStyle) => void;
+  rotationIntervalSec?: number;
+  onRotationIntervalChange?: (sec: number) => void;
   polaroidCount?: number;
   onPolaroidCountChange?: (count: number) => void;
   polaroidSizeMode?: 'mixed' | 'uniform' | 'small' | 'large';
@@ -63,15 +63,7 @@ interface PhotoSourcesModalProps {
 export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   isOpen,
   onClose,
-  currentStyle,
-  onStyleChange,
-  rotationIntervalSec,
-  onRotationIntervalChange,
   onPhotosLoaded,
-  polaroidCount = 12,
-  onPolaroidCountChange,
-  polaroidSizeMode = 'mixed',
-  onPolaroidSizeModeChange,
 }) => {
   const [activeTab, setActiveTab] = useState<'plex' | 'local' | 'web' | 'curated'>('plex');
 
@@ -828,100 +820,6 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
               </button>
             </div>
           )}
-
-          {/* Slideshow Display Style & Speed Controls */}
-          <div className="pt-4 border-t border-gray-800 space-y-3">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-300">
-              <Sliders className="w-3.5 h-3.5 text-blue-400" />
-              <span>Display Style & Rotation Speed</span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[11px] text-gray-400 block mb-1">Presentation Style</label>
-                <div className="grid grid-cols-2 gap-1 bg-gray-950 p-1 rounded-lg border border-gray-800">
-                  {(['ken_burns', 'mosaic', 'polaroid', 'filmstrip'] as const).map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => onStyleChange(s)}
-                      className={`py-1 text-[10px] font-semibold rounded uppercase tracking-wider transition-all ${
-                        currentStyle === s
-                          ? 'bg-blue-600 text-white shadow'
-                          : 'text-gray-400 hover:text-white'
-                      }`}
-                    >
-                      {s === 'ken_burns' ? 'Ken Burns' : s === 'polaroid' ? 'Polaroids' : s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-            {currentStyle === 'polaroid' && onPolaroidCountChange && (
-              <div className="col-span-2 pt-2 border-t border-gray-800 space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] text-gray-400">Polaroid Count / Density</label>
-                  <div className="flex items-center gap-1">
-                    {([6, 12, 18, 24, 32] as const).map((cnt) => (
-                      <button
-                        key={cnt}
-                        type="button"
-                        onClick={() => onPolaroidCountChange(cnt)}
-                        className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold transition-all cursor-pointer ${
-                          polaroidCount === cnt
-                            ? 'bg-blue-600 text-white shadow'
-                            : 'bg-gray-900 border border-gray-800 text-gray-400 hover:text-white'
-                        }`}
-                      >
-                        {cnt === 32 ? 'Fill' : cnt}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {onPolaroidSizeModeChange && (
-                  <div className="flex items-center justify-between">
-                    <label className="text-[11px] text-gray-400">Card Sizes</label>
-                    <div className="flex items-center gap-1">
-                      {[
-                        { id: 'mixed', label: 'Random / Mixed Sizes' },
-                        { id: 'uniform', label: 'Uniform Size' },
-                      ].map((m) => (
-                        <button
-                          key={m.id}
-                          type="button"
-                          onClick={() => onPolaroidSizeModeChange(m.id as any)}
-                          className={`px-2 py-0.5 rounded text-[10px] font-medium transition-all cursor-pointer ${
-                            polaroidSizeMode === m.id
-                              ? 'bg-purple-600/30 border border-purple-500 text-purple-200'
-                              : 'bg-gray-900 border border-gray-800 text-gray-400 hover:text-white'
-                          }`}
-                        >
-                          {m.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-              <div>
-                <label className="text-[11px] text-gray-400 block mb-1">Photo Rotation Speed</label>
-                <select
-                  value={rotationIntervalSec}
-                  onChange={(e) => onRotationIntervalChange(Number(e.target.value))}
-                  className="w-full bg-gray-950 border border-gray-800 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-blue-500"
-                >
-                  <option value={5}>Every 5 seconds</option>
-                  <option value={10}>Every 10 seconds</option>
-                  <option value={15}>Every 15 seconds (Default)</option>
-                  <option value={30}>Every 30 seconds</option>
-                  <option value={60}>Every 1 minute</option>
-                  <option value={300}>Every 5 minutes</option>
-                </select>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
