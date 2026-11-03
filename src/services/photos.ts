@@ -58,6 +58,7 @@ export const CURATED_AMBIENT_PHOTOS: PhotoItem[] = [
 
 // Offline Photo Cache via Cache Storage API (preserves last 30-50 photos offline)
 const CACHE_NAME = 'ambiently-photo-cache-v1';
+const IMAGE_EXT_REGEX = /\.(jpe?g|png|webp|avif|gif|bmp|heic|heif)$/i;
 
 export async function cachePhotosLocally(photos: PhotoItem[]): Promise<void> {
   if (!('caches' in window)) return;
@@ -81,15 +82,77 @@ export async function cachePhotosLocally(photos: PhotoItem[]): Promise<void> {
   }
 }
 
+async function scanDirectoryHandle(
+  dirHandle: any,
+  photos: PhotoItem[],
+  maxPhotos = 1500,
+  currentDepth = 0,
+  maxDepth = 5
+): Promise<void> {
+  if (currentDepth > maxDepth || photos.length >= maxPhotos) return;
+
+  for await (const entry of dirHandle.values()) {
+    if (photos.length >= maxPhotos) break;
+
+    if (entry.kind === 'file') {
+      const isImgExt = IMAGE_EXT_REGEX.test(entry.name);
+      if (isImgExt) {
+        try {
+          const file = await entry.getFile();
+          const url = URL.createObjectURL(file);
+          photos.push({
+            id: `local-${entry.name}-${file.lastModified}-${Math.random().toString(36).slice(2, 7)}`,
+            url,
+            caption: entry.name.replace(/\.[^/.]+$/, ''),
+            date: new Date(file.lastModified).toLocaleDateString(),
+            source: 'local',
+          });
+        } catch {
+          // ignore unreadable network file
+        }
+      } else {
+        // Fallback: check file.type if extension was unusual
+        try {
+          const file = await entry.getFile();
+          if (file.type && file.type.startsWith('image/')) {
+            const url = URL.createObjectURL(file);
+            photos.push({
+              id: `local-${entry.name}-${file.lastModified}-${Math.random().toString(36).slice(2, 7)}`,
+              url,
+              caption: entry.name.replace(/\.[^/.]+$/, ''),
+              date: new Date(file.lastModified).toLocaleDateString(),
+              source: 'local',
+            });
+          }
+        } catch {
+          // ignore
+        }
+      }
+    } else if (entry.kind === 'directory') {
+      // Recursively scan subdirectories (e.g. subfolders, albums on NAS)
+      try {
+        await scanDirectoryHandle(entry, photos, maxPhotos, currentDepth + 1, maxDepth);
+      } catch {
+        // ignore inaccessible subfolder
+      }
+    }
+  }
+}
+
 // Local Directory Picker (showDirectoryPicker) for local PC / mapped NAS photos
 export async function pickLocalPhotoDirectory(): Promise<{
   success: boolean;
   photos: PhotoItem[];
+  folderName?: string;
   error?: string;
 }> {
   try {
     if (!('showDirectoryPicker' in window)) {
-      return { success: false, photos: [], error: 'Directory Picker not supported in this browser.' };
+      return {
+        success: false,
+        photos: [],
+        error: 'Directory Picker is not supported in this browser. Please use the folder browse fallback.',
+      };
     }
 
     const dirHandle = await (window as any).showDirectoryPicker({
@@ -97,30 +160,54 @@ export async function pickLocalPhotoDirectory(): Promise<{
       mode: 'read',
     });
 
+    const folderName = dirHandle.name || 'Selected Folder';
     const localPhotos: PhotoItem[] = [];
-    for await (const entry of dirHandle.values()) {
-      if (entry.kind === 'file') {
-        const file = await entry.getFile();
-        if (file.type.startsWith('image/')) {
-          const url = URL.createObjectURL(file);
-          localPhotos.push({
-            id: `local-${entry.name}`,
-            url,
-            caption: entry.name.replace(/\.[^/.]+$/, ''),
-            date: new Date(file.lastModified).toLocaleDateString(),
-            source: 'local',
-          });
-        }
-      }
+    await scanDirectoryHandle(dirHandle, localPhotos, 1500, 0, 5);
+
+    if (localPhotos.length === 0) {
+      return {
+        success: false,
+        photos: [],
+        folderName,
+        error: `No photos (.jpg, .png, .webp, .heic) found in "${folderName}" or its subfolders.`,
+      };
     }
 
-    return { success: true, photos: localPhotos };
+    return { success: true, photos: localPhotos, folderName };
   } catch (err: any) {
     if (err.name === 'AbortError') {
       return { success: false, photos: [] };
     }
     return { success: false, photos: [], error: err.message };
   }
+}
+
+// Fallback directory parser for standard HTML5 file inputs (<input type="file" webkitdirectory />)
+export function parseFileListToPhotos(files: FileList | File[]): { folderName: string; photos: PhotoItem[] } {
+  const photos: PhotoItem[] = [];
+  let detectedFolder = 'Selected Folder';
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const path = (file as any).webkitRelativePath || file.name;
+    const parts = path.split('/');
+    if (parts.length > 1 && detectedFolder === 'Selected Folder') {
+      detectedFolder = parts[0];
+    }
+
+    if (IMAGE_EXT_REGEX.test(file.name) || (file.type && file.type.startsWith('image/'))) {
+      const url = URL.createObjectURL(file);
+      photos.push({
+        id: `local-${file.name}-${file.lastModified}-${Math.random().toString(36).slice(2, 7)}`,
+        url,
+        caption: file.name.replace(/\.[^/.]+$/, ''),
+        date: new Date(file.lastModified).toLocaleDateString(),
+        source: 'local',
+      });
+    }
+  }
+
+  return { folderName: detectedFolder, photos };
 }
 
 // Parse Google Drive share URLs into direct streamable image URLs

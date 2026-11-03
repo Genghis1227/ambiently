@@ -1,7 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   X,
   FolderOpen,
+  FolderPlus,
+  Trash2,
+  Check,
   Cloud,
   CheckCircle2,
   Tv,
@@ -10,6 +13,7 @@ import {
   ExternalLink,
   Sliders,
   Image as ImageIcon,
+  Loader2,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -29,11 +33,18 @@ import {
 import {
   CURATED_AMBIENT_PHOTOS,
   pickLocalPhotoDirectory,
+  parseFileListToPhotos,
   cachePhotosLocally,
   parseWebPhotoUrls,
   type PhotoItem,
   type PhotoDisplayStyle,
 } from '../../services/photos';
+
+interface SelectedFolderInfo {
+  id: string;
+  name: string;
+  photos: PhotoItem[];
+}
 
 interface PhotoSourcesModalProps {
   isOpen: boolean;
@@ -74,6 +85,11 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   const [selectedSectionKey, setSelectedSectionKey] = useState<string>('');
   const [plexLoading, setPlexLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
+
+  // Local NAS / PC multi-folder state
+  const [selectedFolders, setSelectedFolders] = useState<SelectedFolderInfo[]>([]);
+  const [isScanning, setIsScanning] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Web / Google Drive state
   const [webUrlsText, setWebUrlsText] = useState('');
@@ -204,17 +220,86 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
     }
   };
 
-  // Local Folder Picker
+  // Local Multi-Folder Pickers & Handlers
   const handlePickFolder = async () => {
-    const res = await pickLocalPhotoDirectory();
-    if (res.success && res.photos.length > 0) {
-      onPhotosLoaded(res.photos, 'Local Folder');
-      cachePhotosLocally(res.photos);
-      setStatusMessage(`Loaded ${res.photos.length} photos from local folder.`);
-      setTimeout(() => onClose(), 1200);
-    } else if (res.error) {
-      setStatusMessage(res.error);
+    setIsScanning(true);
+    setStatusMessage('Scanning folder and subfolders for photos...');
+    try {
+      const res = await pickLocalPhotoDirectory();
+      if (res.success && res.photos.length > 0) {
+        const folderName = res.folderName || 'Selected Folder';
+        setSelectedFolders((prev) => {
+          const filtered = prev.filter((f) => f.name !== folderName);
+          return [
+            ...filtered,
+            {
+              id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              name: folderName,
+              photos: res.photos,
+            },
+          ];
+        });
+        setStatusMessage(`Loaded ${res.photos.length} photos from "${folderName}".`);
+      } else if (res.error) {
+        setStatusMessage(res.error);
+      }
+    } finally {
+      setIsScanning(false);
     }
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    setIsScanning(true);
+    setStatusMessage('Reading folder files...');
+    try {
+      const { folderName, photos } = parseFileListToPhotos(e.target.files);
+      if (photos.length > 0) {
+        setSelectedFolders((prev) => {
+          const filtered = prev.filter((f) => f.name !== folderName);
+          return [
+            ...filtered,
+            {
+              id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              name: folderName,
+              photos,
+            },
+          ];
+        });
+        setStatusMessage(`Loaded ${photos.length} photos from "${folderName}".`);
+      } else {
+        setStatusMessage(`No photos (.jpg, .png, .webp, .heic) found in "${folderName}".`);
+      }
+    } finally {
+      setIsScanning(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveFolder = (folderId: string) => {
+    setSelectedFolders((prev) => prev.filter((f) => f.id !== folderId));
+    setStatusMessage('Folder removed from selection.');
+  };
+
+  const totalSelectedPhotos = useMemo(() => {
+    return selectedFolders.reduce((sum, f) => sum + f.photos.length, 0);
+  }, [selectedFolders]);
+
+  const handleApplySelectedFolders = () => {
+    const allPhotos = selectedFolders.flatMap((f) => f.photos);
+    if (allPhotos.length === 0) {
+      setStatusMessage('Please select at least one folder with photos.');
+      return;
+    }
+    const sourceLabel =
+      selectedFolders.length === 1
+        ? `Local (${selectedFolders[0].name})`
+        : `Local (${selectedFolders.length} Folders)`;
+
+    onPhotosLoaded(allPhotos, sourceLabel);
+    cachePhotosLocally(allPhotos);
+    setStatusMessage(`Applied ${allPhotos.length} photos from ${selectedFolders.length} folder(s)!`);
+    setTimeout(() => onClose(), 1000);
   };
 
   // Web / Google Drive URLs
@@ -466,24 +551,153 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
 
           {/* TAB 2: LOCAL PC / NAS FOLDER */}
           {activeTab === 'local' && (
-            <div className="space-y-4 text-center py-4">
-              <div className="w-12 h-12 rounded-2xl bg-blue-500/10 text-blue-400 flex items-center justify-center mx-auto border border-blue-500/20">
-                <FolderOpen className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-white">Local PC or Mapped Network Drive</h3>
-                <p className="text-xs text-gray-400 max-w-sm mx-auto mt-1">
-                  Select any folder of photos on your computer or mapped NAS drive. Images are safely cached for offline slideshow playback.
-                </p>
-              </div>
+            <div className="space-y-4">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileInputChange}
+                {...({ webkitdirectory: '', directory: '', multiple: true } as any)}
+                className="hidden"
+              />
 
-              <button
-                onClick={handlePickFolder}
-                className="py-2.5 px-6 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg transition-all cursor-pointer inline-flex items-center gap-2"
-              >
-                <FolderOpen className="w-4 h-4" />
-                <span>Choose Photos Folder</span>
-              </button>
+              {selectedFolders.length === 0 ? (
+                <div className="text-center py-6 space-y-4">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-500/10 text-blue-400 flex items-center justify-center mx-auto border border-blue-500/20">
+                    <FolderOpen className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white">Local PC or Mapped Network Drive (NAS)</h3>
+                    <p className="text-xs text-gray-400 max-w-sm mx-auto mt-1 leading-relaxed">
+                      Select one or more folders from your computer or network share. Subfolders will be automatically scanned for photos.
+                    </p>
+                  </div>
+
+                  <div className="pt-2 flex flex-col items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handlePickFolder}
+                      disabled={isScanning}
+                      className="py-2.5 px-6 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-xs shadow-lg transition-all cursor-pointer inline-flex items-center gap-2"
+                    >
+                      {isScanning ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Scanning Folder & Subfolders...</span>
+                        </>
+                      ) : (
+                        <>
+                          <FolderOpen className="w-4 h-4" />
+                          <span>Choose Photos Folder</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="text-[11px] text-gray-400 hover:text-blue-400 underline transition-colors cursor-pointer"
+                    >
+                      Browse via file browser fallback
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between pb-1 border-b border-gray-800">
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-gray-300">
+                        Selected Folders ({selectedFolders.length})
+                      </h4>
+                      <p className="text-[11px] text-gray-400">
+                        Total {totalSelectedPhotos} photos ready to display
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handlePickFolder}
+                        disabled={isScanning}
+                        className="flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30 text-xs font-semibold transition-all cursor-pointer"
+                      >
+                        <FolderPlus className="w-3.5 h-3.5" />
+                        <span>Add Folder</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedFolders([])}
+                        className="text-xs text-gray-400 hover:text-red-400 px-2 py-1 transition-colors cursor-pointer"
+                      >
+                        Clear All
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Folders List */}
+                  <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                    {selectedFolders.map((folder) => (
+                      <div
+                        key={folder.id}
+                        className="p-2.5 rounded-xl bg-gray-950/80 border border-gray-800 flex items-center justify-between gap-3 group hover:border-gray-700 transition-all"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center shrink-0 border border-blue-500/20">
+                            <FolderOpen className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-bold text-white truncate">
+                              {folder.name}
+                            </div>
+                            <div className="text-[10px] text-gray-400">
+                              {folder.photos.length} photos found
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Thumbnails preview row */}
+                        <div className="flex items-center gap-1 shrink-0">
+                          {folder.photos.slice(0, 3).map((photo) => (
+                            <img
+                              key={photo.id}
+                              src={photo.url}
+                              alt=""
+                              className="w-7 h-7 rounded object-cover border border-white/10 bg-gray-800"
+                            />
+                          ))}
+                          {folder.photos.length > 3 && (
+                            <span className="text-[10px] font-mono text-gray-400 bg-gray-800 px-1 py-0.5 rounded">
+                              +{folder.photos.length - 3}
+                            </span>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveFolder(folder.id)}
+                          className="p-1 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer shrink-0"
+                          title="Remove folder"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Apply / Confirm Button */}
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={handleApplySelectedFolders}
+                      disabled={totalSelectedPhotos === 0}
+                      className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-xs shadow-lg shadow-blue-500/20 transition-all cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>
+                        Apply {selectedFolders.length} Folder{selectedFolders.length > 1 ? 's' : ''} ({totalSelectedPhotos} Photos)
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
