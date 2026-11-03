@@ -5,9 +5,20 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.1.7';
+export const APP_VERSION = '0.1.8';
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.1.8",
+    date: "November 2, 2026",
+    title: "Google Drive Shared Folder Ingestion, Cloudflare Pages Function Path Fix & Sanitized Placeholder",
+    highlights: [
+      "Google Drive Shared Folder Ingestion: Added dedicated parser and serverless endpoint (/api/gdrive) to extract all images from public Google Drive folders into high-resolution slideshow streams.",
+      "Fixed Cloudflare Pages Function Path: Fixed client routing from /functions/api/... to /api/... with content-type verification, resolving the Unexpected token '<' error on production deployments.",
+      "Sanitized UI Placeholder: Replaced live links in the photo sources modal placeholder with generic illustrative examples.",
+      "Video Filtering: Postponed video handling by cleanly filtering out non-image file extensions from folder imports.",
+    ],
+  },
   {
     version: "v0.1.7",
     date: "November 2, 2026",
