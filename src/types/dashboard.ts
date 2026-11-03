@@ -70,6 +70,7 @@ export interface DashboardWidget<TConfig = Record<string, any>> {
   title: string;
   gridPos: GridPosition;
   freeformPos: FreeformPosition;
+  mobileOrder?: number; // independent vertical order for mobile companion (does not affect desktop/kiosk)
   config: TConfig;
   updated_at: string;
   deleted_at?: string | null;

@@ -192,18 +192,27 @@ export function App() {
     );
   }
 
+  const homeTab = visibleTabs.find((t) => t.isHome) || visibleTabs[0] || tabs[0];
+  const activeTab = visibleTabs.find((t) => t.id === activeTabId) || homeTab;
+  const activeTabIdResolved = activeTab?.id || 'tab-corkboard';
+  const tabWidgets = widgets.filter((w) => w.tabId === activeTabIdResolved);
+
   // 1. Mobile Companion Mode on small screens unless user specifically toggled Desktop
   if (isMobileViewport && !forceDesktopMode) {
     return (
       <>
         <MobileCompanion
           tabs={visibleTabs}
-          activeTabId={activeTabId}
+          activeTabId={activeTabIdResolved}
           notes={notes}
+          widgets={tabWidgets}
           onSelectTab={setActiveTabId}
           onAddNote={addNote}
           onUpdateNote={updateNote}
           onDeleteNote={deleteNote}
+          onUpdateWidget={updateWidget}
+          onRemoveWidget={removeWidget}
+          onAddWidget={addWidget}
           onToggleDesktopView={() => setForceDesktopMode(true)}
           onOpenSettings={() => setIsSettingsOpen(true)}
         />
@@ -214,11 +223,6 @@ export function App() {
       </>
     );
   }
-
-  const homeTab = visibleTabs.find((t) => t.isHome) || visibleTabs[0] || tabs[0];
-  const activeTab = visibleTabs.find((t) => t.id === activeTabId) || homeTab;
-  const activeTabIdResolved = activeTab?.id || 'tab-corkboard';
-  const tabWidgets = widgets.filter((w) => w.tabId === activeTabIdResolved);
 
   // Strict per-canvas sticky notes (plus notes explicitly pinned to 'all' canvases)
   const activeCanvasNotes = notes.filter(
