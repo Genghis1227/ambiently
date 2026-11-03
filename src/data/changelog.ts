@@ -5,9 +5,26 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.1.10';
+export const APP_VERSION = '0.1.11';
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.1.11",
+    date: "November 3, 2026",
+    title: "Hideable Navigation Toolbar, 24×16 Bento Snap-to-Grid, Clean Picture Mode, Night Mode Bar Dimming, & Enhanced Filmstrip",
+    highlights: [
+      "Hideable Navigation Toolbar: Slide navigation dock off-screen for complete full-screen canvas immersion via dock button, quick menu, settings toggle, or keyboard shortcut ('\\'). An intuitive edge restore handle with a directional chevron allows 1-click restoration.",
+      "Zero-Margin Fullscreen Immersion: Automatically clears dock margin padding when the toolbar is hidden so widgets and notes occupy 100% of the display edge-to-edge.",
+      "Snap-to-Grid Alignment System: Real-time 24×16 bento grid alignment while dragging and resizing canvas tiles and sticky notes, complete with an ambient blue alignment guide overlay.",
+      "Night Mode Navigation Dock Dimming: Elevated night mode dim overlay to layer z-[9999] across both canvas and navigation dock, eliminating OLED light bleed in dark environments.",
+      "Clean Picture Mode Option: Added a toggle in Tile Settings to remove album titles, numbering, and captions across Ken Burns, Mosaic, Polaroids, and Filmstrip modes for clean aesthetic photography.",
+      "Expanded Filmstrip Center Spotlight: Enlarged center active image to 1.42x with increased stride and spotlight drop shadows for dramatic visual focus.",
+      "Clock & Weather Center Alignment: Defaulted time and date display in clock-weather widget to center justification with a user-configurable text alignment selector in Tile Settings.",
+      "Sticky Note Dock Clarity: Replaced ambiguous pin icon on navigation dock with a dedicated sticky note icon for immediate recognition.",
+      "Google Photos Link Persistence: Saved Google Photos and Drive source URLs in widget configuration, pre-filling the URL and displaying an active album badge upon reopening sources.",
+      "Google Photos Image Loading & Self-Healing: Resolved Google Photos broken images with document referrer policy, dynamic resolution scaling (=w600/=w800), and auto-healing fallback retry on error.",
+    ],
+  },
   {
     version: "v0.1.10",
     date: "November 2, 2026",
