@@ -3,7 +3,7 @@ import {
   X,
   Settings,
   Check,
-  Sliders,
+  FolderOpen,
   Plus,
   Trash2,
   Search,
@@ -111,6 +111,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
 
   // Quotes states
   const [quoteMode, setQuoteMode] = useState<'curated' | 'custom' | 'both'>('both');
+  const [quoteIntervalSec, setQuoteIntervalSec] = useState<number>(3600);
   const [customQuotes, setCustomQuotes] = useState<QuoteItem[]>([]);
   const [newQuoteText, setNewQuoteText] = useState('');
   const [newQuoteAuthor, setNewQuoteAuthor] = useState('');
@@ -193,6 +194,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     } else if (widget.type === 'quotes') {
       setQuoteMode(widget.config?.quoteMode || 'both');
       setCustomQuotes(Array.isArray(widget.config?.customQuotes) ? widget.config.customQuotes : []);
+      setQuoteIntervalSec(widget.config?.rotationIntervalSec ?? widget.config?.quoteIntervalSec ?? 3600);
     } else if (widget.type === 'textbox') {
       setTextContent(widget.config?.content ?? 'Welcome to Ambiently\nSmart Display & Dashboard');
       setTextFontSize(widget.config?.fontSize || '2xl');
@@ -334,6 +336,8 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     } else if (widget.type === 'quotes') {
       configUpdates.quoteMode = quoteMode;
       configUpdates.customQuotes = customQuotes;
+      configUpdates.rotationIntervalSec = quoteIntervalSec;
+      configUpdates.quoteIntervalSec = quoteIntervalSec;
     } else if (widget.type === 'textbox') {
       configUpdates.content = textContent;
       configUpdates.fontSize = textFontSize;
@@ -430,13 +434,54 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
           {/* Photo Frame Settings */}
           {widget.type === 'photo_frame' && (
             <div className="space-y-4 pt-2 border-t border-gray-800">
+              {/* Photo Sources Hub Trigger */}
+              {onOpenPhotoSources && (
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
+                    Photo Library & Media Sources
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenPhotoSources();
+                    }}
+                    className="w-full flex items-center justify-between p-3.5 rounded-xl bg-gradient-to-r from-amber-500/15 via-blue-500/15 to-purple-500/15 border border-amber-500/30 hover:border-amber-400 text-white transition-all cursor-pointer group shadow-lg"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0 border border-amber-500/30">
+                        <FolderOpen className="w-5 h-5" />
+                      </div>
+                      <div className="text-left">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-white">
+                            Configure Photo Sources
+                          </span>
+                          {widget.config?.sourceLabel && (
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold">
+                              {widget.config.sourceLabel}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-gray-400 block mt-0.5">
+                          Google Photos shared albums, Local PC / NAS Folders, Plex Media Server, or Curated Scenery
+                        </span>
+                      </div>
+                    </div>
+                    <span className="text-xs font-bold text-amber-400 group-hover:translate-x-1 transition-transform">
+                      ➔
+                    </span>
+                  </button>
+                </div>
+              )}
+
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
-                  Slideshow Animation Style
+                  Picture Presentation Mode
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    { id: 'ken_burns', label: 'Ken Burns (Slow Pan)' },
+                    { id: 'ken_burns', label: 'Ken Burns (Slow Pan & Zoom)' },
                     { id: 'mosaic', label: 'Mosaic Collage' },
                     { id: 'polaroid', label: 'Scattered Polaroids' },
                     { id: 'filmstrip', label: 'Filmstrip' },
@@ -552,34 +597,6 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                   ))}
                 </div>
               </div>
-
-              {onOpenPhotoSources && (
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onClose();
-                      onOpenPhotoSources();
-                    }}
-                    className="w-full flex items-center justify-between p-3 rounded-xl bg-gradient-to-r from-amber-500/20 to-purple-500/20 border border-amber-500/40 hover:border-amber-400 text-white transition-all cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Sliders className="w-4 h-4 text-amber-400" />
-                      <div className="text-left">
-                        <span className="text-xs font-bold block text-amber-200">
-                          Connect Photo Sources
-                        </span>
-                        <span className="text-[10px] text-gray-300">
-                          Plex PIN QR Code, Local NAS Folders, Google Drive / Web links
-                        </span>
-                      </div>
-                    </div>
-                    <span className="text-xs font-bold text-amber-400 group-hover:translate-x-0.5 transition-transform">
-                      ➔
-                    </span>
-                  </button>
-                </div>
-              )}
             </div>
           )}
 
@@ -674,6 +691,51 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                       }`}
                     >
                       {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5 flex items-center justify-between">
+                  <span>Update Interval</span>
+                  <span className="text-amber-400 font-mono text-[11px] normal-case">
+                    {[
+                      { label: '30s', value: 30 },
+                      { label: '1 min', value: 60 },
+                      { label: '5 min', value: 300 },
+                      { label: '15 min', value: 900 },
+                      { label: '30 min', value: 1800 },
+                      { label: '1 hr', value: 3600 },
+                      { label: '4 hrs', value: 14400 },
+                      { label: 'Daily (24h)', value: 86400 },
+                      { label: 'Manual Only', value: 0 },
+                    ].find((o) => o.value === quoteIntervalSec)?.label || `${quoteIntervalSec}s`}
+                  </span>
+                </label>
+                <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+                  {[
+                    { label: '30s', value: 30 },
+                    { label: '1m', value: 60 },
+                    { label: '5m', value: 300 },
+                    { label: '15m', value: 900 },
+                    { label: '30m', value: 1800 },
+                    { label: '1h', value: 3600 },
+                    { label: '4h', value: 14400 },
+                    { label: 'Daily', value: 86400 },
+                    { label: 'Manual', value: 0 },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setQuoteIntervalSec(opt.value)}
+                      className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        quoteIntervalSec === opt.value
+                          ? 'bg-amber-600/30 border border-amber-500 text-amber-300 font-bold'
+                          : 'bg-gray-950 border border-gray-800 text-gray-400 hover:text-white hover:bg-gray-800/50'
+                      }`}
+                    >
+                      {opt.label}
                     </button>
                   ))}
                 </div>

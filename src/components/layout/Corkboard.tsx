@@ -37,6 +37,7 @@ import { MediaEmbedWidget } from '../widgets/MediaEmbedWidget';
 import { WidgetSettingsModal } from '../widgets/WidgetSettingsModal';
 import { PhotoSourcesModal } from '../photos/PhotoSourcesModal';
 import { CANVAS_THEMES } from '../../data/canvasThemes';
+import { findOpenCanvasSpot } from '../../utils/autoLayout';
 
 interface CorkboardProps {
   notes: StickyNoteItem[];
@@ -62,6 +63,7 @@ interface CorkboardProps {
   onRemoveWidget?: (widgetId: string) => void;
   onOpenAddWidget?: () => void;
   onUpdateWidget?: (widgetId: string, updates: Partial<DashboardWidget>) => void;
+  onUpdateTab?: (tabId: string, updates: Partial<DashboardTab>) => void;
 }
 
 const COLOR_PALETTE = [
@@ -104,6 +106,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   onRemoveWidget,
   onOpenAddWidget,
   onUpdateWidget,
+  onUpdateTab,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -169,11 +172,90 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   const [newItemText, setNewItemText] = useState('');
   const [expiryOption, setExpiryOption] = useState<'permanent' | '1day' | '3days' | 'custom'>('permanent');
   const [customExpiry, setCustomExpiry] = useState('');
+  const [highlightedNoteId, setHighlightedNoteId] = useState<string | null>(null);
 
   const getNextZIndex = () => {
     const widgetMax = widgets.reduce((m, w) => Math.max(m, w.freeformPos?.zIndex || 1), 1);
     const noteMax = notes.reduce((m, n) => Math.max(m, n.freeformPos?.zIndex || 1), 1);
     return Math.min(45, Math.max(widgetMax, noteMax) + 1);
+  };
+
+  const isCoveredByWidget = (
+    notePos: { xRatio: number; yRatio: number; wRatio: number; hRatio?: number },
+    widgetsList: DashboardWidget[]
+  ): boolean => {
+    const nW = notePos.wRatio || 0.26;
+    const nH = notePos.hRatio || 0.3;
+    const nArea = nW * nH;
+    if (nArea <= 0) return true;
+
+    for (const w of widgetsList) {
+      const wp = w.freeformPos;
+      if (!wp) continue;
+      const wW = wp.wRatio || 0.35;
+      const wH = wp.hRatio || 0.45;
+
+      const xOverlap = Math.max(
+        0,
+        Math.min(notePos.xRatio + nW, wp.xRatio + wW) - Math.max(notePos.xRatio, wp.xRatio)
+      );
+      const yOverlap = Math.max(
+        0,
+        Math.min(notePos.yRatio + nH, wp.yRatio + wH) - Math.max(notePos.yRatio, wp.yRatio)
+      );
+      const overlapArea = xOverlap * yOverlap;
+
+      // If a widget overlaps more than 50% of the note, it is considered covered
+      if (overlapArea / nArea > 0.5) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const handlePinNoteToCanvas = (noteId: string) => {
+    const note = notes.find((n) => n.id === noteId);
+    if (!note) return;
+
+    // Unhide notes on this canvas if currently hidden
+    if (hideNotes && onUpdateTab && activeTabId) {
+      onUpdateTab(activeTabId, { hideNotes: false });
+    }
+
+    const nextZ = getNextZIndex();
+    let targetPos = note.freeformPos ? { ...note.freeformPos, zIndex: nextZ } : null;
+
+    if (!targetPos || isCoveredByWidget(targetPos, widgets)) {
+      const openSpot = findOpenCanvasSpot(
+        [
+          ...widgets.map((w) => w.freeformPos || { xRatio: 0.1, yRatio: 0.1, wRatio: 0.35, hRatio: 0.45 }),
+          ...notes
+            .filter((n) => n.id !== noteId && n.isPinnedToCanvas !== false)
+            .map((n) => n.freeformPos || { xRatio: 0.1, yRatio: 0.1, wRatio: 0.26, hRatio: 0.3 }),
+        ],
+        targetPos?.wRatio || 0.26,
+        targetPos?.hRatio || 0.3,
+        targetPos?.rotation || 0
+      );
+      targetPos = {
+        ...openSpot,
+        zIndex: nextZ,
+      };
+    }
+
+    onUpdateNote(noteId, {
+      isPinnedToCanvas: true,
+      freeformPos: targetPos,
+    });
+
+    setHighlightedNoteId(noteId);
+    setTimeout(() => {
+      setHighlightedNoteId(null);
+    }, 2500);
+  };
+
+  const handleUnpinNoteFromCanvas = (noteId: string) => {
+    onUpdateNote(noteId, { isPinnedToCanvas: false });
   };
 
   const openNoteEditorForExisting = (note: StickyNoteItem) => {
@@ -581,14 +663,14 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   };
 
   const now = new Date();
-  const activeNotes = hideNotes
-    ? []
-    : notes.filter((n) => {
-        if (n.archivedAt) return false;
-        if (n.expiresAt && new Date(n.expiresAt) <= now) return false;
-        if (n.isPinnedToCanvas === false) return false;
-        return true;
-      });
+  const activeNotes = notes.filter((n) => {
+    if (n.archivedAt) return false;
+    if (n.expiresAt && new Date(n.expiresAt) <= now) return false;
+    if (n.isPinnedToCanvas === false) return false;
+    // If the canvas has hideNotes active, only hide notes that have not been explicitly pinned to canvas
+    if (hideNotes && n.isPinnedToCanvas !== true) return false;
+    return true;
+  });
 
   const trashNotes = notes.filter((n) => {
     if (n.archivedAt) return true;
@@ -940,6 +1022,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 <QuotesWidget
                   customQuotes={widget.config?.customQuotes}
                   quoteMode={widget.config?.quoteMode}
+                  rotationIntervalSec={widget.config?.rotationIntervalSec ?? widget.config?.quoteIntervalSec}
                 />
               ) : widget.type === 'calendar' ? (
                 <CalendarWidget
@@ -1005,6 +1088,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   onAddNote={onAddNote}
                   onUpdateNote={onUpdateNote}
                   onDeleteNote={onDeleteNote}
+                  onPinNoteToCanvas={handlePinNoteToCanvas}
+                  onUnpinNoteFromCanvas={handleUnpinNoteFromCanvas}
                 />
               ) : null}
             </div>
@@ -1085,9 +1170,11 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 ? 'none'
                 : 'left 0.3s cubic-bezier(0.22, 1, 0.36, 1), top 0.3s cubic-bezier(0.22, 1, 0.36, 1), width 0.3s cubic-bezier(0.22, 1, 0.36, 1), height 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.25s ease-out, box-shadow 0.2s',
             }}
-            className={`group rounded-2xl p-3.5 shadow-2xl text-gray-900 cursor-grab active:cursor-grabbing border border-black/10 touch-none select-none transition-shadow ${
+            className={`group rounded-2xl p-3.5 shadow-2xl text-gray-900 cursor-grab active:cursor-grabbing border border-black/10 touch-none select-none transition-all ${
               isDragging || isRotating
                 ? 'ring-2 ring-blue-500/70 shadow-2xl'
+                : highlightedNoteId === note.id
+                ? 'ring-4 ring-blue-500 shadow-2xl shadow-blue-500/50 scale-105'
                 : isExpiringSoon
                 ? 'ring-2 ring-amber-500 shadow-amber-500/20'
                 : 'hover:shadow-yellow-500/10'

@@ -38,6 +38,7 @@ export function App() {
     deleteNote,
     permanentlyDeleteNote,
     addTab,
+    updateTab,
     autoOrganizeCanvas,
     undoAutoOrganize,
     lastLayoutSnapshot,
@@ -287,6 +288,7 @@ export function App() {
           onRemoveWidget={removeWidget}
           onOpenAddWidget={() => setIsAddWidgetOpen(true)}
           onUpdateWidget={updateWidget}
+          onUpdateTab={updateTab}
         />
       </div>
 

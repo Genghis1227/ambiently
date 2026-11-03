@@ -7,6 +7,7 @@ import {
   Clock,
   Archive,
   Pin,
+  X,
 } from 'lucide-react';
 import type { StickyNoteItem } from '../../types/dashboard';
 
@@ -16,6 +17,8 @@ interface StickyNotesWidgetProps {
   onUpdateNote: (noteId: string, updates: Partial<StickyNoteItem>) => void;
   onDeleteNote: (noteId: string) => void;
   onToggleArchive?: (noteId: string) => void;
+  onPinNoteToCanvas?: (noteId: string) => void;
+  onUnpinNoteFromCanvas?: (noteId: string) => void;
 }
 
 const COLOR_PALETTE = [
@@ -32,6 +35,8 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
   onAddNote,
   onUpdateNote,
   onDeleteNote,
+  onPinNoteToCanvas,
+  onUnpinNoteFromCanvas,
 }) => {
   const [activeTab, setActiveTab] = useState<'active' | 'trash'>('active');
   const [isCreating, setIsCreating] = useState(false);
@@ -335,23 +340,49 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
                     </div>
 
                     <div className="flex items-center justify-between pt-2 border-t border-black/5 mt-1">
-                      <button
-                        type="button"
-                        onClick={() => onUpdateNote(note.id, { isPinnedToCanvas: note.isPinnedToCanvas === false })}
-                        className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md transition-all cursor-pointer ${
-                          note.isPinnedToCanvas !== false
-                            ? 'bg-black/10 hover:bg-black/20 text-gray-800'
-                            : 'bg-blue-600/20 hover:bg-blue-600/30 text-blue-900 border border-blue-500/30 font-bold'
-                        }`}
-                        title={
-                          note.isPinnedToCanvas !== false
-                            ? 'Pinned on corkboard canvas (click to close from canvas)'
-                            : 'Closed from canvas (click to pin onto canvas)'
-                        }
-                      >
-                        <Pin className="w-2.5 h-2.5" />
-                        <span>{note.isPinnedToCanvas !== false ? 'On Canvas' : 'Pin to Board'}</span>
-                      </button>
+                      {note.isPinnedToCanvas !== false ? (
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onPinNoteToCanvas
+                                ? onPinNoteToCanvas(note.id)
+                                : onUpdateNote(note.id, { isPinnedToCanvas: true })
+                            }
+                            className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-950 border border-emerald-600/20 transition-all cursor-pointer"
+                            title="Pinned on board (click to bring to front and highlight on canvas)"
+                          >
+                            <Pin className="w-2.5 h-2.5 text-emerald-800" />
+                            <span>On Board</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onUnpinNoteFromCanvas
+                                ? onUnpinNoteFromCanvas(note.id)
+                                : onUpdateNote(note.id, { isPinnedToCanvas: false })
+                            }
+                            className="flex items-center justify-center p-0.5 rounded-md hover:bg-black/10 text-gray-600 hover:text-red-700 transition-all cursor-pointer"
+                            title="Close from board (remains in Notes Tile)"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onPinNoteToCanvas
+                              ? onPinNoteToCanvas(note.id)
+                              : onUpdateNote(note.id, { isPinnedToCanvas: true })
+                          }
+                          className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white shadow-sm shadow-blue-500/25 transition-all cursor-pointer"
+                          title="Pin note onto corkboard canvas"
+                        >
+                          <Pin className="w-2.5 h-2.5" />
+                          <span>Pin to Board</span>
+                        </button>
+                      )}
 
                       <button
                         type="button"
