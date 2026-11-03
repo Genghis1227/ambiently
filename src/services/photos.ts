@@ -246,6 +246,21 @@ export function isGooglePhotosUrl(url: string): boolean {
   return /photos\.(app\.goo\.gl|google\.com)/i.test(url);
 }
 
+/**
+ * Tailors image resolution for Google Photos and usercontent CDN URLs.
+ * Dynamically adjusts requested dimensions to prevent 429 rate limits and eliminate heavy bandwidth spikes.
+ */
+export function getOptimizedPhotoUrl(url: string, targetWidth: number = 800): string {
+  if (!url) return '';
+  if (url.includes('googleusercontent.com')) {
+    if (/=(w\d+.*|s\d+.*)$/.test(url)) {
+      return url.replace(/=(w\d+.*|s\d+.*)$/, `=w${targetWidth}`);
+    }
+    return `${url}=w${targetWidth}`;
+  }
+  return url;
+}
+
 export function isGoogleDriveFolderUrl(url: string): boolean {
   if (!url || !url.includes('drive.google.com')) return false;
   return /\/folders\/([a-zA-Z0-9_-]+)/i.test(url) || /[?&]id=([a-zA-Z0-9_-]+)/i.test(url);

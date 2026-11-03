@@ -35,6 +35,7 @@ import {
   parseFileListToPhotos,
   cachePhotosLocally,
   resolveWebAndCloudPhotoUrls,
+  getOptimizedPhotoUrl,
   type PhotoItem,
   type PhotoDisplayStyle,
 } from '../../services/photos';
@@ -699,9 +700,13 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                           {folder.photos.slice(0, 3).map((photo) => (
                             <img
                               key={photo.id}
-                              src={photo.url}
+                              src={getOptimizedPhotoUrl(photo.url, 120)}
                               alt=""
+                              referrerPolicy="no-referrer"
                               className="w-7 h-7 rounded object-cover border border-white/10 bg-gray-800"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLElement).style.display = 'none';
+                              }}
                             />
                           ))}
                           {folder.photos.length > 3 && (

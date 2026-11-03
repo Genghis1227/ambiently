@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Image as ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   CURATED_AMBIENT_PHOTOS,
   cachePhotosLocally,
+  getOptimizedPhotoUrl,
   type PhotoItem,
   type PhotoDisplayStyle,
 } from '../../services/photos';
@@ -359,6 +360,43 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     });
   };
 
+  // Self-healing photo failure tracking: auto-replaces failed/throttled photos with fresh candidates
+  const failedPhotoIdsRef = useRef<Set<string>>(new Set());
+
+  const handlePolaroidError = useCallback((slotIdx: number, photoId: string) => {
+    failedPhotoIdsRef.current.add(photoId);
+    setScatteredPolaroids((prev) => {
+      const currentSlotItem = prev[slotIdx];
+      if (!currentSlotItem) return prev;
+      const slotDef = polaroidSlots[slotIdx] || polaroidSlots[0];
+
+      const otherVisiblePhotoIds = new Set(
+        prev.filter((_, idx) => idx !== slotIdx).map((item) => item.photo.id)
+      );
+      const candidates = photos.filter(
+        (p) => !otherVisiblePhotoIds.has(p.id) && !failedPhotoIdsRef.current.has(p.id)
+      );
+      const pool = candidates.length > 0
+        ? candidates
+        : photos.filter((p) => p.id !== photoId && !failedPhotoIdsRef.current.has(p.id));
+      const finalPool = pool.length > 0 ? pool : photos;
+      const nextPhoto = finalPool[Math.floor(Math.random() * finalPool.length)];
+
+      topZIndexRef.current += 1;
+
+      return prev.map((item, idx) => {
+        if (idx !== slotIdx) return item;
+        return {
+          ...item,
+          photo: nextPhoto,
+          rotation: (slotDef?.rotate || 0) + Math.round((Math.random() * 6 - 3)),
+          zIndex: topZIndexRef.current,
+          key: `slot-${idx}-${nextPhoto.id}-${Date.now()}`,
+        };
+      });
+    });
+  }, [photos, polaroidSlots]);
+
   // Mosaic active quadrant photos & auto-rotation
   const [mosaicPhotos, setMosaicPhotos] = useState<PhotoItem[]>(() => {
     if (savedState?.mosaicPhotos && savedState.mosaicPhotos.length >= 4) {
@@ -412,16 +450,17 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     return () => clearInterval(timer);
   }, [style, photos, intervalSec, photoOrder]);
 
-  const handleShuffleMosaicSlot = (slotIdx: number) => {
+  const handleShuffleMosaicSlot = useCallback((slotIdx: number) => {
     if (photos.length <= 1) return;
     setMosaicPhotos((prev) => {
       const currentSlots = prev.length >= 4 ? prev : photos.slice(0, 4);
       let nextPhoto: PhotoItem;
       if (photoOrder === 'random') {
         const currentIds = new Set(currentSlots.map((p) => p.id));
-        const candidates = photos.filter((p) => !currentIds.has(p.id));
-        const pool = candidates.length > 0 ? candidates : photos;
-        nextPhoto = pool[Math.floor(Math.random() * pool.length)];
+        const candidates = photos.filter((p) => !currentIds.has(p.id) && !failedPhotoIdsRef.current.has(p.id));
+        const pool = candidates.length > 0 ? candidates : photos.filter((p) => !failedPhotoIdsRef.current.has(p.id));
+        const finalPool = pool.length > 0 ? pool : photos;
+        nextPhoto = finalPool[Math.floor(Math.random() * finalPool.length)];
       } else {
         const nextIdx = mosaicIndexRef.current % photos.length;
         nextPhoto = photos[nextIdx];
@@ -432,7 +471,33 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
       updated[slotIdx] = nextPhoto;
       return updated;
     });
-  };
+  }, [photos, photoOrder]);
+
+  const handleMosaicError = useCallback((slotIdx: number, photoId: string) => {
+    failedPhotoIdsRef.current.add(photoId);
+    handleShuffleMosaicSlot(slotIdx);
+  }, [handleShuffleMosaicSlot]);
+
+  const handleKenBurnsError = useCallback((photoId: string) => {
+    failedPhotoIdsRef.current.add(photoId);
+    if (photos.length <= 1) return;
+    if (photoOrder === 'random') {
+      setCurrentIndex((prev) => {
+        let next = Math.floor(Math.random() * photos.length);
+        if (photos.length > 1 && next === prev) {
+          next = (next + 1) % photos.length;
+        }
+        return next;
+      });
+    } else {
+      setCurrentIndex((prev) => (prev + 1) % photos.length);
+    }
+  }, [photos, photoOrder]);
+
+  const handleFilmstripError = useCallback((photoId: string) => {
+    failedPhotoIdsRef.current.add(photoId);
+    setFilmstripIndex((prev) => prev + 1);
+  }, []);
 
   // Sync props to state when widget config updates
   useEffect(() => {
@@ -538,12 +603,20 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                 opacity: { duration: 1.2 },
               }}
               style={{
-                backgroundImage: `url(${currentPhoto.url})`,
+                backgroundImage: `url(${getOptimizedPhotoUrl(currentPhoto.url, 1920)})`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
               }}
               className="absolute inset-0 w-full h-full"
-            />
+            >
+              <img
+                src={getOptimizedPhotoUrl(currentPhoto.url, 1920)}
+                alt=""
+                referrerPolicy="no-referrer"
+                className="hidden"
+                onError={() => handleKenBurnsError(currentPhoto.id)}
+              />
+            </motion.div>
           </AnimatePresence>
           {/* Subtle vignette gradient */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 pointer-events-none" />
@@ -570,10 +643,12 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   className="absolute inset-0 w-full h-full"
                 >
                   <img
-                    src={p.url}
+                    src={getOptimizedPhotoUrl(p.url, 800)}
                     alt={p.caption || 'Photo'}
+                    referrerPolicy="no-referrer"
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                     loading="lazy"
+                    onError={() => handleMosaicError(idx, p.id)}
                   />
                   <div className="absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black/85 via-black/40 to-transparent text-[11px] text-white truncate font-medium">
                     {p.caption || p.author || 'Captured Moment'}
@@ -639,10 +714,12 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                 >
                   <div className="w-full flex-1 min-h-0 overflow-hidden rounded-xs bg-gray-900 relative">
                     <img
-                      src={item.photo.url}
+                      src={getOptimizedPhotoUrl(item.photo.url, isHero ? 800 : 600)}
                       alt={item.photo.caption || 'Polaroid moment'}
+                      referrerPolicy="no-referrer"
                       className="w-full h-full object-cover select-none pointer-events-none"
                       loading="lazy"
+                      onError={() => handlePolaroidError(idx, item.photo.id)}
                     />
                   </div>
                   <div className="mt-1 sm:mt-1.5 px-0.5 text-center shrink-0">
@@ -749,10 +826,12 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                 title={isCenter ? p.caption : 'Click to center this photo'}
               >
                 <img
-                  src={p.url}
+                  src={getOptimizedPhotoUrl(p.url, 800)}
                   alt={p.caption || 'Film frame'}
+                  referrerPolicy="no-referrer"
                   className="w-full h-full object-cover select-none pointer-events-none"
                   loading="lazy"
+                  onError={() => handleFilmstripError(p.id)}
                 />
 
                 {isCenter && (
