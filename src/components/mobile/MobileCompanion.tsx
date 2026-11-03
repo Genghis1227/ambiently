@@ -379,7 +379,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
 
   return (
     <>
-      <div className="w-full min-h-screen bg-[#090d16] text-white flex flex-col justify-between p-4 pb-24 select-none overflow-y-auto">
+      <div className="fixed inset-0 w-full h-[100dvh] bg-[#090d16] text-white flex flex-col p-4 pb-36 mobile-companion-scroll overscroll-y-contain z-30">
         {/* Top Mobile Bar with Clickable Version Tag */}
         <div className="flex items-center justify-between border-b border-gray-800 pb-3 mb-3">
           <div className="flex items-center gap-2.5">
@@ -808,6 +808,9 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
             </div>
           )}
         </div>
+
+        {/* Bottom breathing room spacer for mobile home indicators & scrolling */}
+        <div className="h-20 shrink-0" />
       </div>
 
       {/* Changelog Modal */}

@@ -89,6 +89,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   // Local NAS / PC multi-folder state
   const [selectedFolders, setSelectedFolders] = useState<SelectedFolderInfo[]>([]);
   const [isScanning, setIsScanning] = useState(false);
+  const [scanLimit, setScanLimit] = useState<number>(5000);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Web / Google Drive state
@@ -224,23 +225,22 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   // Local Multi-Folder Pickers & Handlers
   const handlePickFolder = async () => {
     setIsScanning(true);
-    setStatusMessage('Scanning folder and subfolders for photos...');
+    setStatusMessage(`Scanning folder and subfolders (up to ${scanLimit.toLocaleString()} photos)...`);
     try {
-      const res = await pickLocalPhotoDirectory();
+      const res = await pickLocalPhotoDirectory(scanLimit, (count, dirName) => {
+        setStatusMessage(`Scanning "${dirName}": ${count} photos found...`);
+      });
       if (res.success && res.photos.length > 0) {
         const folderName = res.folderName || 'Selected Folder';
-        setSelectedFolders((prev) => {
-          const filtered = prev.filter((f) => f.name !== folderName);
-          return [
-            ...filtered,
-            {
-              id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-              name: folderName,
-              photos: res.photos,
-            },
-          ];
-        });
-        setStatusMessage(`Loaded ${res.photos.length} photos from "${folderName}".`);
+        setSelectedFolders((prev) => [
+          ...prev,
+          {
+            id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            name: folderName,
+            photos: res.photos,
+          },
+        ]);
+        setStatusMessage(`Added "${folderName}" with ${res.photos.length} photos.`);
       } else if (res.error) {
         setStatusMessage(res.error);
       }
@@ -254,20 +254,17 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
     setIsScanning(true);
     setStatusMessage('Reading folder files...');
     try {
-      const { folderName, photos } = parseFileListToPhotos(e.target.files);
+      const { folderName, photos } = parseFileListToPhotos(e.target.files, scanLimit);
       if (photos.length > 0) {
-        setSelectedFolders((prev) => {
-          const filtered = prev.filter((f) => f.name !== folderName);
-          return [
-            ...filtered,
-            {
-              id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-              name: folderName,
-              photos,
-            },
-          ];
-        });
-        setStatusMessage(`Loaded ${photos.length} photos from "${folderName}".`);
+        setSelectedFolders((prev) => [
+          ...prev,
+          {
+            id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            name: folderName,
+            photos,
+          },
+        ]);
+        setStatusMessage(`Added "${folderName}" with ${photos.length} photos.`);
       } else {
         setStatusMessage(`No photos (.jpg, .png, .webp, .heic) found in "${folderName}".`);
       }
@@ -571,6 +568,30 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                 className="hidden"
               />
 
+              {/* Scan Limit / Capacity Selector */}
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-gray-950/80 border border-gray-800 text-xs">
+                <div>
+                  <span className="font-semibold text-gray-200 block">Photo Scan Capacity</span>
+                  <span className="text-[10px] text-gray-500">Max photos to scan across folders and subdirectories</span>
+                </div>
+                <div className="flex items-center gap-1 bg-black/40 p-1 rounded-lg border border-white/5">
+                  {([1000, 2500, 5000, 10000] as const).map((limit) => (
+                    <button
+                      key={limit}
+                      type="button"
+                      onClick={() => setScanLimit(limit)}
+                      className={`px-2 py-0.5 rounded text-xs font-mono font-semibold transition-all cursor-pointer ${
+                        scanLimit === limit
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      {limit >= 1000 ? `${limit / 1000}k` : limit}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {selectedFolders.length === 0 ? (
                 <div className="text-center py-6 space-y-4">
                   <div className="w-12 h-12 rounded-2xl bg-blue-500/10 text-blue-400 flex items-center justify-center mx-auto border border-blue-500/20">
@@ -620,7 +641,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                         Selected Folders ({selectedFolders.length})
                       </h4>
                       <p className="text-[11px] text-gray-400">
-                        Total {totalSelectedPhotos} photos ready to display
+                        Total {totalSelectedPhotos.toLocaleString()} photos ready to display
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -659,7 +680,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                               {folder.name}
                             </div>
                             <div className="text-[10px] text-gray-400">
-                              {folder.photos.length} photos found
+                              {folder.photos.length.toLocaleString()} photos found
                             </div>
                           </div>
                         </div>
@@ -693,6 +714,36 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                     ))}
                   </div>
 
+                  {/* Add Additional Folder Bar */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handlePickFolder}
+                      disabled={isScanning}
+                      className="flex-1 py-2 rounded-xl bg-gray-900 hover:bg-gray-800 border border-gray-700 text-gray-200 text-xs font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      {isScanning ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
+                          <span>Scanning...</span>
+                        </>
+                      ) : (
+                        <>
+                          <FolderPlus className="w-3.5 h-3.5 text-blue-400" />
+                          <span>+ Add Another Folder</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="py-2 px-3 rounded-xl bg-gray-900 hover:bg-gray-800 border border-gray-700 text-gray-400 text-xs transition-all cursor-pointer"
+                      title="Add folder via browser fallback"
+                    >
+                      📁 Fallback Browse
+                    </button>
+                  </div>
+
                   {/* Apply / Confirm Button */}
                   <div className="pt-2">
                     <button
@@ -703,7 +754,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                     >
                       <Check className="w-4 h-4" />
                       <span>
-                        Apply {selectedFolders.length} Folder{selectedFolders.length > 1 ? 's' : ''} ({totalSelectedPhotos} Photos)
+                        Apply {selectedFolders.length} Folder{selectedFolders.length > 1 ? 's' : ''} ({totalSelectedPhotos.toLocaleString()} Photos)
                       </span>
                     </button>
                   </div>

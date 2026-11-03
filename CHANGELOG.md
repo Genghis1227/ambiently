@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.9] - 2026-11-02
+
+### Added
+* **5,000 Photo NAS & Local Folder Capacity (`PhotoSourcesModal.tsx`, `services/photos.ts`):**
+  * Increased default local folder and network share scan limit to 5,000 photos with 8-level recursive directory traversal.
+  * Added live real-time scanning feedback reporting photo counts and the active subdirectory being read.
+  * Added a scan capacity selector (`1k`, `2.5k`, `5k`, `10k`) in the photo sources modal.
+  * Enhanced multi-folder support allowing consecutive folder additions without overwriting existing selections, plus an inline `[ + Add Another Folder ]` action bar.
+
+### Fixed
+* **Mobile Companion Viewport Touch Scrolling (`MobileCompanion.tsx`, `index.css`):**
+  * Resolved mobile touch scrolling inability by anchoring the companion container to `fixed inset-0 w-full h-[100dvh]` with explicit `overflow-y: auto`, `touch-action: pan-y`, and `-webkit-overflow-scrolling: touch`.
+  * Added an end-of-stream breathing room spacer (`h-20`) so bottom cards and notes clear mobile browser bars and navigation handles.
+
+---
+
 ## [0.1.8] - 2026-11-02
 
 ### Added
