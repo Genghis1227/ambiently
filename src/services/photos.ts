@@ -233,6 +233,11 @@ export function isGooglePhotosUrl(url: string): boolean {
   return /photos\.(app\.goo\.gl|google\.com)/i.test(url);
 }
 
+export function isGoogleDriveFolderUrl(url: string): boolean {
+  if (!url || !url.includes('drive.google.com')) return false;
+  return /\/folders\/([a-zA-Z0-9_-]+)/i.test(url) || /[?&]id=([a-zA-Z0-9_-]+)/i.test(url);
+}
+
 export async function fetchGooglePhotosAlbum(
   albumUrl: string,
   maxPhotos: number = 10000
@@ -247,21 +252,37 @@ export async function fetchGooglePhotosAlbum(
   if (!trimmed) return { title: '', count: 0, totalAlbumCount: 0, photos: [], error: 'Empty URL' };
 
   try {
-    const res = await fetch(
-      `/functions/api/gphotos?url=${encodeURIComponent(trimmed)}&maxPhotos=${maxPhotos}`
+    let res = await fetch(
+      `/api/gphotos?url=${encodeURIComponent(trimmed)}&maxPhotos=${maxPhotos}`
     );
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
+    if (res.status === 404) {
+      res = await fetch(
+        `/functions/api/gphotos?url=${encodeURIComponent(trimmed)}&maxPhotos=${maxPhotos}`
+      );
+    }
+
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
       return {
         title: '',
         count: 0,
         totalAlbumCount: 0,
         photos: [],
-        error: errData.error || `Failed to fetch Google Photos album (HTTP ${res.status}).`,
+        error: `Unexpected response from Google Photos service (HTTP ${res.status}). Server returned non-JSON.`,
       };
     }
 
     const data = await res.json();
+    if (!res.ok) {
+      return {
+        title: '',
+        count: 0,
+        totalAlbumCount: 0,
+        photos: [],
+        error: data.error || `Failed to fetch Google Photos album (HTTP ${res.status}).`,
+      };
+    }
+
     if (!data.photos || data.photos.length === 0) {
       return {
         title: data.title || 'Google Photos Album',
@@ -285,6 +306,73 @@ export async function fetchGooglePhotosAlbum(
       totalAlbumCount: 0,
       photos: [],
       error: `Network error connecting to Google Photos service: ${err.message}`,
+    };
+  }
+}
+
+export async function fetchGoogleDriveFolder(
+  folderUrl: string
+): Promise<{
+  title: string;
+  count: number;
+  totalAlbumCount: number;
+  photos: PhotoItem[];
+  error?: string;
+}> {
+  const trimmed = folderUrl.trim();
+  if (!trimmed) return { title: '', count: 0, totalAlbumCount: 0, photos: [], error: 'Empty URL' };
+
+  try {
+    let res = await fetch(`/api/gdrive?url=${encodeURIComponent(trimmed)}`);
+    if (res.status === 404) {
+      res = await fetch(`/functions/api/gdrive?url=${encodeURIComponent(trimmed)}`);
+    }
+
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      return {
+        title: '',
+        count: 0,
+        totalAlbumCount: 0,
+        photos: [],
+        error: `Unexpected response from Google Drive service (HTTP ${res.status}). Server returned non-JSON.`,
+      };
+    }
+
+    const data = await res.json();
+    if (!res.ok) {
+      return {
+        title: '',
+        count: 0,
+        totalAlbumCount: 0,
+        photos: [],
+        error: data.error || `Failed to fetch Google Drive folder (HTTP ${res.status}).`,
+      };
+    }
+
+    if (!data.photos || data.photos.length === 0) {
+      return {
+        title: data.title || 'Google Drive Folder',
+        count: 0,
+        totalAlbumCount: 0,
+        photos: [],
+        error: 'No images found in this Google Drive folder. Please ensure files are images and General Access is "Anyone with the link".',
+      };
+    }
+
+    return {
+      title: data.title || 'Google Drive Folder',
+      count: data.photos.length,
+      totalAlbumCount: data.totalAlbumCount || data.photos.length,
+      photos: data.photos,
+    };
+  } catch (err: any) {
+    return {
+      title: '',
+      count: 0,
+      totalAlbumCount: 0,
+      photos: [],
+      error: `Network error connecting to Google Drive service: ${err.message}`,
     };
   }
 }
@@ -333,7 +421,7 @@ export async function resolveWebAndCloudPhotoUrls(
     .filter((l) => l.length > 5);
 
   const directItems: PhotoItem[] = [];
-  const gphotoPromises: Promise<{
+  const albumPromises: Promise<{
     title: string;
     count: number;
     totalAlbumCount: number;
@@ -344,7 +432,9 @@ export async function resolveWebAndCloudPhotoUrls(
   for (let idx = 0; idx < lines.length; idx++) {
     const line = lines[idx];
     if (isGooglePhotosUrl(line)) {
-      gphotoPromises.push(fetchGooglePhotosAlbum(line, maxPhotos));
+      albumPromises.push(fetchGooglePhotosAlbum(line, maxPhotos));
+    } else if (isGoogleDriveFolderUrl(line)) {
+      albumPromises.push(fetchGoogleDriveFolder(line));
     } else {
       const gdriveResolved = parseGoogleDriveLink(line);
       const finalUrl = gdriveResolved || line;
@@ -358,16 +448,16 @@ export async function resolveWebAndCloudPhotoUrls(
     }
   }
 
-  const gphotoResults = await Promise.all(gphotoPromises);
-  const gphotoItems: PhotoItem[] = [];
-  let gphotoAlbumTitle = '';
+  const albumResults = await Promise.all(albumPromises);
+  const albumItems: PhotoItem[] = [];
+  let mainAlbumTitle = '';
   let highestAlbumTotal = 0;
 
-  for (const res of gphotoResults) {
+  for (const res of albumResults) {
     if (res.photos && res.photos.length > 0) {
-      gphotoItems.push(...res.photos);
-      if (!gphotoAlbumTitle && res.title) {
-        gphotoAlbumTitle = res.title;
+      albumItems.push(...res.photos);
+      if (!mainAlbumTitle && res.title) {
+        mainAlbumTitle = res.title;
       }
       if (res.totalAlbumCount && res.totalAlbumCount > highestAlbumTotal) {
         highestAlbumTotal = res.totalAlbumCount;
@@ -375,10 +465,10 @@ export async function resolveWebAndCloudPhotoUrls(
     }
   }
 
-  const combined = [...gphotoItems, ...directItems];
+  const combined = [...albumItems, ...directItems];
 
   if (combined.length === 0) {
-    const firstError = gphotoResults.find((r) => r.error)?.error;
+    const firstError = albumResults.find((r) => r.error)?.error;
     return {
       photos: [],
       sourceTitle: '',
@@ -387,10 +477,10 @@ export async function resolveWebAndCloudPhotoUrls(
   }
 
   const sourceTitle =
-    gphotoAlbumTitle && directItems.length === 0
-      ? `Google Photos (${gphotoAlbumTitle})`
-      : gphotoAlbumTitle
-      ? `${gphotoAlbumTitle} & Web`
+    mainAlbumTitle && directItems.length === 0
+      ? mainAlbumTitle
+      : mainAlbumTitle
+      ? `${mainAlbumTitle} & Web`
       : `Web Images (${combined.length})`;
 
   return {

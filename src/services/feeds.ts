@@ -35,9 +35,13 @@ export async function fetchCalendarEvents(sources: CalendarSource[]): Promise<Ca
 
   const promises = enabledSources.map(async (src) => {
     try {
-      const endpoint = `/functions/api/ical?url=${encodeURIComponent(src.url.trim())}`;
-      const res = await fetch(endpoint);
+      let res = await fetch(`/api/ical?url=${encodeURIComponent(src.url.trim())}`);
+      if (res.status === 404) {
+        res = await fetch(`/functions/api/ical?url=${encodeURIComponent(src.url.trim())}`);
+      }
       if (!res.ok) return [];
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) return [];
       const data = await res.json();
       return (data.events || []).map((e: any) => ({
         ...e,
@@ -62,9 +66,13 @@ export async function fetchRssFeed(feedUrl: string): Promise<{ title: string; it
   if (!feedUrl || !feedUrl.trim()) return { title: '', items: [] };
 
   try {
-    const endpoint = `/functions/api/rss?url=${encodeURIComponent(feedUrl.trim())}`;
-    const res = await fetch(endpoint);
+    let res = await fetch(`/api/rss?url=${encodeURIComponent(feedUrl.trim())}`);
+    if (res.status === 404) {
+      res = await fetch(`/functions/api/rss?url=${encodeURIComponent(feedUrl.trim())}`);
+    }
     if (!res.ok) return { title: '', items: [] };
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) return { title: '', items: [] };
     return await res.json();
   } catch (err) {
     console.warn('Failed to fetch RSS feed:', err);
