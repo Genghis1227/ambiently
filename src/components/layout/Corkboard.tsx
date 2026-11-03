@@ -1022,6 +1022,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 <QuotesWidget
                   customQuotes={widget.config?.customQuotes}
                   quoteMode={widget.config?.quoteMode}
+                  rotationIntervalSec={widget.config?.rotationIntervalSec ?? widget.config?.quoteIntervalSec}
                 />
               ) : widget.type === 'calendar' ? (
                 <CalendarWidget

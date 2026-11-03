@@ -332,6 +332,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
           <QuotesWidget
             customQuotes={widget.config?.customQuotes}
             quoteMode={widget.config?.quoteMode}
+            rotationIntervalSec={widget.config?.rotationIntervalSec ?? widget.config?.quoteIntervalSec}
           />
         );
       case 'embed':
