@@ -1726,13 +1726,25 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       <PhotoSourcesModal
         isOpen={photoSourcesTargetWidget !== null}
         onClose={() => setPhotoSourcesTargetWidget(null)}
-        onPhotosLoaded={(newPhotos, sourceName) => {
+        initialWebUrls={photoSourcesTargetWidget?.config?.sourceUrl || ''}
+        currentSourceLabel={photoSourcesTargetWidget?.config?.sourceLabel}
+        currentSourceType={
+          photoSourcesTargetWidget?.config?.sourceType ||
+          (photoSourcesTargetWidget?.config?.sourceUrl ||
+           photoSourcesTargetWidget?.config?.customPhotos?.[0]?.url?.includes('googleusercontent.com')
+            ? 'web'
+            : undefined)
+        }
+        currentPhotoCount={photoSourcesTargetWidget?.config?.customPhotos?.length}
+        onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType) => {
           if (photoSourcesTargetWidget && onUpdateWidget && newPhotos.length > 0) {
             onUpdateWidget(photoSourcesTargetWidget.id, {
               config: {
                 ...photoSourcesTargetWidget.config,
                 customPhotos: newPhotos,
                 sourceLabel: sourceName,
+                sourceUrl: sourceUrl !== undefined ? sourceUrl : photoSourcesTargetWidget.config?.sourceUrl,
+                sourceType: sourceType !== undefined ? sourceType : photoSourcesTargetWidget.config?.sourceType,
               },
             });
           }
