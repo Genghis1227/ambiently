@@ -85,9 +85,10 @@ export async function cachePhotosLocally(photos: PhotoItem[]): Promise<void> {
 async function scanDirectoryHandle(
   dirHandle: any,
   photos: PhotoItem[],
-  maxPhotos = 1500,
+  maxPhotos = 5000,
   currentDepth = 0,
-  maxDepth = 5
+  maxDepth = 8,
+  onProgress?: (count: number, currentDirName: string) => void
 ): Promise<void> {
   if (currentDepth > maxDepth || photos.length >= maxPhotos) return;
 
@@ -107,6 +108,9 @@ async function scanDirectoryHandle(
             date: new Date(file.lastModified).toLocaleDateString(),
             source: 'local',
           });
+          if (photos.length % 50 === 0 && onProgress) {
+            onProgress(photos.length, dirHandle.name);
+          }
         } catch {
           // ignore unreadable network file
         }
@@ -123,6 +127,9 @@ async function scanDirectoryHandle(
               date: new Date(file.lastModified).toLocaleDateString(),
               source: 'local',
             });
+            if (photos.length % 50 === 0 && onProgress) {
+              onProgress(photos.length, dirHandle.name);
+            }
           }
         } catch {
           // ignore
@@ -131,7 +138,7 @@ async function scanDirectoryHandle(
     } else if (entry.kind === 'directory') {
       // Recursively scan subdirectories (e.g. subfolders, albums on NAS)
       try {
-        await scanDirectoryHandle(entry, photos, maxPhotos, currentDepth + 1, maxDepth);
+        await scanDirectoryHandle(entry, photos, maxPhotos, currentDepth + 1, maxDepth, onProgress);
       } catch {
         // ignore inaccessible subfolder
       }
@@ -140,7 +147,10 @@ async function scanDirectoryHandle(
 }
 
 // Local Directory Picker (showDirectoryPicker) for local PC / mapped NAS photos
-export async function pickLocalPhotoDirectory(): Promise<{
+export async function pickLocalPhotoDirectory(
+  maxPhotos = 5000,
+  onProgress?: (count: number, currentDirName: string) => void
+): Promise<{
   success: boolean;
   photos: PhotoItem[];
   folderName?: string;
@@ -162,7 +172,7 @@ export async function pickLocalPhotoDirectory(): Promise<{
 
     const folderName = dirHandle.name || 'Selected Folder';
     const localPhotos: PhotoItem[] = [];
-    await scanDirectoryHandle(dirHandle, localPhotos, 1500, 0, 5);
+    await scanDirectoryHandle(dirHandle, localPhotos, maxPhotos, 0, 8, onProgress);
 
     if (localPhotos.length === 0) {
       return {
@@ -183,11 +193,14 @@ export async function pickLocalPhotoDirectory(): Promise<{
 }
 
 // Fallback directory parser for standard HTML5 file inputs (<input type="file" webkitdirectory />)
-export function parseFileListToPhotos(files: FileList | File[]): { folderName: string; photos: PhotoItem[] } {
+export function parseFileListToPhotos(
+  files: FileList | File[],
+  maxPhotos = 5000
+): { folderName: string; photos: PhotoItem[] } {
   const photos: PhotoItem[] = [];
   let detectedFolder = 'Selected Folder';
 
-  for (let i = 0; i < files.length; i++) {
+  for (let i = 0; i < files.length && photos.length < maxPhotos; i++) {
     const file = files[i];
     const path = (file as any).webkitRelativePath || file.name;
     const parts = path.split('/');
