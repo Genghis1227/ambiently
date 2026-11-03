@@ -20,6 +20,13 @@
 }
 
 /* Custom scrollbars where needed (e.g. mobile companion view) */
+.mobile-companion-scroll {
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  touch-action: pan-y !important;
+  overscroll-behavior-y: contain;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
