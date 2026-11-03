@@ -229,6 +229,51 @@ export function parseGoogleDriveLink(rawUrl: string): string | null {
   return null;
 }
 
+export function isGooglePhotosUrl(url: string): boolean {
+  return /photos\.(app\.goo\.gl|google\.com)/i.test(url);
+}
+
+export async function fetchGooglePhotosAlbum(albumUrl: string): Promise<{
+  title: string;
+  photos: PhotoItem[];
+  error?: string;
+}> {
+  const trimmed = albumUrl.trim();
+  if (!trimmed) return { title: '', photos: [], error: 'Empty URL' };
+
+  try {
+    const res = await fetch(`/functions/api/gphotos?url=${encodeURIComponent(trimmed)}`);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      return {
+        title: '',
+        photos: [],
+        error: errData.error || `Failed to fetch Google Photos album (HTTP ${res.status}).`,
+      };
+    }
+
+    const data = await res.json();
+    if (!data.photos || data.photos.length === 0) {
+      return {
+        title: data.title || 'Google Photos Album',
+        photos: [],
+        error: 'No photos found in this Google Photos album. Make sure the album is set to Shared/Anyone with the link.',
+      };
+    }
+
+    return {
+      title: data.title || 'Google Photos Album',
+      photos: data.photos,
+    };
+  } catch (err: any) {
+    return {
+      title: '',
+      photos: [],
+      error: `Network error connecting to Google Photos service: ${err.message}`,
+    };
+  }
+}
+
 // Parse freeform list of web / Google Drive URLs into PhotoItems
 export function parseWebPhotoUrls(text: string): PhotoItem[] {
   if (!text.trim()) return [];
@@ -253,4 +298,71 @@ export function parseWebPhotoUrls(text: string): PhotoItem[] {
   });
 
   return items;
+}
+
+// Resolves both Google Photos shared albums, Google Drive links, and direct web images
+export async function resolveWebAndCloudPhotoUrls(text: string): Promise<{
+  photos: PhotoItem[];
+  sourceTitle: string;
+  error?: string;
+}> {
+  if (!text.trim()) return { photos: [], sourceTitle: '' };
+
+  const lines = text
+    .split(/[\r\n,]+/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 5);
+
+  const directItems: PhotoItem[] = [];
+  const gphotoPromises: Promise<{ title: string; photos: PhotoItem[]; error?: string }>[] = [];
+
+  for (let idx = 0; idx < lines.length; idx++) {
+    const line = lines[idx];
+    if (isGooglePhotosUrl(line)) {
+      gphotoPromises.push(fetchGooglePhotosAlbum(line));
+    } else {
+      const gdriveResolved = parseGoogleDriveLink(line);
+      const finalUrl = gdriveResolved || line;
+      const isGdrive = !!gdriveResolved;
+      directItems.push({
+        id: `web-${idx}-${Date.now()}`,
+        url: finalUrl,
+        caption: isGdrive ? 'Google Drive Photo' : `Web Photo ${idx + 1}`,
+        source: isGdrive ? 'gdrive' : 'web',
+      });
+    }
+  }
+
+  const gphotoResults = await Promise.all(gphotoPromises);
+  const gphotoItems: PhotoItem[] = [];
+  let gphotoAlbumTitle = '';
+
+  for (const res of gphotoResults) {
+    if (res.photos && res.photos.length > 0) {
+      gphotoItems.push(...res.photos);
+      if (!gphotoAlbumTitle && res.title) {
+        gphotoAlbumTitle = res.title;
+      }
+    }
+  }
+
+  const combined = [...gphotoItems, ...directItems];
+
+  if (combined.length === 0) {
+    const firstError = gphotoResults.find((r) => r.error)?.error;
+    return {
+      photos: [],
+      sourceTitle: '',
+      error: firstError || 'No valid photos found. Please check your links.',
+    };
+  }
+
+  const sourceTitle =
+    gphotoAlbumTitle && directItems.length === 0
+      ? `Google Photos (${gphotoAlbumTitle})`
+      : gphotoAlbumTitle
+      ? `${gphotoAlbumTitle} & Web`
+      : 'Web & Cloud';
+
+  return { photos: combined, sourceTitle };
 }

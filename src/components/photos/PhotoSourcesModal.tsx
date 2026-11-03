@@ -35,7 +35,7 @@ import {
   pickLocalPhotoDirectory,
   parseFileListToPhotos,
   cachePhotosLocally,
-  parseWebPhotoUrls,
+  resolveWebAndCloudPhotoUrls,
   type PhotoItem,
   type PhotoDisplayStyle,
 } from '../../services/photos';
@@ -93,6 +93,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
 
   // Web / Google Drive state
   const [webUrlsText, setWebUrlsText] = useState('');
+  const [isWebLoading, setIsWebLoading] = useState(false);
 
   const loadPhotoSections = async (server: PlexServerResource, token: string) => {
     const uri = getBestPlexConnectionUri(server);
@@ -302,16 +303,22 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
     setTimeout(() => onClose(), 1000);
   };
 
-  // Web / Google Drive URLs
-  const handleApplyWebUrls = () => {
-    const items = parseWebPhotoUrls(webUrlsText);
-    if (items.length > 0) {
-      onPhotosLoaded(items, 'Web & Cloud');
-      cachePhotosLocally(items);
-      setStatusMessage(`Added ${items.length} web/Google Drive photos!`);
-      setTimeout(() => onClose(), 1200);
-    } else {
-      setStatusMessage('Please enter at least one valid image or Google Drive link.');
+  // Web / Google Photos & Drive URLs
+  const handleApplyWebUrls = async () => {
+    setIsWebLoading(true);
+    setStatusMessage('Resolving Google Photos album & web links...');
+    try {
+      const res = await resolveWebAndCloudPhotoUrls(webUrlsText);
+      if (res.photos.length > 0) {
+        onPhotosLoaded(res.photos, res.sourceTitle || 'Google Photos & Web');
+        cachePhotosLocally(res.photos);
+        setStatusMessage(`Loaded ${res.photos.length} photos from ${res.sourceTitle}!`);
+        setTimeout(() => onClose(), 1200);
+      } else {
+        setStatusMessage(res.error || 'Please enter at least one valid Google Photos, Google Drive, or image link.');
+      }
+    } finally {
+      setIsWebLoading(false);
     }
   };
 
@@ -347,7 +354,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
           {[
             { id: 'plex', label: 'Plex Server', icon: Tv },
             { id: 'local', label: 'Local Folder', icon: FolderOpen },
-            { id: 'web', label: 'Google Drive & Web', icon: Globe },
+            { id: 'web', label: 'Google Photos & Web', icon: Globe },
             { id: 'curated', label: 'Curated Scenery', icon: Cloud },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -701,30 +708,41 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
             </div>
           )}
 
-          {/* TAB 3: GOOGLE DRIVE & WEB LINKS */}
+          {/* TAB 3: GOOGLE PHOTOS, DRIVE & WEB LINKS */}
           {activeTab === 'web' && (
             <div className="space-y-3">
               <div>
-                <h3 className="text-sm font-bold text-white">Google Drive & Web Image URLs</h3>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  Paste public Google Drive image share links, public album URLs, or direct image links (`.jpg`, `.png`, `.webp`), one per line:
+                <h3 className="text-sm font-bold text-white">Google Photos Albums & Web Images</h3>
+                <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">
+                  Paste public <strong>Google Photos shared album links (<code className="text-blue-400">https://photos.app.goo.gl/...</code>)</strong>, Google Drive image links, or direct image URLs (<code className="text-gray-300">.jpg, .png, .webp</code>), one per line:
                 </p>
               </div>
 
               <textarea
                 value={webUrlsText}
                 onChange={(e) => setWebUrlsText(e.target.value)}
-                placeholder="https://drive.google.com/file/d/...&#10;https://images.unsplash.com/...&#10;https://yourdomain.com/photo.jpg"
+                placeholder="https://photos.app.goo.gl/hDHMNx3E3UdtBPtW9&#10;https://drive.google.com/file/d/...&#10;https://images.unsplash.com/..."
                 rows={5}
                 className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-xs text-white font-mono focus:outline-none focus:border-blue-500 placeholder:text-gray-600"
               />
 
               <button
+                type="button"
                 onClick={handleApplyWebUrls}
-                className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
+                disabled={isWebLoading || !webUrlsText.trim()}
+                className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-xs shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
               >
-                <Globe className="w-4 h-4" />
-                <span>Load Web & Drive Photos</span>
+                {isWebLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Resolving Google Photos Album & Images...</span>
+                  </>
+                ) : (
+                  <>
+                    <Globe className="w-4 h-4" />
+                    <span>Load Google Photos & Web Images</span>
+                  </>
+                )}
               </button>
             </div>
           )}
