@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Image as ImageIcon } from 'lucide-react';
+import { Image as ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   CURATED_AMBIENT_PHOTOS,
   cachePhotosLocally,
@@ -349,7 +349,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     cachePhotosLocally(photos);
   }, [photos]);
 
-  // Slideshow auto-rotation
+  // Slideshow auto-rotation for Ken Burns
   useEffect(() => {
     if (photos.length <= 1) return;
     const interval = setInterval(() => {
@@ -358,7 +358,23 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     return () => clearInterval(interval);
   }, [photos, intervalSec]);
 
-  const currentPhoto = photos[currentIndex] || photos[0];
+  // Filmstrip continuous reel index & auto-rotation
+  const [filmstripIndex, setFilmstripIndex] = useState(0);
+
+  useEffect(() => {
+    if (style !== 'filmstrip' || photos.length <= 1) return;
+    const interval = setInterval(() => {
+      setFilmstripIndex((prev) => prev + 1);
+    }, intervalSec * 1000);
+    return () => clearInterval(interval);
+  }, [style, photos, intervalSec]);
+
+  const filmstripActiveIndex = ((filmstripIndex % photos.length) + photos.length) % photos.length;
+  const currentPhoto =
+    style === 'filmstrip'
+      ? photos[filmstripActiveIndex] || photos[0]
+      : photos[currentIndex] || photos[0];
+  const activeDisplayIndex = style === 'filmstrip' ? filmstripActiveIndex : currentIndex;
 
   return (
     <div className="relative w-full h-full rounded-2xl overflow-hidden select-none bg-black flex flex-col justify-between">
@@ -504,38 +520,128 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
         </div>
       )}
 
-      {/* 4. Filmstrip Scrolling Style */}
+      {/* 4. Filmstrip Scrolling Style (Infinite centered cinematic reel) */}
       {style === 'filmstrip' && (
-        <div className="absolute inset-0 flex items-center gap-4 overflow-x-auto p-4 bg-gray-950">
-          {photos.map((p, idx) => (
-            <div
-              key={p.id}
-              onClick={() => setCurrentIndex(idx)}
-              className={`relative shrink-0 w-44 aspect-[3/2] rounded-xl overflow-hidden cursor-pointer border-2 transition-all ${
-                idx === currentIndex ? 'border-blue-500 scale-105 shadow-xl' : 'border-gray-800 opacity-60'
-              }`}
-            >
-              <img src={p.url} alt={p.caption} className="w-full h-full object-cover" />
-            </div>
-          ))}
+        <div className="absolute inset-0 overflow-hidden bg-[#06080d] flex items-center justify-center select-none group">
+          {/* Perforated film rails at top and bottom */}
+          <div className="absolute top-0 inset-x-0 h-4 bg-black/90 border-b border-white/10 flex items-center justify-between px-2 pointer-events-none z-30 overflow-hidden">
+            {Array.from({ length: 32 }).map((_, i) => (
+              <div key={i} className="w-2.5 h-1.5 rounded-[1px] bg-white/20 border border-black/40 shrink-0" />
+            ))}
+          </div>
+          <div className="absolute bottom-0 inset-x-0 h-4 bg-black/90 border-t border-white/10 flex items-center justify-between px-2 pointer-events-none z-30 overflow-hidden">
+            {Array.from({ length: 32 }).map((_, i) => (
+              <div key={i} className="w-2.5 h-1.5 rounded-[1px] bg-white/20 border border-black/40 shrink-0" />
+            ))}
+          </div>
+
+          {/* Vignette gradients on left and right for seamless entrance/exit */}
+          <div className="absolute inset-y-0 left-0 w-28 bg-gradient-to-r from-[#06080d] via-[#06080d]/80 to-transparent pointer-events-none z-25" />
+          <div className="absolute inset-y-0 right-0 w-28 bg-gradient-to-l from-[#06080d] via-[#06080d]/80 to-transparent pointer-events-none z-25" />
+
+          {/* Interactive Navigation Chevrons on Hover */}
+          {photos.length > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFilmstripIndex((prev) => prev - 1);
+                }}
+                className="absolute left-3 top-1/2 -translate-y-1/2 z-35 p-2 rounded-full bg-black/60 hover:bg-black/80 text-white/70 hover:text-white border border-white/15 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer backdrop-blur-sm"
+                title="Previous photo"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFilmstripIndex((prev) => prev + 1);
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 z-35 p-2 rounded-full bg-black/60 hover:bg-black/80 text-white/70 hover:text-white border border-white/15 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer backdrop-blur-sm"
+                title="Next photo"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </>
+          )}
+
+          {/* Window of 7 reel positions centered on filmstripIndex */}
+          {[-3, -2, -1, 0, 1, 2, 3].map((offset) => {
+            const itemIndex = filmstripIndex + offset;
+            const photoIndex = ((itemIndex % photos.length) + photos.length) % photos.length;
+            const p = photos[photoIndex];
+            if (!p) return null;
+
+            const isCenter = offset === 0;
+
+            return (
+              <motion.div
+                key={itemIndex}
+                onClick={() => {
+                  if (!isCenter) {
+                    setFilmstripIndex(itemIndex);
+                  }
+                }}
+                animate={{
+                  x: `${offset * 62}%`,
+                  scale: isCenter ? 1.15 : Math.abs(offset) === 1 ? 0.78 : Math.abs(offset) === 2 ? 0.62 : 0.48,
+                  opacity: isCenter ? 1 : Math.abs(offset) === 1 ? 0.5 : Math.abs(offset) === 2 ? 0.2 : 0,
+                  zIndex: isCenter ? 20 : 10 - Math.abs(offset),
+                  filter: isCenter ? 'brightness(100%)' : 'brightness(65%)',
+                }}
+                transition={{
+                  duration: 0.85,
+                  ease: [0.25, 1, 0.5, 1],
+                }}
+                className={`absolute w-[52%] max-w-[460px] aspect-[16/10] rounded-xl overflow-hidden cursor-pointer shadow-2xl ${
+                  isCenter
+                    ? 'ring-2 ring-blue-500/90 shadow-[0_20px_50px_rgba(0,0,0,0.9)]'
+                    : 'border border-white/10 hover:opacity-75'
+                }`}
+                title={isCenter ? p.caption : 'Click to center this photo'}
+              >
+                <img
+                  src={p.url}
+                  alt={p.caption || 'Film frame'}
+                  className="w-full h-full object-cover select-none pointer-events-none"
+                  loading="lazy"
+                />
+
+                {isCenter && (
+                  <div className="absolute bottom-0 inset-x-0 p-3 bg-gradient-to-t from-black/95 via-black/60 to-transparent text-center">
+                    <div className="text-xs sm:text-sm font-bold text-white truncate drop-shadow-md">
+                      {p.caption || 'Captured Moment'}
+                    </div>
+                    {p.author && (
+                      <div className="text-[10px] text-gray-300 font-sans truncate drop-shadow mt-0.5">
+                        {p.author}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </motion.div>
+            );
+          })}
         </div>
       )}
 
       {/* Ambient Top Caption Pill */}
-      <div className="relative z-10 p-3 flex items-center justify-between text-white drop-shadow-md pointer-events-none pr-24">
+      <div className="relative z-40 p-3 flex items-center justify-between text-white drop-shadow-md pointer-events-none pr-24">
         <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-xs">
           <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
           <span className="font-medium truncate max-w-[160px]">
             {currentPhoto.caption || sourceLabel}
           </span>
           <span className="text-[10px] text-gray-400 font-mono">
-            ({currentIndex + 1}/{photos.length})
+            ({activeDisplayIndex + 1}/{photos.length})
           </span>
         </div>
       </div>
 
-      {/* Subtle Bottom Photo Attribution */}
-      {currentPhoto.author && (
+      {/* Subtle Bottom Photo Attribution (for Ken Burns and Mosaic) */}
+      {style !== 'filmstrip' && currentPhoto.author && (
         <div className="relative z-10 p-3 flex items-end justify-end text-white pointer-events-none drop-shadow-lg">
           <div className="text-[11px] text-gray-400 text-right bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full border border-white/10">
             Photo: <span className="text-gray-200 font-medium">{currentPhoto.author}</span>
