@@ -5,9 +5,21 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.1.8';
+export const APP_VERSION = '0.1.9';
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.1.9",
+    date: "November 2, 2026",
+    title: "Mobile Companion Viewport Touch Scroll Fix, 5k NAS Photo Capacity & Enhanced Multi-Folder",
+    highlights: [
+      "Fixed Mobile Companion Scrolling: Bound mobile companion viewport to fixed inset-0 with dynamic 100dvh, touch-pan-y, and momentum touch scrolling so all widget cards and notes can be scrolled through seamlessly.",
+      "Expanded NAS & Local Folder Capacity to 5,000 Photos: Increased default scan limit from 1,500 to 5,000 photos with 8-level recursive subdirectory traversal for large mapped NAS photo archives.",
+      "Real-Time NAS Scan Progress: Added live scanning status updates with photo count and active subfolder name.",
+      "Configurable Scan Capacity: Added scan capacity selector pills (1k, 2.5k, 5k, 10k) in the photo sources hub.",
+      "Enhanced Multi-Folder Stacking: Added consecutive folder additions without replacement and an inline '+ Add Another Folder' action bar.",
+    ],
+  },
   {
     version: "v0.1.8",
     date: "November 2, 2026",
