@@ -42,6 +42,7 @@ export function App() {
     autoOrganizeCanvas,
     undoAutoOrganize,
     lastLayoutSnapshot,
+    toggleDockHidden,
   } = useDashboardStore();
 
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -93,6 +94,27 @@ export function App() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Keyboard shortcut: '\' (backslash) to toggle toolbar visibility
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === '\\') {
+        const target = e.target as HTMLElement;
+        if (
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable ||
+          target.closest('input, textarea, [contenteditable="true"]')
+        ) {
+          return;
+        }
+        e.preventDefault();
+        toggleDockHidden();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [toggleDockHidden]);
 
   const handleToggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -235,13 +257,15 @@ export function App() {
     (n) => n.archivedAt || (n.expiresAt && new Date(n.expiresAt) <= now)
   ).length;
 
-  // Dynamic padding based on Dock position
-  const dockPaddingClasses = {
-    left: 'pl-20',
-    right: 'pr-20',
-    top: 'pt-20',
-    bottom: 'pb-20',
-  }[settings.dockPosition];
+  // Dynamic padding based on Dock position (omitted if dock is hidden for full immersion)
+  const dockPaddingClasses = settings.isDockHidden
+    ? ''
+    : {
+        left: 'pl-20',
+        right: 'pr-20',
+        top: 'pt-20',
+        bottom: 'pb-20',
+      }[settings.dockPosition];
 
   return (
     <div
@@ -279,6 +303,7 @@ export function App() {
           onOpenAddWidget={() => setIsAddWidgetOpen(true)}
           onUpdateWidget={updateWidget}
           onUpdateTab={updateTab}
+          snapToGrid={settings.snapToGrid}
         />
       </div>
 
@@ -304,6 +329,8 @@ export function App() {
         onUndoOrganize={undoAutoOrganize}
         canUndoOrganize={lastLayoutSnapshot?.tabId === activeTabIdResolved}
         onToggleMobileCompanion={isMobileViewport ? () => setForceDesktopMode(false) : undefined}
+        isDockHidden={settings.isDockHidden}
+        onToggleDockHidden={toggleDockHidden}
       />
 
       {/* Night Mode Screen Overlay */}
