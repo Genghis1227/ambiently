@@ -14,6 +14,7 @@ import {
   Layers,
   Smartphone,
   Grid,
+  Eye,
   EyeOff,
 } from 'lucide-react';
 import type { DockPosition } from '../../types/dashboard';
@@ -102,6 +103,7 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
 
       {/* Floating Quick HUD Card */}
       <div
+        data-dock-element="true"
         className={`absolute z-50 w-80 max-w-[calc(100vw-5rem)] rounded-2xl bg-gray-950/95 backdrop-blur-2xl border border-gray-800 p-4 shadow-2xl text-white select-none transition-all animate-in fade-in zoom-in-95 duration-150 pointer-events-auto ${positionClasses}`}
         onClick={(e) => e.stopPropagation()}
       >
@@ -284,7 +286,7 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
             </span>
           </button>
 
-          {/* Hide Toolbar Shortcut */}
+          {/* Hide / Pin Toolbar Shortcut */}
           <button
             type="button"
             onClick={() => {
@@ -294,8 +296,12 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
             className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-gray-900/80 hover:bg-gray-800/90 border border-gray-800 text-xs font-medium text-gray-200 transition-all cursor-pointer"
           >
             <div className="flex items-center gap-2">
-              <EyeOff className="w-4 h-4 text-amber-400" />
-              <span>Hide Navigation Toolbar</span>
+              {settings.isDockHidden ? (
+                <Eye className="w-4 h-4 text-blue-400" />
+              ) : (
+                <EyeOff className="w-4 h-4 text-amber-400" />
+              )}
+              <span>{settings.isDockHidden ? 'Keep Toolbar Visible' : 'Hide Navigation Toolbar'}</span>
             </div>
             <span className="text-[10px] text-gray-500 font-mono">\</span>
           </button>

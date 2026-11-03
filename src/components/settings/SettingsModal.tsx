@@ -911,11 +911,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             <div className="flex items-center justify-between p-3 rounded-xl bg-gray-800/40 border border-gray-800">
               <div className="space-y-0.5 max-w-[80%]">
                 <div className="flex items-center gap-2">
-                  <EyeOff className="w-4 h-4 text-amber-400" />
+                  {settings.isDockHidden ? (
+                    <EyeOff className="w-4 h-4 text-amber-400" />
+                  ) : (
+                    <Eye className="w-4 h-4 text-gray-400" />
+                  )}
                   <span className="text-sm font-medium text-gray-200">Hide Navigation Toolbar</span>
                 </div>
                 <p className="text-xs text-gray-400">
-                  Hides the toolbar for full-screen immersion. Restore via edge handle or shortcut <kbd className="px-1.5 py-0.5 rounded bg-gray-800 text-[11px] font-mono text-gray-300 border border-gray-700">\</kbd>.
+                  Hides the toolbar for full-screen immersion. Clicking off the peeked toolbar hides it again automatically unless pinned with the eye icon or shortcut <kbd className="px-1.5 py-0.5 rounded bg-gray-800 text-[11px] font-mono text-gray-300 border border-gray-700">\</kbd>.
                 </p>
               </div>
               <button
