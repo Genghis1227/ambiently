@@ -202,6 +202,7 @@ interface PhotoFrameWidgetProps {
   initialPolaroidCount?: number;
   initialPolaroidSizeMode?: PolaroidSizeMode;
   photoOrder?: 'random' | 'sequential';
+  showCaptions?: boolean;
   onUpdateConfig?: (updates: Record<string, any>) => void;
 }
 
@@ -214,6 +215,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   initialPolaroidCount = 12,
   initialPolaroidSizeMode = 'mixed',
   photoOrder = 'random',
+  showCaptions = true,
   onUpdateConfig: _onUpdateConfig,
 }) => {
   const stateKey = widgetId || `photo-state-${initialSourceLabel || 'ambient'}`;
@@ -650,9 +652,11 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                     loading="lazy"
                     onError={() => handleMosaicError(idx, p.id)}
                   />
-                  <div className="absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black/85 via-black/40 to-transparent text-[11px] text-white truncate font-medium">
-                    {p.caption || p.author || 'Captured Moment'}
-                  </div>
+                  {showCaptions && (
+                    <div className="absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black/85 via-black/40 to-transparent text-[11px] text-white truncate font-medium">
+                      {p.caption || p.author || 'Captured Moment'}
+                    </div>
+                  )}
                 </motion.div>
               </AnimatePresence>
             </div>
@@ -706,10 +710,10 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                 <div
                   className={`relative w-full h-full bg-[#fdfbf7] rounded-sm shadow-2xl border border-black/15 flex flex-col justify-between transition-shadow group-hover:shadow-cyan-500/30 ${
                     isHero
-                      ? 'p-2 sm:p-3 pb-6 sm:pb-9 ring-1 ring-black/5'
+                      ? showCaptions ? 'p-2 sm:p-3 pb-6 sm:pb-9 ring-1 ring-black/5' : 'p-2 sm:p-3 pb-3 ring-1 ring-black/5'
                       : isSmall
-                      ? 'p-1 pb-4'
-                      : 'p-1.5 sm:p-2 pb-5 sm:pb-7'
+                      ? showCaptions ? 'p-1 pb-4' : 'p-1'
+                      : showCaptions ? 'p-1.5 sm:p-2 pb-5 sm:pb-7' : 'p-1.5 sm:p-2'
                   }`}
                 >
                   <div className="w-full flex-1 min-h-0 overflow-hidden rounded-xs bg-gray-900 relative">
@@ -722,20 +726,22 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                       onError={() => handlePolaroidError(idx, item.photo.id)}
                     />
                   </div>
-                  <div className="mt-1 sm:mt-1.5 px-0.5 text-center shrink-0">
-                    <div
-                      className={`font-handwriting font-bold text-gray-800 truncate tracking-tight ${
-                        isHero ? 'text-xs sm:text-sm font-extrabold' : isSmall ? 'text-[9px]' : 'text-[10px] sm:text-xs'
-                      }`}
-                    >
-                      {item.photo.caption || 'Captured Moment'}
-                    </div>
-                    {item.photo.author && !isSmall && (
-                      <div className="text-[8px] sm:text-[9px] text-gray-500 font-sans truncate">
-                        {item.photo.author}
+                  {showCaptions && (
+                    <div className="mt-1 sm:mt-1.5 px-0.5 text-center shrink-0">
+                      <div
+                        className={`font-handwriting font-bold text-gray-800 truncate tracking-tight ${
+                          isHero ? 'text-xs sm:text-sm font-extrabold' : isSmall ? 'text-[9px]' : 'text-[10px] sm:text-xs'
+                        }`}
+                      >
+                        {item.photo.caption || 'Captured Moment'}
                       </div>
-                    )}
-                  </div>
+                      {item.photo.author && !isSmall && (
+                        <div className="text-[8px] sm:text-[9px] text-gray-500 font-sans truncate">
+                          {item.photo.author}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </motion.div>
             );
@@ -834,7 +840,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   onError={() => handleFilmstripError(p.id)}
                 />
 
-                {isCenter && (
+                {isCenter && showCaptions && (
                   <div className="absolute bottom-0 inset-x-0 p-3 bg-gradient-to-t from-black/95 via-black/60 to-transparent text-center">
                     <div className="text-xs sm:text-sm font-bold text-white truncate drop-shadow-md">
                       {p.caption || 'Captured Moment'}
@@ -853,20 +859,22 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
       )}
 
       {/* Ambient Top Caption Pill */}
-      <div className="relative z-40 p-3 flex items-center justify-between text-white drop-shadow-md pointer-events-none pr-24">
-        <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-xs">
-          <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
-          <span className="font-medium truncate max-w-[160px]">
-            {currentPhoto.caption || sourceLabel}
-          </span>
-          <span className="text-[10px] text-gray-400 font-mono">
-            ({activeDisplayIndex + 1}/{photos.length})
-          </span>
+      {showCaptions && (
+        <div className="relative z-40 p-3 flex items-center justify-between text-white drop-shadow-md pointer-events-none pr-24">
+          <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-xs">
+            <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
+            <span className="font-medium truncate max-w-[160px]">
+              {currentPhoto.caption || sourceLabel}
+            </span>
+            <span className="text-[10px] text-gray-400 font-mono">
+              ({activeDisplayIndex + 1}/{photos.length})
+            </span>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Subtle Bottom Photo Attribution (for Ken Burns and Mosaic) */}
-      {style !== 'filmstrip' && currentPhoto.author && (
+      {showCaptions && style !== 'filmstrip' && currentPhoto.author && (
         <div className="relative z-10 p-3 flex items-end justify-end text-white pointer-events-none drop-shadow-lg">
           <div className="text-[11px] text-gray-400 text-right bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full border border-white/10">
             Photo: <span className="text-gray-200 font-medium">{currentPhoto.author}</span>

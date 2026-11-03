@@ -322,6 +322,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
               initialPolaroidCount={widget.config?.polaroidCount || 12}
               initialPolaroidSizeMode={widget.config?.polaroidSizeMode || 'mixed'}
               photoOrder={widget.config?.photoOrder || 'random'}
+              showCaptions={widget.config?.showCaptions ?? true}
             />
           </div>
         );

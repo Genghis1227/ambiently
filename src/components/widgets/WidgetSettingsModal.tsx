@@ -78,6 +78,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const [polaroidCount, setPolaroidCount] = useState<number>(widget?.config?.polaroidCount || 12);
   const [polaroidSizeMode, setPolaroidSizeMode] = useState<'mixed' | 'uniform' | 'small' | 'large'>(widget?.config?.polaroidSizeMode || 'mixed');
   const [photoOrder, setPhotoOrder] = useState<'random' | 'sequential'>('random');
+  const [showCaptions, setShowCaptions] = useState<boolean>(widget?.config?.showCaptions ?? true);
 
   // Weather & Clock states
   const [locationName, setLocationName] = useState('Austin, TX');
@@ -158,6 +159,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setPolaroidCount(widget.config?.polaroidCount || 12);
       setPolaroidSizeMode(widget.config?.polaroidSizeMode || 'mixed');
       setPhotoOrder(widget.config?.photoOrder || 'random');
+      setShowCaptions(widget.config?.showCaptions ?? true);
     } else if (widget.type === 'weather' || widget.type === 'clock_weather') {
       setLocationName(widget.config?.locationName || 'Austin, TX');
       setTempUnit(widget.config?.unit || 'F');
@@ -316,6 +318,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.polaroidCount = polaroidCount;
       configUpdates.polaroidSizeMode = polaroidSizeMode;
       configUpdates.photoOrder = photoOrder;
+      configUpdates.showCaptions = showCaptions;
     } else if (widget.type === 'weather' || widget.type === 'clock_weather') {
       configUpdates.locationName = locationName.trim();
       configUpdates.unit = tempUnit;
@@ -645,6 +648,32 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Photo Captions & Counter Toggle (Clean Picture Mode) */}
+              <div className="flex items-center justify-between p-3.5 rounded-xl bg-gray-950 border border-gray-800">
+                <div className="space-y-0.5 pr-3">
+                  <div className="text-xs font-semibold text-white">Album Name & Photo Numbers</div>
+                  <div className="text-[11px] text-gray-400">
+                    {showCaptions
+                      ? 'Showing album titles, handwritten labels, and photo counter'
+                      : 'Clean picture mode: album name, labels, and numbers hidden'}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCaptions(!showCaptions)}
+                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer shrink-0 ${
+                    showCaptions ? 'bg-blue-600' : 'bg-gray-700'
+                  }`}
+                  title={showCaptions ? 'Switch to clean picture mode' : 'Show album name and numbers'}
+                >
+                  <div
+                    className={`w-4 h-4 rounded-full bg-white transition-transform absolute top-1 ${
+                      showCaptions ? 'left-6' : 'left-1'
+                    }`}
+                  />
+                </button>
               </div>
             </div>
           )}

@@ -1041,6 +1041,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   initialPolaroidCount={widget.config?.polaroidCount || 12}
                   initialPolaroidSizeMode={widget.config?.polaroidSizeMode || 'mixed'}
                   photoOrder={widget.config?.photoOrder || 'random'}
+                  showCaptions={widget.config?.showCaptions ?? true}
                   onUpdateConfig={(updates) => {
                     if (onUpdateWidget) {
                       onUpdateWidget(widget.id, {
