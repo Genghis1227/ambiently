@@ -270,6 +270,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
             clockFace={widget.config?.clockFace || widget.config?.face || 'digital'}
             showSeconds={widget.config?.showSeconds ?? true}
             timezone={widget.config?.timezone}
+            clockAlign={widget.config?.clockAlign || 'center'}
           />
         );
       case 'clock':

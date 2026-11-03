@@ -93,6 +93,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   // Clock & World Clock states
   const [clockFace, setClockFace] = useState<'digital' | 'minimal' | 'analog'>('digital');
   const [showSeconds, setShowSeconds] = useState(true);
+  const [clockAlign, setClockAlign] = useState<'center' | 'left'>('center');
   const [worldCities, setWorldCities] = useState<WorldClockCity[]>(DEFAULT_WORLD_CITIES);
   const [worldCitySearch, setWorldCitySearch] = useState('');
 
@@ -168,9 +169,11 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setTimezone(widget.config?.timezone || '');
       setClockFace(widget.config?.clockFace || widget.config?.face || 'digital');
       setShowSeconds(widget.config?.showSeconds ?? true);
+      setClockAlign(widget.config?.clockAlign || 'center');
     } else if (widget.type === 'clock') {
       setClockFace(widget.config?.clockFace || 'digital');
       setShowSeconds(widget.config?.showSeconds ?? true);
+      setClockAlign(widget.config?.clockAlign || 'center');
       setTimezone(widget.config?.timezone || '');
       setLocationName(widget.config?.locationName || '');
     } else if (widget.type === 'world_clock') {
@@ -329,10 +332,12 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
         configUpdates.face = clockFace;
         configUpdates.clockFace = clockFace;
         configUpdates.showSeconds = showSeconds;
+        configUpdates.clockAlign = clockAlign;
       }
     } else if (widget.type === 'clock') {
       configUpdates.clockFace = clockFace;
       configUpdates.showSeconds = showSeconds;
+      configUpdates.clockAlign = clockAlign;
       configUpdates.timezone = timezone || undefined;
       configUpdates.locationName = locationName.trim() || undefined;
     } else if (widget.type === 'world_clock') {
@@ -1002,6 +1007,34 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                   ))}
                 </div>
               </div>
+
+              {/* Clock Alignment (Center vs Left) */}
+              {(widget.type === 'clock_weather' || widget.type === 'clock') && (
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
+                    Clock Text Alignment
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: 'center', label: 'Centered (Default)' },
+                      { id: 'left', label: 'Left Aligned' },
+                    ].map((a) => (
+                      <button
+                        key={a.id}
+                        type="button"
+                        onClick={() => setClockAlign(a.id as 'center' | 'left')}
+                        className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          clockAlign === a.id
+                            ? 'bg-blue-600/30 border border-blue-500 text-blue-300'
+                            : 'bg-gray-950 border border-gray-800 text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        {a.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Universal Show Seconds Toggle for ALL Clock & Time Tiles */}
               <div className="flex items-center justify-between p-3 rounded-xl bg-gray-950 border border-gray-800">

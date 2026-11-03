@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   LayoutGrid,
   Pin,
+  StickyNote,
   Image,
   Calendar,
   Settings,
@@ -59,6 +60,7 @@ interface NavigationDockProps {
 const iconMap: Record<string, React.ReactNode> = {
   LayoutGrid: <LayoutGrid className="w-5 h-5" />,
   Pin: <Pin className="w-5 h-5" />,
+  StickyNote: <StickyNote className="w-5 h-5" />,
   Image: <Image className="w-5 h-5" />,
   Calendar: <Calendar className="w-5 h-5" />,
   Home: <Home className="w-5 h-5" />,
@@ -231,10 +233,10 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
           {onOpenCreateNote && (
             <button
               onClick={onOpenCreateNote}
-              title="Pin New Sticky Note"
+              title="New Sticky Note"
               className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition-all cursor-pointer"
             >
-              <Pin className="w-4 h-4" />
+              <StickyNote className="w-4 h-4" />
             </button>
           )}
 

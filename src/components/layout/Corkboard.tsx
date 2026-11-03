@@ -1012,6 +1012,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   clockFace={widget.config?.clockFace || widget.config?.face || 'digital'}
                   showSeconds={widget.config?.showSeconds ?? true}
                   timezone={widget.config?.timezone}
+                  clockAlign={widget.config?.clockAlign || 'center'}
                 />
               ) : widget.type === 'countdown' ? (
                 <CountdownWidget

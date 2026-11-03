@@ -22,6 +22,7 @@ interface ClockWeatherWidgetProps {
   clockFace?: 'digital' | 'minimal' | 'flip' | 'analog';
   showSeconds?: boolean;
   timezone?: string;
+  clockAlign?: 'center' | 'left';
 }
 
 const renderWeatherIcon = (code: number, isDay: boolean) => {
@@ -46,6 +47,7 @@ export const ClockWeatherWidget: React.FC<ClockWeatherWidgetProps> = ({
   clockFace = 'digital',
   showSeconds = true,
   timezone,
+  clockAlign = 'center',
 }) => {
   const [time, setTime] = useState(new Date());
   const [weather, setWeather] = useState<WeatherData | null>(null);
@@ -81,7 +83,7 @@ export const ClockWeatherWidget: React.FC<ClockWeatherWidgetProps> = ({
   return (
     <div className="w-full h-full flex flex-col justify-between select-none">
       {/* Clock Section */}
-      <div className="flex flex-col items-start justify-center">
+      <div className={`flex flex-col justify-center ${clockAlign === 'left' ? 'items-start text-left' : 'items-center text-center'}`}>
         {clockFace === 'analog' ? (
           <div className="relative w-28 h-28 rounded-full border-2 border-gray-700 bg-gray-950/60 flex items-center justify-center my-2 shadow-inner">
             {/* Analog Clock Hands */}
@@ -111,7 +113,7 @@ export const ClockWeatherWidget: React.FC<ClockWeatherWidgetProps> = ({
             <div className="w-2 h-2 rounded-full bg-white z-10" />
           </div>
         ) : clockFace === 'minimal' ? (
-          <div className="flex items-baseline gap-2.5">
+          <div className={`flex items-baseline gap-2.5 ${clockAlign === 'left' ? 'justify-start' : 'justify-center'}`}>
             <span className="text-5xl md:text-6xl font-sans font-bold tracking-tighter text-white">
               {zt.hoursMinutes}
             </span>
@@ -120,11 +122,11 @@ export const ClockWeatherWidget: React.FC<ClockWeatherWidgetProps> = ({
             </span>
           </div>
         ) : (
-          <div className="flex items-baseline gap-2">
+          <div className={`flex items-baseline gap-2 ${clockAlign === 'left' ? 'justify-start' : 'justify-center'}`}>
             <span className="text-5xl md:text-6xl font-light tracking-tight text-white font-mono">
               {zt.hoursMinutes}
             </span>
-            <div className="flex flex-col text-xs text-gray-400 font-mono">
+            <div className="flex flex-col text-xs text-gray-400 font-mono items-start text-left">
               <span className="font-semibold text-blue-400">{zt.ampm}</span>
               {showSeconds && <span className="text-gray-500">{zt.seconds}s</span>}
             </div>
