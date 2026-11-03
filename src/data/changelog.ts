@@ -5,9 +5,24 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.1.9';
+export const APP_VERSION = '0.1.10';
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.1.10",
+    date: "November 2, 2026",
+    title: "Default Random Photo Shuffle, Infinite Filmstrip Reel, Auto-Rotating Mosaic, Persistent Playback, & UX Streamlining",
+    highlights: [
+      "Random Photo Playback by Default: Configured random shuffle across Ken Burns, Mosaic, Filmstrip, and Polaroids with a configurable Photo Playback Order selector (🔀 Random Shuffle vs ➡️ Sequential) in Tile Settings.",
+      "Persistent Photo Rotation Across Canvas Switches: Preserved rotation progress across canvas carousel switches and unmounts, preventing photo frames from restarting at photo #1 every time a board scrolls into view.",
+      "Infinite Centered Filmstrip Reel: Overhauled filmstrip presentation into an always-centered hero stage with smooth scale-up, leftward glide animation, perforated film rails, hover chevrons, and infinite feed looping.",
+      "Auto-Rotating Mosaic Collage: Replaced static 4-photo limitation with an active quadrant queue that continually and smoothly cross-fades fresh photos into the collage at the chosen interval.",
+      "Polaroid Polish: Removed washi tape decal from the top of Polaroid cards for authentic white photo paper prints.",
+      "Clean Photo Sources Hub: Removed redundant presentation style and speed controls from the media picker in favor of centralized Tile Settings.",
+      "Removed Display Density: Eliminated artificial CSS canvas scaling so the board always renders at crisp native 1:1 scale without edge clipping.",
+      "Dismiss-on-Backdrop & Pinned Headers: Added click-outside backdrop dismissal and Escape key support across all modals, and pinned the settings header so users never have to scroll up to close.",
+    ],
+  },
   {
     version: "v0.1.9",
     date: "November 2, 2026",

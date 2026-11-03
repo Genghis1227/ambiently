@@ -68,7 +68,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     widgets,
     notes,
     setDockPosition,
-    setDisplayDensity,
     setCarouselEnabled,
     setCarouselDuration,
     updateSettings,
@@ -136,6 +135,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       getCurrentUser().then(setUser);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -242,10 +250,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
   return (
     <>
-      <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-        <div className="w-full max-w-xl rounded-2xl bg-gray-900 border border-gray-800 p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-y-auto">
-          {/* Header with Title and Clickable Version Badge */}
-          <div className="flex items-center justify-between border-b border-gray-800 pb-4 mb-6">
+      <div
+        className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 cursor-pointer"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            onClose();
+          }
+        }}
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-xl rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden cursor-default"
+        >
+          {/* Pinned Header with Title, Clickable Version Badge, and Close Button */}
+          <div className="flex items-center justify-between border-b border-gray-800 p-5 bg-gray-950/80 shrink-0">
             <div className="flex items-center gap-3">
               <img src="/logo.png" alt="Ambiently" className="w-8 h-8 rounded-lg shadow-sm" />
               <div>
@@ -266,13 +284,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             </div>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-all"
+              className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-all cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
-          <div className="space-y-6">
+          <div className="p-6 overflow-y-auto space-y-6">
             {/* Canvases & Boards Manager */}
             <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800">
               <div className="flex items-center justify-between mb-3">
@@ -861,36 +879,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   />
                 </div>
               )}
-            </div>
-
-            {/* Display Density (Canvas Scale) */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block">
-                  Canvas Display Density / Zoom
-                </label>
-                <span className="text-[11px] text-blue-400 font-mono">
-                  {settings.displayDensity * 100}%
-                </span>
-              </div>
-              <p className="text-[11px] text-gray-400 mb-2">
-                Scales board cards for 1080p, 1440p, or 4K screens (dock & settings remain pinned).
-              </p>
-              <div className="grid grid-cols-4 gap-2">
-                {([0.75, 1.0, 1.25, 1.5] as const).map((density) => (
-                  <button
-                    key={density}
-                    onClick={() => setDisplayDensity(density)}
-                    className={`py-2 px-3 rounded-xl border text-xs font-medium transition-all ${
-                      settings.displayDensity === density
-                        ? 'bg-blue-600/20 border-blue-500 text-blue-300'
-                        : 'border-gray-800 text-gray-400 hover:bg-gray-800'
-                    }`}
-                  >
-                    {density === 1.0 ? '100% (Default)' : `${density * 100}%`}
-                  </button>
-                ))}
-              </div>
             </div>
 
             {/* Dock Position */}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Image as ImageIcon } from 'lucide-react';
+import { Image as ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   CURATED_AMBIENT_PHOTOS,
   cachePhotosLocally,
@@ -127,37 +127,120 @@ interface ActivePolaroidItem {
   key: string;
 }
 
+// In-memory runtime cache to preserve continuous rotation across canvas switches & remounts
+interface PhotoWidgetRuntimeState {
+  signature: string;
+  currentIndex: number;
+  filmstripIndex: number;
+  mosaicPhotos?: PhotoItem[];
+  mosaicSlot: number;
+  mosaicIndex: number;
+  scatteredPolaroids?: ActivePolaroidItem[];
+}
+
+const photoRuntimeCache = new Map<string, PhotoWidgetRuntimeState>();
+
+function getPhotosSignature(items: PhotoItem[]): string {
+  if (!items || items.length === 0) return 'empty';
+  return `${items.length}-${items[0]?.id || ''}-${items[items.length - 1]?.id || ''}`;
+}
+
+function loadRuntimeState(key: string, signature: string): PhotoWidgetRuntimeState | null {
+  const memory = photoRuntimeCache.get(key);
+  if (memory && memory.signature === signature) {
+    return memory;
+  }
+  try {
+    const raw = sessionStorage.getItem(`ambiently-photo-progress-${key}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.signature === signature) {
+        photoRuntimeCache.set(key, parsed);
+        return parsed;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function saveRuntimeState(key: string, state: PhotoWidgetRuntimeState) {
+  photoRuntimeCache.set(key, state);
+  try {
+    sessionStorage.setItem(
+      `ambiently-photo-progress-${key}`,
+      JSON.stringify({
+        signature: state.signature,
+        currentIndex: state.currentIndex,
+        filmstripIndex: state.filmstripIndex,
+        mosaicIndex: state.mosaicIndex,
+        mosaicSlot: state.mosaicSlot,
+      })
+    );
+  } catch {
+    // ignore
+  }
+}
+
+function shuffleArray<T>(items: T[]): T[] {
+  const arr = [...items];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 interface PhotoFrameWidgetProps {
+  widgetId?: string;
   initialStyle?: PhotoDisplayStyle;
   rotationIntervalSec?: number;
   customPhotos?: PhotoItem[];
   initialSourceLabel?: string;
   initialPolaroidCount?: number;
   initialPolaroidSizeMode?: PolaroidSizeMode;
+  photoOrder?: 'random' | 'sequential';
   onUpdateConfig?: (updates: Record<string, any>) => void;
 }
 
 export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
+  widgetId,
   initialStyle = 'ken_burns',
   rotationIntervalSec = 15,
   customPhotos,
   initialSourceLabel = 'Curated',
   initialPolaroidCount = 12,
   initialPolaroidSizeMode = 'mixed',
+  photoOrder = 'random',
   onUpdateConfig: _onUpdateConfig,
 }) => {
+  const stateKey = widgetId || `photo-state-${initialSourceLabel || 'ambient'}`;
+  const initialPhotos = customPhotos && customPhotos.length > 0 ? customPhotos : CURATED_AMBIENT_PHOTOS;
+  const initialSig = getPhotosSignature(initialPhotos);
+  const savedState = loadRuntimeState(stateKey, initialSig);
+
   const [style, setStyle] = useState<PhotoDisplayStyle>(initialStyle);
   const [intervalSec, setIntervalSec] = useState<number>(rotationIntervalSec);
-  const [photos, setPhotos] = useState<PhotoItem[]>(
-    customPhotos && customPhotos.length > 0 ? customPhotos : CURATED_AMBIENT_PHOTOS
-  );
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [photos, setPhotos] = useState<PhotoItem[]>(() => {
+    return photoOrder === 'random' ? shuffleArray(initialPhotos) : initialPhotos;
+  });
+  const [currentIndex, setCurrentIndex] = useState(() => {
+    if (savedState?.currentIndex != null && savedState.currentIndex < initialPhotos.length) {
+      return savedState.currentIndex;
+    }
+    return photoOrder === 'random' && initialPhotos.length > 0
+      ? Math.floor(Math.random() * initialPhotos.length)
+      : 0;
+  });
   const [sourceLabel, setSourceLabel] = useState<string>(initialSourceLabel);
 
   const [polaroidCount, setPolaroidCount] = useState<number>(initialPolaroidCount);
   const [polaroidSizeMode, setPolaroidSizeMode] = useState<PolaroidSizeMode>(initialPolaroidSizeMode);
 
-  const [scatteredPolaroids, setScatteredPolaroids] = useState<ActivePolaroidItem[]>([]);
+  const [scatteredPolaroids, setScatteredPolaroids] = useState<ActivePolaroidItem[]>(
+    () => savedState?.scatteredPolaroids || []
+  );
   const topZIndexRef = useRef(30);
 
   // Sync props to state if parent config updates
@@ -177,15 +260,20 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   // Initialize scattered polaroids when photos or slots change
   useEffect(() => {
     if (!photos || photos.length === 0 || polaroidSlots.length === 0) return;
-    const initial: ActivePolaroidItem[] = polaroidSlots.map((slot, idx) => ({
-      slotIndex: idx,
-      photo: photos[idx % photos.length],
-      rotation: slot.rotate,
-      zIndex: 10 + idx,
-      key: `slot-${idx}-${photos[idx % photos.length].id}-${Date.now()}`,
-    }));
-    setScatteredPolaroids(initial);
-    topZIndexRef.current = 15 + polaroidSlots.length;
+    setScatteredPolaroids((prev) => {
+      if (prev && prev.length === polaroidSlots.length) {
+        return prev;
+      }
+      const initial: ActivePolaroidItem[] = polaroidSlots.map((slot, idx) => ({
+        slotIndex: idx,
+        photo: photos[idx % photos.length],
+        rotation: slot.rotate,
+        zIndex: 10 + idx,
+        key: `slot-${idx}-${photos[idx % photos.length].id}-${Date.now()}`,
+      }));
+      topZIndexRef.current = 15 + polaroidSlots.length;
+      return initial;
+    });
   }, [photos, polaroidSlots]);
 
   // Randomly update one polaroid at a time from source photos
@@ -271,6 +359,80 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     });
   };
 
+  // Mosaic active quadrant photos & auto-rotation
+  const [mosaicPhotos, setMosaicPhotos] = useState<PhotoItem[]>(() => {
+    if (savedState?.mosaicPhotos && savedState.mosaicPhotos.length >= 4) {
+      return savedState.mosaicPhotos;
+    }
+    return initialPhotos.slice(0, 4);
+  });
+  const mosaicSlotRef = useRef(savedState?.mosaicSlot ?? 0);
+  const mosaicIndexRef = useRef(savedState?.mosaicIndex ?? 4);
+
+  useEffect(() => {
+    if (!photos || photos.length === 0) return;
+    setMosaicPhotos((prev) => {
+      if (prev && prev.length >= 4) return prev;
+      mosaicSlotRef.current = 0;
+      mosaicIndexRef.current = 4 % photos.length;
+      return photos.slice(0, 4);
+    });
+  }, [photos]);
+
+  useEffect(() => {
+    if (style !== 'mosaic' || photos.length <= 1) return;
+
+    // Staggered quadrant rotation: swap one photo every rotation interval
+    const timer = setInterval(() => {
+      setMosaicPhotos((prev) => {
+        if (photos.length <= 1) return prev;
+        const currentSlots = prev.length >= 4 ? prev : photos.slice(0, 4);
+
+        let nextPhoto: PhotoItem;
+        if (photoOrder === 'random') {
+          const currentIds = new Set(currentSlots.map((p) => p.id));
+          const candidates = photos.filter((p) => !currentIds.has(p.id));
+          const pool = candidates.length > 0 ? candidates : photos;
+          nextPhoto = pool[Math.floor(Math.random() * pool.length)];
+        } else {
+          const nextIdx = mosaicIndexRef.current % photos.length;
+          nextPhoto = photos[nextIdx];
+          mosaicIndexRef.current = (nextIdx + 1) % photos.length;
+        }
+
+        const slotToReplace = mosaicSlotRef.current % 4;
+        mosaicSlotRef.current = (mosaicSlotRef.current + 1) % 4;
+
+        const updated = [...currentSlots];
+        updated[slotToReplace] = nextPhoto;
+        return updated;
+      });
+    }, intervalSec * 1000);
+
+    return () => clearInterval(timer);
+  }, [style, photos, intervalSec, photoOrder]);
+
+  const handleShuffleMosaicSlot = (slotIdx: number) => {
+    if (photos.length <= 1) return;
+    setMosaicPhotos((prev) => {
+      const currentSlots = prev.length >= 4 ? prev : photos.slice(0, 4);
+      let nextPhoto: PhotoItem;
+      if (photoOrder === 'random') {
+        const currentIds = new Set(currentSlots.map((p) => p.id));
+        const candidates = photos.filter((p) => !currentIds.has(p.id));
+        const pool = candidates.length > 0 ? candidates : photos;
+        nextPhoto = pool[Math.floor(Math.random() * pool.length)];
+      } else {
+        const nextIdx = mosaicIndexRef.current % photos.length;
+        nextPhoto = photos[nextIdx];
+        mosaicIndexRef.current = (nextIdx + 1) % photos.length;
+      }
+
+      const updated = [...currentSlots];
+      updated[slotIdx] = nextPhoto;
+      return updated;
+    });
+  };
 
   // Sync props to state when widget config updates
   useEffect(() => {
@@ -283,10 +445,20 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
 
   useEffect(() => {
     if (customPhotos && customPhotos.length > 0) {
-      setPhotos(customPhotos);
-      setCurrentIndex(0);
+      const pool = photoOrder === 'random' ? shuffleArray(customPhotos) : customPhotos;
+      setPhotos(pool);
+      const newSig = getPhotosSignature(customPhotos);
+      const existing = loadRuntimeState(stateKey, newSig);
+      if (!existing) {
+        // Brand new photo album loaded by user -> reset to start or random
+        setCurrentIndex(photoOrder === 'random' ? Math.floor(Math.random() * customPhotos.length) : 0);
+        setFilmstripIndex(0);
+        setMosaicPhotos(pool.slice(0, 4));
+        mosaicSlotRef.current = 0;
+        mosaicIndexRef.current = 4 % customPhotos.length;
+      }
     }
-  }, [customPhotos]);
+  }, [customPhotos, stateKey, photoOrder]);
 
   useEffect(() => {
     if (initialSourceLabel) {
@@ -299,16 +471,56 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     cachePhotosLocally(photos);
   }, [photos]);
 
-  // Slideshow auto-rotation
+  // Slideshow auto-rotation for Ken Burns
   useEffect(() => {
     if (photos.length <= 1) return;
     const interval = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % photos.length);
+      if (photoOrder === 'random') {
+        setCurrentIndex((prev) => {
+          let next = Math.floor(Math.random() * photos.length);
+          if (photos.length > 1 && next === prev) {
+            next = (next + 1) % photos.length;
+          }
+          return next;
+        });
+      } else {
+        setCurrentIndex((prev) => (prev + 1) % photos.length);
+      }
     }, intervalSec * 1000);
     return () => clearInterval(interval);
-  }, [photos, intervalSec]);
+  }, [photos, intervalSec, photoOrder]);
 
-  const currentPhoto = photos[currentIndex] || photos[0];
+  // Filmstrip continuous reel index & auto-rotation
+  const [filmstripIndex, setFilmstripIndex] = useState(() => savedState?.filmstripIndex ?? 0);
+
+  useEffect(() => {
+    if (style !== 'filmstrip' || photos.length <= 1) return;
+    const interval = setInterval(() => {
+      setFilmstripIndex((prev) => prev + 1);
+    }, intervalSec * 1000);
+    return () => clearInterval(interval);
+  }, [style, photos, intervalSec]);
+
+  // Save persistent rotation progress across canvas carousel switches & unmounts
+  useEffect(() => {
+    const currentSig = getPhotosSignature(photos);
+    saveRuntimeState(stateKey, {
+      signature: currentSig,
+      currentIndex,
+      filmstripIndex,
+      mosaicPhotos,
+      mosaicSlot: mosaicSlotRef.current,
+      mosaicIndex: mosaicIndexRef.current,
+      scatteredPolaroids,
+    });
+  }, [currentIndex, filmstripIndex, mosaicPhotos, scatteredPolaroids, photos, stateKey]);
+
+  const filmstripActiveIndex = ((filmstripIndex % photos.length) + photos.length) % photos.length;
+  const currentPhoto =
+    style === 'filmstrip'
+      ? photos[filmstripActiveIndex] || photos[0]
+      : photos[currentIndex] || photos[0];
+  const activeDisplayIndex = style === 'filmstrip' ? filmstripActiveIndex : currentIndex;
 
   return (
     <div className="relative w-full h-full rounded-2xl overflow-hidden select-none bg-black flex flex-col justify-between">
@@ -338,20 +550,36 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
         </div>
       )}
 
-      {/* 2. Mosaic / Collage Grid Style */}
+      {/* 2. Mosaic / Collage Grid Style (4-quadrant auto-rotating collection) */}
       {style === 'mosaic' && (
         <div className="absolute inset-0 p-2 grid grid-cols-2 grid-rows-2 gap-2 bg-gray-950">
-          {photos.slice(0, 4).map((p, idx) => (
+          {(mosaicPhotos.length >= 4 ? mosaicPhotos : photos.slice(0, 4)).map((p, idx) => (
             <div
-              key={p.id}
-              className={`relative rounded-xl overflow-hidden shadow-md ${
-                idx === currentIndex % 4 ? 'ring-2 ring-blue-500' : ''
-              }`}
+              key={`mosaic-slot-${idx}`}
+              onClick={() => handleShuffleMosaicSlot(idx)}
+              className="relative rounded-xl overflow-hidden shadow-md bg-gray-900 group cursor-pointer"
+              title="Click to advance this photo"
             >
-              <img src={p.url} alt={p.caption} className="w-full h-full object-cover" />
-              <div className="absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black/80 to-transparent text-[11px] text-white truncate font-medium">
-                {p.caption}
-              </div>
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={p.id}
+                  initial={{ opacity: 0, scale: 1.04 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.8, ease: 'easeInOut' }}
+                  className="absolute inset-0 w-full h-full"
+                >
+                  <img
+                    src={p.url}
+                    alt={p.caption || 'Photo'}
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    loading="lazy"
+                  />
+                  <div className="absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black/85 via-black/40 to-transparent text-[11px] text-white truncate font-medium">
+                    {p.caption || p.author || 'Captured Moment'}
+                  </div>
+                </motion.div>
+              </AnimatePresence>
             </div>
           ))}
         </div>
@@ -399,13 +627,6 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                 }}
                 className="aspect-[4/5] cursor-pointer touch-manipulation group"
               >
-                {/* Washi tape decal */}
-                <div
-                  className={`absolute -top-2 left-1/2 -translate-x-1/2 bg-white/40 backdrop-blur-xs border border-white/50 shadow-xs z-10 pointer-events-none -rotate-2 ${
-                    isHero ? 'w-10 sm:w-12 h-3 sm:h-3.5' : isSmall ? 'w-6 h-2' : 'w-8 sm:w-10 h-2.5 sm:h-3'
-                  }`}
-                />
-
                 {/* Classic white polaroid paper frame */}
                 <div
                   className={`relative w-full h-full bg-[#fdfbf7] rounded-sm shadow-2xl border border-black/15 flex flex-col justify-between transition-shadow group-hover:shadow-cyan-500/30 ${
@@ -445,38 +666,128 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
         </div>
       )}
 
-      {/* 4. Filmstrip Scrolling Style */}
+      {/* 4. Filmstrip Scrolling Style (Infinite centered cinematic reel) */}
       {style === 'filmstrip' && (
-        <div className="absolute inset-0 flex items-center gap-4 overflow-x-auto p-4 bg-gray-950">
-          {photos.map((p, idx) => (
-            <div
-              key={p.id}
-              onClick={() => setCurrentIndex(idx)}
-              className={`relative shrink-0 w-44 aspect-[3/2] rounded-xl overflow-hidden cursor-pointer border-2 transition-all ${
-                idx === currentIndex ? 'border-blue-500 scale-105 shadow-xl' : 'border-gray-800 opacity-60'
-              }`}
-            >
-              <img src={p.url} alt={p.caption} className="w-full h-full object-cover" />
-            </div>
-          ))}
+        <div className="absolute inset-0 overflow-hidden bg-[#06080d] flex items-center justify-center select-none group">
+          {/* Perforated film rails at top and bottom */}
+          <div className="absolute top-0 inset-x-0 h-4 bg-black/90 border-b border-white/10 flex items-center justify-between px-2 pointer-events-none z-30 overflow-hidden">
+            {Array.from({ length: 32 }).map((_, i) => (
+              <div key={i} className="w-2.5 h-1.5 rounded-[1px] bg-white/20 border border-black/40 shrink-0" />
+            ))}
+          </div>
+          <div className="absolute bottom-0 inset-x-0 h-4 bg-black/90 border-t border-white/10 flex items-center justify-between px-2 pointer-events-none z-30 overflow-hidden">
+            {Array.from({ length: 32 }).map((_, i) => (
+              <div key={i} className="w-2.5 h-1.5 rounded-[1px] bg-white/20 border border-black/40 shrink-0" />
+            ))}
+          </div>
+
+          {/* Vignette gradients on left and right for seamless entrance/exit */}
+          <div className="absolute inset-y-0 left-0 w-28 bg-gradient-to-r from-[#06080d] via-[#06080d]/80 to-transparent pointer-events-none z-25" />
+          <div className="absolute inset-y-0 right-0 w-28 bg-gradient-to-l from-[#06080d] via-[#06080d]/80 to-transparent pointer-events-none z-25" />
+
+          {/* Interactive Navigation Chevrons on Hover */}
+          {photos.length > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFilmstripIndex((prev) => prev - 1);
+                }}
+                className="absolute left-3 top-1/2 -translate-y-1/2 z-35 p-2 rounded-full bg-black/60 hover:bg-black/80 text-white/70 hover:text-white border border-white/15 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer backdrop-blur-sm"
+                title="Previous photo"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFilmstripIndex((prev) => prev + 1);
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 z-35 p-2 rounded-full bg-black/60 hover:bg-black/80 text-white/70 hover:text-white border border-white/15 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer backdrop-blur-sm"
+                title="Next photo"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </>
+          )}
+
+          {/* Window of 7 reel positions centered on filmstripIndex */}
+          {[-3, -2, -1, 0, 1, 2, 3].map((offset) => {
+            const itemIndex = filmstripIndex + offset;
+            const photoIndex = ((itemIndex % photos.length) + photos.length) % photos.length;
+            const p = photos[photoIndex];
+            if (!p) return null;
+
+            const isCenter = offset === 0;
+
+            return (
+              <motion.div
+                key={itemIndex}
+                onClick={() => {
+                  if (!isCenter) {
+                    setFilmstripIndex(itemIndex);
+                  }
+                }}
+                animate={{
+                  x: `${offset * 62}%`,
+                  scale: isCenter ? 1.15 : Math.abs(offset) === 1 ? 0.78 : Math.abs(offset) === 2 ? 0.62 : 0.48,
+                  opacity: isCenter ? 1 : Math.abs(offset) === 1 ? 0.5 : Math.abs(offset) === 2 ? 0.2 : 0,
+                  zIndex: isCenter ? 20 : 10 - Math.abs(offset),
+                  filter: isCenter ? 'brightness(100%)' : 'brightness(65%)',
+                }}
+                transition={{
+                  duration: 0.85,
+                  ease: [0.25, 1, 0.5, 1],
+                }}
+                className={`absolute w-[52%] max-w-[460px] aspect-[16/10] rounded-xl overflow-hidden cursor-pointer shadow-2xl ${
+                  isCenter
+                    ? 'ring-2 ring-blue-500/90 shadow-[0_20px_50px_rgba(0,0,0,0.9)]'
+                    : 'border border-white/10 hover:opacity-75'
+                }`}
+                title={isCenter ? p.caption : 'Click to center this photo'}
+              >
+                <img
+                  src={p.url}
+                  alt={p.caption || 'Film frame'}
+                  className="w-full h-full object-cover select-none pointer-events-none"
+                  loading="lazy"
+                />
+
+                {isCenter && (
+                  <div className="absolute bottom-0 inset-x-0 p-3 bg-gradient-to-t from-black/95 via-black/60 to-transparent text-center">
+                    <div className="text-xs sm:text-sm font-bold text-white truncate drop-shadow-md">
+                      {p.caption || 'Captured Moment'}
+                    </div>
+                    {p.author && (
+                      <div className="text-[10px] text-gray-300 font-sans truncate drop-shadow mt-0.5">
+                        {p.author}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </motion.div>
+            );
+          })}
         </div>
       )}
 
       {/* Ambient Top Caption Pill */}
-      <div className="relative z-10 p-3 flex items-center justify-between text-white drop-shadow-md pointer-events-none pr-24">
+      <div className="relative z-40 p-3 flex items-center justify-between text-white drop-shadow-md pointer-events-none pr-24">
         <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-xs">
           <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
           <span className="font-medium truncate max-w-[160px]">
             {currentPhoto.caption || sourceLabel}
           </span>
           <span className="text-[10px] text-gray-400 font-mono">
-            ({currentIndex + 1}/{photos.length})
+            ({activeDisplayIndex + 1}/{photos.length})
           </span>
         </div>
       </div>
 
-      {/* Subtle Bottom Photo Attribution */}
-      {currentPhoto.author && (
+      {/* Subtle Bottom Photo Attribution (for Ken Burns and Mosaic) */}
+      {style !== 'filmstrip' && currentPhoto.author && (
         <div className="relative z-10 p-3 flex items-end justify-end text-white pointer-events-none drop-shadow-lg">
           <div className="text-[11px] text-gray-400 text-right bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full border border-white/10">
             Photo: <span className="text-gray-200 font-medium">{currentPhoto.author}</span>

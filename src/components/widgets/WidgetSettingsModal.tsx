@@ -77,6 +77,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const [photoIntervalSec, setPhotoIntervalSec] = useState<number>(15);
   const [polaroidCount, setPolaroidCount] = useState<number>(widget?.config?.polaroidCount || 12);
   const [polaroidSizeMode, setPolaroidSizeMode] = useState<'mixed' | 'uniform' | 'small' | 'large'>(widget?.config?.polaroidSizeMode || 'mixed');
+  const [photoOrder, setPhotoOrder] = useState<'random' | 'sequential'>('random');
 
   // Weather & Clock states
   const [locationName, setLocationName] = useState('Austin, TX');
@@ -156,6 +157,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setPhotoIntervalSec(widget.config?.rotationIntervalSec || 15);
       setPolaroidCount(widget.config?.polaroidCount || 12);
       setPolaroidSizeMode(widget.config?.polaroidSizeMode || 'mixed');
+      setPhotoOrder(widget.config?.photoOrder || 'random');
     } else if (widget.type === 'weather' || widget.type === 'clock_weather') {
       setLocationName(widget.config?.locationName || 'Austin, TX');
       setTempUnit(widget.config?.unit || 'F');
@@ -208,6 +210,15 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setTextBgStyle(widget.config?.bgStyle || 'transparent');
     }
   }, [widget, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen || !widget) return null;
 
@@ -304,6 +315,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.rotationIntervalSec = photoIntervalSec;
       configUpdates.polaroidCount = polaroidCount;
       configUpdates.polaroidSizeMode = polaroidSizeMode;
+      configUpdates.photoOrder = photoOrder;
     } else if (widget.type === 'weather' || widget.type === 'clock_weather') {
       configUpdates.locationName = locationName.trim();
       configUpdates.unit = tempUnit;
@@ -359,8 +371,16 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 select-none">
-      <div className="w-full max-w-lg rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 select-none cursor-pointer"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-lg rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl overflow-hidden flex flex-col max-h-[85vh] cursor-default"
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-950/60">
           <div className="flex items-center gap-2.5">
@@ -593,6 +613,35 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                       }`}
                     >
                       {sec >= 60 ? `${sec / 60}m` : `${sec}s`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5 flex items-center justify-between">
+                  <span>Photo Playback Order</span>
+                  <span className="text-[10px] font-mono text-cyan-400">
+                    {photoOrder === 'sequential' ? 'Sequential' : 'Shuffle'}
+                  </span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: 'random', label: '🔀 Random Shuffle (Default)', desc: 'Surprise mix across entire collection' },
+                    { id: 'sequential', label: '➡️ Sequential Order', desc: 'In upload or folder order' },
+                  ].map((ord) => (
+                    <button
+                      key={ord.id}
+                      type="button"
+                      onClick={() => setPhotoOrder(ord.id as any)}
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                        photoOrder === ord.id
+                          ? 'bg-blue-600/20 border-blue-500 text-blue-300'
+                          : 'border-gray-800 bg-gray-950 text-gray-400 hover:text-white hover:bg-gray-800'
+                      }`}
+                    >
+                      <div className="text-xs font-semibold text-white">{ord.label}</div>
+                      <div className="text-[10px] text-gray-500">{ord.desc}</div>
                     </button>
                   ))}
                 </div>

@@ -3,7 +3,7 @@
 > Modern, ambient smart-display and command center Progressive Web App (PWA) under the Trinhism ecosystem, designed as a self-hosted, local-first alternative to commercial display services (Mango Display, DAKboard, Skylight).
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPLv3-blue.svg)](LICENSE)
-[![Release](https://img.shields.io/badge/Release-v0.1.0-cyan.svg)](CHANGELOG.md)
+[![Release](https://img.shields.io/badge/Release-v0.1.10-cyan.svg)](CHANGELOG.md)
 
 ![Ambiently Banner](public/og-banner.png)
 
@@ -23,10 +23,22 @@
 * **⚡ 0ms Offline-First Boot:** Runs entirely out of client-side browser storage (IndexedDB via Dexie.js). Never shows a blank screen if home Wi-Fi drops.
 * **💾 Local File Auto-Sync & JSON Snapshots:** Direct integration with the browser File System Access API to auto-save and mirror state directly to a local `ambiently-data.json` file, plus 1-click JSON export/restore.
 * **📌 Pure Freeform Corkboard Multi-Canvas Engine:**
-  * **Unlimited Custom Canvases:** Create as many dedicated boards as you want (e.g., *Family Board*, *Photo Gallery*, *Morning Briefing*) with 16 custom icons and 1-click tab reordering (`▲`/`▼`).
+  * **Unlimited Custom Canvases & Default Home Board:** Create as many dedicated boards as you want (e.g., *Family Board*, *Photo Gallery*, *Morning Briefing*) with 16 custom icons, 1-click tab reordering (`▲`/`▼`), and selectable default Home Board indicator.
   * **Interactive Freeform Pinboard:** Drag, tilt (`↺`/`↻`), layer (`z-index`), resize via bottom-right corner handles (`↘`), or toggle any widget to **100% Fullscreen Canvas** with one click.
-* **📱 Mobile Companion Remote & QR Family Invite:** Automatically detects smartphone viewports (`< 768px`) to provide an instant task adder, checklist completion feed, and remote tab switcher. Includes 1-scan QR code family onboarding.
-* **🖼️ Multi-Source Photo Frame:** 4 display styles (Ken Burns, 4-quadrant mosaic, angled Polaroid stack, and scrolling filmstrip) supporting **Plex Media Server (4-digit PIN QR Code)**, **Local / NAS Folders**, **Google Drive / Web links**, and curated photography with offline Cache Storage resilience.
+  * **Smart Pinned Notes:** Pop floating notes onto the canvas from the Notes Tile with automatic collision avoidance, open-space positioning, and 1-click header close buttons (`✕`).
+* **📱 Mobile Companion Remote & Vertical Tile Stream:**
+  * **Full Canvas Live Stream:** Seamless single-column vertical feed rendering live preview cards for all widgets (Clock, Weather, Countdown, Photos, RSS, Quotes, Media, Notes).
+  * **Persistent View Options:** 3-way segmented filter pills (`All Tiles` | `Widgets` | `Notes & Tasks`) automatically persisted in `localStorage`.
+  * **Independent Mobile Reordering (`▲` / `▼`):** Reorder mobile cards on the fly without impacting non-mobile desktop or kiosk coordinates.
+  * **Mobile Tile Customizer & Creation:** 1-tap `⚙️` button opens full tile settings on mobile, with `+ Add Tile` creation directly from smartphones.
+  * **Hardware Momentum Scrolling:** Native `100dvh` viewport binding with `touch-pan-y` and momentum touch scrolling.
+* **🖼️ Multi-Source Ambient Photo Frame & Clean Aesthetic:**
+  * **Centralized Configuration:** Picture presentation modes (*Ken Burns*, *Mosaic Collage*, *Scattered Polaroids*, *Filmstrip*) and media library sources live entirely in Tile Settings, keeping the ambient smart-display screen completely clean and collision-free.
+  * **Google Photos Shared Albums (Deep batchexecute Pagination):** Automated `snAcKc` RPC pagination to ingest massive shared albums (tested and benchmarked with 7,500+ photos) with lightweight descriptors and on-demand lazy loading.
+  * **Google Drive Shared Folders:** Direct ingestion of public Google Drive shared folders (`drive.google.com/drive/folders/...`) into high-resolution slideshow streams (`=w1920-h1080`).
+  * **Local / NAS Multi-Folder Stacking (Up to 5,000+ Photos):** Multi-folder selection with live thumbnails, 8-level recursive directory scanning, and real-time scanning feedback for local disks and mapped network drives.
+  * **Plex Media Server:** 1-scan QR code 4-digit PIN authentication to discover and stream private libraries from Synology/TrueNAS/QNAP servers.
+  * **Curated Photography:** Instant scenic presets with browser `CacheStorage` resilience for offline playback.
 * **📅 Multi-Calendar Feeds:** Unified chronological agenda & monthly grid parsing multiple `webcal://` and `.ics` feeds with per-calendar color tags via Cloudflare edge workers.
 * **🔒 Kiosk Security & Hardware Polish:**
   * Screen Wake Lock API & Fullscreen Mode.
@@ -42,7 +54,7 @@
 * **PWA Engine:** `vite-plugin-pwa` (Workbox)
 * **Styling & Animation:** [Tailwind CSS v4](https://tailwindcss.com/), [Framer Motion](https://www.framer.com/motion/), [Lucide React](https://lucide.dev/)
 * **Local-First State:** [Dexie.js](https://dexie.org/) (IndexedDB) + [Zustand](https://github.com/pmndrs/zustand)
-* **Edge Proxy:** Cloudflare Pages Functions (`/functions/api/*`) for CORS-free iCal/RSS parsing.
+* **Edge Proxy Functions:** Cloudflare Pages Functions (`/api/ical`, `/api/rss`, `/api/gphotos`, `/api/gdrive`) for CORS-free feeds and media resolvers.
 * **Cloud Sync (Optional SaaS):** Supabase Auth & Realtime Postgres.
 
 ---

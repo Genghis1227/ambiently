@@ -314,12 +314,14 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return (
           <div className="h-44 w-full">
             <PhotoFrameWidget
+              widgetId={widget.id}
               initialStyle={widget.config?.displayStyle || 'ken_burns'}
               rotationIntervalSec={widget.config?.rotationIntervalSec || 15}
               customPhotos={widget.config?.customPhotos}
               initialSourceLabel={widget.config?.sourceLabel}
               initialPolaroidCount={widget.config?.polaroidCount || 12}
               initialPolaroidSizeMode={widget.config?.polaroidSizeMode || 'mixed'}
+              photoOrder={widget.config?.photoOrder || 'random'}
             />
           </div>
         );
@@ -842,22 +844,6 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         <PhotoSourcesModal
           isOpen={Boolean(photoSourcesTargetWidget)}
           onClose={() => setPhotoSourcesTargetWidget(null)}
-          currentStyle={photoSourcesTargetWidget.config?.displayStyle || 'ken_burns'}
-          onStyleChange={(newStyle) => {
-            if (photoSourcesTargetWidget && onUpdateWidget) {
-              onUpdateWidget(photoSourcesTargetWidget.id, {
-                config: { ...photoSourcesTargetWidget.config, displayStyle: newStyle },
-              });
-            }
-          }}
-          rotationIntervalSec={photoSourcesTargetWidget.config?.rotationIntervalSec || 15}
-          onRotationIntervalChange={(newSec) => {
-            if (photoSourcesTargetWidget && onUpdateWidget) {
-              onUpdateWidget(photoSourcesTargetWidget.id, {
-                config: { ...photoSourcesTargetWidget.config, rotationIntervalSec: newSec },
-              });
-            }
-          }}
           onPhotosLoaded={(newPhotos, sourceName) => {
             if (photoSourcesTargetWidget && onUpdateWidget && newPhotos.length > 0) {
               onUpdateWidget(photoSourcesTargetWidget.id, {
@@ -866,22 +852,6 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
                   customPhotos: newPhotos,
                   sourceLabel: sourceName,
                 },
-              });
-            }
-          }}
-          polaroidCount={photoSourcesTargetWidget.config?.polaroidCount || 12}
-          onPolaroidCountChange={(cnt) => {
-            if (photoSourcesTargetWidget && onUpdateWidget) {
-              onUpdateWidget(photoSourcesTargetWidget.id, {
-                config: { ...photoSourcesTargetWidget.config, polaroidCount: cnt },
-              });
-            }
-          }}
-          polaroidSizeMode={photoSourcesTargetWidget.config?.polaroidSizeMode || 'mixed'}
-          onPolaroidSizeModeChange={(mode) => {
-            if (photoSourcesTargetWidget && onUpdateWidget) {
-              onUpdateWidget(photoSourcesTargetWidget.id, {
-                config: { ...photoSourcesTargetWidget.config, polaroidSizeMode: mode },
               });
             }
           }}
