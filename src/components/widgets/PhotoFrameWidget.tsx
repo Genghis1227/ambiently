@@ -183,6 +183,15 @@ function saveRuntimeState(key: string, state: PhotoWidgetRuntimeState) {
   }
 }
 
+function shuffleArray<T>(items: T[]): T[] {
+  const arr = [...items];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 interface PhotoFrameWidgetProps {
   widgetId?: string;
   initialStyle?: PhotoDisplayStyle;
@@ -191,6 +200,7 @@ interface PhotoFrameWidgetProps {
   initialSourceLabel?: string;
   initialPolaroidCount?: number;
   initialPolaroidSizeMode?: PolaroidSizeMode;
+  photoOrder?: 'random' | 'sequential';
   onUpdateConfig?: (updates: Record<string, any>) => void;
 }
 
@@ -202,6 +212,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   initialSourceLabel = 'Curated',
   initialPolaroidCount = 12,
   initialPolaroidSizeMode = 'mixed',
+  photoOrder = 'random',
   onUpdateConfig: _onUpdateConfig,
 }) => {
   const stateKey = widgetId || `photo-state-${initialSourceLabel || 'ambient'}`;
@@ -211,8 +222,17 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
 
   const [style, setStyle] = useState<PhotoDisplayStyle>(initialStyle);
   const [intervalSec, setIntervalSec] = useState<number>(rotationIntervalSec);
-  const [photos, setPhotos] = useState<PhotoItem[]>(initialPhotos);
-  const [currentIndex, setCurrentIndex] = useState(() => savedState?.currentIndex ?? 0);
+  const [photos, setPhotos] = useState<PhotoItem[]>(() => {
+    return photoOrder === 'random' ? shuffleArray(initialPhotos) : initialPhotos;
+  });
+  const [currentIndex, setCurrentIndex] = useState(() => {
+    if (savedState?.currentIndex != null && savedState.currentIndex < initialPhotos.length) {
+      return savedState.currentIndex;
+    }
+    return photoOrder === 'random' && initialPhotos.length > 0
+      ? Math.floor(Math.random() * initialPhotos.length)
+      : 0;
+  });
   const [sourceLabel, setSourceLabel] = useState<string>(initialSourceLabel);
 
   const [polaroidCount, setPolaroidCount] = useState<number>(initialPolaroidCount);
@@ -367,9 +387,18 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
       setMosaicPhotos((prev) => {
         if (photos.length <= 1) return prev;
         const currentSlots = prev.length >= 4 ? prev : photos.slice(0, 4);
-        const nextIdx = mosaicIndexRef.current % photos.length;
-        const nextPhoto = photos[nextIdx];
-        mosaicIndexRef.current = (nextIdx + 1) % photos.length;
+
+        let nextPhoto: PhotoItem;
+        if (photoOrder === 'random') {
+          const currentIds = new Set(currentSlots.map((p) => p.id));
+          const candidates = photos.filter((p) => !currentIds.has(p.id));
+          const pool = candidates.length > 0 ? candidates : photos;
+          nextPhoto = pool[Math.floor(Math.random() * pool.length)];
+        } else {
+          const nextIdx = mosaicIndexRef.current % photos.length;
+          nextPhoto = photos[nextIdx];
+          mosaicIndexRef.current = (nextIdx + 1) % photos.length;
+        }
 
         const slotToReplace = mosaicSlotRef.current % 4;
         mosaicSlotRef.current = (mosaicSlotRef.current + 1) % 4;
@@ -381,15 +410,23 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     }, intervalSec * 1000);
 
     return () => clearInterval(timer);
-  }, [style, photos, intervalSec]);
+  }, [style, photos, intervalSec, photoOrder]);
 
   const handleShuffleMosaicSlot = (slotIdx: number) => {
     if (photos.length <= 1) return;
     setMosaicPhotos((prev) => {
       const currentSlots = prev.length >= 4 ? prev : photos.slice(0, 4);
-      const nextIdx = mosaicIndexRef.current % photos.length;
-      const nextPhoto = photos[nextIdx];
-      mosaicIndexRef.current = (nextIdx + 1) % photos.length;
+      let nextPhoto: PhotoItem;
+      if (photoOrder === 'random') {
+        const currentIds = new Set(currentSlots.map((p) => p.id));
+        const candidates = photos.filter((p) => !currentIds.has(p.id));
+        const pool = candidates.length > 0 ? candidates : photos;
+        nextPhoto = pool[Math.floor(Math.random() * pool.length)];
+      } else {
+        const nextIdx = mosaicIndexRef.current % photos.length;
+        nextPhoto = photos[nextIdx];
+        mosaicIndexRef.current = (nextIdx + 1) % photos.length;
+      }
 
       const updated = [...currentSlots];
       updated[slotIdx] = nextPhoto;
@@ -408,19 +445,20 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
 
   useEffect(() => {
     if (customPhotos && customPhotos.length > 0) {
-      setPhotos(customPhotos);
+      const pool = photoOrder === 'random' ? shuffleArray(customPhotos) : customPhotos;
+      setPhotos(pool);
       const newSig = getPhotosSignature(customPhotos);
       const existing = loadRuntimeState(stateKey, newSig);
       if (!existing) {
-        // Brand new photo album loaded by user -> reset to start
-        setCurrentIndex(0);
+        // Brand new photo album loaded by user -> reset to start or random
+        setCurrentIndex(photoOrder === 'random' ? Math.floor(Math.random() * customPhotos.length) : 0);
         setFilmstripIndex(0);
-        setMosaicPhotos(customPhotos.slice(0, 4));
+        setMosaicPhotos(pool.slice(0, 4));
         mosaicSlotRef.current = 0;
         mosaicIndexRef.current = 4 % customPhotos.length;
       }
     }
-  }, [customPhotos, stateKey]);
+  }, [customPhotos, stateKey, photoOrder]);
 
   useEffect(() => {
     if (initialSourceLabel) {
@@ -437,10 +475,20 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   useEffect(() => {
     if (photos.length <= 1) return;
     const interval = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % photos.length);
+      if (photoOrder === 'random') {
+        setCurrentIndex((prev) => {
+          let next = Math.floor(Math.random() * photos.length);
+          if (photos.length > 1 && next === prev) {
+            next = (next + 1) % photos.length;
+          }
+          return next;
+        });
+      } else {
+        setCurrentIndex((prev) => (prev + 1) % photos.length);
+      }
     }, intervalSec * 1000);
     return () => clearInterval(interval);
-  }, [photos, intervalSec]);
+  }, [photos, intervalSec, photoOrder]);
 
   // Filmstrip continuous reel index & auto-rotation
   const [filmstripIndex, setFilmstripIndex] = useState(() => savedState?.filmstripIndex ?? 0);
