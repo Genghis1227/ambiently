@@ -814,19 +814,19 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   }
                 }}
                 animate={{
-                  x: `${offset * 62}%`,
-                  scale: isCenter ? 1.15 : Math.abs(offset) === 1 ? 0.78 : Math.abs(offset) === 2 ? 0.62 : 0.48,
-                  opacity: isCenter ? 1 : Math.abs(offset) === 1 ? 0.5 : Math.abs(offset) === 2 ? 0.2 : 0,
-                  zIndex: isCenter ? 20 : 10 - Math.abs(offset),
-                  filter: isCenter ? 'brightness(100%)' : 'brightness(65%)',
+                  x: `${offset * 70}%`,
+                  scale: isCenter ? 1.42 : Math.abs(offset) === 1 ? 0.72 : Math.abs(offset) === 2 ? 0.52 : 0.38,
+                  opacity: isCenter ? 1 : Math.abs(offset) === 1 ? 0.55 : Math.abs(offset) === 2 ? 0.22 : 0,
+                  zIndex: isCenter ? 32 : 10 - Math.abs(offset),
+                  filter: isCenter ? 'brightness(105%) contrast(102%)' : 'brightness(60%)',
                 }}
                 transition={{
                   duration: 0.85,
                   ease: [0.25, 1, 0.5, 1],
                 }}
-                className={`absolute w-[52%] max-w-[460px] aspect-[16/10] rounded-xl overflow-hidden cursor-pointer shadow-2xl ${
+                className={`absolute w-[50%] max-w-[480px] aspect-[16/10] rounded-xl overflow-hidden cursor-pointer shadow-2xl ${
                   isCenter
-                    ? 'ring-2 ring-blue-500/90 shadow-[0_20px_50px_rgba(0,0,0,0.9)]'
+                    ? 'ring-2 ring-blue-500/90 shadow-[0_25px_60px_rgba(0,0,0,0.95)]'
                     : 'border border-white/10 hover:opacity-75'
                 }`}
                 title={isCenter ? p.caption : 'Click to center this photo'}
