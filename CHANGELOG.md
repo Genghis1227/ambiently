@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.7] - 2026-11-02
+
+### Added
+* **Google Photos Deep Pagination (`functions/api/gphotos.ts`, `vite.config.ts`, `services/photos.ts`, `PhotoSourcesModal.tsx`):**
+  * Automated `snAcKc` batchexecute RPC pagination to ingest full Google Photos shared albums of 7,000+ photos (benchmarked and verified with 7,579 photos).
+  * Maintained lightweight photo descriptors (~200 bytes per item) and on-demand lazy image loading for smooth performance on smart displays and mobile devices.
+  * Added live album progress badges and total count transparency in the photo sources hub.
+* **Centralized Photo Frame Configuration (`PhotoFrameWidget.tsx`, `WidgetSettingsModal.tsx`, `MobileCompanion.tsx`):**
+  * Relocated slideshow presentation styles (Ken Burns, Mosaic Collage, Scattered Polaroids, Filmstrip) and photo library sources entirely into Tile Configuration (`WidgetSettingsModal` / `PhotoSourcesModal`).
+  * Removed all in-canvas overlay buttons to eliminate hover action collisions and provide a completely clean ambient smart-display aesthetic.
+  * Enabled full photo library management parity inside the Mobile Companion tile settings workflow.
+* **Multi-Folder Selection & Local NAS Photo Support (`PhotoSourcesModal.tsx`, `services/photos.ts`):**
+  * Added multi-folder selection with `[ ➕ Add Another Folder ]`, folder item cards with remove actions, and `[ Apply Selected Folders ]`.
+  * Enabled recursive subfolder scanning (up to 5 levels deep) and file-extension fallback (`IMAGE_EXT_REGEX`) to support network shares and NAS drives.
+* **Configurable Quote Update Intervals (`WidgetSettingsModal.tsx`, `QuotesWidget.tsx`):**
+  * Added quote update interval selector (`30s`, `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `Daily`, `Manual`) with smooth cross-fade rotation transitions and interval badge indicators.
+
+### Fixed
+* **Sticky Note Canvas Visibility & Placement (`Corkboard.tsx`, `App.tsx`):**
+  * Resolved invisible pinned notes by auto-unhiding notes, elevating `zIndex`, detecting widget collisions, auto-positioning into open canvas spaces, and adding a 2.5s visual pop-out ring.
+
+---
+
 ## [0.1.6] - 2026-11-02
 
 ### Added

@@ -5,9 +5,22 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.1.6';
+export const APP_VERSION = '0.1.7';
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.1.7",
+    date: "November 2, 2026",
+    title: "Google Photos Deep Pagination, Centralized Photo Configuration, Multi-Folder NAS, Quote Intervals, & Canvas Note Visibility",
+    highlights: [
+      "Google Photos Deep Pagination: Automated batchexecute RPC pagination to ingest full albums of 7,000+ photos (tested with 7,579 photos) while maintaining lightweight lazy loading and non-repeating long-term shuffle.",
+      "Centralized Photo Frame Configuration: Moved picture presentation modes (Ken Burns, Mosaic, Polaroids, Filmstrip) and photo library sources entirely into tile configuration, keeping ambient photo frames 100% clean and collision-free.",
+      "Mobile Photo Sources & Mode Management: Wired full photo library source and style management into the Mobile Companion tile settings workflow.",
+      "Multi-Folder Selection & Local NAS Photo Support: Multi-folder selection with live thumbnails and recursive subfolder scanning for local disks and mapped network drives.",
+      "Configurable Quote Intervals: Added update interval settings (30s, 1m, 5m, 15m, 30m, 1h, 4h, Daily, Manual) with smooth cross-fade rotation transitions.",
+      "Sticky Note Canvas Visibility & Smart Placement: Automatic collision detection, open-space canvas positioning, z-index elevation, and a 2.5s pop-out highlight when pinning notes from the tile widget.",
+    ],
+  },
   {
     version: "v0.1.6",
     date: "November 2, 2026",
