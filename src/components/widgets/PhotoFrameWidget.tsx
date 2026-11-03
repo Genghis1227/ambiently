@@ -1,16 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Image as ImageIcon,
-  Sliders,
-} from 'lucide-react';
+import { Image as ImageIcon } from 'lucide-react';
 import {
   CURATED_AMBIENT_PHOTOS,
   cachePhotosLocally,
   type PhotoItem,
   type PhotoDisplayStyle,
 } from '../../services/photos';
-import { PhotoSourcesModal } from '../photos/PhotoSourcesModal';
 
 
 export type PolaroidDensity = 6 | 12 | 18 | 24 | 32;
@@ -148,7 +144,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   initialSourceLabel = 'Curated',
   initialPolaroidCount = 12,
   initialPolaroidSizeMode = 'mixed',
-  onUpdateConfig,
+  onUpdateConfig: _onUpdateConfig,
 }) => {
   const [style, setStyle] = useState<PhotoDisplayStyle>(initialStyle);
   const [intervalSec, setIntervalSec] = useState<number>(rotationIntervalSec);
@@ -157,7 +153,6 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   );
   const [currentIndex, setCurrentIndex] = useState(0);
   const [sourceLabel, setSourceLabel] = useState<string>(initialSourceLabel);
-  const [isSourcesModalOpen, setIsSourcesModalOpen] = useState(false);
 
   const [polaroidCount, setPolaroidCount] = useState<number>(initialPolaroidCount);
   const [polaroidSizeMode, setPolaroidSizeMode] = useState<PolaroidSizeMode>(initialPolaroidSizeMode);
@@ -178,16 +173,6 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   const polaroidSlots = React.useMemo(() => {
     return generatePolaroidSlots(polaroidCount, polaroidSizeMode);
   }, [polaroidCount, polaroidSizeMode]);
-
-  const handlePolaroidCountChange = (count: number) => {
-    setPolaroidCount(count);
-    if (onUpdateConfig) onUpdateConfig({ polaroidCount: count });
-  };
-
-  const handlePolaroidSizeModeChange = (mode: PolaroidSizeMode) => {
-    setPolaroidSizeMode(mode);
-    if (onUpdateConfig) onUpdateConfig({ polaroidSizeMode: mode });
-  };
 
   // Initialize scattered polaroids when photos or slots change
   useEffect(() => {
@@ -324,35 +309,6 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   }, [photos, intervalSec]);
 
   const currentPhoto = photos[currentIndex] || photos[0];
-
-  const handlePhotosLoaded = (newPhotos: PhotoItem[], sourceName: string) => {
-    if (newPhotos.length > 0) {
-      setPhotos(newPhotos);
-      setCurrentIndex(0);
-      setSourceLabel(sourceName);
-      cachePhotosLocally(newPhotos);
-      if (onUpdateConfig) {
-        onUpdateConfig({
-          customPhotos: newPhotos,
-          sourceLabel: sourceName,
-        });
-      }
-    }
-  };
-
-  const handleStyleChange = (newStyle: PhotoDisplayStyle) => {
-    setStyle(newStyle);
-    if (onUpdateConfig) {
-      onUpdateConfig({ displayStyle: newStyle });
-    }
-  };
-
-  const handleIntervalChange = (newSec: number) => {
-    setIntervalSec(newSec);
-    if (onUpdateConfig) {
-      onUpdateConfig({ rotationIntervalSec: newSec });
-    }
-  };
 
   return (
     <div className="relative w-full h-full rounded-2xl overflow-hidden select-none bg-black flex flex-col justify-between">
@@ -506,101 +462,27 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
         </div>
       )}
 
-      {/* Ambient Top Controls */}
-      <div className="relative z-10 p-3 flex items-center justify-between text-white drop-shadow-md pr-24">
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-xs">
-            <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
-            <span className="font-medium truncate max-w-[130px]">
-              {currentPhoto.caption || sourceLabel}
-            </span>
-            <span className="text-[10px] text-gray-400 font-mono">
-              ({currentIndex + 1}/{photos.length})
-            </span>
-          </div>
-
-          {/* Polaroid Count & Size Quick Controls */}
-          {style === 'polaroid' && (
-            <div className="hidden sm:flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-[10px]">
-              <span className="text-gray-400 font-semibold uppercase tracking-wider">Count:</span>
-              {([6, 12, 18, 24, 32] as const).map((cnt) => (
-                <button
-                  key={cnt}
-                  type="button"
-                  onClick={() => handlePolaroidCountChange(cnt)}
-                  className={`px-1.5 py-0.5 rounded font-mono font-bold transition-all cursor-pointer ${
-                    polaroidCount === cnt
-                      ? 'bg-blue-600 text-white shadow'
-                      : 'text-gray-400 hover:text-white hover:bg-gray-800'
-                  }`}
-                >
-                  {cnt === 32 ? 'Fill' : cnt}
-                </button>
-              ))}
-
-              <span className="text-gray-600 mx-0.5">|</span>
-
-              <button
-                type="button"
-                onClick={() => handlePolaroidSizeModeChange(polaroidSizeMode === 'mixed' ? 'uniform' : 'mixed')}
-                className={`px-2 py-0.5 rounded font-semibold transition-all cursor-pointer ${
-                  polaroidSizeMode === 'mixed'
-                    ? 'bg-purple-600/40 border border-purple-500/50 text-purple-200'
-                    : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                {polaroidSizeMode === 'mixed' ? 'Random Sizes' : 'Uniform'}
-              </button>
-            </div>
-          )}
+      {/* Ambient Top Caption Pill */}
+      <div className="relative z-10 p-3 flex items-center justify-between text-white drop-shadow-md pointer-events-none pr-24">
+        <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-xs">
+          <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
+          <span className="font-medium truncate max-w-[160px]">
+            {currentPhoto.caption || sourceLabel}
+          </span>
+          <span className="text-[10px] text-gray-400 font-mono">
+            ({currentIndex + 1}/{photos.length})
+          </span>
         </div>
       </div>
 
-      {/* Bottom Controls: Quick Style Switcher, Prominent Sources Trigger & Attribution */}
-      <div className="relative z-10 p-3 flex items-center justify-between gap-2 text-white drop-shadow-lg flex-wrap pointer-events-auto">
-        <div className="flex items-center gap-1 bg-black/50 backdrop-blur-md p-1 rounded-full border border-white/10 shadow-lg">
-          {(['ken_burns', 'mosaic', 'polaroid', 'filmstrip'] as const).map((s) => (
-            <button
-              key={s}
-              onClick={() => handleStyleChange(s)}
-              className={`px-2 py-0.5 text-[10px] rounded-full uppercase tracking-wider font-semibold transition-all cursor-pointer ${
-                style === s ? 'bg-blue-600 text-white shadow' : 'text-gray-300 hover:text-white'
-              }`}
-            >
-              {s === 'ken_burns' ? 'Ken Burns' : s === 'polaroid' ? 'Polaroids' : s}
-            </button>
-          ))}
-          <button
-            onClick={() => setIsSourcesModalOpen(true)}
-            title="Configure Photo Sources (Google Photos, Local Folders, Plex, Web)"
-            className="flex items-center gap-1 px-2.5 py-0.5 text-[10px] rounded-full bg-amber-500/25 hover:bg-amber-500/45 text-amber-300 font-bold border border-amber-500/40 shadow-sm transition-all cursor-pointer ml-1"
-          >
-            <Sliders className="w-3 h-3" />
-            <span>Sources</span>
-          </button>
-        </div>
-
-        {currentPhoto.author && (
-          <div className="text-[11px] text-gray-400 bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full border border-white/10 pointer-events-none">
+      {/* Subtle Bottom Photo Attribution */}
+      {currentPhoto.author && (
+        <div className="relative z-10 p-3 flex items-end justify-end text-white pointer-events-none drop-shadow-lg">
+          <div className="text-[11px] text-gray-400 text-right bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full border border-white/10">
             Photo: <span className="text-gray-200 font-medium">{currentPhoto.author}</span>
           </div>
-        )}
-      </div>
-
-      {/* Dedicated Photo Sources Hub Modal */}
-      <PhotoSourcesModal
-        isOpen={isSourcesModalOpen}
-        onClose={() => setIsSourcesModalOpen(false)}
-        currentStyle={style}
-        onStyleChange={handleStyleChange}
-        rotationIntervalSec={intervalSec}
-        onRotationIntervalChange={handleIntervalChange}
-        onPhotosLoaded={handlePhotosLoaded}
-        polaroidCount={polaroidCount}
-        onPolaroidCountChange={handlePolaroidCountChange}
-        polaroidSizeMode={polaroidSizeMode}
-        onPolaroidSizeModeChange={handlePolaroidSizeModeChange}
-      />
+        </div>
+      )}
     </div>
   );
 };

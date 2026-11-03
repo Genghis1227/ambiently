@@ -3,7 +3,7 @@ import {
   X,
   Settings,
   Check,
-  Sliders,
+  FolderOpen,
   Plus,
   Trash2,
   Search,
@@ -434,13 +434,54 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
           {/* Photo Frame Settings */}
           {widget.type === 'photo_frame' && (
             <div className="space-y-4 pt-2 border-t border-gray-800">
+              {/* Photo Sources Hub Trigger */}
+              {onOpenPhotoSources && (
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
+                    Photo Library & Media Sources
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenPhotoSources();
+                    }}
+                    className="w-full flex items-center justify-between p-3.5 rounded-xl bg-gradient-to-r from-amber-500/15 via-blue-500/15 to-purple-500/15 border border-amber-500/30 hover:border-amber-400 text-white transition-all cursor-pointer group shadow-lg"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0 border border-amber-500/30">
+                        <FolderOpen className="w-5 h-5" />
+                      </div>
+                      <div className="text-left">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-white">
+                            Configure Photo Sources
+                          </span>
+                          {widget.config?.sourceLabel && (
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold">
+                              {widget.config.sourceLabel}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-gray-400 block mt-0.5">
+                          Google Photos shared albums, Local PC / NAS Folders, Plex Media Server, or Curated Scenery
+                        </span>
+                      </div>
+                    </div>
+                    <span className="text-xs font-bold text-amber-400 group-hover:translate-x-1 transition-transform">
+                      ➔
+                    </span>
+                  </button>
+                </div>
+              )}
+
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
-                  Slideshow Animation Style
+                  Picture Presentation Mode
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    { id: 'ken_burns', label: 'Ken Burns (Slow Pan)' },
+                    { id: 'ken_burns', label: 'Ken Burns (Slow Pan & Zoom)' },
                     { id: 'mosaic', label: 'Mosaic Collage' },
                     { id: 'polaroid', label: 'Scattered Polaroids' },
                     { id: 'filmstrip', label: 'Filmstrip' },
@@ -556,34 +597,6 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                   ))}
                 </div>
               </div>
-
-              {onOpenPhotoSources && (
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onClose();
-                      onOpenPhotoSources();
-                    }}
-                    className="w-full flex items-center justify-between p-3 rounded-xl bg-gradient-to-r from-amber-500/20 to-purple-500/20 border border-amber-500/40 hover:border-amber-400 text-white transition-all cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Sliders className="w-4 h-4 text-amber-400" />
-                      <div className="text-left">
-                        <span className="text-xs font-bold block text-amber-200">
-                          Connect Photo Sources
-                        </span>
-                        <span className="text-[10px] text-gray-300">
-                          Plex PIN QR Code, Local NAS Folders, Google Drive / Web links
-                        </span>
-                      </div>
-                    </div>
-                    <span className="text-xs font-bold text-amber-400 group-hover:translate-x-0.5 transition-transform">
-                      ➔
-                    </span>
-                  </button>
-                </div>
-              )}
             </div>
           )}
 

@@ -28,6 +28,7 @@ import type { DashboardTab, DashboardWidget, StickyNoteItem } from '../../types/
 import { APP_VERSION } from '../../data/changelog';
 import { ChangelogModal } from '../changelog/ChangelogModal';
 import { WidgetSettingsModal } from '../widgets/WidgetSettingsModal';
+import { PhotoSourcesModal } from '../photos/PhotoSourcesModal';
 import { AddWidgetModal } from '../widgets/AddWidgetModal';
 import { CalendarWidget } from '../widgets/CalendarWidget';
 import { ClockWeatherWidget } from '../widgets/ClockWeatherWidget';
@@ -105,6 +106,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
 
   // Modals for modifying & adding tiles on mobile
   const [editingWidget, setEditingWidget] = useState<DashboardWidget | null>(null);
+  const [photoSourcesTargetWidget, setPhotoSourcesTargetWidget] = useState<DashboardWidget | null>(null);
   const [isAddWidgetOpen, setIsAddWidgetOpen] = useState(false);
 
   const now = new Date();
@@ -819,6 +821,11 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         isOpen={Boolean(editingWidget)}
         onClose={() => setEditingWidget(null)}
         widget={editingWidget}
+        onOpenPhotoSources={() => {
+          if (editingWidget) {
+            setPhotoSourcesTargetWidget(editingWidget);
+          }
+        }}
         onSave={(widgetId, updates) => {
           if (onUpdateWidget) {
             onUpdateWidget(widgetId, updates);
@@ -826,6 +833,57 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
           setEditingWidget(null);
         }}
       />
+
+      {/* Photo Sources Modal when triggered from mobile widget settings */}
+      {photoSourcesTargetWidget && (
+        <PhotoSourcesModal
+          isOpen={Boolean(photoSourcesTargetWidget)}
+          onClose={() => setPhotoSourcesTargetWidget(null)}
+          currentStyle={photoSourcesTargetWidget.config?.displayStyle || 'ken_burns'}
+          onStyleChange={(newStyle) => {
+            if (photoSourcesTargetWidget && onUpdateWidget) {
+              onUpdateWidget(photoSourcesTargetWidget.id, {
+                config: { ...photoSourcesTargetWidget.config, displayStyle: newStyle },
+              });
+            }
+          }}
+          rotationIntervalSec={photoSourcesTargetWidget.config?.rotationIntervalSec || 15}
+          onRotationIntervalChange={(newSec) => {
+            if (photoSourcesTargetWidget && onUpdateWidget) {
+              onUpdateWidget(photoSourcesTargetWidget.id, {
+                config: { ...photoSourcesTargetWidget.config, rotationIntervalSec: newSec },
+              });
+            }
+          }}
+          onPhotosLoaded={(newPhotos, sourceName) => {
+            if (photoSourcesTargetWidget && onUpdateWidget && newPhotos.length > 0) {
+              onUpdateWidget(photoSourcesTargetWidget.id, {
+                config: {
+                  ...photoSourcesTargetWidget.config,
+                  customPhotos: newPhotos,
+                  sourceLabel: sourceName,
+                },
+              });
+            }
+          }}
+          polaroidCount={photoSourcesTargetWidget.config?.polaroidCount || 12}
+          onPolaroidCountChange={(cnt) => {
+            if (photoSourcesTargetWidget && onUpdateWidget) {
+              onUpdateWidget(photoSourcesTargetWidget.id, {
+                config: { ...photoSourcesTargetWidget.config, polaroidCount: cnt },
+              });
+            }
+          }}
+          polaroidSizeMode={photoSourcesTargetWidget.config?.polaroidSizeMode || 'mixed'}
+          onPolaroidSizeModeChange={(mode) => {
+            if (photoSourcesTargetWidget && onUpdateWidget) {
+              onUpdateWidget(photoSourcesTargetWidget.id, {
+                config: { ...photoSourcesTargetWidget.config, polaroidSizeMode: mode },
+              });
+            }
+          }}
+        />
+      )}
 
       {/* Add Widget Modal for adding new tiles directly from mobile */}
       {onAddWidget && (
