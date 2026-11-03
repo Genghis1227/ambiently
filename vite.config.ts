@@ -12,7 +12,7 @@ export default defineConfig({
       name: 'cloudflare-dev-functions',
       configureServer(server) {
         server.middlewares.use(async (req, res, next) => {
-          if (req.url && req.url.startsWith('/functions/api/gphotos')) {
+          if (req.url && (req.url.startsWith('/api/gphotos') || req.url.startsWith('/functions/api/gphotos'))) {
             const parsed = new URL(req.url, 'http://localhost');
             const shareUrl = parsed.searchParams.get('url');
             const maxPhotosParam = parseInt(parsed.searchParams.get('maxPhotos') || '10000', 10);
@@ -131,6 +131,106 @@ export default defineConfig({
                   title,
                   count: photos.length,
                   totalAlbumCount: Math.max(totalAlbumCount, photos.length),
+                  photos,
+                })
+              );
+            } catch (err: any) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: err.message }));
+            }
+            return;
+          }
+
+          if (req.url && (req.url.startsWith('/api/gdrive') || req.url.startsWith('/functions/api/gdrive'))) {
+            const parsed = new URL(req.url, 'http://localhost');
+            const rawUrl = parsed.searchParams.get('url') || parsed.searchParams.get('folderId');
+            if (!rawUrl) {
+              res.statusCode = 400;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: 'Missing "url" or "folderId" query parameter' }));
+              return;
+            }
+
+            let folderId = rawUrl.trim();
+            const folderMatch = folderId.match(/drive\.google\.com\/(?:drive\/(?:u\/\d+\/)?)?folders\/([a-zA-Z0-9_-]+)/);
+            if (folderMatch && folderMatch[1]) {
+              folderId = folderMatch[1];
+            } else {
+              const idParamMatch = folderId.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+              if (idParamMatch && idParamMatch[1]) {
+                folderId = idParamMatch[1];
+              }
+            }
+
+            try {
+              const embeddedUrl = `https://drive.google.com/embeddedfolderview?id=${encodeURIComponent(folderId)}#grid`;
+              const fetchRes = await fetch(embeddedUrl, {
+                redirect: 'follow',
+                headers: {
+                  'User-Agent':
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                },
+              });
+
+              if (fetchRes.status === 401 || fetchRes.url.includes('accounts.google.com/ServiceLogin')) {
+                res.statusCode = 403;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(
+                  JSON.stringify({
+                    error:
+                      'Google Drive folder requires sign-in. In Google Drive, please right-click the folder, select Share, and change General Access to "Anyone with the link" (Viewer).',
+                  })
+                );
+                return;
+              }
+
+              if (!fetchRes.ok) {
+                res.statusCode = fetchRes.status;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ error: `Failed to fetch Google Drive folder: ${fetchRes.statusText}` }));
+                return;
+              }
+
+              const html = await fetchRes.text();
+              const titleMatch = html.match(/<title>([^<]+)<\/title>/);
+              let title = titleMatch ? titleMatch[1].trim() : 'Google Drive Folder';
+              if (!title || title.toLowerCase() === 'google drive') {
+                title = 'Google Drive Folder';
+              }
+
+              const entryRegex = /id="entry-([a-zA-Z0-9_-]+)"[\s\S]*?class="flip-entry-title">([^<]+)<\/div>/g;
+              const photos = [];
+              const seenFileIds = new Set();
+              let m;
+
+              while ((m = entryRegex.exec(html)) !== null) {
+                const fileId = m[1];
+                const filename = m[2].trim();
+
+                if (seenFileIds.has(fileId)) continue;
+                seenFileIds.add(fileId);
+
+                const isNonImage = /\.(mp4|mov|avi|mkv|webm|wmv|flv|m4v|pdf|zip|tar|gz|rar|docx?|xlsx?|pptx?|txt)$/i.test(filename);
+                if (!isNonImage) {
+                  photos.push({
+                    id: `gdrive-${fileId}`,
+                    url: `https://lh3.googleusercontent.com/d/${fileId}=w1920-h1080`,
+                    caption: filename.replace(/\.[^/.]+$/, ''),
+                    source: 'gdrive',
+                  });
+                }
+              }
+
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/json');
+              res.setHeader('Access-Control-Allow-Origin', '*');
+              res.end(
+                JSON.stringify({
+                  title,
+                  count: photos.length,
+                  totalAlbumCount: photos.length,
                   photos,
                 })
               );

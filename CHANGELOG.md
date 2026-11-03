@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.8] - 2026-11-02
+
+### Added
+* **Google Drive Shared Folder Ingestion (`functions/api/gdrive.ts`, `vite.config.ts`, `services/photos.ts`, `PhotoSourcesModal.tsx`):**
+  * Added automated parser and serverless endpoint (`/api/gdrive`) to extract all images from public Google Drive folders into high-resolution streamable photos (`=w1920-h1080`).
+  * Added detection for Google Drive folder URLs (`drive.google.com/drive/folders/...`) in the Photo Sources modal.
+  * Added clean filtering to skip video and document formats for photo frame playback.
+
+### Fixed
+* **Cloudflare Pages API Function Routing (`services/photos.ts`, `services/feeds.ts`, `vite.config.ts`):**
+  * Corrected client API requests from `/functions/api/...` to `/api/...`, matching Cloudflare Pages' native function mounting path and resolving `Unexpected token '<', "<!doctype "... is not valid JSON` errors on production.
+  * Added `Content-Type: application/json` verification before parsing response bodies to prevent syntax errors on unexpected HTML fallbacks.
+* **Sanitized Example Placeholders (`PhotoSourcesModal.tsx`):**
+  * Replaced live links in the photo sources modal textarea placeholder with sanitized generic examples.
+
+---
+
 ## [0.1.7] - 2026-11-02
 
 ### Added

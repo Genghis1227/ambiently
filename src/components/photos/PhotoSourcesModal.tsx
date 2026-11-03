@@ -716,20 +716,20 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
           {activeTab === 'web' && (
             <div className="space-y-3">
               <div>
-                <h3 className="text-sm font-bold text-white">Google Photos Albums & Web Images</h3>
+                <h3 className="text-sm font-bold text-white">Google Photos Albums, Drive Folders & Web Images</h3>
                 <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">
-                  Paste public <strong>Google Photos shared album links (<code className="text-blue-400">https://photos.app.goo.gl/...</code>)</strong>, Google Drive image links, or direct image URLs (<code className="text-gray-300">.jpg, .png, .webp</code>), one per line:
+                  Paste public <strong>Google Photos shared album links</strong> (<code className="text-blue-400">https://photos.app.goo.gl/...</code>), <strong>Google Drive shared folders</strong> (<code className="text-purple-400">drive.google.com/drive/folders/...</code>), direct Drive files, or web images (<code className="text-gray-300">.jpg, .png, .webp</code>), one per line:
                 </p>
                 <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-blue-300 bg-blue-950/40 border border-blue-800/40 px-2.5 py-1 rounded-lg">
                   <span className="shrink-0">⚡</span>
-                  <span>Deep pagination active: large shared albums with 7,000+ photos are automatically resolved in full.</span>
+                  <span>Deep pagination active: large shared Google Photos albums and Google Drive folders are automatically resolved in full.</span>
                 </div>
               </div>
 
               <textarea
                 value={webUrlsText}
                 onChange={(e) => setWebUrlsText(e.target.value)}
-                placeholder="https://photos.app.goo.gl/hDHMNx3E3UdtBPtW9&#10;https://drive.google.com/file/d/...&#10;https://images.unsplash.com/..."
+                placeholder="https://photos.app.goo.gl/your-shared-album-link&#10;https://drive.google.com/drive/folders/your-folder-id&#10;https://drive.google.com/file/d/your-file-id&#10;https://images.unsplash.com/..."
                 rows={5}
                 className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-xs text-white font-mono focus:outline-none focus:border-blue-500 placeholder:text-gray-600"
               />
