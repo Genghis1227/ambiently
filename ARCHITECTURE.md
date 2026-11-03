@@ -15,8 +15,10 @@ flowchart TB
     end
 
     subgraph Edge ["Cloudflare Pages Edge (/functions/api/*)"]
-        ICalProxy["/api/ical-proxy\n(Webcal & .ics Parser)"]
-        RssProxy["/api/rss-proxy\n(RSS 2.0 / Atom XML Parser)"]
+        ICalProxy["/api/ical\n(Webcal & .ics Parser)"]
+        RssProxy["/api/rss\n(RSS 2.0 / Atom XML Parser)"]
+        GPhotosProxy["/api/gphotos\n(Google Photos batchexecute RPC Paginator)"]
+        GDriveProxy["/api/gdrive\n(Google Drive Shared Folder Ingestion)"]
     end
 
     subgraph Cloud ["Optional Cloud Sync (Supabase)"]
@@ -30,6 +32,8 @@ flowchart TB
     UI <--> Cache
     UI --> ICalProxy
     UI --> RssProxy
+    UI --> GPhotosProxy
+    UI --> GDriveProxy
     Store <--> Auth
     Store <--> PG
 ```
@@ -40,9 +44,9 @@ flowchart TB
 
 Ambiently uses **Dexie.js** over browser `IndexedDB` (`AmbientlyDB`) with 5 core object stores:
 1. `settings`: Global kiosk configuration (`dockPosition`, `displayDensity`, `carouselEnabled`, `nightModeStyle`, `nightModeStart`, `nightModeEnd`, `wakeLockEnabled`, `pinHash`).
-2. `tabs`: Ordered canvas definitions (`id`, `name`, `icon`, `order`, `autoRotateDurationSec`, `enabled`).
-3. `widgets`: Widget instances scoped by `tabId`, storing normalized freeform canvas coordinates (`freeformPos: { xRatio, yRatio, wRatio, hRatio, zIndex, rotation, isFullScreen }`) and widget-specific `config` (e.g., calendar `.ics` sources, weather coordinates, custom photo arrays).
-4. `notes`: Sticky notes & checklists scoped by `tabId`, supporting soft-deletion (`archivedAt`), automatic expiration (`expiresAt`), and freeform coordinates.
+2. `tabs`: Ordered canvas definitions (`id`, `name`, `icon`, `order`, `autoRotateDurationSec`, `isHome`, `enabled`).
+3. `widgets`: Widget instances scoped by `tabId`, storing normalized freeform canvas coordinates (`freeformPos: { xRatio, yRatio, wRatio, hRatio, zIndex, rotation, isFullScreen }`), mobile display ordering (`mobileOrder`), and widget-specific `config` (e.g., calendar `.ics` sources, weather coordinates, photo settings, quote intervals).
+4. `notes`: Sticky notes & checklists scoped by `tabId`, supporting soft-deletion (`archivedAt`), automatic expiration (`expiresAt`), canvas pinning status (`isPinnedToCanvas`), and freeform coordinates.
 5. `localDeviceVault`: Device-only key-value store for sensitive local tokens that are never pushed to cloud sync.
 
 ---
@@ -55,8 +59,19 @@ To support 1080p tablets, 1440p monitors, and 4K TVs without causing "zoom traps
 
 ---
 
-## 4. Serverless Edge Proxies (`functions/api/`)
+## 4. Serverless Edge Functions (`functions/api/`)
 
-Public calendar (`.ics`) and RSS feeds rarely include browser CORS headers (`Access-Control-Allow-Origin: *`). Ambiently solves this at the edge using Cloudflare Pages Functions:
-* **`functions/api/ical-proxy.ts`**: Normalizes `webcal://` URLs to `https://`, fetches the raw `.ics` stream, parses `VEVENT` blocks (handling folded lines, `DTSTART`, `DTEND`, `SUMMARY`, `LOCATION`), and returns clean JSON cached at the edge for 15 minutes (`Cache-Control: s-maxage=900`).
-* **`functions/api/rss-proxy.ts`**: Fetches RSS 2.0 `<item>` and Atom `<entry>` XML feeds, strips HTML/CDATA tags, and returns normalized JSON headlines cached for 15 minutes.
+Cloudflare Pages Functions handle CORS-free feeds, media parsing, and deep pagination:
+* **`functions/api/ical.ts` (`/api/ical`)**: Normalizes `webcal://` URLs to `https://`, fetches raw `.ics` streams, parses `VEVENT` blocks (folded lines, `DTSTART`, `DTEND`, `SUMMARY`, `LOCATION`), and returns clean JSON cached at the edge for 15 minutes.
+* **`functions/api/rss.ts` (`/api/rss`)**: Fetches RSS 2.0 `<item>` and Atom `<entry>` XML feeds, strips HTML/CDATA tags, and returns normalized JSON headlines cached for 15 minutes.
+* **`functions/api/gphotos.ts` (`/api/gphotos`)**: Resolves public Google Photos shared albums (`photos.app.goo.gl` / `photos.google.com/share`). Extracts album metadata (`AF_initDataCallback 'ds:1'`) and automates subsequent `snAcKc` batchexecute RPC pagination to retrieve full photo collections (tested up to 7,500+ photos in ~11s) with 1-hour edge caching.
+* **`functions/api/gdrive.ts` (`/api/gdrive`)**: Resolves public Google Drive shared folders (`drive.google.com/drive/folders/...`) into high-resolution streamable photos (`=w1920-h1080`), skipping video/document formats and validating public access permissions.
+
+---
+
+## 5. Mobile Companion Viewport Architecture (`MobileCompanion.tsx`)
+
+To ensure flawless mobile touch interaction while preserving the kiosk corkboard's `overflow: hidden`:
+* **Viewport Containment**: Mobile Companion renders inside a `fixed inset-0 w-full h-[100dvh]` container with `-webkit-overflow-scrolling: touch`, `touch-action: pan-y`, and `overscroll-behavior-y: contain`.
+* **Independent Mobile Reordering**: Widgets retain an optional `mobileOrder` integer property. Swapping cards on mobile modifies `mobileOrder` without impacting desktop freeform coordinates (`xRatio`, `yRatio`).
+* **Persistent View State**: View filter preferences (`all`, `widgets`, `notes`) are preserved in `localStorage` under `ambiently_companion_view`.

@@ -53,6 +53,9 @@
 * **Inline Sticky Note Editing (`✏️` / Double-Click):** Edit any existing note's title, message body, checklist items (add, edit, or delete rows), pastel color, typography scale (`S`, `M`, `L`, `XL`), canvas board assignment, or expiration timer without losing its position, size, or rotation on the corkboard.
 * **Wide-Range Sizing & 4 Font Scales (`S / M / L / XL`):** Resize sticky notes from tiny `8%` label tags all the way up to `100%` posters, and choose from Small (`S`), Medium (`M`), Large (`L`), or Poster (`XL`) text scales.
 * **6-Color Pastel Palette:** Customize notes in Amber Yellow, Emerald Green, Sky Blue, Rose Pink, Lavender Purple, or Warm Peach.
+* **Close Floating Sticky Notes & Smart Canvas Placement (`Corkboard.tsx`, `App.tsx`):**
+  * **1-Click Close (`✕`)**: Every floating note on the corkboard features a close button in its header. Closing a note unpins it from the canvas (`isPinnedToCanvas: false`) without deleting it, keeping it active and safe in the Notes Tile.
+  * **Pin to Board with Collision Avoidance**: Click `[ 📌 Pin to Board ]` in the Notes Tile to pop notes back onto the corkboard. Ambiently automatically unhides notes, elevates `zIndex`, detects widget coverage, auto-positions into open space, and displays a 2.5s visual pop-out ring.
 * **Note Expiration & Auto-Cleanup Engine:**
   * Assign notes as **Permanent**, **Expire in 24 Hours**, **Expire in 3 Days**, or pick a **Custom Date/Time**.
   * Notes expiring within 12 hours display an amber warning border and badge.
@@ -63,16 +66,20 @@
 
 ## 3. Multi-Source Ambient Photo Frame (Phase 3)
 
+### Clean Ambient Display & Centralized Configuration
+* **100% Collision-Free Smart Display:** Presentation styles and photo library source management are located entirely inside **Tile Configuration (`WidgetSettingsModal` / `PhotoSourcesModal`)**. The photo frame itself is kept clean and immersive with only a subtle caption pill on the top-left and photo attribution on the bottom-right, eliminating hover action collisions with `{ ⚙️, ⤢, 🗑️ }`.
+
 ### 4 Distinct Visual Display Styles
 1. **Ken Burns (Ambient Pan & Zoom):** Full-bleed edge-to-edge crossfades with smooth continuous scale/pan motion and readable gradient vignettes.
 2. **Mosaic / Collage Grid:** 4-quadrant multi-photo grid highlighting active frames.
-3. **Classic Polaroid:** Angled vintage photo frame with caption and photographer attribution.
+3. **Scattered Polaroids:** Angled vintage photo frames with custom density (`6`, `12`, `18`, `24`, `32` / Fill) and size modes (`Random Sizes` / `Uniform`).
 4. **Scrolling Filmstrip:** Horizontal interactive thumbnail ribbon.
 
-### 4 Built-In Photo Connectors (`PhotoSourcesModal.tsx`)
+### Comprehensive Media Sources (`PhotoSourcesModal.tsx`)
+* **Google Photos Shared Albums (Deep batchexecute Pagination):** Paste any public Google Photos shared album link (`photos.app.goo.gl` or `photos.google.com/share`). Automated `snAcKc` batchexecute RPC pagination retrieves massive libraries (tested and benchmarked with 7,500+ photos in ~11s) while maintaining lightweight in-memory descriptors and on-demand lazy loading.
+* **Google Drive Public Shared Folders:** Paste public Google Drive folder links (`drive.google.com/drive/folders/...`) to extract all images into high-resolution streamable photos (`=w1920-h1080`) via our `/api/gdrive` serverless extractor.
+* **Local PC & NAS Multi-Folder Stacking (5,000+ Photos):** Multi-folder selection using the browser File System Access API with recursive 8-level subdirectory scanning. Includes configurable scan capacity (`1k`, `2.5k`, `5k`, `10k`), live scan progress feedback, and an inline `[ + Add Another Folder ]` action bar.
 * **Plex Media Server (1-Scan QR Code PIN Flow):** Generates a 4-digit Plex PIN and scannable QR code (`https://app.plex.tv/auth#?clientID=...&code=...`), auto-discovers your Plex server, and streams photo libraries directly.
-* **Local / NAS Folder Picker:** Uses the browser `showDirectoryPicker` API (with recursive folder input fallback) to stream `.jpg`, `.png`, `.webp`, `.gif`, and `.avif` photos straight from a local folder or SMB/NAS network share.
-* **Google Drive & Direct Web Links:** Paste shared Google Drive image links (automatically converted to direct view URLs) or image URLs.
 * **Curated Photography Presets:** Instant 1-click categories (*Nature*, *Architecture*, *Space*, *Cozy*) cached in the browser `CacheStorage` API (`ambiently-photo-cache-v1`) for offline playback.
 
 ---
@@ -87,13 +94,14 @@ Every widget features a top-right **Tile Settings (`⚙️`)** button to customi
   * Powered by **Open-Meteo API** (zero API key required) with a 1-click **City Geocoding Lookup** in Tile Settings, Fahrenheit/Celsius toggle, current temperature, "feels like", high/lows, and daily forecast strip.
 * **Multi-Source Calendar (`CalendarWidget.tsx`):**
   * Toggle between **Chronological Agenda View** and **Monthly Calendar Grid**.
-  * Add, toggle, color-tag, or remove multiple public/secret `.ics` and `webcal://` URLs (Google Calendar, Apple iCloud, Outlook) in Tile Settings, parsed via our Cloudflare Pages Edge proxy (`/api/ical-proxy`).
+  * Add, toggle, color-tag, or remove multiple public/secret `.ics` and `webcal://` URLs (Google Calendar, Apple iCloud, Outlook) in Tile Settings, parsed via our Cloudflare Pages Edge proxy (`/api/ical`).
 * **Ambient Stream & Web Embed Tile (`MediaEmbedWidget.tsx`):**
   * Embed live video/audio streams or web dashboards directly on any canvas with 1-click presets (*Lofi Hip Hop Radio*, *4K Cozy Fireplace*, *NASA ISS Live Earth View*, *Live Weather Radar via Windy.com*) or any custom YouTube / web embed URL, complete with quick audio mute/unmute and reload controls.
 * **Daily Quotes & Custom Family Affirmations (`QuotesWidget.tsx`):**
-  * Add custom family affirmations, house rules, or personal mantras in Tile Settings, choose between **Curated Only**, **Custom Only**, or **Mix Both**, and cycle quotes on demand with a 1-click refresh button.
+  * Add custom family affirmations, house rules, or personal mantras in Tile Settings, choose between **Curated Only**, **Custom Only**, or **Mix Both**.
+  * **Configurable Update Intervals:** Choose auto-rotation speed (`30s`, `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `Daily`, `Manual`) with smooth cross-fade opacity transitions and dynamic header badges (`Thought of the Day`, `Thought of the Hour`, `⏱ 1h`).
 * **RSS News Ticker (`RssWidget.tsx`):**
-  * Displays rotating headlines and relative timestamps from any RSS 2.0 or Atom feed via `/api/rss-proxy`.
+  * Displays rotating headlines and relative timestamps from any RSS 2.0 or Atom feed via `/api/rss`.
 * **Milestone Countdown (`CountdownWidget.tsx`):**
   * Live days/hours/minutes/seconds countdown timer to upcoming vacations, birthdays, or milestones.
 
@@ -101,10 +109,15 @@ Every widget features a top-right **Tile Settings (`⚙️`)** button to customi
 
 ## 5. Mobile Companion Mode & Hybrid Sync (Phase 5)
 
-* **Responsive Mobile Companion (`< 768px`):**
-  * Automatically serves a streamlined mobile interface (`MobileCompanion.tsx`) when opened on a smartphone, with a 1-tap toggle to switch to the full Kiosk view if desired.
-  * **Quick Note & Inline Mobile Editing:** Post new notes/checklists to the selected canvas, edit existing notes (`✏️`), or append new items (`+ Add item`) to existing checklists directly from your phone.
-  * **Remote Tab Switcher:** Tap any tab pill on your phone to view and manage that canvas's notes.
+* **Vertical Tile Stream (`MobileCompanion.tsx`):**
+  * Automatically serves a structured single-column vertical feed of the active canvas when opened on a smartphone (`< 768px`).
+  * **Live Preview Cards:** Every canvas widget (Clock & Weather, Countdown, Photos, RSS, Quotes, Media, Notes) renders a live mobile-responsive preview card.
+  * **Persistent View Option Filter:** 3-way segmented filter pills (`All Tiles` | `Widgets` | `Notes & Tasks`) automatically persisted in `localStorage`.
+  * **Independent Mobile Reordering (`▲` / `▼`):** Move buttons on each widget card modify an isolated `mobileOrder` property with zero impact on the desktop/kiosk layout.
+  * **Mobile Tile Settings & Creation:** 1-tap `⚙️` button opens the full tile customizer on mobile, plus a `+ Add Tile` button to add new widgets from your phone.
+  * **Hardware Momentum Touch Scrolling:** Bound to `fixed inset-0 w-full h-[100dvh]` with `touch-action: pan-y` and momentum scrolling for smooth vertical swiping.
+* **Quick Note & Inline Mobile Editing:** Post new notes/checklists to the selected canvas, edit existing notes (`✏️`), or append new items (`+ Add item`) to existing checklists directly from your phone.
+* **Remote Tab Switcher:** Tap any tab pill on your phone to view and manage that canvas's widgets and notes.
 * **Family QR Code Invite (`ShareBoardModal.tsx`):**
   * Generate a scannable QR code and 6-digit join code in Settings so family members can connect their phones without typing passwords.
 * **3-Tier Persistence & Backup:**
