@@ -5,9 +5,20 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.1.11';
+export const APP_VERSION = '0.1.12';
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.1.12",
+    date: "November 3, 2026",
+    title: "Mobile Companion Viewport Layout & Safe-Area Fix",
+    highlights: [
+      "Prevented Mobile Tab Squashing: Added shrink-0 and min-h-[44px] to the mobile tab switcher bar, preventing Flexbox from compressing the tabs and vertically clipping the text and buttons.",
+      "Non-Compressing Mobile Headers & Controls: Added shrink-0 constraints to the top mobile bar, filter pill toggles, quick add note box, and stream container for rock-solid layout integrity.",
+      "Hidden Horizontal Scrollbars: Added .no-scrollbar cross-browser CSS utility to eliminate scrollbar height consumption on the mobile tab switcher.",
+      "Safe-Area Inset Support: Added dynamic top safe-area inset padding and viewport-fit=cover so mobile companion headers never get obstructed by device notches or browser URL bars.",
+    ],
+  },
   {
     version: "v0.1.11",
     date: "November 3, 2026",

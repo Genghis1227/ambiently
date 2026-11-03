@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.12] - 2026-11-03
+
+### Fixed
+* **Mobile Companion Viewport Layout & Tab Compression (`MobileCompanion.tsx`, `index.css`, `index.html`):**
+  * Added `shrink-0`, `min-h-[44px]`, and `py-1.5` to the mobile tab switcher bar, preventing Flexbox from squashing the tab buttons and slicing off tab labels (`Family Board`, `Photos`).
+  * Enforced `shrink-0` across the top mobile bar, filter selectors, note quick-add bar, and main stream container so headers and controls maintain their designed dimensions when scrolling long content streams.
+  * Added cross-browser `.no-scrollbar` utility classes in `src/index.css` to hide horizontal scrollbars from eating up vertical space on mobile browsers.
+  * Added `pt-[max(1rem,env(safe-area-inset-top))]` in `MobileCompanion.tsx` and `viewport-fit=cover` in `index.html` to prevent clipping under device notches, cutouts, and mobile browser URL bars.
+
+---
+
 ## [0.1.11] - 2026-11-03
 
 ### Added
