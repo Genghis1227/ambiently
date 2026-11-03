@@ -314,6 +314,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return (
           <div className="h-44 w-full">
             <PhotoFrameWidget
+              widgetId={widget.id}
               initialStyle={widget.config?.displayStyle || 'ken_burns'}
               rotationIntervalSec={widget.config?.rotationIntervalSec || 15}
               customPhotos={widget.config?.customPhotos}

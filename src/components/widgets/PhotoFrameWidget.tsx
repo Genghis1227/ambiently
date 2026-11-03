@@ -127,7 +127,64 @@ interface ActivePolaroidItem {
   key: string;
 }
 
+// In-memory runtime cache to preserve continuous rotation across canvas switches & remounts
+interface PhotoWidgetRuntimeState {
+  signature: string;
+  currentIndex: number;
+  filmstripIndex: number;
+  mosaicPhotos?: PhotoItem[];
+  mosaicSlot: number;
+  mosaicIndex: number;
+  scatteredPolaroids?: ActivePolaroidItem[];
+}
+
+const photoRuntimeCache = new Map<string, PhotoWidgetRuntimeState>();
+
+function getPhotosSignature(items: PhotoItem[]): string {
+  if (!items || items.length === 0) return 'empty';
+  return `${items.length}-${items[0]?.id || ''}-${items[items.length - 1]?.id || ''}`;
+}
+
+function loadRuntimeState(key: string, signature: string): PhotoWidgetRuntimeState | null {
+  const memory = photoRuntimeCache.get(key);
+  if (memory && memory.signature === signature) {
+    return memory;
+  }
+  try {
+    const raw = sessionStorage.getItem(`ambiently-photo-progress-${key}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.signature === signature) {
+        photoRuntimeCache.set(key, parsed);
+        return parsed;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function saveRuntimeState(key: string, state: PhotoWidgetRuntimeState) {
+  photoRuntimeCache.set(key, state);
+  try {
+    sessionStorage.setItem(
+      `ambiently-photo-progress-${key}`,
+      JSON.stringify({
+        signature: state.signature,
+        currentIndex: state.currentIndex,
+        filmstripIndex: state.filmstripIndex,
+        mosaicIndex: state.mosaicIndex,
+        mosaicSlot: state.mosaicSlot,
+      })
+    );
+  } catch {
+    // ignore
+  }
+}
+
 interface PhotoFrameWidgetProps {
+  widgetId?: string;
   initialStyle?: PhotoDisplayStyle;
   rotationIntervalSec?: number;
   customPhotos?: PhotoItem[];
@@ -138,6 +195,7 @@ interface PhotoFrameWidgetProps {
 }
 
 export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
+  widgetId,
   initialStyle = 'ken_burns',
   rotationIntervalSec = 15,
   customPhotos,
@@ -146,18 +204,23 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   initialPolaroidSizeMode = 'mixed',
   onUpdateConfig: _onUpdateConfig,
 }) => {
+  const stateKey = widgetId || `photo-state-${initialSourceLabel || 'ambient'}`;
+  const initialPhotos = customPhotos && customPhotos.length > 0 ? customPhotos : CURATED_AMBIENT_PHOTOS;
+  const initialSig = getPhotosSignature(initialPhotos);
+  const savedState = loadRuntimeState(stateKey, initialSig);
+
   const [style, setStyle] = useState<PhotoDisplayStyle>(initialStyle);
   const [intervalSec, setIntervalSec] = useState<number>(rotationIntervalSec);
-  const [photos, setPhotos] = useState<PhotoItem[]>(
-    customPhotos && customPhotos.length > 0 ? customPhotos : CURATED_AMBIENT_PHOTOS
-  );
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [photos, setPhotos] = useState<PhotoItem[]>(initialPhotos);
+  const [currentIndex, setCurrentIndex] = useState(() => savedState?.currentIndex ?? 0);
   const [sourceLabel, setSourceLabel] = useState<string>(initialSourceLabel);
 
   const [polaroidCount, setPolaroidCount] = useState<number>(initialPolaroidCount);
   const [polaroidSizeMode, setPolaroidSizeMode] = useState<PolaroidSizeMode>(initialPolaroidSizeMode);
 
-  const [scatteredPolaroids, setScatteredPolaroids] = useState<ActivePolaroidItem[]>([]);
+  const [scatteredPolaroids, setScatteredPolaroids] = useState<ActivePolaroidItem[]>(
+    () => savedState?.scatteredPolaroids || []
+  );
   const topZIndexRef = useRef(30);
 
   // Sync props to state if parent config updates
@@ -177,15 +240,20 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   // Initialize scattered polaroids when photos or slots change
   useEffect(() => {
     if (!photos || photos.length === 0 || polaroidSlots.length === 0) return;
-    const initial: ActivePolaroidItem[] = polaroidSlots.map((slot, idx) => ({
-      slotIndex: idx,
-      photo: photos[idx % photos.length],
-      rotation: slot.rotate,
-      zIndex: 10 + idx,
-      key: `slot-${idx}-${photos[idx % photos.length].id}-${Date.now()}`,
-    }));
-    setScatteredPolaroids(initial);
-    topZIndexRef.current = 15 + polaroidSlots.length;
+    setScatteredPolaroids((prev) => {
+      if (prev && prev.length === polaroidSlots.length) {
+        return prev;
+      }
+      const initial: ActivePolaroidItem[] = polaroidSlots.map((slot, idx) => ({
+        slotIndex: idx,
+        photo: photos[idx % photos.length],
+        rotation: slot.rotate,
+        zIndex: 10 + idx,
+        key: `slot-${idx}-${photos[idx % photos.length].id}-${Date.now()}`,
+      }));
+      topZIndexRef.current = 15 + polaroidSlots.length;
+      return initial;
+    });
   }, [photos, polaroidSlots]);
 
   // Randomly update one polaroid at a time from source photos
@@ -272,15 +340,23 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   };
 
   // Mosaic active quadrant photos & auto-rotation
-  const [mosaicPhotos, setMosaicPhotos] = useState<PhotoItem[]>(() => photos.slice(0, 4));
-  const mosaicSlotRef = useRef(0);
-  const mosaicIndexRef = useRef(4);
+  const [mosaicPhotos, setMosaicPhotos] = useState<PhotoItem[]>(() => {
+    if (savedState?.mosaicPhotos && savedState.mosaicPhotos.length >= 4) {
+      return savedState.mosaicPhotos;
+    }
+    return initialPhotos.slice(0, 4);
+  });
+  const mosaicSlotRef = useRef(savedState?.mosaicSlot ?? 0);
+  const mosaicIndexRef = useRef(savedState?.mosaicIndex ?? 4);
 
   useEffect(() => {
     if (!photos || photos.length === 0) return;
-    setMosaicPhotos(photos.slice(0, 4));
-    mosaicSlotRef.current = 0;
-    mosaicIndexRef.current = 4 % photos.length;
+    setMosaicPhotos((prev) => {
+      if (prev && prev.length >= 4) return prev;
+      mosaicSlotRef.current = 0;
+      mosaicIndexRef.current = 4 % photos.length;
+      return photos.slice(0, 4);
+    });
   }, [photos]);
 
   useEffect(() => {
@@ -321,7 +397,6 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     });
   };
 
-
   // Sync props to state when widget config updates
   useEffect(() => {
     if (initialStyle) setStyle(initialStyle);
@@ -334,9 +409,18 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   useEffect(() => {
     if (customPhotos && customPhotos.length > 0) {
       setPhotos(customPhotos);
-      setCurrentIndex(0);
+      const newSig = getPhotosSignature(customPhotos);
+      const existing = loadRuntimeState(stateKey, newSig);
+      if (!existing) {
+        // Brand new photo album loaded by user -> reset to start
+        setCurrentIndex(0);
+        setFilmstripIndex(0);
+        setMosaicPhotos(customPhotos.slice(0, 4));
+        mosaicSlotRef.current = 0;
+        mosaicIndexRef.current = 4 % customPhotos.length;
+      }
     }
-  }, [customPhotos]);
+  }, [customPhotos, stateKey]);
 
   useEffect(() => {
     if (initialSourceLabel) {
@@ -359,7 +443,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   }, [photos, intervalSec]);
 
   // Filmstrip continuous reel index & auto-rotation
-  const [filmstripIndex, setFilmstripIndex] = useState(0);
+  const [filmstripIndex, setFilmstripIndex] = useState(() => savedState?.filmstripIndex ?? 0);
 
   useEffect(() => {
     if (style !== 'filmstrip' || photos.length <= 1) return;
@@ -368,6 +452,20 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     }, intervalSec * 1000);
     return () => clearInterval(interval);
   }, [style, photos, intervalSec]);
+
+  // Save persistent rotation progress across canvas carousel switches & unmounts
+  useEffect(() => {
+    const currentSig = getPhotosSignature(photos);
+    saveRuntimeState(stateKey, {
+      signature: currentSig,
+      currentIndex,
+      filmstripIndex,
+      mosaicPhotos,
+      mosaicSlot: mosaicSlotRef.current,
+      mosaicIndex: mosaicIndexRef.current,
+      scatteredPolaroids,
+    });
+  }, [currentIndex, filmstripIndex, mosaicPhotos, scatteredPolaroids, photos, stateKey]);
 
   const filmstripActiveIndex = ((filmstripIndex % photos.length) + photos.length) % photos.length;
   const currentPhoto =

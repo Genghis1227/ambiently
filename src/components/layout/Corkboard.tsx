@@ -1033,6 +1033,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 <RssWidget feedUrl={widget.config?.feedUrl} />
               ) : widget.type === 'photo_frame' ? (
                 <PhotoFrameWidget
+                  widgetId={widget.id}
                   initialStyle={widget.config?.displayStyle || 'ken_burns'}
                   rotationIntervalSec={widget.config?.rotationIntervalSec || 15}
                   customPhotos={widget.config?.customPhotos}
