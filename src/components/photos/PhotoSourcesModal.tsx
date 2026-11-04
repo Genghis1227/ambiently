@@ -36,6 +36,9 @@ import {
   cachePhotosLocally,
   resolveWebAndCloudPhotoUrls,
   getOptimizedPhotoUrl,
+  isGooglePhotosUrl,
+  isGoogleDriveFolderUrl,
+  parseGoogleDriveLink,
   type PhotoItem,
   type PhotoDisplayStyle,
 } from '../../services/photos';
@@ -110,6 +113,55 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
 
   // Web / Google Drive state
   const [webUrlsText, setWebUrlsText] = useState(initialWebUrls || '');
+
+  const detectedSources = useMemo(() => {
+    const lines = webUrlsText
+      .split(/[\r\n]+/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 5);
+
+    return lines.map((line, idx) => {
+      if (isGooglePhotosUrl(line)) {
+        return {
+          id: `src-${idx}`,
+          type: 'gphotos' as const,
+          label: 'Google Photos Album',
+          url: line,
+        };
+      }
+      if (isGoogleDriveFolderUrl(line)) {
+        return {
+          id: `src-${idx}`,
+          type: 'gdrive_folder' as const,
+          label: 'Google Drive Folder',
+          url: line,
+        };
+      }
+      if (parseGoogleDriveLink(line)) {
+        return {
+          id: `src-${idx}`,
+          type: 'gdrive_file' as const,
+          label: 'Google Drive File',
+          url: line,
+        };
+      }
+      return {
+        id: `src-${idx}`,
+        type: 'web' as const,
+        label: 'Direct Web Image',
+        url: line,
+      };
+    });
+  }, [webUrlsText]);
+
+  const handleRemoveSourceLine = (indexToRemove: number) => {
+    const lines = webUrlsText
+      .split(/[\r\n]+/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 5);
+    const updated = lines.filter((_, idx) => idx !== indexToRemove).join('\n');
+    setWebUrlsText(updated);
+  };
   const [isWebLoading, setIsWebLoading] = useState(false);
 
   const loadPhotoSections = async (server: PlexServerResource, token: string) => {
@@ -871,17 +923,25 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                     </button>
                   </div>
                   {initialWebUrls && (
-                    <div className="flex items-center justify-between bg-black/40 px-2 py-1 rounded text-[11px] font-mono text-blue-300">
-                      <span className="truncate max-w-[420px]">{initialWebUrls}</span>
-                      {webUrlsText.trim() !== initialWebUrls.trim() && (
-                        <button
-                          type="button"
-                          onClick={() => setWebUrlsText(initialWebUrls)}
-                          className="text-xs text-blue-400 hover:text-blue-200 underline shrink-0 ml-2"
-                        >
-                          Restore Link
-                        </button>
-                      )}
+                    <div className="bg-black/40 px-2 py-1.5 rounded text-[11px] font-mono text-blue-300 flex flex-col gap-1">
+                      {initialWebUrls
+                        .split(/[\r\n]+/)
+                        .map((u) => u.trim())
+                        .filter(Boolean)
+                        .map((u, i) => (
+                          <div key={i} className="flex items-center justify-between gap-2">
+                            <span className="truncate max-w-[420px]">🔗 {u}</span>
+                            {i === 0 && webUrlsText.trim() !== initialWebUrls.trim() && (
+                              <button
+                                type="button"
+                                onClick={() => setWebUrlsText(initialWebUrls)}
+                                className="text-xs text-blue-400 hover:text-blue-200 underline shrink-0 ml-2 cursor-pointer"
+                              >
+                                Restore Link
+                              </button>
+                            )}
+                          </div>
+                        ))}
                     </div>
                   )}
                 </div>
@@ -895,24 +955,91 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                 className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-xs text-white font-mono focus:outline-none focus:border-blue-500 placeholder:text-gray-600"
               />
 
+              {/* Live Detected Sources Feedback */}
+              {detectedSources.length > 0 && (
+                <div className="space-y-1.5 p-2.5 rounded-xl bg-gray-950/80 border border-gray-800">
+                  <div className="flex items-center justify-between text-[11px] font-semibold text-gray-300">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                      Detected Sources ({detectedSources.length})
+                    </span>
+                    {detectedSources.length > 1 && (
+                      <span className="text-[10px] text-emerald-300 font-medium bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                        ✓ Will merge all {detectedSources.length} sources into 1 album
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                    {detectedSources.map((source, idx) => (
+                      <div
+                        key={source.id}
+                        className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-gray-900 border border-gray-800/80 text-xs text-gray-300 group hover:border-gray-700 transition-colors"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0 font-mono shadow-sm border ${
+                              source.type === 'gphotos'
+                                ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                                : source.type === 'gdrive_folder'
+                                ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                                : source.type === 'gdrive_file'
+                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
+                            }`}
+                          >
+                            {source.type === 'gphotos'
+                              ? 'Google Photos'
+                              : source.type === 'gdrive_folder'
+                              ? 'Google Drive'
+                              : source.type === 'gdrive_file'
+                              ? 'Drive File'
+                              : 'Web Image'}
+                          </span>
+                          <span className="font-mono text-[11px] text-gray-400 truncate max-w-[340px]">
+                            {source.url}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSourceLine(idx)}
+                          className="text-gray-500 hover:text-red-400 p-1 rounded transition-colors opacity-70 group-hover:opacity-100 cursor-pointer"
+                          title="Remove this link"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={handleApplyWebUrls}
-                disabled={isWebLoading || !webUrlsText.trim()}
+                disabled={isWebLoading || detectedSources.length === 0}
                 className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-xs shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
               >
                 {isWebLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Resolving Google Photos Album & Images...</span>
+                    <span>
+                      {detectedSources.length > 1
+                        ? `Resolving & Merging ${detectedSources.length} Cloud Sources...`
+                        : 'Resolving Google Photos Album & Images...'}
+                    </span>
                   </>
                 ) : (
                   <>
                     <Globe className="w-4 h-4" />
                     <span>
-                      {initialWebUrls && initialWebUrls.trim() === webUrlsText.trim()
-                        ? 'Reload & Sync Album Photos'
-                        : 'Load Google Photos & Web Images'}
+                      {detectedSources.length > 1
+                        ? initialWebUrls && initialWebUrls.trim() === webUrlsText.trim()
+                          ? `Reload & Sync All ${detectedSources.length} Sources`
+                          : `Load & Merge All ${detectedSources.length} Sources`
+                        : initialWebUrls && initialWebUrls.trim() === webUrlsText.trim()
+                        ? `Reload & Sync ${detectedSources[0]?.label || 'Album'}`
+                        : `Load ${detectedSources[0]?.label || 'Google Photos & Web'}`}
                     </span>
                   </>
                 )}

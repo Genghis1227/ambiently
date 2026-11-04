@@ -478,14 +478,14 @@ export async function resolveWebAndCloudPhotoUrls(
 
   const albumResults = await Promise.all(albumPromises);
   const albumItems: PhotoItem[] = [];
-  let mainAlbumTitle = '';
+  const albumTitles: string[] = [];
   let highestAlbumTotal = 0;
 
   for (const res of albumResults) {
     if (res.photos && res.photos.length > 0) {
       albumItems.push(...res.photos);
-      if (!mainAlbumTitle && res.title) {
-        mainAlbumTitle = res.title;
+      if (res.title && !albumTitles.includes(res.title)) {
+        albumTitles.push(res.title);
       }
       if (res.totalAlbumCount && res.totalAlbumCount > highestAlbumTotal) {
         highestAlbumTotal = res.totalAlbumCount;
@@ -503,6 +503,8 @@ export async function resolveWebAndCloudPhotoUrls(
       error: firstError || 'No valid photos found. Please check your links.',
     };
   }
+
+  const mainAlbumTitle = albumTitles.join(' + ');
 
   const sourceTitle =
     mainAlbumTitle && directItems.length === 0
