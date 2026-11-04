@@ -653,37 +653,28 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     cachePhotosLocally(photos);
   }, [photos]);
 
+  const kenBurnsHistoryRef = useRef<number[]>([]);
+
   const handleKenBurnsNext = useCallback(() => {
     if (photos.length <= 1) return;
-    if (photoOrder === 'random') {
-      setCurrentIndex((prev) => {
-        let next = Math.floor(Math.random() * photos.length);
-        if (photos.length > 1 && next === prev) {
-          next = (next + 1) % photos.length;
-        }
-        return next;
-      });
-    } else {
-      setCurrentIndex((prev) => (prev + 1) % photos.length);
-    }
+    setCurrentIndex((prev) => {
+      kenBurnsHistoryRef.current.push(prev);
+      if (kenBurnsHistoryRef.current.length > 50) kenBurnsHistoryRef.current.shift();
+      return (prev + 1) % photos.length;
+    });
     setResetTrigger((prev) => prev + 1);
-  }, [photos, photoOrder]);
+  }, [photos]);
 
   const handleKenBurnsPrev = useCallback(() => {
     if (photos.length <= 1) return;
-    if (photoOrder === 'random') {
-      setCurrentIndex((prev) => {
-        let next = Math.floor(Math.random() * photos.length);
-        if (photos.length > 1 && next === prev) {
-          next = (next + 1) % photos.length;
-        }
-        return next;
-      });
+    if (kenBurnsHistoryRef.current.length > 0) {
+      const prevIdx = kenBurnsHistoryRef.current.pop()!;
+      setCurrentIndex(prevIdx);
     } else {
       setCurrentIndex((prev) => (prev - 1 + photos.length) % photos.length);
     }
     setResetTrigger((prev) => prev + 1);
-  }, [photos, photoOrder]);
+  }, [photos]);
 
   const handleFilmstripNext = useCallback(() => {
     setFilmstripIndex((prev) => prev + 1);
@@ -697,22 +688,23 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
 
   // Slideshow auto-rotation for Ken Burns
   useEffect(() => {
-    if (photos.length <= 1) return;
+    if (style !== 'ken_burns' || photos.length <= 1) return;
     const interval = setInterval(() => {
-      if (photoOrder === 'random') {
-        setCurrentIndex((prev) => {
+      setCurrentIndex((prev) => {
+        kenBurnsHistoryRef.current.push(prev);
+        if (kenBurnsHistoryRef.current.length > 50) kenBurnsHistoryRef.current.shift();
+        if (photoOrder === 'random') {
           let next = Math.floor(Math.random() * photos.length);
           if (photos.length > 1 && next === prev) {
             next = (next + 1) % photos.length;
           }
           return next;
-        });
-      } else {
-        setCurrentIndex((prev) => (prev + 1) % photos.length);
-      }
+        }
+        return (prev + 1) % photos.length;
+      });
     }, intervalSec * 1000);
     return () => clearInterval(interval);
-  }, [photos, intervalSec, photoOrder, resetTrigger]);
+  }, [photos, intervalSec, photoOrder, resetTrigger, style]);
 
   // Filmstrip continuous reel index & auto-rotation
   const [filmstripIndex, setFilmstripIndex] = useState(() => savedState?.filmstripIndex ?? 0);
@@ -837,7 +829,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   e.stopPropagation();
                   handleKenBurnsPrev();
                 }}
-                className="absolute left-3 top-1/2 -translate-y-1/2 z-35 p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
+                className="absolute left-3 top-1/2 -translate-y-1/2 z-[35] p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
                 title="Previous photo (Go back)"
               >
                 <ChevronLeft className="w-5 h-5" />
@@ -850,7 +842,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   e.stopPropagation();
                   handleKenBurnsNext();
                 }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 z-35 p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
+                className="absolute right-3 top-1/2 -translate-y-1/2 z-[35] p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
                 title="Next photo"
               >
                 <ChevronRight className="w-5 h-5" />
@@ -912,7 +904,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   e.stopPropagation();
                   handleMosaicPrev();
                 }}
-                className="absolute left-3 top-1/2 -translate-y-1/2 z-35 p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
+                className="absolute left-3 top-1/2 -translate-y-1/2 z-[35] p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
                 title="Previous photo collage (Go back)"
               >
                 <ChevronLeft className="w-5 h-5" />
@@ -925,7 +917,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   e.stopPropagation();
                   handleMosaicNext();
                 }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 z-35 p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
+                className="absolute right-3 top-1/2 -translate-y-1/2 z-[35] p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
                 title="Next photo collage"
               >
                 <ChevronRight className="w-5 h-5" />
@@ -1050,7 +1042,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   e.stopPropagation();
                   handleFilmstripPrev();
                 }}
-                className="absolute left-3 top-1/2 -translate-y-1/2 z-35 p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
+                className="absolute left-3 top-1/2 -translate-y-1/2 z-[35] p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
                 title="Previous photo (Go back)"
               >
                 <ChevronLeft className="w-5 h-5" />
@@ -1063,7 +1055,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   e.stopPropagation();
                   handleFilmstripNext();
                 }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 z-35 p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
+                className="absolute right-3 top-1/2 -translate-y-1/2 z-[35] p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
                 title="Next photo"
               >
                 <ChevronRight className="w-5 h-5" />
