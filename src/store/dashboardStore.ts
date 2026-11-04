@@ -173,7 +173,12 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       await db.notes.bulkAdd(DEFAULT_NOTES);
     }
 
-    const loadedSettings = (await db.settings.get('global')) || DEFAULT_SETTINGS;
+    const rawSettings = await db.settings.get('global');
+    const loadedSettings = {
+      ...DEFAULT_SETTINGS,
+      ...(rawSettings || {}),
+      carouselEnabled: rawSettings?.carouselEnabled ?? true,
+    };
     const allTabs = await db.tabs.toArray();
     const loadedTabs = allTabs
       .filter((t: DashboardTab) => !t.deleted_at)

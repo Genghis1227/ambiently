@@ -331,6 +331,7 @@ export function App() {
         onToggleMobileCompanion={isMobileViewport ? () => setForceDesktopMode(false) : undefined}
         isDockHidden={settings.isDockHidden}
         onToggleDockHidden={toggleDockHidden}
+        isNightMode={settings.nightModeEnabled}
       />
 
       {/* Night Mode Screen Overlay */}

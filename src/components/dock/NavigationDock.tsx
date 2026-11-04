@@ -63,6 +63,7 @@ interface NavigationDockProps {
   onToggleMobileCompanion?: () => void;
   isDockHidden?: boolean;
   onToggleDockHidden?: () => void;
+  isNightMode?: boolean;
 }
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -106,6 +107,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
   onToggleMobileCompanion,
   isDockHidden = false,
   onToggleDockHidden,
+  isNightMode = false,
 }) => {
   const isVertical = dockPosition === 'left' || dockPosition === 'right';
   const [showOrganizeMenu, setShowOrganizeMenu] = useState(false);
@@ -126,6 +128,41 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
       setIsPeekOpen(false);
     }
   }, [isDockHidden]);
+
+  // When night mode activates, collapse peeked toolbar immediately
+  useEffect(() => {
+    if (isNightMode && isDockHidden) {
+      setIsPeekOpen(false);
+    }
+  }, [isNightMode, isDockHidden]);
+
+  // Mouse leave timer to auto-hide when moving away from the toolbar
+  const hideTimerRef = useRef<number | null>(null);
+
+  const handleMouseEnter = () => {
+    if (hideTimerRef.current !== null) {
+      window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+  };
+
+  const handleMouseLeave = () => {
+    if (isDockHidden && isPeekOpen) {
+      if (isQuickMenuOpen) return;
+      if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = window.setTimeout(() => {
+        setIsPeekOpen(false);
+      }, isNightMode ? 350 : 500);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (hideTimerRef.current !== null) {
+        window.clearTimeout(hideTimerRef.current);
+      }
+    };
+  }, []);
 
   // Auto-hide when clicking off the toolbar while in hidden/peeked mode
   useEffect(() => {
@@ -202,15 +239,17 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
           type="button"
           data-dock-element="true"
           onClick={() => setIsPeekOpen(true)}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
           title="Peek Navigation Toolbar (Shortcut: \)"
-          className={`fixed z-50 flex items-center justify-center p-2.5 bg-gray-900/90 hover:bg-gray-800 text-gray-300 hover:text-white backdrop-blur-xl border border-gray-700/80 shadow-2xl transition-all cursor-pointer group active:scale-95 ${
+          className={`fixed z-[65] flex items-center justify-center p-2.5 bg-gray-900/90 hover:bg-gray-800 text-gray-300 hover:text-white backdrop-blur-xl border border-gray-700/80 shadow-2xl transition-all cursor-pointer group active:scale-95 ${
             dockPosition === 'left'
-              ? 'left-0 top-1/2 -translate-y-1/2 rounded-r-2xl border-l-0 shadow-[4px_0_15px_rgba(0,0,0,0.5)]'
+              ? 'left-0 bottom-24 rounded-r-2xl border-l-0 shadow-[4px_0_15px_rgba(0,0,0,0.5)]'
               : dockPosition === 'right'
-              ? 'right-0 top-1/2 -translate-y-1/2 rounded-l-2xl border-r-0 shadow-[-4px_0_15px_rgba(0,0,0,0.5)]'
+              ? 'right-0 bottom-24 rounded-l-2xl border-r-0 shadow-[-4px_0_15px_rgba(0,0,0,0.5)]'
               : dockPosition === 'top'
-              ? 'top-0 left-1/2 -translate-x-1/2 rounded-b-2xl border-t-0 shadow-[0_4px_15px_rgba(0,0,0,0.5)]'
-              : 'bottom-0 left-1/2 -translate-x-1/2 rounded-t-2xl border-b-0 shadow-[0_-4px_15px_rgba(0,0,0,0.5)]'
+              ? 'top-0 right-24 rounded-b-2xl border-t-0 shadow-[0_4px_15px_rgba(0,0,0,0.5)]'
+              : 'bottom-0 right-24 rounded-t-2xl border-b-0 shadow-[0_-4px_15px_rgba(0,0,0,0.5)]'
           }`}
         >
           {dockPosition === 'left' && <ChevronRight className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" />}
@@ -223,7 +262,13 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
       <nav
         ref={navRef}
         data-dock-element="true"
-        className={`fixed z-50 flex items-center gap-2 p-2 rounded-2xl bg-gray-900/85 backdrop-blur-xl border border-gray-800/90 shadow-2xl transition-all duration-300 ease-in-out ${positionClasses}`}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        className={`fixed z-[65] flex items-center gap-2 p-2 rounded-2xl backdrop-blur-xl transition-all duration-300 ease-in-out ${
+          isNightMode
+            ? 'opacity-85 hover:opacity-100 bg-gray-950/95 border border-gray-900 shadow-xl'
+            : 'bg-gray-900/85 border border-gray-800/90 shadow-2xl'
+        } ${positionClasses}`}
       >
         {/* Brand Icon & Quick HUD Trigger */}
         <div className="relative flex items-center justify-center p-1">
@@ -285,26 +330,18 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
                 }`}
               >
                 {tab.icon && iconMap[tab.icon] ? iconMap[tab.icon] : <LayoutGrid className="w-5 h-5" />}
-                {/* Home Indicator Dot (when inactive) */}
-                {isHome && !isActive && (
+                {/* Home Indicator Icon */}
+                {isHome && (
                   <span
-                    className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-purple-400 shadow-[0_0_4px_rgba(192,132,252,0.8)]"
-                    title="Home Board"
-                  />
-                )}
-                {/* Active Dot indicator */}
-                {isActive && (
-                  <span
-                    className={`absolute w-1.5 h-1.5 rounded-full bg-white ${
-                      dockPosition === 'left'
-                        ? '-left-1'
-                        : dockPosition === 'right'
-                        ? '-right-1'
-                        : dockPosition === 'top'
-                        ? '-top-1'
-                        : '-bottom-1'
+                    className={`absolute -top-1 -right-1 p-0.5 rounded-full flex items-center justify-center shadow-md transition-colors ${
+                      isActive
+                        ? 'bg-purple-600 text-white ring-2 ring-gray-950'
+                        : 'bg-gray-800 text-purple-300 border border-purple-500/40'
                     }`}
-                  />
+                    title="Home Board"
+                  >
+                    <Home className="w-2.5 h-2.5 stroke-[2.5]" />
+                  </span>
                 )}
               </button>
             );
@@ -382,7 +419,12 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
         {/* Quick Utilities / Kiosk controls */}
         <div className={`flex items-center gap-1.5 ${isVertical ? 'flex-col' : 'flex-row'}`}>
           <button
-            onClick={onToggleNightMode}
+            onClick={() => {
+              onToggleNightMode();
+              if (isDockHidden) {
+                setIsPeekOpen(false);
+              }
+            }}
             title="Toggle Night Mode"
             className="flex items-center justify-center w-10 h-10 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-gray-800/70 transition-all cursor-pointer"
           >

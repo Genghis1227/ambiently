@@ -15,6 +15,7 @@ import {
   AlignCenter,
   AlignRight,
   ImageIcon,
+  Share2,
 } from 'lucide-react';
 import { useDashboardStore } from '../../store/dashboardStore';
 import type { DashboardWidget } from '../../types/dashboard';
@@ -29,7 +30,7 @@ interface WidgetSettingsModalProps {
   onClose: () => void;
   widget: DashboardWidget | null;
   onSave: (widgetId: string, updates: { title?: string; config: Record<string, any> }) => void;
-  onOpenPhotoSources?: () => void;
+  onOpenPhotoSources?: (asCommonSource?: boolean) => void;
 }
 
 interface GeoHit {
@@ -69,6 +70,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   onOpenPhotoSources,
 }) => {
   const settings = useDashboardStore((state) => state.settings);
+  const applyCommonPhotosToAllWidgets = useDashboardStore((state) => state.applyCommonPhotosToAllWidgets);
   const [title, setTitle] = useState('');
 
   // Countdown states
@@ -77,6 +79,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
 
   // Photo Frame states
   const [useCommonSource, setUseCommonSource] = useState<boolean>(true);
+  const [syncSuccessMessage, setSyncSuccessMessage] = useState<string>('');
   const [photoStyle, setPhotoStyle] = useState<string>('ken_burns');
   const [photoIntervalSec, setPhotoIntervalSec] = useState<number>(15);
   const [polaroidCount, setPolaroidCount] = useState<number>(widget?.config?.polaroidCount || 12);
@@ -159,7 +162,14 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
         setCountdownTime('00:00');
       }
     } else if (widget.type === 'photo_frame') {
-      setUseCommonSource(widget.config?.useCommonSource !== false);
+      const explicitCommon = widget.config?.useCommonSource;
+      if (explicitCommon !== undefined) {
+        setUseCommonSource(explicitCommon);
+      } else {
+        const hasCustomPhotos = Boolean(widget.config?.customPhotos && widget.config.customPhotos.length > 0);
+        const hasCommonLibrary = Boolean(settings.commonPhotos && settings.commonPhotos.length > 0);
+        setUseCommonSource(hasCommonLibrary ? true : !hasCustomPhotos);
+      }
       setPhotoStyle(widget.config?.displayStyle || 'ken_burns');
       setPhotoIntervalSec(widget.config?.rotationIntervalSec || 15);
       setPolaroidCount(widget.config?.polaroidCount || 12);
@@ -219,7 +229,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setLetterSpacing(widget.config?.letterSpacing || 'normal');
       setTextBgStyle(widget.config?.bgStyle || 'transparent');
     }
-  }, [widget, isOpen]);
+  }, [widget, isOpen, settings.commonPhotos]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -476,7 +486,25 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => setUseCommonSource(true)}
+                    onClick={async () => {
+                      if (
+                        (!settings.commonPhotos || settings.commonPhotos.length === 0) &&
+                        widget.config?.customPhotos &&
+                        widget.config.customPhotos.length > 0
+                      ) {
+                        await applyCommonPhotosToAllWidgets(
+                          widget.config.customPhotos,
+                          widget.config.sourceLabel || 'Google Photos & Web',
+                          widget.config.sourceUrl,
+                          widget.config.sourceType || 'web'
+                        );
+                        setSyncSuccessMessage(
+                          `✓ Synced ${widget.config.customPhotos.length.toLocaleString()} photos as the Shared Board Library!`
+                        );
+                        setTimeout(() => setSyncSuccessMessage(''), 4000);
+                      }
+                      setUseCommonSource(true);
+                    }}
                     className={`p-3 rounded-xl border text-xs font-medium text-left transition-all cursor-pointer flex flex-col gap-1 ${
                       useCommonSource
                         ? 'bg-blue-600/20 border-blue-500 text-blue-300 ring-1 ring-blue-500/50'
@@ -488,7 +516,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                       <span>Shared Board Library</span>
                     </div>
                     <span className="text-[10px] text-gray-400">
-                      Syncs with all shared photo frames ({settings.commonPhotos?.length ? `${settings.commonPhotos.length} photos` : 'Curated Scenery'})
+                      Syncs with all shared photo frames ({settings.commonPhotos?.length ? `${settings.commonPhotos.length.toLocaleString()} photos` : 'Curated Scenery'})
                     </span>
                   </button>
 
@@ -506,11 +534,64 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                       <span>This Tile Only</span>
                     </div>
                     <span className="text-[10px] text-gray-400">
-                      Independent album ({widget.config?.customPhotos?.length ? `${widget.config.customPhotos.length} photos` : 'Curated Scenery'})
+                      Independent album ({widget.config?.customPhotos?.length ? `${widget.config.customPhotos.length.toLocaleString()} photos` : 'Curated Scenery'})
                     </span>
                   </button>
                 </div>
               </div>
+
+              {/* Status Message */}
+              {syncSuccessMessage && (
+                <div className="p-2.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-medium flex items-center gap-2 animate-in fade-in">
+                  <Check className="w-4 h-4 shrink-0 text-emerald-400" />
+                  <span>{syncSuccessMessage}</span>
+                </div>
+              )}
+
+              {/* Quick Promote / Sync to Shared Board Library */}
+              {widget.config?.customPhotos && widget.config.customPhotos.length > 0 && (
+                <div className="p-3 rounded-xl bg-gradient-to-r from-blue-950/60 to-purple-950/40 border border-blue-500/30 flex items-center justify-between gap-3 shadow-md">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 border border-blue-500/30">
+                      <Share2 className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-white flex items-center gap-2">
+                        <span>Make this Album the Shared Board Library</span>
+                      </div>
+                      <div className="text-[11px] text-gray-300">
+                        This tile has {widget.config.customPhotos.length.toLocaleString()} photos loaded{widget.config.sourceLabel ? ` (${widget.config.sourceLabel})` : ''}. Share across all photo frames?
+                      </div>
+                      {widget.config.sourceUrl && (
+                        <div className="text-[10px] font-mono text-blue-300 truncate max-w-[320px] mt-1 bg-black/40 px-2 py-0.5 rounded border border-blue-500/20">
+                          🔗 {widget.config.sourceUrl}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!widget.config?.customPhotos) return;
+                      await applyCommonPhotosToAllWidgets(
+                        widget.config.customPhotos,
+                        widget.config.sourceLabel || 'Google Photos & Web',
+                        widget.config.sourceUrl,
+                        widget.config.sourceType || 'web'
+                      );
+                      setUseCommonSource(true);
+                      setSyncSuccessMessage(
+                        `✓ Synced ${widget.config.customPhotos.length.toLocaleString()} photos as the Shared Board Library!`
+                      );
+                      setTimeout(() => setSyncSuccessMessage(''), 4000);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition-all shrink-0 cursor-pointer shadow-md flex items-center gap-1.5"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                    <span>Set as Shared</span>
+                  </button>
+                </div>
+              )}
 
               {/* Photo Sources Hub Trigger */}
               {onOpenPhotoSources && (
@@ -522,23 +603,23 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                     type="button"
                     onClick={() => {
                       onClose();
-                      onOpenPhotoSources();
+                      onOpenPhotoSources(useCommonSource);
                     }}
                     className="w-full flex items-center justify-between p-3.5 rounded-xl bg-gradient-to-r from-amber-500/15 via-blue-500/15 to-purple-500/15 border border-amber-500/30 hover:border-amber-400 text-white transition-all cursor-pointer group shadow-lg"
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
                       <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0 border border-amber-500/30">
                         <FolderOpen className="w-5 h-5" />
                       </div>
-                      <div className="text-left">
+                      <div className="text-left min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-bold text-white">
                             {useCommonSource ? 'Configure Shared Board Library' : 'Configure Custom Photos'}
                           </span>
                           {(useCommonSource
-                            ? (settings.commonPhotoSourceLabel || 'Shared Library')
+                            ? (settings.commonPhotoSourceLabel || (settings.commonPhotos?.length ? 'Shared Library' : undefined))
                             : widget.config?.sourceLabel) && (
-                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold">
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold truncate max-w-[160px]">
                               {useCommonSource
                                 ? (settings.commonPhotoSourceLabel || 'Shared Library')
                                 : widget.config?.sourceLabel}
@@ -548,9 +629,21 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                         <span className="text-[11px] text-gray-400 block mt-0.5">
                           Google Photos shared albums, Local PC / NAS Folders, Plex Media Server, or Curated Scenery
                         </span>
+                        {/* Display active source link if available */}
+                        {(() => {
+                          const activeUrl = useCommonSource
+                            ? (settings.commonPhotoSourceUrl || widget.config?.sourceUrl)
+                            : (widget.config?.sourceUrl || settings.commonPhotoSourceUrl);
+                          if (!activeUrl) return null;
+                          return (
+                            <div className="text-[10px] font-mono text-blue-300/90 truncate max-w-[340px] mt-1 bg-black/40 px-2 py-0.5 rounded border border-blue-500/20">
+                              🔗 {activeUrl}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
-                    <span className="text-xs font-bold text-amber-400 group-hover:translate-x-1 transition-transform">
+                    <span className="text-xs font-bold text-amber-400 group-hover:translate-x-1 transition-transform shrink-0 ml-2">
                       ➔
                     </span>
                   </button>

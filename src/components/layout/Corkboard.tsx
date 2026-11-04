@@ -21,6 +21,10 @@ import {
   RotateCw,
   Edit2,
   Layers,
+  BringToFront,
+  SendToBack,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import { ClockWeatherWidget } from '../widgets/ClockWeatherWidget';
 import { ClockWidget } from '../widgets/ClockWidget';
@@ -137,7 +141,10 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   }, [notes, widgets]);
 
   const [editingWidget, setEditingWidget] = useState<DashboardWidget | null>(null);
-  const [photoSourcesTargetWidget, setPhotoSourcesTargetWidget] = useState<DashboardWidget | null>(null);
+  const [photoSourcesTarget, setPhotoSourcesTarget] = useState<{
+    widget: DashboardWidget;
+    isCommon: boolean;
+  } | null>(null);
   const settings = useDashboardStore((state) => state.settings);
   const applyCommonPhotosToAllWidgets = useDashboardStore((state) => state.applyCommonPhotosToAllWidgets);
 
@@ -184,11 +191,185 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   const [customExpiry, setCustomExpiry] = useState('');
   const [highlightedNoteId, setHighlightedNoteId] = useState<string | null>(null);
 
+  // Z-Order Context Menu state
+  interface ContextMenuState {
+    x: number;
+    y: number;
+    id: string;
+    type: 'widget' | 'note';
+    title?: string;
+    currentZ: number;
+    isBackground?: boolean;
+    rotation?: number;
+  }
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+
   const getNextZIndex = () => {
     const widgetMax = widgets.reduce((m, w) => Math.max(m, w.freeformPos?.zIndex || 1), 1);
     const noteMax = notes.reduce((m, n) => Math.max(m, n.freeformPos?.zIndex || 1), 1);
     return Math.min(45, Math.max(widgetMax, noteMax) + 1);
   };
+
+  const getTopZIndex = () => {
+    const widgetMax = widgets.reduce((m, w) => Math.max(m, w.freeformPos?.zIndex || 1), 1);
+    const noteMax = notes.reduce((m, n) => Math.max(m, n.freeformPos?.zIndex || 1), 1);
+    return Math.max(widgetMax, noteMax);
+  };
+
+  const handleBringToFront = (id: string, type: 'widget' | 'note') => {
+    const nextZ = getNextZIndex();
+    if (type === 'widget' && onUpdateWidgetPos) {
+      const w = widgets.find((x) => x.id === id);
+      if (w && w.freeformPos) {
+        onUpdateWidgetPos(id, w.gridPos, {
+          ...w.freeformPos,
+          zIndex: nextZ,
+          isBackground: false,
+        });
+      }
+    } else if (type === 'note' && onUpdateNotePos) {
+      const n = notes.find((x) => x.id === id);
+      if (n && n.freeformPos) {
+        onUpdateNotePos(id, {
+          ...n.freeformPos,
+          zIndex: nextZ,
+          isBackground: false,
+        });
+      }
+    }
+    setContextMenu(null);
+  };
+
+  // Close Context Menu on click outside or Escape
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClose = () => setContextMenu(null);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setContextMenu(null);
+    };
+    window.addEventListener('pointerdown', handleClose);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('pointerdown', handleClose);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [contextMenu]);
+
+  const handleSendToBack = (id: string, type: 'widget' | 'note') => {
+    if (type === 'widget' && onUpdateWidgetPos) {
+      const w = widgets.find((x) => x.id === id);
+      if (w && w.freeformPos) {
+        onUpdateWidgetPos(id, w.gridPos, {
+          ...w.freeformPos,
+          zIndex: 0,
+          isBackground: true,
+        });
+      }
+    } else if (type === 'note' && onUpdateNotePos) {
+      const n = notes.find((x) => x.id === id);
+      if (n && n.freeformPos) {
+        onUpdateNotePos(id, {
+          ...n.freeformPos,
+          zIndex: 0,
+          isBackground: true,
+        });
+      }
+    }
+    setContextMenu(null);
+  };
+
+  // Close Context Menu on click outside or Escape
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClose = () => setContextMenu(null);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setContextMenu(null);
+    };
+    window.addEventListener('pointerdown', handleClose);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('pointerdown', handleClose);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [contextMenu]);
+
+  const handleBringForward = (id: string, type: 'widget' | 'note') => {
+    if (type === 'widget' && onUpdateWidgetPos) {
+      const w = widgets.find((x) => x.id === id);
+      if (w && w.freeformPos) {
+        onUpdateWidgetPos(id, w.gridPos, {
+          ...w.freeformPos,
+          zIndex: Math.min(45, (w.freeformPos.zIndex || 1) + 1),
+          isBackground: false,
+        });
+      }
+    } else if (type === 'note' && onUpdateNotePos) {
+      const n = notes.find((x) => x.id === id);
+      if (n && n.freeformPos) {
+        onUpdateNotePos(id, {
+          ...n.freeformPos,
+          zIndex: Math.min(45, (n.freeformPos.zIndex || 1) + 1),
+          isBackground: false,
+        });
+      }
+    }
+    setContextMenu(null);
+  };
+
+  // Close Context Menu on click outside or Escape
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClose = () => setContextMenu(null);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setContextMenu(null);
+    };
+    window.addEventListener('pointerdown', handleClose);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('pointerdown', handleClose);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [contextMenu]);
+
+  const handleSendBackward = (id: string, type: 'widget' | 'note') => {
+    if (type === 'widget' && onUpdateWidgetPos) {
+      const w = widgets.find((x) => x.id === id);
+      if (w && w.freeformPos) {
+        const newZ = Math.max(0, (w.freeformPos.zIndex || 1) - 1);
+        onUpdateWidgetPos(id, w.gridPos, {
+          ...w.freeformPos,
+          zIndex: newZ,
+          isBackground: newZ === 0 ? true : w.freeformPos.isBackground,
+        });
+      }
+    } else if (type === 'note' && onUpdateNotePos) {
+      const n = notes.find((x) => x.id === id);
+      if (n && n.freeformPos) {
+        const newZ = Math.max(0, (n.freeformPos.zIndex || 1) - 1);
+        onUpdateNotePos(id, {
+          ...n.freeformPos,
+          zIndex: newZ,
+          isBackground: newZ === 0 ? true : n.freeformPos.isBackground,
+        });
+      }
+    }
+    setContextMenu(null);
+  };
+
+  // Close Context Menu on click outside or Escape
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClose = () => setContextMenu(null);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setContextMenu(null);
+    };
+    window.addEventListener('pointerdown', handleClose);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('pointerdown', handleClose);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [contextMenu]);
 
   const isCoveredByWidget = (
     notePos: { xRatio: number; yRatio: number; wRatio: number; hRatio?: number },
@@ -384,6 +565,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     type: 'note' | 'widget',
     pos?: NonNullable<DashboardWidget['freeformPos']>
   ) => {
+    if (e.button !== 0) return;
     if ((e.target as HTMLElement).closest('button, input, textarea, select, a, [role="button"], [data-no-drag="true"]')) return;
 
     if (!containerRef.current) return;
@@ -394,8 +576,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     const currentX = (pos?.xRatio ?? 0.1) * rect.width;
     const currentY = (pos?.yRatio ?? 0.1) * rect.height;
 
-    const nextZ = getNextZIndex();
-    nextZIndexRef.current = nextZ;
+    const targetZ = pos?.isBackground ? (pos?.zIndex || 0) : getNextZIndex();
+    nextZIndexRef.current = targetZ;
     dragTargetInitialPosRef.current = pos || null;
     dragStartPointerRef.current = { x: e.clientX, y: e.clientY };
     isDraggingRef.current = false;
@@ -830,6 +1012,25 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             key={widget.id}
             data-canvas-card="true"
             onPointerDown={(e) => !isFullScreen && handlePointerDown(e, widget.id, 'widget', pos)}
+            onPointerDownCapture={() => {
+              if (!isFullScreen && !pos?.isBackground && (pos?.zIndex || 1) < getTopZIndex()) {
+                handleBringToFront(widget.id, 'widget');
+              }
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setContextMenu({
+                x: e.clientX,
+                y: e.clientY,
+                id: widget.id,
+                type: 'widget',
+                title: widget.title,
+                currentZ: pos.zIndex || 1,
+                isBackground: Boolean(pos.isBackground),
+                rotation: pos.rotation,
+              });
+            }}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
@@ -961,6 +1162,30 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   className="p-1 rounded-lg hover:bg-gray-800 text-gray-300 hover:text-white transition-all cursor-pointer"
                 >
                   <Settings className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {onUpdateWidgetPos && !isFullScreen && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setContextMenu({
+                      x: rect.left,
+                      y: rect.bottom + 6,
+                      id: widget.id,
+                      type: 'widget',
+                      title: widget.title,
+                      currentZ: pos.zIndex || 1,
+                      isBackground: Boolean(pos.isBackground),
+                      rotation: pos.rotation,
+                    });
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  title="Layer order (Bring to Front / Send to Back)"
+                  className="p-1 rounded-lg hover:bg-gray-800 text-gray-300 hover:text-white transition-all cursor-pointer"
+                >
+                  <Layers className="w-3.5 h-3.5" />
                 </button>
               )}
               {onUpdateWidgetPos && (
@@ -1189,6 +1414,25 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             key={note.id}
             data-canvas-card="true"
             onPointerDown={(e) => handlePointerDown(e, note.id, 'note', pos)}
+            onPointerDownCapture={() => {
+              if (!pos?.isBackground && (pos?.zIndex || 1) < getTopZIndex()) {
+                handleBringToFront(note.id, 'note');
+              }
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setContextMenu({
+                x: e.clientX,
+                y: e.clientY,
+                id: note.id,
+                type: 'note',
+                title: note.title || 'Sticky Note',
+                currentZ: pos.zIndex || 1,
+                isBackground: Boolean(pos.isBackground),
+                rotation: pos.rotation,
+              });
+            }}
             onPointerMove={handlePointerMove}
             onPointerUp={(e) => {
               handlePointerUp(e);
@@ -1307,6 +1551,29 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                     title="Edit note"
                   >
                     <Edit2 className="w-3 h-3" />
+                  </button>
+                  <button
+                    type="button"
+                    data-no-drag="true"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setContextMenu({
+                        x: rect.left,
+                        y: rect.bottom + 6,
+                        id: note.id,
+                        type: 'note',
+                        title: note.title || 'Sticky Note',
+                        currentZ: pos.zIndex || 1,
+                        isBackground: Boolean(pos.isBackground),
+                        rotation: pos.rotation,
+                      });
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className="p-1 rounded-md text-gray-700 hover:text-blue-900 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
+                    title="Layer order (Bring to Front / Send to Back)"
+                  >
+                    <Layers className="w-3 h-3" />
                   </button>
                   <button
                     type="button"
@@ -1770,46 +2037,54 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               onUpdateWidget(widgetId, updates);
             }
           }}
-          onOpenPhotoSources={() => {
-            setPhotoSourcesTargetWidget(editingWidget);
+          onOpenPhotoSources={(asCommonSource) => {
+            if (editingWidget) {
+              setPhotoSourcesTarget({
+                widget: editingWidget,
+                isCommon:
+                  asCommonSource !== undefined
+                    ? asCommonSource
+                    : editingWidget.config?.useCommonSource !== false,
+              });
+            }
           }}
         />
       )}
 
       {/* Per-Widget Photo Sources Hub opened from Tile Settings */}
-      {photoSourcesTargetWidget && (() => {
+      {photoSourcesTarget && (() => {
         const activePhotoWidget =
-          widgets.find((w) => w.id === photoSourcesTargetWidget.id) || photoSourcesTargetWidget;
-        const isUsingCommon = activePhotoWidget.config?.useCommonSource !== false;
+          widgets.find((w) => w.id === photoSourcesTarget.widget.id) || photoSourcesTarget.widget;
+        const isUsingCommon = photoSourcesTarget.isCommon;
 
         return (
           <PhotoSourcesModal
             isOpen={true}
-            onClose={() => setPhotoSourcesTargetWidget(null)}
+            onClose={() => setPhotoSourcesTarget(null)}
             isCommonSource={isUsingCommon}
             initialWebUrls={
-              activePhotoWidget.config?.sourceUrl ||
-              (isUsingCommon ? settings.commonPhotoSourceUrl : '') ||
-              ''
+              (isUsingCommon
+                ? settings.commonPhotoSourceUrl || activePhotoWidget.config?.sourceUrl
+                : activePhotoWidget.config?.sourceUrl || settings.commonPhotoSourceUrl) || ''
             }
             currentSourceLabel={
-              activePhotoWidget.config?.sourceLabel ||
-              (isUsingCommon ? settings.commonPhotoSourceLabel : undefined)
+              isUsingCommon
+                ? settings.commonPhotoSourceLabel ||
+                  (settings.commonPhotos?.length ? 'Shared Library' : activePhotoWidget.config?.sourceLabel)
+                : activePhotoWidget.config?.sourceLabel
             }
             currentSourceType={
-              activePhotoWidget.config?.sourceType ||
-              (isUsingCommon ? settings.commonPhotoSourceType : undefined) ||
-              (activePhotoWidget.config?.sourceUrl ||
-               activePhotoWidget.config?.customPhotos?.[0]?.url?.includes('googleusercontent.com')
-                ? 'web'
-                : undefined)
+              isUsingCommon
+                ? settings.commonPhotoSourceType || activePhotoWidget.config?.sourceType
+                : activePhotoWidget.config?.sourceType || settings.commonPhotoSourceType
             }
             currentPhotoCount={
-              activePhotoWidget.config?.customPhotos?.length ??
-              (isUsingCommon ? settings.commonPhotos?.length : undefined)
+              isUsingCommon
+                ? (settings.commonPhotos?.length ?? activePhotoWidget.config?.customPhotos?.length)
+                : (activePhotoWidget.config?.customPhotos?.length ?? settings.commonPhotos?.length)
             }
             onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType, applyToAll) => {
-              if (applyToAll) {
+              if (applyToAll || isUsingCommon) {
                 applyCommonPhotosToAllWidgets(newPhotos, sourceName, sourceUrl, sourceType);
               } else if (onUpdateWidget && newPhotos.length > 0) {
                 onUpdateWidget(activePhotoWidget.id, {
@@ -1827,6 +2102,159 @@ export const Corkboard: React.FC<CorkboardProps> = ({
           />
         );
       })()}
+
+      {/* Floating Context Menu for Z-Order & Layer Management */}
+      {contextMenu && (
+        <div
+          data-no-drag="true"
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          style={{
+            left: Math.min(contextMenu.x, window.innerWidth - 225),
+            top: Math.min(contextMenu.y, window.innerHeight - 290),
+          }}
+          className="fixed z-[100] w-56 rounded-2xl bg-gray-950/95 backdrop-blur-2xl border border-gray-800 p-2 shadow-2xl text-xs text-gray-200 select-none animate-in fade-in zoom-in-95 duration-100"
+        >
+          {/* Header */}
+          <div className="px-2.5 py-1.5 mb-1 border-b border-gray-800/80 flex items-center justify-between">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Layers className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+              <span className="font-bold text-white truncate text-[11px]">
+                {contextMenu.title || (contextMenu.type === 'widget' ? 'Widget' : 'Sticky Note')}
+              </span>
+            </div>
+            {contextMenu.isBackground ? (
+              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                Background
+              </span>
+            ) : (
+              <span className="text-[10px] font-mono text-gray-400">
+                L{contextMenu.currentZ}
+              </span>
+            )}
+          </div>
+
+          {/* Layer Order Actions */}
+          <div className="space-y-0.5">
+            <button
+              type="button"
+              onClick={() => handleBringToFront(contextMenu.id, contextMenu.type)}
+              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
+            >
+              <BringToFront className="w-4 h-4 text-emerald-400 shrink-0" />
+              <div>
+                <div className="font-semibold text-xs">Bring to Front</div>
+                <div className="text-[10px] text-gray-400">Place on top of all cards</div>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleBringForward(contextMenu.id, contextMenu.type)}
+              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
+            >
+              <ArrowUp className="w-4 h-4 text-blue-400 shrink-0" />
+              <div>
+                <div className="font-semibold text-xs">Bring Forward</div>
+                <div className="text-[10px] text-gray-400">Step up 1 layer</div>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSendBackward(contextMenu.id, contextMenu.type)}
+              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
+            >
+              <ArrowDown className="w-4 h-4 text-amber-400 shrink-0" />
+              <div>
+                <div className="font-semibold text-xs">Send Backward</div>
+                <div className="text-[10px] text-gray-400">Step down 1 layer</div>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSendToBack(contextMenu.id, contextMenu.type)}
+              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
+            >
+              <SendToBack className="w-4 h-4 text-purple-400 shrink-0" />
+              <div>
+                <div className="font-semibold text-xs">Send to Back</div>
+                <div className="text-[10px] text-gray-400">Pin as background layer</div>
+              </div>
+            </button>
+          </div>
+
+          {/* Context Options Divider */}
+          <div className="border-t border-gray-800/80 my-1" />
+
+          {/* Quick Context Settings */}
+          {contextMenu.type === 'widget' && (
+            <button
+              type="button"
+              onClick={() => {
+                const w = widgets.find((x) => x.id === contextMenu.id);
+                if (w) setEditingWidget(w);
+                setContextMenu(null);
+              }}
+              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-300 hover:text-white transition-colors cursor-pointer text-left"
+            >
+              <Settings className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+              <span>Tile Settings</span>
+            </button>
+          )}
+
+          {contextMenu.type === 'widget' && contextMenu.rotation && contextMenu.rotation !== 0 && onUpdateWidgetPos && (
+            <button
+              type="button"
+              onClick={() => {
+                const w = widgets.find((x) => x.id === contextMenu.id);
+                if (w && w.freeformPos) {
+                  onUpdateWidgetPos(w.id, w.gridPos, { ...w.freeformPos, rotation: 0 });
+                }
+                setContextMenu(null);
+              }}
+              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-300 hover:text-white transition-colors cursor-pointer text-left"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+              <span>Reset Rotation (0°)</span>
+            </button>
+          )}
+
+          {contextMenu.type === 'note' && (
+            <button
+              type="button"
+              onClick={() => {
+                const n = notes.find((x) => x.id === contextMenu.id);
+                if (n) {
+                  openNoteEditorForExisting(n);
+                }
+                setContextMenu(null);
+              }}
+              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-300 hover:text-white transition-colors cursor-pointer text-left"
+            >
+              <Edit2 className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+              <span>Edit Note</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              if (contextMenu.type === 'widget' && onRemoveWidget) {
+                onRemoveWidget(contextMenu.id);
+              } else if (contextMenu.type === 'note' && onUpdateNote) {
+                onUpdateNote(contextMenu.id, { isPinnedToCanvas: false });
+              }
+              setContextMenu(null);
+            }}
+            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-red-500/15 text-red-400 hover:text-red-300 transition-colors cursor-pointer text-left"
+          >
+            <Trash2 className="w-3.5 h-3.5 shrink-0" />
+            <span>Remove from Canvas</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 };
