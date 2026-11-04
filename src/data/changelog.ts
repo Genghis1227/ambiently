@@ -5,9 +5,24 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.1.13';
+export const APP_VERSION = '0.1.14';
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.1.14",
+    date: "November 4, 2026",
+    title: "Touch Swipe Gestures, Hybrid Z-Order Layering, & Ambient Controls",
+    highlights: [
+      "Touch Swipe Gestures: Swipe left or right across any photo frame (Filmstrip, Ken Burns, Mosaic, or Polaroids) on touchscreens, tablets, and kiosks to advance or navigate photos.",
+      "Hybrid Z-Order Layering: Foreground tiles and sticky notes gently elevate to the front when clicked or dragged.",
+      "Right-Click & Touch Layers Menu: Right-click any card or tap the new Layers button in the hover toolbar to Bring to Front, Send to Back (pin as background layer), Bring Forward, or Send Backward.",
+      "Ken Burns & Filmstrip Navigation: Sequential next/previous navigation with an in-memory history stack and keyboard arrow support.",
+      "Hardware Face Detection & Smart Top-Crop: Automatic native FaceDetector API and top-crop fallback for portrait photos.",
+      "Toolbar Peek Collision Fix: Relocated edge peek handle to bottom-24 and integrated previous/next buttons into the top photo counter pill.",
+      "Photo Sources Clarity: 1-click 'Set as Shared Board Library' and explicit 'Remove Source' / 'Reset to Default' buttons.",
+      "Auto-Rotate Toggle: Corrected icon parity and guaranteed auto-rotation defaults to enabled.",
+    ],
+  },
   {
     version: "v0.1.13",
     date: "November 3, 2026",

@@ -779,11 +779,57 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
       : photos[currentIndex] || photos[0];
   const activeDisplayIndex = style === 'filmstrip' ? filmstripActiveIndex : currentIndex;
 
+  // Touch swipe gesture handling (Filmstrip, Ken Burns, Mosaic, Polaroid)
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return;
+    touchStartRef.current = {
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY,
+      time: Date.now(),
+    };
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStartRef.current || e.changedTouches.length !== 1) return;
+    const start = touchStartRef.current;
+    const end = e.changedTouches[0];
+    touchStartRef.current = null;
+
+    const deltaX = end.clientX - start.x;
+    const deltaY = end.clientY - start.y;
+    const deltaTime = Date.now() - start.time;
+
+    // Must be a swipe gesture: horizontal distance > 40px, predominantly horizontal, within 600ms
+    if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY) * 1.3 && deltaTime < 600) {
+      if (deltaX < 0) {
+        // Swipe Left -> Next
+        if (style === 'filmstrip') handleFilmstripNext();
+        else if (style === 'mosaic') handleMosaicNext();
+        else if (style === 'ken_burns') handleKenBurnsNext();
+        else if (style === 'polaroid' && scatteredPolaroids.length > 0) {
+          handleShufflePolaroid(Math.floor(Math.random() * scatteredPolaroids.length));
+        }
+      } else {
+        // Swipe Right -> Previous
+        if (style === 'filmstrip') handleFilmstripPrev();
+        else if (style === 'mosaic') handleMosaicPrev();
+        else if (style === 'ken_burns') handleKenBurnsPrev();
+        else if (style === 'polaroid' && scatteredPolaroids.length > 0) {
+          handleShufflePolaroid(Math.floor(Math.random() * scatteredPolaroids.length));
+        }
+      }
+    }
+  };
+
   return (
     <div
       className="group relative w-full h-full rounded-2xl overflow-hidden select-none bg-black flex flex-col justify-between"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
       {/* 1. Ken Burns Ambient Display Style */}
       {style === 'ken_burns' && (
