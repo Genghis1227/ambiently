@@ -5,9 +5,22 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.1.14';
+export const APP_VERSION = '0.1.15';
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.1.15",
+    date: "November 4, 2026",
+    title: "Live Cloud Multi-Source Recognition & Shared Library Clarity",
+    highlights: [
+      "Live Multi-Source Recognition: Real-time URL parsing in Photo Sources detects Google Photos albums, Google Drive folders, Drive files, and direct web images as you type or paste.",
+      "Multi-Source Merging: Paste multiple album links on separate lines to merge thousands of photos from Google Photos and Google Drive folders into a unified photo frame.",
+      "Live Source Management: Preview detected sources as categorized badges with 1-click line removal, clear merge indicators, and dynamic action buttons.",
+      "Combined Album Title Credit: Multi-album sources automatically combine titles (e.g., 'Dashboard + Family Album') in the active source badge.",
+      "Tile Settings Clarity: Removed redundant 'Make this Album Shared' promotion banner when already in Shared Library mode or when sources are identical.",
+      "Clean Tile URL Isolation: Prevented independent tiles from inheriting shared library links in active URL badges.",
+    ],
+  },
   {
     version: "v0.1.14",
     date: "November 4, 2026",
