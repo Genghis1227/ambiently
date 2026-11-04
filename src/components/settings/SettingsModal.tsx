@@ -994,10 +994,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
               <div className="flex items-center justify-between text-xs px-3 py-2 rounded-lg bg-gray-900/60 border border-gray-800 text-gray-300">
                 <span className="text-gray-400">Current Shared Source:</span>
-                <span className="font-medium text-amber-300">
-                  {settings.commonPhotoSourceLabel || 'Curated Ambient'}
-                  {settings.commonPhotos && settings.commonPhotos.length > 0 && ` (${settings.commonPhotos.length} photos)`}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-amber-300">
+                    {settings.commonPhotoSourceLabel || 'Curated Ambient'}
+                    {settings.commonPhotos && settings.commonPhotos.length > 0 && ` (${settings.commonPhotos.length.toLocaleString()} photos)`}
+                  </span>
+                  {settings.commonPhotos && settings.commonPhotos.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => applyCommonPhotosToAllWidgets([], undefined, undefined, 'curated')}
+                      className="text-[10px] text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 px-2 py-0.5 rounded border border-red-500/20 cursor-pointer transition-all font-semibold"
+                      title="Reset shared library back to default Curated Scenery"
+                    >
+                      Reset to Default
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 

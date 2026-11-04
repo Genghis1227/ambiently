@@ -860,6 +860,15 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                         )}
                       </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={handleApplyCurated}
+                      className="text-[11px] font-semibold text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 px-2.5 py-1 rounded-lg border border-red-500/30 transition-all cursor-pointer flex items-center gap-1 shrink-0 ml-2"
+                      title="Remove this source and reset back to default Curated Scenery"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Remove Source</span>
+                    </button>
                   </div>
                   {initialWebUrls && (
                     <div className="flex items-center justify-between bg-black/40 px-2 py-1 rounded text-[11px] font-mono text-blue-300">
