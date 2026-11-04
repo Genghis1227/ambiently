@@ -211,7 +211,7 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
             }`}
           >
             <div className="flex items-center justify-between w-full">
-              {settings.carouselEnabled ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+              {settings.carouselEnabled ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
               <span className="text-[10px] font-bold uppercase tracking-wider opacity-75">
                 {settings.carouselEnabled ? 'Rotating' : 'Paused'}
               </span>
