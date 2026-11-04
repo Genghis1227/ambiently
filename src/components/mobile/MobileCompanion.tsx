@@ -110,7 +110,10 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
 
   // Modals for modifying & adding tiles on mobile
   const [editingWidget, setEditingWidget] = useState<DashboardWidget | null>(null);
-  const [photoSourcesTargetWidget, setPhotoSourcesTargetWidget] = useState<DashboardWidget | null>(null);
+  const [photoSourcesTarget, setPhotoSourcesTarget] = useState<{
+    widget: DashboardWidget;
+    isCommon: boolean;
+  } | null>(null);
   const [isAddWidgetOpen, setIsAddWidgetOpen] = useState(false);
 
   const now = new Date();
@@ -833,9 +836,15 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         isOpen={Boolean(editingWidget)}
         onClose={() => setEditingWidget(null)}
         widget={editingWidget}
-        onOpenPhotoSources={() => {
+        onOpenPhotoSources={(asCommonSource) => {
           if (editingWidget) {
-            setPhotoSourcesTargetWidget(editingWidget);
+            setPhotoSourcesTarget({
+              widget: editingWidget,
+              isCommon:
+                asCommonSource !== undefined
+                  ? asCommonSource
+                  : editingWidget.config?.useCommonSource !== false,
+            });
           }
         }}
         onSave={(widgetId, updates) => {
@@ -847,39 +856,39 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
       />
 
       {/* Photo Sources Modal when triggered from mobile widget settings */}
-      {photoSourcesTargetWidget && (() => {
+      {photoSourcesTarget && (() => {
         const activePhotoWidget =
-          widgets.find((w) => w.id === photoSourcesTargetWidget.id) || photoSourcesTargetWidget;
-        const isUsingCommon = activePhotoWidget.config?.useCommonSource !== false;
+          widgets.find((w) => w.id === photoSourcesTarget.widget.id) || photoSourcesTarget.widget;
+        const isUsingCommon = photoSourcesTarget.isCommon;
 
         return (
           <PhotoSourcesModal
-            isOpen={Boolean(photoSourcesTargetWidget)}
-            onClose={() => setPhotoSourcesTargetWidget(null)}
+            isOpen={Boolean(photoSourcesTarget)}
+            onClose={() => setPhotoSourcesTarget(null)}
             isCommonSource={isUsingCommon}
             initialWebUrls={
-              activePhotoWidget.config?.sourceUrl ||
-              (isUsingCommon ? settings.commonPhotoSourceUrl : '') ||
-              ''
+              (isUsingCommon
+                ? settings.commonPhotoSourceUrl || activePhotoWidget.config?.sourceUrl
+                : activePhotoWidget.config?.sourceUrl || settings.commonPhotoSourceUrl) || ''
             }
             currentSourceLabel={
-              activePhotoWidget.config?.sourceLabel ||
-              (isUsingCommon ? settings.commonPhotoSourceLabel : undefined)
+              isUsingCommon
+                ? settings.commonPhotoSourceLabel ||
+                  (settings.commonPhotos?.length ? 'Shared Library' : activePhotoWidget.config?.sourceLabel)
+                : activePhotoWidget.config?.sourceLabel
             }
             currentSourceType={
-              activePhotoWidget.config?.sourceType ||
-              (isUsingCommon ? settings.commonPhotoSourceType : undefined) ||
-              (activePhotoWidget.config?.sourceUrl ||
-               activePhotoWidget.config?.customPhotos?.[0]?.url?.includes('googleusercontent.com')
-                ? 'web'
-                : undefined)
+              isUsingCommon
+                ? settings.commonPhotoSourceType || activePhotoWidget.config?.sourceType
+                : activePhotoWidget.config?.sourceType || settings.commonPhotoSourceType
             }
             currentPhotoCount={
-              activePhotoWidget.config?.customPhotos?.length ??
-              (isUsingCommon ? settings.commonPhotos?.length : undefined)
+              isUsingCommon
+                ? (settings.commonPhotos?.length ?? activePhotoWidget.config?.customPhotos?.length)
+                : (activePhotoWidget.config?.customPhotos?.length ?? settings.commonPhotos?.length)
             }
             onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType, applyToAll) => {
-              if (applyToAll) {
+              if (applyToAll || isUsingCommon) {
                 applyCommonPhotosToAllWidgets(newPhotos, sourceName, sourceUrl, sourceType);
               } else if (onUpdateWidget && newPhotos.length > 0) {
                 onUpdateWidget(activePhotoWidget.id, {
