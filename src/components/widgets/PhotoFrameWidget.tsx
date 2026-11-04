@@ -8,6 +8,7 @@ import {
   type PhotoItem,
   type PhotoDisplayStyle,
 } from '../../services/photos';
+import { useDashboardStore } from '../../store/dashboardStore';
 
 
 export type PolaroidDensity = 6 | 12 | 18 | 24 | 32;
@@ -197,6 +198,7 @@ interface PhotoFrameWidgetProps {
   widgetId?: string;
   initialStyle?: PhotoDisplayStyle;
   rotationIntervalSec?: number;
+  useCommonSource?: boolean;
   customPhotos?: PhotoItem[];
   initialSourceLabel?: string;
   initialPolaroidCount?: number;
@@ -210,6 +212,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   widgetId,
   initialStyle = 'ken_burns',
   rotationIntervalSec = 15,
+  useCommonSource,
   customPhotos,
   initialSourceLabel = 'Curated',
   initialPolaroidCount = 12,
@@ -218,8 +221,22 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   showCaptions = true,
   onUpdateConfig: _onUpdateConfig,
 }) => {
-  const stateKey = widgetId || `photo-state-${initialSourceLabel || 'ambient'}`;
-  const initialPhotos = customPhotos && customPhotos.length > 0 ? customPhotos : CURATED_AMBIENT_PHOTOS;
+  const commonPhotos = useDashboardStore((s) => s.settings.commonPhotos);
+  const commonPhotoSourceLabel = useDashboardStore((s) => s.settings.commonPhotoSourceLabel);
+
+  const isUsingCommonSource =
+    useCommonSource !== false && Boolean(commonPhotos && commonPhotos.length > 0);
+  const resolvedPhotos = isUsingCommonSource
+    ? commonPhotos!
+    : customPhotos && customPhotos.length > 0
+    ? customPhotos
+    : CURATED_AMBIENT_PHOTOS;
+  const resolvedLabel = isUsingCommonSource
+    ? commonPhotoSourceLabel || initialSourceLabel || 'Shared Library'
+    : initialSourceLabel || (customPhotos?.length ? 'Custom Photos' : 'Curated');
+
+  const stateKey = widgetId || `photo-state-${resolvedLabel || 'ambient'}`;
+  const initialPhotos = resolvedPhotos;
   const initialSig = getPhotosSignature(initialPhotos);
   const savedState = loadRuntimeState(stateKey, initialSig);
 
@@ -236,7 +253,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
       ? Math.floor(Math.random() * initialPhotos.length)
       : 0;
   });
-  const [sourceLabel, setSourceLabel] = useState<string>(initialSourceLabel);
+  const [sourceLabel, setSourceLabel] = useState<string>(resolvedLabel);
 
   const [polaroidCount, setPolaroidCount] = useState<number>(initialPolaroidCount);
   const [polaroidSizeMode, setPolaroidSizeMode] = useState<PolaroidSizeMode>(initialPolaroidSizeMode);
@@ -511,27 +528,25 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   }, [rotationIntervalSec]);
 
   useEffect(() => {
-    if (customPhotos && customPhotos.length > 0) {
-      const pool = photoOrder === 'random' ? shuffleArray(customPhotos) : customPhotos;
+    if (resolvedPhotos && resolvedPhotos.length > 0) {
+      const pool = photoOrder === 'random' ? shuffleArray(resolvedPhotos) : resolvedPhotos;
       setPhotos(pool);
-      const newSig = getPhotosSignature(customPhotos);
+      const newSig = getPhotosSignature(resolvedPhotos);
       const existing = loadRuntimeState(stateKey, newSig);
       if (!existing) {
-        // Brand new photo album loaded by user -> reset to start or random
-        setCurrentIndex(photoOrder === 'random' ? Math.floor(Math.random() * customPhotos.length) : 0);
+        // Brand new photo album loaded -> reset to start or random
+        setCurrentIndex(photoOrder === 'random' ? Math.floor(Math.random() * resolvedPhotos.length) : 0);
         setFilmstripIndex(0);
         setMosaicPhotos(pool.slice(0, 4));
         mosaicSlotRef.current = 0;
-        mosaicIndexRef.current = 4 % customPhotos.length;
+        mosaicIndexRef.current = 4 % resolvedPhotos.length;
       }
     }
-  }, [customPhotos, stateKey, photoOrder]);
+  }, [resolvedPhotos, stateKey, photoOrder]);
 
   useEffect(() => {
-    if (initialSourceLabel) {
-      setSourceLabel(initialSourceLabel);
-    }
-  }, [initialSourceLabel]);
+    setSourceLabel(resolvedLabel);
+  }, [resolvedLabel]);
 
   // Cache photos on mount for 0ms offline fallback
   useEffect(() => {

@@ -53,12 +53,14 @@ interface PhotoSourcesModalProps {
     photos: PhotoItem[],
     sourceName: string,
     sourceUrl?: string,
-    sourceType?: 'plex' | 'local' | 'web' | 'curated'
+    sourceType?: 'plex' | 'local' | 'web' | 'curated',
+    applyToAll?: boolean
   ) => void;
   initialWebUrls?: string;
   currentSourceLabel?: string;
   currentSourceType?: 'plex' | 'local' | 'web' | 'curated';
   currentPhotoCount?: number;
+  isCommonSource?: boolean;
   // Backward compatibility optional props (styled in Tile Settings)
   currentStyle?: PhotoDisplayStyle;
   onStyleChange?: (style: PhotoDisplayStyle) => void;
@@ -78,8 +80,16 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   currentSourceLabel,
   currentSourceType,
   currentPhotoCount,
+  isCommonSource,
 }) => {
   const [activeTab, setActiveTab] = useState<'plex' | 'local' | 'web' | 'curated'>('plex');
+  const [applyToAll, setApplyToAll] = useState<boolean>(isCommonSource ?? false);
+
+  useEffect(() => {
+    if (isCommonSource !== undefined) {
+      setApplyToAll(isCommonSource);
+    }
+  }, [isCommonSource]);
 
   // Plex auth & server states
   const [plexToken, setPlexToken] = useState<string | null>(null);
@@ -99,7 +109,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Web / Google Drive state
-  const [webUrlsText, setWebUrlsText] = useState('');
+  const [webUrlsText, setWebUrlsText] = useState(initialWebUrls || '');
   const [isWebLoading, setIsWebLoading] = useState(false);
 
   const loadPhotoSections = async (server: PlexServerResource, token: string) => {
@@ -214,7 +224,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
         selectedSectionKey
       );
       if (photos.length > 0) {
-        onPhotosLoaded(photos, `Plex (${selectedServer.name})`, undefined, 'plex');
+        onPhotosLoaded(photos, `Plex (${selectedServer.name})`, undefined, 'plex', applyToAll);
         cachePhotosLocally(photos);
         setStatusMessage(`Successfully loaded ${photos.length} photos from Plex!`);
         setTimeout(() => onClose(), 1200);
@@ -300,7 +310,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
         ? `Local (${selectedFolders[0].name})`
         : `Local (${selectedFolders.length} Folders)`;
 
-    onPhotosLoaded(allPhotos, sourceLabel, undefined, 'local');
+    onPhotosLoaded(allPhotos, sourceLabel, undefined, 'local', applyToAll);
     cachePhotosLocally(allPhotos);
     setStatusMessage(`Applied ${allPhotos.length} photos from ${selectedFolders.length} folder(s)!`);
     setTimeout(() => onClose(), 1000);
@@ -313,7 +323,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
     try {
       const res = await resolveWebAndCloudPhotoUrls(webUrlsText);
       if (res.photos.length > 0) {
-        onPhotosLoaded(res.photos, res.sourceTitle || 'Google Photos & Web', webUrlsText, 'web');
+        onPhotosLoaded(res.photos, res.sourceTitle || 'Google Photos & Web', webUrlsText, 'web', applyToAll);
         cachePhotosLocally(res.photos);
         const countText =
           res.totalAlbumCount && res.totalAlbumCount > res.photos.length
@@ -331,7 +341,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
 
   // Curated Preset
   const handleApplyCurated = () => {
-    onPhotosLoaded(CURATED_AMBIENT_PHOTOS, 'Curated Ambient', undefined, 'curated');
+    onPhotosLoaded(CURATED_AMBIENT_PHOTOS, 'Curated Ambient', undefined, 'curated', applyToAll);
     cachePhotosLocally(CURATED_AMBIENT_PHOTOS);
     setStatusMessage('Curated ambient scenery loaded.');
     setTimeout(() => onClose(), 1000);
@@ -373,9 +383,27 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-950/60">
-          <div className="flex items-center gap-2">
-            <ImageIcon className="w-5 h-5 text-blue-400" />
-            <h2 className="text-base font-bold text-white">Photo Frame & Media Sources</h2>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+              <ImageIcon className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-white">
+                  {isCommonSource ? 'Common Photo Library' : 'Photo Frame & Media Sources'}
+                </h2>
+                {isCommonSource && (
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                    Shared Board Library
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-gray-400">
+                {isCommonSource
+                  ? 'Manage the shared photo library used across all your photo frames'
+                  : 'Select photo sources, cloud albums, or curated ambient photography'}
+              </p>
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -818,19 +846,35 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
 
               {/* Active Configured Album Banner */}
               {currentSourceLabel && (
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-blue-950/40 border border-blue-500/30 text-xs">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <div>
-                      <span className="text-gray-400">Currently Active: </span>
-                      <span className="text-white font-semibold">{currentSourceLabel}</span>
-                      {currentPhotoCount != null && currentPhotoCount > 0 && (
-                        <span className="text-blue-300 ml-1.5 font-mono">
-                          ({currentPhotoCount.toLocaleString()} photos)
-                        </span>
-                      )}
+                <div className="flex flex-col gap-1.5 p-2.5 rounded-xl bg-blue-950/40 border border-blue-500/30 text-xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <div>
+                        <span className="text-gray-400">Currently Active: </span>
+                        <span className="text-white font-semibold">{currentSourceLabel}</span>
+                        {currentPhotoCount != null && currentPhotoCount > 0 && (
+                          <span className="text-blue-300 ml-1.5 font-mono">
+                            ({currentPhotoCount.toLocaleString()} photos)
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
+                  {initialWebUrls && (
+                    <div className="flex items-center justify-between bg-black/40 px-2 py-1 rounded text-[11px] font-mono text-blue-300">
+                      <span className="truncate max-w-[420px]">{initialWebUrls}</span>
+                      {webUrlsText.trim() !== initialWebUrls.trim() && (
+                        <button
+                          type="button"
+                          onClick={() => setWebUrlsText(initialWebUrls)}
+                          className="text-xs text-blue-400 hover:text-blue-200 underline shrink-0 ml-2"
+                        >
+                          Restore Link
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -888,6 +932,28 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                 <span>Use Curated Scenery</span>
               </button>
             </div>
+          )}
+        </div>
+
+        {/* Modal Footer with Common Library Toggle */}
+        <div className="px-5 py-3 border-t border-gray-800 bg-gray-950/70 flex items-center justify-between text-xs">
+          {isCommonSource ? (
+            <div className="flex items-center gap-2 text-blue-400">
+              <span className="inline-block w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+              <span>Updating Shared Board Library (applies to all shared photo frames)</span>
+            </div>
+          ) : (
+            <label className="flex items-center gap-2.5 cursor-pointer select-none text-gray-300 hover:text-white">
+              <input
+                type="checkbox"
+                checked={applyToAll}
+                onChange={(e) => setApplyToAll(e.target.checked)}
+                className="w-4 h-4 rounded border-gray-700 bg-gray-900 text-blue-600 focus:ring-blue-500 cursor-pointer"
+              />
+              <span className="font-medium">
+                Set as Common Library (apply this album to all photo widgets on your boards)
+              </span>
+            </label>
           )}
         </div>
       </div>

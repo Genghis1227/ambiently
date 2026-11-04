@@ -29,6 +29,7 @@ import { APP_VERSION } from '../../data/changelog';
 import { ChangelogModal } from '../changelog/ChangelogModal';
 import { WidgetSettingsModal } from '../widgets/WidgetSettingsModal';
 import { PhotoSourcesModal } from '../photos/PhotoSourcesModal';
+import { useDashboardStore } from '../../store/dashboardStore';
 import { AddWidgetModal } from '../widgets/AddWidgetModal';
 import { CalendarWidget } from '../widgets/CalendarWidget';
 import { ClockWeatherWidget } from '../widgets/ClockWeatherWidget';
@@ -75,6 +76,9 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
   onToggleDesktopView,
   onOpenSettings,
 }) => {
+  const settings = useDashboardStore((state) => state.settings);
+  const applyCommonPhotosToAllWidgets = useDashboardStore((state) => state.applyCommonPhotosToAllWidgets);
+
   // Persistent View Option (All Tiles | Widgets | Notes & Tasks)
   const [viewMode, setViewMode] = useState<CompanionViewMode>(() => {
     try {
@@ -316,6 +320,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
           <div className="h-44 w-full">
             <PhotoFrameWidget
               widgetId={widget.id}
+              useCommonSource={widget.config?.useCommonSource}
               initialStyle={widget.config?.displayStyle || 'ken_burns'}
               rotationIntervalSec={widget.config?.rotationIntervalSec || 15}
               customPhotos={widget.config?.customPhotos}
@@ -842,35 +847,56 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
       />
 
       {/* Photo Sources Modal when triggered from mobile widget settings */}
-      {photoSourcesTargetWidget && (
-        <PhotoSourcesModal
-          isOpen={Boolean(photoSourcesTargetWidget)}
-          onClose={() => setPhotoSourcesTargetWidget(null)}
-          initialWebUrls={photoSourcesTargetWidget?.config?.sourceUrl || ''}
-          currentSourceLabel={photoSourcesTargetWidget?.config?.sourceLabel}
-          currentSourceType={
-            photoSourcesTargetWidget?.config?.sourceType ||
-            (photoSourcesTargetWidget?.config?.sourceUrl ||
-             photoSourcesTargetWidget?.config?.customPhotos?.[0]?.url?.includes('googleusercontent.com')
-              ? 'web'
-              : undefined)
-          }
-          currentPhotoCount={photoSourcesTargetWidget?.config?.customPhotos?.length}
-          onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType) => {
-            if (photoSourcesTargetWidget && onUpdateWidget && newPhotos.length > 0) {
-              onUpdateWidget(photoSourcesTargetWidget.id, {
-                config: {
-                  ...photoSourcesTargetWidget.config,
-                  customPhotos: newPhotos,
-                  sourceLabel: sourceName,
-                  sourceUrl: sourceUrl !== undefined ? sourceUrl : photoSourcesTargetWidget.config?.sourceUrl,
-                  sourceType: sourceType !== undefined ? sourceType : photoSourcesTargetWidget.config?.sourceType,
-                },
-              });
+      {photoSourcesTargetWidget && (() => {
+        const activePhotoWidget =
+          widgets.find((w) => w.id === photoSourcesTargetWidget.id) || photoSourcesTargetWidget;
+        const isUsingCommon = activePhotoWidget.config?.useCommonSource !== false;
+
+        return (
+          <PhotoSourcesModal
+            isOpen={Boolean(photoSourcesTargetWidget)}
+            onClose={() => setPhotoSourcesTargetWidget(null)}
+            isCommonSource={isUsingCommon}
+            initialWebUrls={
+              activePhotoWidget.config?.sourceUrl ||
+              (isUsingCommon ? settings.commonPhotoSourceUrl : '') ||
+              ''
             }
-          }}
-        />
-      )}
+            currentSourceLabel={
+              activePhotoWidget.config?.sourceLabel ||
+              (isUsingCommon ? settings.commonPhotoSourceLabel : undefined)
+            }
+            currentSourceType={
+              activePhotoWidget.config?.sourceType ||
+              (isUsingCommon ? settings.commonPhotoSourceType : undefined) ||
+              (activePhotoWidget.config?.sourceUrl ||
+               activePhotoWidget.config?.customPhotos?.[0]?.url?.includes('googleusercontent.com')
+                ? 'web'
+                : undefined)
+            }
+            currentPhotoCount={
+              activePhotoWidget.config?.customPhotos?.length ??
+              (isUsingCommon ? settings.commonPhotos?.length : undefined)
+            }
+            onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType, applyToAll) => {
+              if (applyToAll) {
+                applyCommonPhotosToAllWidgets(newPhotos, sourceName, sourceUrl, sourceType);
+              } else if (onUpdateWidget && newPhotos.length > 0) {
+                onUpdateWidget(activePhotoWidget.id, {
+                  config: {
+                    ...activePhotoWidget.config,
+                    useCommonSource: false,
+                    customPhotos: newPhotos,
+                    sourceLabel: sourceName,
+                    sourceUrl: sourceUrl !== undefined ? sourceUrl : activePhotoWidget.config?.sourceUrl,
+                    sourceType: sourceType !== undefined ? sourceType : activePhotoWidget.config?.sourceType,
+                  },
+                });
+              }
+            }}
+          />
+        );
+      })()}
 
       {/* Add Widget Modal for adding new tiles directly from mobile */}
       {onAddWidget && (

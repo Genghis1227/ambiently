@@ -18,6 +18,7 @@ import type {
 } from '../types/dashboard';
 import { saveSnapshotToFile, hasActiveLocalFile } from '../services/fileSync';
 import { computeNonOverlappingLayout, findOpenCanvasSpot } from '../utils/autoLayout';
+import type { PhotoItem } from '../services/photos';
 
 interface LayoutSnapshot {
   tabId: string;
@@ -59,6 +60,18 @@ interface DashboardState {
   toggleSnapToGrid: () => Promise<void>;
   setDockHidden: (isDockHidden: boolean) => Promise<void>;
   toggleDockHidden: () => Promise<void>;
+  setCommonPhotos: (
+    photos: PhotoItem[],
+    sourceLabel?: string,
+    sourceUrl?: string,
+    sourceType?: 'plex' | 'local' | 'web' | 'curated'
+  ) => Promise<void>;
+  applyCommonPhotosToAllWidgets: (
+    photos: PhotoItem[],
+    sourceLabel?: string,
+    sourceUrl?: string,
+    sourceType?: 'plex' | 'local' | 'web' | 'curated'
+  ) => Promise<void>;
   toggleTabEnabled: (tabId: string, enabled: boolean) => Promise<void>;
   setDisplayDensity: (density: 0.75 | 1.0 | 1.25 | 1.5) => Promise<void>;
   setCarouselEnabled: (enabled: boolean) => Promise<void>;
@@ -322,6 +335,43 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   toggleDockHidden: async () => {
     const current = Boolean(get().settings.isDockHidden);
     await get().setDockHidden(!current);
+  },
+
+  setCommonPhotos: async (photos, sourceLabel, sourceUrl, sourceType) => {
+    const updated = {
+      ...get().settings,
+      commonPhotos: photos,
+      commonPhotoSourceLabel: sourceLabel,
+      commonPhotoSourceUrl: sourceUrl,
+      commonPhotoSourceType: sourceType,
+      updated_at: new Date().toISOString(),
+    };
+    await db.settings.put(updated);
+    set({ settings: updated });
+    get().saveLocalBackup();
+  },
+
+  applyCommonPhotosToAllWidgets: async (photos, sourceLabel, sourceUrl, sourceType) => {
+    await get().setCommonPhotos(photos, sourceLabel, sourceUrl, sourceType);
+    const updatedWidgets = get().widgets.map((w) => {
+      if (w.type === 'photo_frame') {
+        return {
+          ...w,
+          config: {
+            ...w.config,
+            useCommonSource: true,
+            sourceLabel: sourceLabel || w.config?.sourceLabel,
+            sourceUrl: sourceUrl || w.config?.sourceUrl,
+            sourceType: sourceType || w.config?.sourceType,
+          },
+        };
+      }
+      return w;
+    });
+    await db.widgets.clear();
+    await db.widgets.bulkPut(updatedWidgets);
+    set({ widgets: updatedWidgets });
+    get().saveLocalBackup();
   },
 
   toggleTabEnabled: async (tabId, enabled) => {
