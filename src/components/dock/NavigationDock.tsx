@@ -285,26 +285,18 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
                 }`}
               >
                 {tab.icon && iconMap[tab.icon] ? iconMap[tab.icon] : <LayoutGrid className="w-5 h-5" />}
-                {/* Home Indicator Dot (when inactive) */}
-                {isHome && !isActive && (
+                {/* Home Indicator Icon */}
+                {isHome && (
                   <span
-                    className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-purple-400 shadow-[0_0_4px_rgba(192,132,252,0.8)]"
-                    title="Home Board"
-                  />
-                )}
-                {/* Active Dot indicator */}
-                {isActive && (
-                  <span
-                    className={`absolute w-1.5 h-1.5 rounded-full bg-white ${
-                      dockPosition === 'left'
-                        ? '-left-1'
-                        : dockPosition === 'right'
-                        ? '-right-1'
-                        : dockPosition === 'top'
-                        ? '-top-1'
-                        : '-bottom-1'
+                    className={`absolute -top-1 -right-1 p-0.5 rounded-full flex items-center justify-center shadow-md transition-colors ${
+                      isActive
+                        ? 'bg-purple-600 text-white ring-2 ring-gray-950'
+                        : 'bg-gray-800 text-purple-300 border border-purple-500/40'
                     }`}
-                  />
+                    title="Home Board"
+                  >
+                    <Home className="w-2.5 h-2.5 stroke-[2.5]" />
+                  </span>
                 )}
               </button>
             );
