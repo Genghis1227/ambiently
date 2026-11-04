@@ -261,6 +261,8 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   const [scatteredPolaroids, setScatteredPolaroids] = useState<ActivePolaroidItem[]>(
     () => savedState?.scatteredPolaroids || []
   );
+  const [isHovered, setIsHovered] = useState(false);
+  const [resetTrigger, setResetTrigger] = useState(0);
   const topZIndexRef = useRef(30);
 
   // Sync props to state if parent config updates
@@ -467,7 +469,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     }, intervalSec * 1000);
 
     return () => clearInterval(timer);
-  }, [style, photos, intervalSec, photoOrder]);
+  }, [style, photos, intervalSec, photoOrder, resetTrigger]);
 
   const handleShuffleMosaicSlot = useCallback((slotIdx: number) => {
     if (photos.length <= 1) return;
@@ -491,6 +493,48 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
       return updated;
     });
   }, [photos, photoOrder]);
+
+  const handleMosaicNext = useCallback(() => {
+    if (photos.length <= 1) return;
+    setMosaicPhotos((prev) => {
+      const pool = photos;
+      const count = pool.length;
+      if (count <= 4) {
+        return [...prev.slice(1), prev[0]];
+      }
+      const nextBatch: PhotoItem[] = [];
+      for (let i = 0; i < 4; i++) {
+        const nextIdx = mosaicIndexRef.current % count;
+        nextBatch.push(pool[nextIdx]);
+        mosaicIndexRef.current = (nextIdx + 1) % count;
+      }
+      return nextBatch;
+    });
+    mosaicSlotRef.current = 0;
+    setResetTrigger((prev) => prev + 1);
+  }, [photos]);
+
+  const handleMosaicPrev = useCallback(() => {
+    if (photos.length <= 1) return;
+    setMosaicPhotos((prev) => {
+      const pool = photos;
+      const count = pool.length;
+      if (count <= 4) {
+        return [prev[prev.length - 1], ...prev.slice(0, prev.length - 1)];
+      }
+      const prevStart = ((mosaicIndexRef.current - 8) % count + count) % count;
+      mosaicIndexRef.current = prevStart;
+      const prevBatch: PhotoItem[] = [];
+      for (let i = 0; i < 4; i++) {
+        const nextIdx = mosaicIndexRef.current % count;
+        prevBatch.push(pool[nextIdx]);
+        mosaicIndexRef.current = (nextIdx + 1) % count;
+      }
+      return prevBatch;
+    });
+    mosaicSlotRef.current = 0;
+    setResetTrigger((prev) => prev + 1);
+  }, [photos]);
 
   const handleMosaicError = useCallback((slotIdx: number, photoId: string) => {
     failedPhotoIdsRef.current.add(photoId);
@@ -553,6 +597,48 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     cachePhotosLocally(photos);
   }, [photos]);
 
+  const handleKenBurnsNext = useCallback(() => {
+    if (photos.length <= 1) return;
+    if (photoOrder === 'random') {
+      setCurrentIndex((prev) => {
+        let next = Math.floor(Math.random() * photos.length);
+        if (photos.length > 1 && next === prev) {
+          next = (next + 1) % photos.length;
+        }
+        return next;
+      });
+    } else {
+      setCurrentIndex((prev) => (prev + 1) % photos.length);
+    }
+    setResetTrigger((prev) => prev + 1);
+  }, [photos, photoOrder]);
+
+  const handleKenBurnsPrev = useCallback(() => {
+    if (photos.length <= 1) return;
+    if (photoOrder === 'random') {
+      setCurrentIndex((prev) => {
+        let next = Math.floor(Math.random() * photos.length);
+        if (photos.length > 1 && next === prev) {
+          next = (next + 1) % photos.length;
+        }
+        return next;
+      });
+    } else {
+      setCurrentIndex((prev) => (prev - 1 + photos.length) % photos.length);
+    }
+    setResetTrigger((prev) => prev + 1);
+  }, [photos, photoOrder]);
+
+  const handleFilmstripNext = useCallback(() => {
+    setFilmstripIndex((prev) => prev + 1);
+    setResetTrigger((prev) => prev + 1);
+  }, []);
+
+  const handleFilmstripPrev = useCallback(() => {
+    setFilmstripIndex((prev) => prev - 1);
+    setResetTrigger((prev) => prev + 1);
+  }, []);
+
   // Slideshow auto-rotation for Ken Burns
   useEffect(() => {
     if (photos.length <= 1) return;
@@ -570,7 +656,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
       }
     }, intervalSec * 1000);
     return () => clearInterval(interval);
-  }, [photos, intervalSec, photoOrder]);
+  }, [photos, intervalSec, photoOrder, resetTrigger]);
 
   // Filmstrip continuous reel index & auto-rotation
   const [filmstripIndex, setFilmstripIndex] = useState(() => savedState?.filmstripIndex ?? 0);
@@ -581,7 +667,48 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
       setFilmstripIndex((prev) => prev + 1);
     }, intervalSec * 1000);
     return () => clearInterval(interval);
-  }, [style, photos, intervalSec]);
+  }, [style, photos, intervalSec, resetTrigger]);
+
+  // Keyboard arrow buttons navigation while hovered
+  useEffect(() => {
+    if (!isHovered) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        if (style === 'filmstrip') {
+          handleFilmstripNext();
+        } else if (style === 'mosaic') {
+          handleMosaicNext();
+        } else if (style === 'ken_burns') {
+          handleKenBurnsNext();
+        }
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        if (style === 'filmstrip') {
+          handleFilmstripPrev();
+        } else if (style === 'mosaic') {
+          handleMosaicPrev();
+        } else if (style === 'ken_burns') {
+          handleKenBurnsPrev();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    isHovered,
+    style,
+    handleFilmstripNext,
+    handleFilmstripPrev,
+    handleMosaicNext,
+    handleMosaicPrev,
+    handleKenBurnsNext,
+    handleKenBurnsPrev,
+  ]);
 
   // Save persistent rotation progress across canvas carousel switches & unmounts
   useEffect(() => {
@@ -605,7 +732,11 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   const activeDisplayIndex = style === 'filmstrip' ? filmstripActiveIndex : currentIndex;
 
   return (
-    <div className="relative w-full h-full rounded-2xl overflow-hidden select-none bg-black flex flex-col justify-between">
+    <div
+      className="group relative w-full h-full rounded-2xl overflow-hidden select-none bg-black flex flex-col justify-between"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
       {/* 1. Ken Burns Ambient Display Style */}
       {style === 'ken_burns' && (
         <div className="absolute inset-0 overflow-hidden">
@@ -637,6 +768,38 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
           </AnimatePresence>
           {/* Subtle vignette gradient */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 pointer-events-none" />
+
+          {/* Interactive Navigation Chevrons on Hover for Ken Burns */}
+          {photos.length > 1 && (
+            <>
+              <button
+                type="button"
+                data-no-drag="true"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleKenBurnsPrev();
+                }}
+                className="absolute left-3 top-1/2 -translate-y-1/2 z-35 p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
+                title="Previous photo (Go back)"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <button
+                type="button"
+                data-no-drag="true"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleKenBurnsNext();
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 z-35 p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
+                title="Next photo"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -676,6 +839,38 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
               </AnimatePresence>
             </div>
           ))}
+
+          {/* Interactive Navigation Chevrons on Hover for Mosaic */}
+          {photos.length > 1 && (
+            <>
+              <button
+                type="button"
+                data-no-drag="true"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleMosaicPrev();
+                }}
+                className="absolute left-3 top-1/2 -translate-y-1/2 z-35 p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
+                title="Previous photo collage (Go back)"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <button
+                type="button"
+                data-no-drag="true"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleMosaicNext();
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 z-35 p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
+                title="Next photo collage"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -788,22 +983,26 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
             <>
               <button
                 type="button"
+                data-no-drag="true"
+                onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setFilmstripIndex((prev) => prev - 1);
+                  handleFilmstripPrev();
                 }}
-                className="absolute left-3 top-1/2 -translate-y-1/2 z-35 p-2 rounded-full bg-black/60 hover:bg-black/80 text-white/70 hover:text-white border border-white/15 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer backdrop-blur-sm"
-                title="Previous photo"
+                className="absolute left-3 top-1/2 -translate-y-1/2 z-35 p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
+                title="Previous photo (Go back)"
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
               <button
                 type="button"
+                data-no-drag="true"
+                onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setFilmstripIndex((prev) => prev + 1);
+                  handleFilmstripNext();
                 }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 z-35 p-2 rounded-full bg-black/60 hover:bg-black/80 text-white/70 hover:text-white border border-white/15 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer backdrop-blur-sm"
+                className="absolute right-3 top-1/2 -translate-y-1/2 z-35 p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
                 title="Next photo"
               >
                 <ChevronRight className="w-5 h-5" />
