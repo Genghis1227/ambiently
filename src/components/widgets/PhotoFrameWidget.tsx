@@ -141,6 +141,7 @@ interface PhotoWidgetRuntimeState {
 }
 
 const photoRuntimeCache = new Map<string, PhotoWidgetRuntimeState>();
+const photoFocalCache = new Map<string, string>();
 
 function getPhotosSignature(items: PhotoItem[]): string {
   if (!items || items.length === 0) return 'empty';
@@ -263,6 +264,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   );
   const [isHovered, setIsHovered] = useState(false);
   const [resetTrigger, setResetTrigger] = useState(0);
+  const [photoFocals, setPhotoFocals] = useState<Record<string, string>>({});
   const topZIndexRef = useRef(30);
 
   // Sync props to state if parent config updates
@@ -562,6 +564,60 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     setFilmstripIndex((prev) => prev + 1);
   }, []);
 
+  // Detect photo aspect ratio and face location to intelligently crop portrait photos toward the top
+  const handleImageLoad = useCallback((photoId: string, img: HTMLImageElement) => {
+    if (photoFocalCache.has(photoId)) {
+      const cached = photoFocalCache.get(photoId)!;
+      setPhotoFocals((prev) => (prev[photoId] === cached ? prev : { ...prev, [photoId]: cached }));
+      return;
+    }
+
+    const { naturalWidth, naturalHeight } = img;
+    if (!naturalWidth || !naturalHeight) return;
+
+    // Detect if photo is portrait (taller than wide)
+    const isPortrait = naturalHeight > naturalWidth * 1.05;
+
+    if (!isPortrait) {
+      photoFocalCache.set(photoId, 'center center');
+      setPhotoFocals((prev) => ({ ...prev, [photoId]: 'center center' }));
+      return;
+    }
+
+    // Default portrait focal position: top 20% to keep heads & faces clearly in frame
+    const defaultPortraitPos = 'center 20%';
+
+    // Try modern browser FaceDetector API if supported (Chromium / Edge / Android)
+    if (typeof window !== 'undefined' && 'FaceDetector' in window) {
+      try {
+        const detector = new (window as any).FaceDetector({ fastMode: true, maxDetectedFaces: 3 });
+        detector
+          .detect(img)
+          .then((faces: any[]) => {
+            if (faces && faces.length > 0) {
+              // Find the top-most face to ensure heads are never cropped
+              const topFace = faces.reduce((prev: any, curr: any) =>
+                curr.boundingBox.top < prev.boundingBox.top ? curr : prev
+              );
+              const faceY = topFace.boundingBox.top + topFace.boundingBox.height * 0.45;
+              const yPercent = Math.max(10, Math.min(50, Math.round((faceY / naturalHeight) * 100)));
+              const detectedPos = `center ${yPercent}%`;
+              photoFocalCache.set(photoId, detectedPos);
+              setPhotoFocals((prev) => ({ ...prev, [photoId]: detectedPos }));
+            }
+          })
+          .catch(() => {
+            // Keep default portrait top-crop on CORS or detection error
+          });
+      } catch {
+        // Fallback to default portrait top-crop
+      }
+    }
+
+    photoFocalCache.set(photoId, defaultPortraitPos);
+    setPhotoFocals((prev) => ({ ...prev, [photoId]: defaultPortraitPos }));
+  }, []);
+
   // Sync props to state when widget config updates
   useEffect(() => {
     if (initialStyle) setStyle(initialStyle);
@@ -753,7 +809,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
               style={{
                 backgroundImage: `url(${getOptimizedPhotoUrl(currentPhoto.url, 1920)})`,
                 backgroundSize: 'cover',
-                backgroundPosition: 'center',
+                backgroundPosition: photoFocals[currentPhoto.id] || photoFocalCache.get(currentPhoto.id) || 'center',
               }}
               className="absolute inset-0 w-full h-full"
             >
@@ -762,6 +818,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                 alt=""
                 referrerPolicy="no-referrer"
                 className="hidden"
+                onLoad={(e) => handleImageLoad(currentPhoto.id, e.currentTarget)}
                 onError={() => handleKenBurnsError(currentPhoto.id)}
               />
             </motion.div>
@@ -827,7 +884,11 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                     alt={p.caption || 'Photo'}
                     referrerPolicy="no-referrer"
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    style={{
+                      objectPosition: photoFocals[p.id] || photoFocalCache.get(p.id) || undefined,
+                    }}
                     loading="lazy"
+                    onLoad={(e) => handleImageLoad(p.id, e.currentTarget)}
                     onError={() => handleMosaicError(idx, p.id)}
                   />
                   {showCaptions && (
@@ -1050,7 +1111,11 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   alt={p.caption || 'Film frame'}
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-cover select-none pointer-events-none"
+                  style={{
+                    objectPosition: photoFocals[p.id] || photoFocalCache.get(p.id) || undefined,
+                  }}
                   loading="lazy"
+                  onLoad={(e) => handleImageLoad(p.id, e.currentTarget)}
                   onError={() => handleFilmstripError(p.id)}
                 />
 
