@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.13] - 2026-11-03
+
+### Added
+* **Shared Common Photo Library (`dashboardStore.ts`, `db.ts`, `types/dashboard.ts`, `SettingsModal.tsx`, `WidgetSettingsModal.tsx`, `Corkboard.tsx`, `MobileCompanion.tsx`):**
+  * Added board-wide shared photo library allowing multiple photo widgets across boards to display from a single centralized photo album (Google Photos, Plex, Local Folders, or Curated Scenery).
+  * Added segmented "Photo Library Scope" selector in Tile Settings (`Shared Board Library` vs `This Tile Only`), giving users granular control over whether a widget uses the shared album or an independent collection.
+  * Added dedicated "Common Photo Library" configuration card in Board Settings for direct management of the board-wide photo album.
+  * Added option in Photo Sources Modal to set any configured album as the common library for all photo frames with 1 click.
+* **Toolbar Auto-Hide on Click-Off & Dynamic Pinning Eye State (`NavigationDock.tsx`, `AmbientQuickMenu.tsx`, `SettingsModal.tsx`):**
+  * When the toolbar is hidden, clicking the edge handle peeks the dock open; clicking anywhere outside the dock or pressing Escape automatically re-hides it back to the edge.
+  * Added dynamic eye icon indicator: shows crossed-out eye (`EyeOff`) when in auto-hide mode and open eye (`Eye`) when pinned. Clicking the crossed-out eye un-crosses it and pins the toolbar permanently open so it stops auto-hiding.
+* **Google Photos Link Persistence & Restore in Sources Modal (`PhotoSourcesModal.tsx`, `Corkboard.tsx`, `MobileCompanion.tsx`):**
+  * Fully pre-populates configured album URLs in the Google Photos & Web input textarea upon reopening sources modal.
+  * Added currently active album banner displaying the saved link with a 1-click "Restore Link" action to prevent confusion when revisiting sources.
+
+---
+
 ## [0.1.12] - 2026-11-03
 
 ### Fixed

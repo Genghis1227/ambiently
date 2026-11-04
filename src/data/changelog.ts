@@ -5,9 +5,22 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.1.12';
+export const APP_VERSION = '0.1.13';
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.1.13",
+    date: "November 3, 2026",
+    title: "Shared Common Photo Library, Toolbar Auto-Hide Click-Off, & Persistent Source Links",
+    highlights: [
+      "Shared Common Photo Library: Synchronize a single common photo source (Google Photos, Plex, Local Folders, or Curated Scenery) across all photo widgets on your boards.",
+      "Granular Photo Library Scope: Toggle between 'Shared Board Library' and 'This Tile Only' inside Tile Settings to either inherit the shared collection or keep an independent custom album.",
+      "Common Photo Management in Settings: Configure or update the board-wide shared photo library directly from Board Settings or via 1-click 'Set as Common Library' checkbox in the Photo Sources modal.",
+      "Toolbar Auto-Hide on Click-Off: When the toolbar is hidden, peeking it open from the edge handle now automatically re-hides when clicking anywhere outside the dock or pressing Escape.",
+      "Dynamic Toolbar Eye Pinning: The toolbar eye icon dynamically reflects auto-hide status (crossed-out EyeOff in amber when hidden, open Eye when pinned). Clicking it un-crosses the eye and pins the toolbar open.",
+      "Persistent Google Photos Link & Active Badge: Configured Google Photos and Drive album links are cleanly displayed with a 'Restore Link' button and pre-filled in the sources dialog so the active source is never lost.",
+    ],
+  },
   {
     version: "v0.1.12",
     date: "November 3, 2026",
