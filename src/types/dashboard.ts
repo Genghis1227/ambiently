@@ -46,6 +46,7 @@ export interface FreeformPosition {
   zIndex: number;
   rotation: number; // degrees (-60 to 60)
   isFullScreen?: boolean;
+  isBackground?: boolean;
 }
 
 export interface DashboardTab {
