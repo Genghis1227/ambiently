@@ -14,7 +14,9 @@ import {
   AlignLeft,
   AlignCenter,
   AlignRight,
+  ImageIcon,
 } from 'lucide-react';
+import { useDashboardStore } from '../../store/dashboardStore';
 import type { DashboardWidget } from '../../types/dashboard';
 import type { CalendarSource } from '../../services/feeds';
 import type { QuoteItem } from '../../services/quotes';
@@ -66,6 +68,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   onSave,
   onOpenPhotoSources,
 }) => {
+  const settings = useDashboardStore((state) => state.settings);
   const [title, setTitle] = useState('');
 
   // Countdown states
@@ -73,6 +76,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const [countdownTime, setCountdownTime] = useState('00:00');
 
   // Photo Frame states
+  const [useCommonSource, setUseCommonSource] = useState<boolean>(true);
   const [photoStyle, setPhotoStyle] = useState<string>('ken_burns');
   const [photoIntervalSec, setPhotoIntervalSec] = useState<number>(15);
   const [polaroidCount, setPolaroidCount] = useState<number>(widget?.config?.polaroidCount || 12);
@@ -155,6 +159,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
         setCountdownTime('00:00');
       }
     } else if (widget.type === 'photo_frame') {
+      setUseCommonSource(widget.config?.useCommonSource !== false);
       setPhotoStyle(widget.config?.displayStyle || 'ken_burns');
       setPhotoIntervalSec(widget.config?.rotationIntervalSec || 15);
       setPolaroidCount(widget.config?.polaroidCount || 12);
@@ -316,6 +321,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.eventName = title.trim() || 'Upcoming Milestone';
       configUpdates.targetDate = iso;
     } else if (widget.type === 'photo_frame') {
+      configUpdates.useCommonSource = useCommonSource;
       configUpdates.displayStyle = photoStyle;
       configUpdates.rotationIntervalSec = photoIntervalSec;
       configUpdates.polaroidCount = polaroidCount;
@@ -462,11 +468,55 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
           {/* Photo Frame Settings */}
           {widget.type === 'photo_frame' && (
             <div className="space-y-4 pt-2 border-t border-gray-800">
+              {/* Photo Source Mode: Common vs Tile-Specific */}
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
+                  Photo Library Scope
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setUseCommonSource(true)}
+                    className={`p-3 rounded-xl border text-xs font-medium text-left transition-all cursor-pointer flex flex-col gap-1 ${
+                      useCommonSource
+                        ? 'bg-blue-600/20 border-blue-500 text-blue-300 ring-1 ring-blue-500/50'
+                        : 'border-gray-800 bg-gray-950 text-gray-400 hover:text-white hover:bg-gray-800'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
+                      <span>Shared Board Library</span>
+                    </div>
+                    <span className="text-[10px] text-gray-400">
+                      Syncs with all shared photo frames ({settings.commonPhotos?.length ? `${settings.commonPhotos.length} photos` : 'Curated Scenery'})
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setUseCommonSource(false)}
+                    className={`p-3 rounded-xl border text-xs font-medium text-left transition-all cursor-pointer flex flex-col gap-1 ${
+                      !useCommonSource
+                        ? 'bg-blue-600/20 border-blue-500 text-blue-300 ring-1 ring-blue-500/50'
+                        : 'border-gray-800 bg-gray-950 text-gray-400 hover:text-white hover:bg-gray-800'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <FolderOpen className="w-3.5 h-3.5 text-amber-400" />
+                      <span>This Tile Only</span>
+                    </div>
+                    <span className="text-[10px] text-gray-400">
+                      Independent album ({widget.config?.customPhotos?.length ? `${widget.config.customPhotos.length} photos` : 'Curated Scenery'})
+                    </span>
+                  </button>
+                </div>
+              </div>
+
               {/* Photo Sources Hub Trigger */}
               {onOpenPhotoSources && (
                 <div>
                   <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
-                    Photo Library & Media Sources
+                    {useCommonSource ? 'Shared Library Album' : 'Tile-Specific Album'}
                   </label>
                   <button
                     type="button"
@@ -483,11 +533,15 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                       <div className="text-left">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-bold text-white">
-                            Configure Photo Sources
+                            {useCommonSource ? 'Configure Shared Board Library' : 'Configure Custom Photos'}
                           </span>
-                          {widget.config?.sourceLabel && (
+                          {(useCommonSource
+                            ? (settings.commonPhotoSourceLabel || 'Shared Library')
+                            : widget.config?.sourceLabel) && (
                             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold">
-                              {widget.config.sourceLabel}
+                              {useCommonSource
+                                ? (settings.commonPhotoSourceLabel || 'Shared Library')
+                                : widget.config?.sourceLabel}
                             </span>
                           )}
                         </div>

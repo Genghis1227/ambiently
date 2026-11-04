@@ -36,6 +36,7 @@ import { StickyNotesWidget } from '../widgets/StickyNotesWidget';
 import { MediaEmbedWidget } from '../widgets/MediaEmbedWidget';
 import { WidgetSettingsModal } from '../widgets/WidgetSettingsModal';
 import { PhotoSourcesModal } from '../photos/PhotoSourcesModal';
+import { useDashboardStore } from '../../store/dashboardStore';
 import { CANVAS_THEMES } from '../../data/canvasThemes';
 import { findOpenCanvasSpot } from '../../utils/autoLayout';
 
@@ -137,6 +138,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
   const [editingWidget, setEditingWidget] = useState<DashboardWidget | null>(null);
   const [photoSourcesTargetWidget, setPhotoSourcesTargetWidget] = useState<DashboardWidget | null>(null);
+  const settings = useDashboardStore((state) => state.settings);
+  const applyCommonPhotosToAllWidgets = useDashboardStore((state) => state.applyCommonPhotosToAllWidgets);
 
   // Resizing state
   const [resizingId, setResizingId] = useState<string | null>(null);
@@ -1085,6 +1088,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               ) : widget.type === 'photo_frame' ? (
                 <PhotoFrameWidget
                   widgetId={widget.id}
+                  useCommonSource={widget.config?.useCommonSource}
                   initialStyle={widget.config?.displayStyle || 'ken_burns'}
                   rotationIntervalSec={widget.config?.rotationIntervalSec || 15}
                   customPhotos={widget.config?.customPhotos}
@@ -1773,33 +1777,56 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       )}
 
       {/* Per-Widget Photo Sources Hub opened from Tile Settings */}
-      <PhotoSourcesModal
-        isOpen={photoSourcesTargetWidget !== null}
-        onClose={() => setPhotoSourcesTargetWidget(null)}
-        initialWebUrls={photoSourcesTargetWidget?.config?.sourceUrl || ''}
-        currentSourceLabel={photoSourcesTargetWidget?.config?.sourceLabel}
-        currentSourceType={
-          photoSourcesTargetWidget?.config?.sourceType ||
-          (photoSourcesTargetWidget?.config?.sourceUrl ||
-           photoSourcesTargetWidget?.config?.customPhotos?.[0]?.url?.includes('googleusercontent.com')
-            ? 'web'
-            : undefined)
-        }
-        currentPhotoCount={photoSourcesTargetWidget?.config?.customPhotos?.length}
-        onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType) => {
-          if (photoSourcesTargetWidget && onUpdateWidget && newPhotos.length > 0) {
-            onUpdateWidget(photoSourcesTargetWidget.id, {
-              config: {
-                ...photoSourcesTargetWidget.config,
-                customPhotos: newPhotos,
-                sourceLabel: sourceName,
-                sourceUrl: sourceUrl !== undefined ? sourceUrl : photoSourcesTargetWidget.config?.sourceUrl,
-                sourceType: sourceType !== undefined ? sourceType : photoSourcesTargetWidget.config?.sourceType,
-              },
-            });
-          }
-        }}
-      />
+      {photoSourcesTargetWidget && (() => {
+        const activePhotoWidget =
+          widgets.find((w) => w.id === photoSourcesTargetWidget.id) || photoSourcesTargetWidget;
+        const isUsingCommon = activePhotoWidget.config?.useCommonSource !== false;
+
+        return (
+          <PhotoSourcesModal
+            isOpen={true}
+            onClose={() => setPhotoSourcesTargetWidget(null)}
+            isCommonSource={isUsingCommon}
+            initialWebUrls={
+              activePhotoWidget.config?.sourceUrl ||
+              (isUsingCommon ? settings.commonPhotoSourceUrl : '') ||
+              ''
+            }
+            currentSourceLabel={
+              activePhotoWidget.config?.sourceLabel ||
+              (isUsingCommon ? settings.commonPhotoSourceLabel : undefined)
+            }
+            currentSourceType={
+              activePhotoWidget.config?.sourceType ||
+              (isUsingCommon ? settings.commonPhotoSourceType : undefined) ||
+              (activePhotoWidget.config?.sourceUrl ||
+               activePhotoWidget.config?.customPhotos?.[0]?.url?.includes('googleusercontent.com')
+                ? 'web'
+                : undefined)
+            }
+            currentPhotoCount={
+              activePhotoWidget.config?.customPhotos?.length ??
+              (isUsingCommon ? settings.commonPhotos?.length : undefined)
+            }
+            onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType, applyToAll) => {
+              if (applyToAll) {
+                applyCommonPhotosToAllWidgets(newPhotos, sourceName, sourceUrl, sourceType);
+              } else if (onUpdateWidget && newPhotos.length > 0) {
+                onUpdateWidget(activePhotoWidget.id, {
+                  config: {
+                    ...activePhotoWidget.config,
+                    useCommonSource: false,
+                    customPhotos: newPhotos,
+                    sourceLabel: sourceName,
+                    sourceUrl: sourceUrl !== undefined ? sourceUrl : activePhotoWidget.config?.sourceUrl,
+                    sourceType: sourceType !== undefined ? sourceType : activePhotoWidget.config?.sourceType,
+                  },
+                });
+              }
+            }}
+          />
+        );
+      })()}
     </div>
   );
 };

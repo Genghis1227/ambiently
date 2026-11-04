@@ -1,3 +1,5 @@
+import type { PhotoItem } from '../services/photos';
+
 export type DockPosition = 'left' | 'top' | 'right' | 'bottom';
 
 export type CanvasBackgroundTheme =
@@ -116,6 +118,12 @@ export interface AppSettings {
   // Canvas & Dock Options
   snapToGrid?: boolean;
   isDockHidden?: boolean;
+
+  // Common Photo Library (shared across photo widgets)
+  commonPhotos?: PhotoItem[];
+  commonPhotoSourceLabel?: string;
+  commonPhotoSourceUrl?: string;
+  commonPhotoSourceType?: 'plex' | 'local' | 'web' | 'curated';
 
   // PIN Protection
   pinLockEnabled: boolean;

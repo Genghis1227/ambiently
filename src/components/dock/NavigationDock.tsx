@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   LayoutGrid,
   Pin,
@@ -26,6 +26,7 @@ import {
   Archive,
   Wand2,
   RotateCcw,
+  Eye,
   EyeOff,
   ChevronLeft,
   ChevronRight,
@@ -110,6 +111,8 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
   const [showOrganizeMenu, setShowOrganizeMenu] = useState(false);
   const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(false);
   const [activeMode, setActiveMode] = useState<AutoOrganizeMode>('bento');
+  const [isPeekOpen, setIsPeekOpen] = useState(false);
+  const navRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (!showOrganizeMenu) return;
@@ -117,24 +120,68 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
     return () => clearTimeout(timer);
   }, [showOrganizeMenu, activeMode]);
 
+  // When dock hidden status changes from external source, reset peek
+  useEffect(() => {
+    if (!isDockHidden) {
+      setIsPeekOpen(false);
+    }
+  }, [isDockHidden]);
+
+  // Auto-hide when clicking off the toolbar while in hidden/peeked mode
+  useEffect(() => {
+    if (!isDockHidden || !isPeekOpen) return;
+
+    const handlePointerDownOutside = (e: PointerEvent | MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+
+      // Ignore clicks within the dock itself, quick menus, or open dialogs/modals
+      if (
+        navRef.current?.contains(target) ||
+        target.closest('[data-dock-element="true"]') ||
+        target.closest('[role="dialog"]')
+      ) {
+        return;
+      }
+
+      setIsPeekOpen(false);
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsPeekOpen(false);
+      }
+    };
+
+    window.addEventListener('pointerdown', handlePointerDownOutside);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDownOutside);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isDockHidden, isPeekOpen]);
+
+  // If dock is hidden, it is effectively hidden unless the user has peeked it open
+  const isEffectivelyHidden = isDockHidden && !isPeekOpen;
+
   const positionClasses = {
     left: `left-3 top-1/2 flex-col ${
-      isDockHidden
+      isEffectivelyHidden
         ? '-translate-y-1/2 -translate-x-[220%] opacity-0 pointer-events-none'
         : '-translate-y-1/2 translate-x-0 opacity-100'
     }`,
     right: `right-3 top-1/2 flex-col ${
-      isDockHidden
+      isEffectivelyHidden
         ? '-translate-y-1/2 translate-x-[220%] opacity-0 pointer-events-none'
         : '-translate-y-1/2 translate-x-0 opacity-100'
     }`,
     top: `top-3 left-1/2 flex-row ${
-      isDockHidden
+      isEffectivelyHidden
         ? '-translate-x-1/2 -translate-y-[220%] opacity-0 pointer-events-none'
         : '-translate-x-1/2 translate-y-0 opacity-100'
     }`,
     bottom: `bottom-3 left-1/2 flex-row ${
-      isDockHidden
+      isEffectivelyHidden
         ? '-translate-x-1/2 translate-y-[220%] opacity-0 pointer-events-none'
         : '-translate-x-1/2 translate-y-0 opacity-100'
     }`,
@@ -149,12 +196,13 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
 
   return (
     <>
-      {/* Edge Handle to Restore Hidden Toolbar */}
-      {isDockHidden && onToggleDockHidden && (
+      {/* Edge Handle to Peek Hidden Toolbar */}
+      {isDockHidden && !isPeekOpen && onToggleDockHidden && (
         <button
           type="button"
-          onClick={onToggleDockHidden}
-          title="Show Navigation Toolbar (Shortcut: \)"
+          data-dock-element="true"
+          onClick={() => setIsPeekOpen(true)}
+          title="Peek Navigation Toolbar (Shortcut: \)"
           className={`fixed z-50 flex items-center justify-center p-2.5 bg-gray-900/90 hover:bg-gray-800 text-gray-300 hover:text-white backdrop-blur-xl border border-gray-700/80 shadow-2xl transition-all cursor-pointer group active:scale-95 ${
             dockPosition === 'left'
               ? 'left-0 top-1/2 -translate-y-1/2 rounded-r-2xl border-l-0 shadow-[4px_0_15px_rgba(0,0,0,0.5)]'
@@ -173,6 +221,8 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
       )}
 
       <nav
+        ref={navRef}
+        data-dock-element="true"
         className={`fixed z-50 flex items-center gap-2 p-2 rounded-2xl bg-gray-900/85 backdrop-blur-xl border border-gray-800/90 shadow-2xl transition-all duration-300 ease-in-out ${positionClasses}`}
       >
         {/* Brand Icon & Quick HUD Trigger */}
@@ -357,11 +407,26 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
 
           {onToggleDockHidden && (
             <button
-              onClick={onToggleDockHidden}
-              title="Hide Navigation Toolbar (Shortcut: \)"
-              className="flex items-center justify-center w-10 h-10 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-gray-800/70 transition-all cursor-pointer"
+              onClick={() => {
+                onToggleDockHidden();
+                setIsPeekOpen(false);
+              }}
+              title={
+                isDockHidden
+                  ? 'Keep toolbar visible (Pin toolbar)'
+                  : 'Hide toolbar (Shortcut: \\)'
+              }
+              className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all cursor-pointer ${
+                isDockHidden
+                  ? 'text-amber-400 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 shadow-sm'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/70'
+              }`}
             >
-              <EyeOff className="w-4 h-4" />
+              {isDockHidden ? (
+                <EyeOff className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Eye className="w-4 h-4" />
+              )}
             </button>
           )}
         </div>

@@ -26,6 +26,8 @@ import {
   SunDim,
   Home,
   Grid,
+  ImageIcon,
+  FolderOpen,
 } from 'lucide-react';
 import { db } from '../../services/db';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -54,6 +56,7 @@ import { CreateCanvasModal } from '../dock/CreateCanvasModal';
 import { ChangelogModal } from '../changelog/ChangelogModal';
 import { SupportPanel } from './SupportPanel';
 import { ShareBoardModal } from './ShareBoardModal';
+import { PhotoSourcesModal } from '../photos/PhotoSourcesModal';
 
 import type { User } from '@supabase/supabase-js';
 
@@ -73,6 +76,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     setSnapToGrid,
     setCarouselEnabled,
     setCarouselDuration,
+    applyCommonPhotosToAllWidgets,
     updateSettings,
     setPinLock,
     saveLocalBackup,
@@ -87,6 +91,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [pinSuccess, setPinSuccess] = useState(false);
   const [isChangelogOpen, setIsChangelogOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
+  const [isCommonPhotoModalOpen, setIsCommonPhotoModalOpen] = useState(false);
 
   // Supabase cloud state
   const [user, setUser] = useState<User | null>(null);
@@ -911,11 +916,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             <div className="flex items-center justify-between p-3 rounded-xl bg-gray-800/40 border border-gray-800">
               <div className="space-y-0.5 max-w-[80%]">
                 <div className="flex items-center gap-2">
-                  <EyeOff className="w-4 h-4 text-amber-400" />
+                  {settings.isDockHidden ? (
+                    <EyeOff className="w-4 h-4 text-amber-400" />
+                  ) : (
+                    <Eye className="w-4 h-4 text-gray-400" />
+                  )}
                   <span className="text-sm font-medium text-gray-200">Hide Navigation Toolbar</span>
                 </div>
                 <p className="text-xs text-gray-400">
-                  Hides the toolbar for full-screen immersion. Restore via edge handle or shortcut <kbd className="px-1.5 py-0.5 rounded bg-gray-800 text-[11px] font-mono text-gray-300 border border-gray-700">\</kbd>.
+                  Hides the toolbar for full-screen immersion. Clicking off the peeked toolbar hides it again automatically unless pinned with the eye icon or shortcut <kbd className="px-1.5 py-0.5 rounded bg-gray-800 text-[11px] font-mono text-gray-300 border border-gray-700">\</kbd>.
                 </p>
               </div>
               <button
@@ -957,6 +966,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   }`}
                 />
               </button>
+            </div>
+
+            {/* Common Photo Library Section */}
+            <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4 text-amber-400" />
+                  <div>
+                    <span className="text-sm font-semibold text-white block">
+                      Common Photo Library
+                    </span>
+                    <span className="text-[11px] text-gray-400">
+                      Shared album used by all photo frame widgets configured to use the shared board library
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsCommonPhotoModalOpen(true)}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow"
+                >
+                  <FolderOpen className="w-3.5 h-3.5" />
+                  <span>Configure Common Photos</span>
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between text-xs px-3 py-2 rounded-lg bg-gray-900/60 border border-gray-800 text-gray-300">
+                <span className="text-gray-400">Current Shared Source:</span>
+                <span className="font-medium text-amber-300">
+                  {settings.commonPhotoSourceLabel || 'Curated Ambient'}
+                  {settings.commonPhotos && settings.commonPhotos.length > 0 && ` (${settings.commonPhotos.length} photos)`}
+                </span>
+              </div>
             </div>
 
             {/* Cloud SaaS Sync Section */}
@@ -1218,6 +1260,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       <ShareBoardModal
         isOpen={isShareOpen}
         onClose={() => setIsShareOpen(false)}
+      />
+
+      {/* Common Photo Sources Hub */}
+      <PhotoSourcesModal
+        isOpen={isCommonPhotoModalOpen}
+        onClose={() => setIsCommonPhotoModalOpen(false)}
+        isCommonSource={true}
+        initialWebUrls={settings.commonPhotoSourceUrl || ''}
+        currentSourceLabel={settings.commonPhotoSourceLabel}
+        currentSourceType={settings.commonPhotoSourceType}
+        currentPhotoCount={settings.commonPhotos?.length}
+        onPhotosLoaded={(photos, sourceLabel, sourceUrl, sourceType) => {
+          applyCommonPhotosToAllWidgets(photos, sourceLabel, sourceUrl, sourceType);
+        }}
       />
     </>
   );
