@@ -548,8 +548,16 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                 </div>
               )}
 
-              {/* Quick Promote / Sync to Shared Board Library */}
-              {widget.config?.customPhotos && widget.config.customPhotos.length > 0 && (
+              {/* Quick Promote / Sync to Shared Board Library (Only when on 'This Tile Only' and this album differs from the shared library) */}
+              {!useCommonSource &&
+                widget.config?.customPhotos &&
+                widget.config.customPhotos.length > 0 &&
+                (!settings.commonPhotos ||
+                  settings.commonPhotos.length === 0 ||
+                  (widget.config.sourceUrl && widget.config.sourceUrl !== settings.commonPhotoSourceUrl) ||
+                  (!widget.config.sourceUrl &&
+                    (widget.config.sourceLabel !== settings.commonPhotoSourceLabel ||
+                      widget.config.customPhotos.length !== settings.commonPhotos.length))) && (
                 <div className="p-3 rounded-xl bg-gradient-to-r from-blue-950/60 to-purple-950/40 border border-blue-500/30 flex items-center justify-between gap-3 shadow-md">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 border border-blue-500/30">
@@ -633,7 +641,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                         {(() => {
                           const activeUrl = useCommonSource
                             ? (settings.commonPhotoSourceUrl || widget.config?.sourceUrl)
-                            : (widget.config?.sourceUrl || settings.commonPhotoSourceUrl);
+                            : widget.config?.sourceUrl;
                           if (!activeUrl) return null;
                           return (
                             <div className="text-[10px] font-mono text-blue-300/90 truncate max-w-[340px] mt-1 bg-black/40 px-2 py-0.5 rounded border border-blue-500/20">
