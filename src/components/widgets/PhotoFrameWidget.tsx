@@ -829,7 +829,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   e.stopPropagation();
                   handleKenBurnsPrev();
                 }}
-                className="absolute left-3 top-1/2 -translate-y-1/2 z-[35] p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
+                className="absolute left-5 top-1/2 -translate-y-1/2 z-[35] p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
                 title="Previous photo (Go back)"
               >
                 <ChevronLeft className="w-5 h-5" />
@@ -842,7 +842,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   e.stopPropagation();
                   handleKenBurnsNext();
                 }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 z-[35] p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
+                className="absolute right-5 top-1/2 -translate-y-1/2 z-[35] p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
                 title="Next photo"
               >
                 <ChevronRight className="w-5 h-5" />
@@ -904,7 +904,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   e.stopPropagation();
                   handleMosaicPrev();
                 }}
-                className="absolute left-3 top-1/2 -translate-y-1/2 z-[35] p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
+                className="absolute left-5 top-1/2 -translate-y-1/2 z-[35] p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
                 title="Previous photo collage (Go back)"
               >
                 <ChevronLeft className="w-5 h-5" />
@@ -917,7 +917,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   e.stopPropagation();
                   handleMosaicNext();
                 }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 z-[35] p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
+                className="absolute right-5 top-1/2 -translate-y-1/2 z-[35] p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
                 title="Next photo collage"
               >
                 <ChevronRight className="w-5 h-5" />
@@ -1042,7 +1042,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   e.stopPropagation();
                   handleFilmstripPrev();
                 }}
-                className="absolute left-3 top-1/2 -translate-y-1/2 z-[35] p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
+                className="absolute left-5 top-1/2 -translate-y-1/2 z-[35] p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
                 title="Previous photo (Go back)"
               >
                 <ChevronLeft className="w-5 h-5" />
@@ -1055,7 +1055,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   e.stopPropagation();
                   handleFilmstripNext();
                 }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 z-[35] p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
+                className="absolute right-5 top-1/2 -translate-y-1/2 z-[35] p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
                 title="Next photo"
               >
                 <ChevronRight className="w-5 h-5" />
@@ -1129,17 +1129,51 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
         </div>
       )}
 
-      {/* Ambient Top Caption Pill */}
+      {/* Ambient Top Caption Pill with Integrated Navigation Controls */}
       {showCaptions && (
         <div className="relative z-40 p-3 flex items-center justify-between text-white drop-shadow-md pointer-events-none pr-24">
-          <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-xs">
-            <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
-            <span className="font-medium truncate max-w-[160px]">
+          <div className="flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/15 text-xs shadow-lg pointer-events-auto">
+            {photos.length > 1 && (
+              <button
+                type="button"
+                data-no-drag="true"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (style === 'filmstrip') handleFilmstripPrev();
+                  else if (style === 'mosaic') handleMosaicPrev();
+                  else handleKenBurnsPrev();
+                }}
+                className="p-0.5 -ml-1 rounded-full hover:bg-white/20 text-gray-300 hover:text-white transition-all cursor-pointer"
+                title="Previous photo (Go back)"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <ImageIcon className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+            <span className="font-medium truncate max-w-[140px]">
               {currentPhoto.caption || sourceLabel}
             </span>
             <span className="text-[10px] text-gray-400 font-mono">
               ({activeDisplayIndex + 1}/{photos.length})
             </span>
+            {photos.length > 1 && (
+              <button
+                type="button"
+                data-no-drag="true"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (style === 'filmstrip') handleFilmstripNext();
+                  else if (style === 'mosaic') handleMosaicNext();
+                  else handleKenBurnsNext();
+                }}
+                className="p-0.5 -mr-1 rounded-full hover:bg-white/20 text-gray-300 hover:text-white transition-all cursor-pointer"
+                title="Next photo"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
       )}

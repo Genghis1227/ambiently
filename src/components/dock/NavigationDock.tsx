@@ -244,12 +244,12 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
           title="Peek Navigation Toolbar (Shortcut: \)"
           className={`fixed z-[65] flex items-center justify-center p-2.5 bg-gray-900/90 hover:bg-gray-800 text-gray-300 hover:text-white backdrop-blur-xl border border-gray-700/80 shadow-2xl transition-all cursor-pointer group active:scale-95 ${
             dockPosition === 'left'
-              ? 'left-0 top-1/2 -translate-y-1/2 rounded-r-2xl border-l-0 shadow-[4px_0_15px_rgba(0,0,0,0.5)]'
+              ? 'left-0 bottom-24 rounded-r-2xl border-l-0 shadow-[4px_0_15px_rgba(0,0,0,0.5)]'
               : dockPosition === 'right'
-              ? 'right-0 top-1/2 -translate-y-1/2 rounded-l-2xl border-r-0 shadow-[-4px_0_15px_rgba(0,0,0,0.5)]'
+              ? 'right-0 bottom-24 rounded-l-2xl border-r-0 shadow-[-4px_0_15px_rgba(0,0,0,0.5)]'
               : dockPosition === 'top'
-              ? 'top-0 left-1/2 -translate-x-1/2 rounded-b-2xl border-t-0 shadow-[0_4px_15px_rgba(0,0,0,0.5)]'
-              : 'bottom-0 left-1/2 -translate-x-1/2 rounded-t-2xl border-b-0 shadow-[0_-4px_15px_rgba(0,0,0,0.5)]'
+              ? 'top-0 right-24 rounded-b-2xl border-t-0 shadow-[0_4px_15px_rgba(0,0,0,0.5)]'
+              : 'bottom-0 right-24 rounded-t-2xl border-b-0 shadow-[0_-4px_15px_rgba(0,0,0,0.5)]'
           }`}
         >
           {dockPosition === 'left' && <ChevronRight className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" />}
