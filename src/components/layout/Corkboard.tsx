@@ -1007,6 +1007,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
           rotation: isRotating && rotateAngle !== null ? rotateAngle : pos.rotation,
         };
 
+        const isNearTopEdge = !isFullScreen && (displayPos.yRatio ?? 0) < 0.04;
+
         return (
           <div
             key={widget.id}
@@ -1115,7 +1117,15 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             )}
 
             {/* Top Right Widget Controls: Tilt, Settings, Maximize/Restore & Remove */}
-            <div className="absolute top-2.5 right-2.5 z-30 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 backdrop-blur-md px-1.5 py-1 rounded-xl border border-white/10 shadow-xl">
+            <div
+              className={`absolute z-30 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-950/90 backdrop-blur-md px-1.5 py-1 rounded-xl border border-gray-700/80 shadow-2xl ${
+                isFullScreen
+                  ? 'top-3 right-3'
+                  : isNearTopEdge
+                  ? 'top-2 right-2'
+                  : '-top-3.5 right-3'
+              }`}
+            >
               {!isFullScreen && onUpdateWidgetPos && (
                 <>
                   <button

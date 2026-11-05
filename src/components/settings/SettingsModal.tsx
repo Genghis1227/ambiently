@@ -47,6 +47,7 @@ import {
 import { APP_VERSION } from '../../data/changelog';
 import { CANVAS_ICONS } from '../../data/canvasIcons';
 import { CANVAS_THEMES } from '../../data/canvasThemes';
+import { MAX_CANVASES } from '../../types/dashboard';
 import {
   CURATED_WALLPAPER_PRESETS,
   processUploadedWallpaper,
@@ -313,10 +314,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 <button
                   type="button"
                   onClick={() => setIsCreateCanvasOpen(true)}
-                  className="px-2.5 py-1.5 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer"
+                  disabled={tabs.length >= MAX_CANVASES}
+                  title={
+                    tabs.length >= MAX_CANVASES
+                      ? `Maximum of ${MAX_CANVASES} canvases reached`
+                      : 'Create New Canvas'
+                  }
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
+                    tabs.length >= MAX_CANVASES
+                      ? 'bg-gray-800 text-gray-500 border border-gray-700 opacity-50 cursor-not-allowed'
+                      : 'bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 cursor-pointer'
+                  }`}
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>New Canvas</span>
+                  <span>{tabs.length >= MAX_CANVASES ? `Limit Reached (${MAX_CANVASES})` : 'New Canvas'}</span>
                 </button>
               </div>
 
@@ -1259,6 +1270,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       <CreateCanvasModal
         isOpen={isCreateCanvasOpen}
         onClose={() => setIsCreateCanvasOpen(false)}
+        existingCanvasCount={tabs.length}
         onCreateCanvas={(name, icon, theme, wallpaperUrl, dimLevel) => {
           addTab(name, icon, theme, wallpaperUrl, dimLevel);
         }}

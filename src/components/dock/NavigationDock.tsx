@@ -38,6 +38,7 @@ import type {
   DashboardTab,
   DockPosition,
 } from '../../types/dashboard';
+import { MAX_CANVASES } from '../../types/dashboard';
 import { AmbientQuickMenu } from './AmbientQuickMenu';
 
 interface NavigationDockProps {
@@ -315,6 +316,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
             const isActive = tab.id === activeTabId;
             const hasExplicitHome = tabs.some((t) => t.isHome);
             const isHome = tab.isHome || (!hasExplicitHome && idx === 0);
+            const hotkeyLabel = idx === 9 ? '0' : idx < 9 ? String(idx + 1) : '';
             return (
               <button
                 key={tab.id}
@@ -322,7 +324,11 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
                   setIsQuickMenuOpen(false);
                   onSelectTab(tab.id);
                 }}
-                title={isHome ? `${tab.name} (Home Board)` : tab.name}
+                title={
+                  isHome
+                    ? `${tab.name} (Home Board)${hotkeyLabel ? ` [Key: ${hotkeyLabel}]` : ''}`
+                    : `${tab.name}${hotkeyLabel ? ` [Key: ${hotkeyLabel}]` : ''}`
+                }
                 className={`relative flex items-center justify-center w-11 h-11 rounded-xl transition-all cursor-pointer ${
                   isActive
                     ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
@@ -343,6 +349,12 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
                     <Home className="w-2.5 h-2.5 stroke-[2.5]" />
                   </span>
                 )}
+                {/* Hotkey number indicator (1-9, 0) */}
+                {hotkeyLabel && (
+                  <span className="absolute bottom-0.5 right-1 text-[9px] font-mono font-bold opacity-40 group-hover:opacity-90 transition-opacity pointer-events-none">
+                    {hotkeyLabel}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -350,9 +362,18 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
           {/* Create New Canvas Button */}
           {onOpenAddCanvas && (
             <button
-              onClick={onOpenAddCanvas}
-              title="Create New Canvas"
-              className="flex items-center justify-center w-10 h-10 rounded-xl text-emerald-400 hover:text-white hover:bg-emerald-600/30 transition-all border border-emerald-500/20 cursor-pointer"
+              onClick={tabs.length >= MAX_CANVASES ? undefined : onOpenAddCanvas}
+              disabled={tabs.length >= MAX_CANVASES}
+              title={
+                tabs.length >= MAX_CANVASES
+                  ? 'Canvas limit reached (maximum 10 canvases allowed)'
+                  : 'Create New Canvas'
+              }
+              className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all border ${
+                tabs.length >= MAX_CANVASES
+                  ? 'text-gray-600 border-gray-800 bg-gray-900/40 opacity-40 cursor-not-allowed'
+                  : 'text-emerald-400 hover:text-white hover:bg-emerald-600/30 border-emerald-500/20 cursor-pointer'
+              }`}
             >
               <Plus className="w-4 h-4" />
             </button>

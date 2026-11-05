@@ -16,6 +16,7 @@ import type {
   AutoOrganizeMode,
   FreeformPosition,
 } from '../types/dashboard';
+import { MAX_CANVASES } from '../types/dashboard';
 import { saveSnapshotToFile, hasActiveLocalFile } from '../services/fileSync';
 import { computeNonOverlappingLayout, findOpenCanvasSpot } from '../utils/autoLayout';
 import type { PhotoItem } from '../services/photos';
@@ -50,7 +51,7 @@ interface DashboardState {
     backgroundTheme?: CanvasBackgroundTheme,
     customWallpaperUrl?: string,
     backgroundDimLevel?: number
-  ) => Promise<string>;
+  ) => Promise<string | null>;
   updateTab: (tabId: string, updates: Partial<DashboardTab>) => Promise<void>;
   setHomeTab: (tabId: string) => Promise<void>;
   deleteTab: (tabId: string) => Promise<void>;
@@ -217,6 +218,11 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     customWallpaperUrl,
     backgroundDimLevel = 45
   ) => {
+    const activeTabs = get().tabs.filter((t) => !t.deleted_at);
+    if (activeTabs.length >= MAX_CANVASES) {
+      console.warn(`Canvas limit of ${MAX_CANVASES} reached.`);
+      return null;
+    }
     const newId = `tab-${Date.now()}`;
     const maxOrder = get().tabs.reduce((max, t) => Math.max(max, t.order), -1);
     const newTab: DashboardTab = {

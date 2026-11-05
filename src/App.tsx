@@ -95,26 +95,43 @@ export function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Keyboard shortcut: '\' (backslash) to toggle toolbar visibility
+  // Keyboard shortcuts:
+  // '\' (backslash) to toggle toolbar visibility
+  // '1'-'9' and '0' (for 10) to switch between canvases
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable ||
+        target.closest('input, textarea, [contenteditable="true"], [role="dialog"]')
+      ) {
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) {
+        return;
+      }
+
       if (e.key === '\\') {
-        const target = e.target as HTMLElement;
-        if (
-          target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.isContentEditable ||
-          target.closest('input, textarea, [contenteditable="true"]')
-        ) {
-          return;
-        }
         e.preventDefault();
         toggleDockHidden();
+        return;
+      }
+
+      // Hotkey numbers from 1 to 10 to flip through canvases
+      if (/^[0-9]$/.test(e.key)) {
+        const index = e.key === '0' ? 9 : parseInt(e.key, 10) - 1;
+        const activeTabs = tabs.filter((t) => !t.deleted_at);
+        if (activeTabs[index]) {
+          e.preventDefault();
+          setActiveTabId(activeTabs[index].id);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleDockHidden]);
+  }, [toggleDockHidden, tabs, setActiveTabId]);
 
   const handleToggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -369,6 +386,7 @@ export function App() {
       <CreateCanvasModal
         isOpen={isCreateCanvasOpen}
         onClose={() => setIsCreateCanvasOpen(false)}
+        existingCanvasCount={tabs.length}
         onCreateCanvas={(name, icon, theme, wallpaperUrl, dimLevel) => {
           addTab(name, icon, theme, wallpaperUrl, dimLevel);
         }}

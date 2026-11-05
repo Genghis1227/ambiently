@@ -7,6 +7,7 @@ import {
   processUploadedWallpaper,
 } from '../../utils/imageUpload';
 import type { CanvasBackgroundTheme } from '../../types/dashboard';
+import { MAX_CANVASES } from '../../types/dashboard';
 
 interface CreateCanvasModalProps {
   isOpen: boolean;
@@ -18,13 +19,16 @@ interface CreateCanvasModalProps {
     customWallpaperUrl?: string,
     backgroundDimLevel?: number
   ) => void;
+  existingCanvasCount?: number;
 }
 
 export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
   isOpen,
   onClose,
   onCreateCanvas,
+  existingCanvasCount = 0,
 }) => {
+  const isLimitReached = existingCanvasCount >= MAX_CANVASES;
   const [name, setName] = useState('');
   const [selectedIcon, setSelectedIcon] = useState('Pin');
   const [selectedTheme, setSelectedTheme] = useState<CanvasBackgroundTheme>('midnight_dots');
@@ -104,6 +108,17 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
 
         {/* Form Body */}
         <form onSubmit={handleCreate} className="p-5 overflow-y-auto space-y-4">
+          {isLimitReached && (
+            <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs flex flex-col gap-1">
+              <span className="font-bold flex items-center gap-1.5">
+                <span>⚠️</span> Canvas Limit Reached ({existingCanvasCount}/{MAX_CANVASES})
+              </span>
+              <p className="text-[11px] text-amber-200/80 leading-relaxed">
+                You have reached the maximum limit of {MAX_CANVASES} canvases. Please remove an existing canvas to create a new one.
+              </p>
+            </div>
+          )}
+
           <div>
             <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
               Canvas / Board Name
@@ -289,10 +304,10 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={!name.trim() || isUploading}
+              disabled={!name.trim() || isUploading || isLimitReached}
               className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-xs font-bold text-white shadow-lg shadow-emerald-500/25 transition-all cursor-pointer"
             >
-              Create Canvas
+              {isLimitReached ? 'Limit Reached' : 'Create Canvas'}
             </button>
           </div>
         </form>

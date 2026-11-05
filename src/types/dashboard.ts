@@ -2,6 +2,8 @@ import type { PhotoItem } from '../services/photos';
 
 export type DockPosition = 'left' | 'top' | 'right' | 'bottom';
 
+export const MAX_CANVASES = 10;
+
 export type CanvasBackgroundTheme =
   | 'midnight_dots'
   | 'warm_cork'
