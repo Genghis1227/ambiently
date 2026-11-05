@@ -110,7 +110,7 @@ const WIDGET_TEMPLATES: WidgetTemplate[] = [
     description: 'Rotating news headlines and article summaries from your favorite RSS feeds.',
     icon: Rss,
     defaultGridPos: { w: 4, h: 4 },
-    defaultConfig: { feedUrl: 'https://news.ycombinator.com/rss' },
+    defaultConfig: { feedUrl: 'https://tony.trinhism.com/index.xml' },
     color: 'from-orange-500/20 to-red-500/20 text-orange-400 border-orange-500/30',
   },
   {

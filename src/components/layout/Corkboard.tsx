@@ -1381,7 +1381,16 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   }}
                 />
               ) : widget.type === 'rss' ? (
-                <RssWidget feedUrl={widget.config?.feedUrl} />
+                <RssWidget
+                  feedUrl={widget.config?.feedUrl}
+                  onUpdateConfig={(updates) => {
+                    if (onUpdateWidget) {
+                      onUpdateWidget(widget.id, {
+                        config: { ...widget.config, ...updates },
+                      });
+                    }
+                  }}
+                />
               ) : widget.type === 'photo_frame' ? (
                 <PhotoFrameWidget
                   widgetId={widget.id}

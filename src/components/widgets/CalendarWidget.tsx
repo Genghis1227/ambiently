@@ -9,7 +9,7 @@ import {
   X,
   HelpCircle,
 } from 'lucide-react';
-import { fetchCalendarEvents, type CalendarEvent, type CalendarSource } from '../../services/feeds';
+import { fetchCalendarEvents, getCachedCalendarEvents, type CalendarEvent, type CalendarSource } from '../../services/feeds';
 import { CalendarUrlGuideModal } from '../calendar/CalendarUrlGuideModal';
 
 export type CalendarViewMode = 'agenda' | '3day' | 'week' | 'month';
@@ -44,6 +44,16 @@ function formatTimeShort(date: Date): string {
   return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(' ', '');
 }
 
+function parseEventLocalDate(dateStr: string, isAllDay?: boolean): Date {
+  if (isAllDay) {
+    const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 0, 0, 0, 0);
+    }
+  }
+  return new Date(dateStr);
+}
+
 function formatEventTime(evt: CalendarEvent): string {
   if (evt.isAllDay) return 'All Day';
   const start = new Date(evt.start);
@@ -51,8 +61,26 @@ function formatEventTime(evt: CalendarEvent): string {
 }
 
 function isEventOnDate(evt: CalendarEvent, targetDate: Date): boolean {
-  const dayStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 0, 0, 0, 0).getTime();
-  const dayEnd = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 23, 59, 59, 999).getTime();
+  const targetY = targetDate.getFullYear();
+  const targetM = targetDate.getMonth();
+  const targetD = targetDate.getDate();
+
+  if (evt.isAllDay) {
+    const startDate = parseEventLocalDate(evt.start, true);
+    const target = new Date(targetY, targetM, targetD, 0, 0, 0, 0);
+
+    if (evt.end) {
+      const endDate = parseEventLocalDate(evt.end, true);
+      if (endDate.getTime() > startDate.getTime()) {
+        // In RFC 5545, DTEND for all-day events is exclusive (midnight of the next day)
+        return target.getTime() >= startDate.getTime() && target.getTime() < endDate.getTime();
+      }
+    }
+    return target.getTime() === startDate.getTime();
+  }
+
+  const dayStart = new Date(targetY, targetM, targetD, 0, 0, 0, 0).getTime();
+  const dayEnd = new Date(targetY, targetM, targetD, 23, 59, 59, 999).getTime();
   const evtStart = new Date(evt.start).getTime();
   const evtEnd = evt.end ? new Date(evt.end).getTime() : evtStart;
   return evtStart <= dayEnd && evtEnd >= dayStart;
@@ -126,8 +154,11 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
   onUpdateConfig,
 }) => {
   const [view, setView] = useState<CalendarViewMode>(defaultView);
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  // Initialize immediately from cache so canvas carousel/tab switching renders instantly with 0 blank wait
+  const [events, setEvents] = useState<CalendarEvent[]>(() => getCachedCalendarEvents(sources)?.events || []);
   const [loading, setLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<number | null>(() => getCachedCalendarEvents(sources)?.lastFetched || null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [baseDate, setBaseDate] = useState(new Date());
   const [selectedDayDetail, setSelectedDayDetail] = useState<{ date: Date; events: CalendarEvent[] } | null>(null);
@@ -139,20 +170,42 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
     setView(defaultView);
   }, [defaultView]);
 
-  const loadEvents = async () => {
-    setLoading(true);
+  const loadEvents = async (force: boolean = false, background: boolean = false) => {
+    if (!background && events.length === 0) {
+      setLoading(true);
+    }
+    setIsSyncing(true);
     try {
-      const data = await fetchCalendarEvents(sources);
+      const data = await fetchCalendarEvents(sources, force);
       setEvents(data);
+      setLastUpdated(Date.now());
     } catch (err) {
       console.warn('Failed to load events:', err);
     } finally {
       setLoading(false);
+      setIsSyncing(false);
     }
   };
 
   useEffect(() => {
-    loadEvents();
+    const cached = getCachedCalendarEvents(sources);
+    if (cached) {
+      setEvents(cached.events);
+      setLastUpdated(cached.lastFetched);
+      if (cached.isStale) {
+        // Silently revalidate in background if older than 15 minutes
+        loadEvents(true, true);
+      }
+    } else {
+      loadEvents(false, false);
+    }
+
+    // Recommended refresh frequency: 15-minute background polling
+    const interval = setInterval(() => {
+      loadEvents(true, true);
+    }, 15 * 60 * 1000);
+
+    return () => clearInterval(interval);
   }, [sources]);
 
   // Auto-scroll time grid to active morning/afternoon hours
@@ -205,7 +258,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
 
   // Agenda view events (filtered from baseDate)
   const agendaStartMs = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate()).getTime() - 24 * 60 * 60 * 1000;
-  const agendaEvents = events.filter((e) => new Date(e.start).getTime() >= agendaStartMs);
+  const agendaEvents = events.filter((e) => parseEventLocalDate(e.start, e.isAllDay).getTime() >= agendaStartMs);
 
   // Month View calculations
   const startOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
@@ -335,12 +388,16 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
           </button>
           <button
             type="button"
-            onClick={loadEvents}
-            disabled={loading}
-            title="Reload calendar feeds"
+            onClick={() => loadEvents(true, false)}
+            disabled={isSyncing}
+            title={
+              lastUpdated
+                ? `Last updated: ${new Date(lastUpdated).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} (Click to refresh on-demand)`
+                : 'Refresh calendar feeds (Auto-refreshes every 15 min)'
+            }
             className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors cursor-pointer"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin text-blue-400' : ''}`} />
           </button>
         </div>
       </div>
@@ -365,7 +422,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
             </div>
           ) : (
             agendaEvents.slice(0, 30).map((evt) => {
-              const startDate = new Date(evt.start);
+              const startDate = parseEventLocalDate(evt.start, evt.isAllDay);
               const isToday = startDate.toDateString() === now.toDateString();
 
               return (
@@ -801,9 +858,13 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                         }}
                         className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-semibold truncate border-l-4 leading-tight shadow-2xs"
                       >
-                        {!de.isAllDay && (
+                        {!de.isAllDay ? (
                           <span className="font-mono text-[10px] md:text-[11px] opacity-80 shrink-0">
                             {formatTimeShort(new Date(de.start))}
+                          </span>
+                        ) : (
+                          <span className="text-[9px] uppercase font-bold tracking-wider px-1 py-0.2 rounded bg-black/25 shrink-0">
+                            All-Day
                           </span>
                         )}
                         <span className="truncate">{de.summary}</span>
