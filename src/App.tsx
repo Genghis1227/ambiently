@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Lock } from 'lucide-react';
 import { useDashboardStore } from './store/dashboardStore';
 import { NavigationDock } from './components/dock/NavigationDock';
 import { Corkboard } from './components/layout/Corkboard';
@@ -11,6 +12,7 @@ import { AddWidgetModal } from './components/widgets/AddWidgetModal';
 import { CreateCanvasModal } from './components/dock/CreateCanvasModal';
 import { openLocalFileBinding } from './services/fileSync';
 import { subscribeToRealtimeBoard, joinBoardByCode } from './services/supabase';
+import { useIdleCursor } from './hooks/useIdleCursor';
 
 export function App() {
   const {
@@ -23,7 +25,6 @@ export function App() {
     notes,
     setActiveTabId,
     unlockKiosk,
-    isUnlocked,
     isCarouselPaused,
     pauseCarouselTemporarily,
     toggleNightModeManual,
@@ -47,6 +48,11 @@ export function App() {
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [pinChallenge, setPinChallenge] = useState<{
+    action: 'exit_fullscreen' | 'open_settings';
+    title?: string;
+    subtitle?: string;
+  } | null>(null);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
   const [isAddWidgetOpen, setIsAddWidgetOpen] = useState(false);
   const [isCreateCanvasOpen, setIsCreateCanvasOpen] = useState(false);
@@ -87,6 +93,14 @@ export function App() {
     initStore();
   }, [initStore]);
 
+  // Ambient Kiosk & Night Mode Idle Cursor Auto-Hide
+  useIdleCursor({
+    enabled: settings.autoHideCursor !== false,
+    timeoutMs: (settings.cursorIdleTimeoutSec || 3) * 1000,
+    nightModeTimeoutMs: 1200,
+    isNightMode: settings.nightModeEnabled,
+  });
+
   useEffect(() => {
     const handleResize = () => {
       setIsMobileViewport(window.innerWidth < 768);
@@ -95,9 +109,15 @@ export function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Granular kiosk & protection controls
+  const isFullscreenKioskLocked = Boolean(settings.pinLockEnabled && settings.lockFullscreenKiosk !== false);
+  const isSettingsLocked = Boolean(settings.pinLockEnabled && settings.lockSettingsAccess !== false);
+  const isCanvasLocked = Boolean(settings.lockCanvasEditing);
+
   // Keyboard shortcuts:
   // '\' (backslash) to toggle toolbar visibility
   // '1'-'9' and '0' (for 10) to switch between canvases
+  // Escape to prompt PIN if in fullscreen and kiosk fullscreen lock is enabled
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -109,6 +129,17 @@ export function App() {
       ) {
         return;
       }
+
+      if (e.key === 'Escape' && isFullscreenKioskLocked && document.fullscreenElement) {
+        e.preventDefault();
+        setPinChallenge({
+          action: 'exit_fullscreen',
+          title: 'Exit Fullscreen Kiosk',
+          subtitle: 'Enter parent PIN to exit fullscreen',
+        });
+        return;
+      }
+
       if (e.metaKey || e.ctrlKey || e.altKey) {
         return;
       }
@@ -131,7 +162,48 @@ export function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleDockHidden, tabs, setActiveTabId]);
+  }, [toggleDockHidden, tabs, setActiveTabId, isFullscreenKioskLocked]);
+
+  // Fullscreen state listener + Keyboard Lock API (Chromium / Edge / Chrome Kiosk)
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      const isNowFullscreen = Boolean(document.fullscreenElement);
+      setIsFullscreen(isNowFullscreen);
+
+      if (isNowFullscreen && 'keyboard' in navigator && (navigator as any).keyboard?.lock) {
+        (navigator as any).keyboard.lock(['Escape']).catch(() => {});
+      } else if (!isNowFullscreen && 'keyboard' in navigator && (navigator as any).keyboard?.unlock) {
+        (navigator as any).keyboard.unlock();
+      }
+    };
+
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+  }, []);
+
+  // Prevent context menu (right click / long press) when kiosk fullscreen lock is enabled to prevent kids accessing browser menu
+  useEffect(() => {
+    if (!isFullscreenKioskLocked) return;
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener('contextmenu', handleContextMenu);
+    return () => window.removeEventListener('contextmenu', handleContextMenu);
+  }, [isFullscreenKioskLocked]);
+
+  // Auto return to fullscreen on next tap/touch if kiosk fullscreen lock is active and screen is not in fullscreen
+  useEffect(() => {
+    if (!isFullscreenKioskLocked) return;
+
+    const handlePointerDown = () => {
+      if (!document.fullscreenElement && !pinChallenge && !isSettingsOpen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+    };
+
+    window.addEventListener('pointerdown', handlePointerDown);
+    return () => window.removeEventListener('pointerdown', handlePointerDown);
+  }, [isFullscreenKioskLocked, pinChallenge, isSettingsOpen]);
 
   const handleToggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -140,11 +212,49 @@ export function App() {
       });
       setIsFullscreen(true);
     } else {
+      // If kid-proof kiosk fullscreen lock is enabled, exiting fullscreen requires the parent PIN!
+      if (isFullscreenKioskLocked) {
+        setPinChallenge({
+          action: 'exit_fullscreen',
+          title: 'Exit Fullscreen Kiosk',
+          subtitle: 'Enter parent PIN to exit fullscreen',
+        });
+        return;
+      }
       if (document.exitFullscreen) {
-        document.exitFullscreen();
+        document.exitFullscreen().catch(() => {});
         setIsFullscreen(false);
       }
     }
+  };
+
+  const handleOpenSettings = () => {
+    if (isSettingsLocked) {
+      setPinChallenge({
+        action: 'open_settings',
+        title: 'Kiosk Settings Locked',
+        subtitle: 'Enter parent PIN to access settings & controls',
+      });
+      return;
+    }
+    setIsSettingsOpen(true);
+  };
+
+  const handlePinUnlock = async (enteredPin: string) => {
+    const success = await unlockKiosk(enteredPin);
+    if (success) {
+      if (pinChallenge?.action === 'exit_fullscreen') {
+        if (document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+          setIsFullscreen(false);
+        }
+      } else if (pinChallenge?.action === 'open_settings') {
+        setIsSettingsOpen(true);
+      }
+      setPinChallenge(null);
+      return true;
+    }
+    return false;
   };
 
   const handleConnectFile = async () => {
@@ -254,7 +364,7 @@ export function App() {
           onRemoveWidget={removeWidget}
           onAddWidget={addWidget}
           onToggleDesktopView={() => setForceDesktopMode(true)}
-          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenSettings={handleOpenSettings}
         />
         <SettingsModal
           isOpen={isSettingsOpen}
@@ -321,6 +431,7 @@ export function App() {
           onUpdateWidget={updateWidget}
           onUpdateTab={updateTab}
           snapToGrid={settings.snapToGrid}
+          isCanvasLocked={isCanvasLocked}
         />
       </div>
 
@@ -329,9 +440,10 @@ export function App() {
         tabs={visibleTabs}
         activeTabId={activeTabIdResolved}
         dockPosition={settings.dockPosition}
-        isLocked={!isUnlocked}
+        isLocked={Boolean(settings.pinLockEnabled)}
+        isCanvasLocked={isCanvasLocked}
         onSelectTab={setActiveTabId}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenSettings={handleOpenSettings}
         onToggleNightMode={toggleNightModeManual}
         onToggleFullscreen={handleToggleFullscreen}
         isFullscreen={isFullscreen}
@@ -359,11 +471,38 @@ export function App() {
         onWake={toggleNightModeManual}
       />
 
-      {/* Kiosk PIN Lock Overlay */}
-      {!isUnlocked && (
+      {/* Kiosk Fullscreen Warning Banner when kiosk lock is enabled but not in fullscreen */}
+      {isFullscreenKioskLocked && !isFullscreen && !pinChallenge && (
+        <div
+          onClick={() => {
+            document.documentElement.requestFullscreen().catch(() => {});
+          }}
+          className="fixed top-3 left-1/2 -translate-x-1/2 z-[70] px-4 py-2 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-200 text-xs font-semibold shadow-2xl backdrop-blur-md flex items-center gap-2 cursor-pointer animate-pulse"
+        >
+          <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+          <span>Kid Lock Active • Tap anywhere to return to Fullscreen</span>
+        </div>
+      )}
+
+      {/* Kid-Proof Kiosk PIN Challenge Overlay */}
+      {pinChallenge && (
         <PinOverlay
-          onUnlock={unlockKiosk}
-          onForgotChallenge={() => unlockKiosk('')}
+          title={pinChallenge.title}
+          subtitle={pinChallenge.subtitle}
+          onUnlock={handlePinUnlock}
+          onForgotChallenge={() => {
+            unlockKiosk('');
+            if (pinChallenge.action === 'exit_fullscreen') {
+              if (document.exitFullscreen) {
+                document.exitFullscreen().catch(() => {});
+                setIsFullscreen(false);
+              }
+            } else if (pinChallenge.action === 'open_settings') {
+              setIsSettingsOpen(true);
+            }
+            setPinChallenge(null);
+          }}
+          onCancel={() => setPinChallenge(null)}
         />
       )}
 

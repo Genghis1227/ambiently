@@ -14,6 +14,7 @@ import {
   Tv,
   Plus,
   Type,
+  Sparkles,
 } from 'lucide-react';
 import type { WidgetType, DashboardWidget } from '../../types/dashboard';
 
@@ -159,6 +160,15 @@ const WIDGET_TEMPLATES: WidgetTemplate[] = [
     defaultGridPos: { w: 4, h: 8 },
     defaultConfig: {},
     color: 'from-rose-500/20 to-pink-500/20 text-rose-400 border-rose-500/30',
+  },
+  {
+    type: 'image',
+    title: 'Single Image or GIF',
+    description: 'Display an animated GIF from GIPHY, a transparent canvas sticker, or any picture with search & URL support.',
+    icon: Sparkles,
+    defaultGridPos: { w: 4, h: 4 },
+    defaultConfig: { fit: 'contain', transparentBg: false },
+    color: 'from-fuchsia-500/20 to-pink-500/20 text-fuchsia-400 border-fuchsia-500/30',
   },
 ];
 

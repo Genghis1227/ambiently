@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.22] - 2026-11-05
+
+### Added
+* **Granular Kid Protection & Kiosk Security Controls (`SettingsModal.tsx`, `Corkboard.tsx`, `NavigationDock.tsx`, `App.tsx`, `dashboardStore.ts`, `types/dashboard.ts`):**
+  * Added independent "Lock Canvas Layout & Content" toggle (`lockCanvasEditing`) in both Security & System and Display & Navigation settings. Freezes widget tiles and sticky notes in place, disabling tile dragging, rotating, resizing, deleting, adding widgets/canvases, or auto-organizing. Interactive widgets and chore checklist checkboxes remain usable. Can be toggled independently with or without a PIN.
+  * Added independent "Lock Fullscreen Kiosk Mode" toggle (`lockFullscreenKiosk`) that traps the Escape key, integrates the Chromium Keyboard Lock API (`navigator.keyboard.lock(['Escape'])`), blocks context menus, and auto-returns to fullscreen on touch/tap. Exiting fullscreen requires the parent PIN.
+  * Added independent "Require PIN for Command Center Settings" toggle (`lockSettingsAccess`) to guard settings access.
+  * Added visual lock indicators in the navigation dock and canvas empty state when canvas editing is locked.
+* **Single Image & GIF Widget (`ImageWidget.tsx`, `MediaSearchModal.tsx`, `mediaSearch.ts`, `AddWidgetModal.tsx`, `WidgetSettingsModal.tsx`, `Corkboard.tsx`, `MobileCompanion.tsx`):**
+  * Added dedicated Image & GIF tile widget with integrated GIPHY GIF & animated sticker search, Wikimedia Commons public domain image search, custom image URLs, and direct file upload.
+  * Supports frameless transparent sticker mode, object-fit scaling (`contain`, `cover`, `fill`), optional captions, and click-through external hyperlinks.
+* **Ambient Mouse Cursor Auto-Hide (`useIdleCursor.ts`, `index.css`, `SettingsModal.tsx`):**
+  * Automatically hides the idle mouse cursor after 3 seconds of inactivity (customizable from 1 to 15s in settings), accelerated to 1.2s in Night Mode (`dim` and `oled_clock`), instantly restoring cursor visibility on mouse movement.
+
+---
+
 ## [0.1.21] - 2026-11-04
 
 ### Fixed

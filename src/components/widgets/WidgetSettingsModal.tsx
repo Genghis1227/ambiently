@@ -29,6 +29,8 @@ import { EMBED_PRESETS, type EmbedPresetId } from './MediaEmbedWidget';
 import { DEFAULT_WORLD_CITIES, type WorldClockCity } from './WorldClockWidget';
 import type { TextBoxConfig } from './TextBoxWidget';
 import { CURATED_RSS_FEEDS } from '../../data/curatedFeeds';
+import { MediaSearchModal } from './MediaSearchModal';
+import { Sparkles } from 'lucide-react';
 
 interface WidgetSettingsModalProps {
   isOpen: boolean;
@@ -144,6 +146,14 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const [letterSpacing, setLetterSpacing] = useState<NonNullable<TextBoxConfig['letterSpacing']>>('normal');
   const [textBgStyle, setTextBgStyle] = useState<NonNullable<TextBoxConfig['bgStyle']>>('transparent');
 
+  // Single Image / GIF states
+  const [imageUrl, setImageUrl] = useState('');
+  const [imageFit, setImageFit] = useState<'contain' | 'cover' | 'fill'>('contain');
+  const [imageCaption, setImageCaption] = useState('');
+  const [imageTransparentBg, setImageTransparentBg] = useState(false);
+  const [imageLinkUrl, setImageLinkUrl] = useState('');
+  const [isMediaSearchOpen, setIsMediaSearchOpen] = useState(false);
+
   // Populate initial state when modal opens with a widget
   useEffect(() => {
     if (!widget) return;
@@ -234,6 +244,12 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setTextTransform(widget.config?.textTransform || 'none');
       setLetterSpacing(widget.config?.letterSpacing || 'normal');
       setTextBgStyle(widget.config?.bgStyle || 'transparent');
+    } else if (widget.type === 'image') {
+      setImageUrl(widget.config?.url || '');
+      setImageFit(widget.config?.fit || 'contain');
+      setImageCaption(widget.config?.caption || '');
+      setImageTransparentBg(Boolean(widget.config?.transparentBg));
+      setImageLinkUrl(widget.config?.linkUrl || '');
     }
   }, [widget, isOpen, settings.commonPhotos]);
 
@@ -392,6 +408,12 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.textTransform = textTransform;
       configUpdates.letterSpacing = letterSpacing;
       configUpdates.bgStyle = textBgStyle;
+    } else if (widget.type === 'image') {
+      configUpdates.url = imageUrl.trim();
+      configUpdates.fit = imageFit;
+      configUpdates.caption = imageCaption.trim();
+      configUpdates.transparentBg = imageTransparentBg;
+      configUpdates.linkUrl = imageLinkUrl.trim();
     }
 
     onSave(widget.id, {
@@ -2010,6 +2032,148 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
               </div>
             </div>
           )}
+
+          {/* Single Image or GIF Settings */}
+          {widget.type === 'image' && (
+            <div className="space-y-4 pt-2 border-t border-gray-800">
+              {/* Media Preview & Change Button */}
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5 flex items-center justify-between">
+                  <span>Image / GIF Preview</span>
+                  {imageUrl && (
+                    <span className="text-[10px] text-emerald-400 font-mono">Active</span>
+                  )}
+                </label>
+                <div className="flex gap-3 items-center p-3 rounded-xl bg-gray-950 border border-gray-800">
+                  <div
+                    className={`w-20 h-20 rounded-xl overflow-hidden border border-gray-800 shrink-0 flex items-center justify-center ${
+                      imageTransparentBg
+                        ? 'bg-[linear-gradient(45deg,#1f2937_25%,transparent_25%),linear-gradient(-45deg,#1f2937_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#1f2937_75%),linear-gradient(-45deg,transparent_75%,#1f2937_75%)] bg-[size:12px_12px] bg-[position:0_0,0_6px,6px_-6px,-6px_0]'
+                        : 'bg-black/50'
+                    }`}
+                  >
+                    {imageUrl ? (
+                      <img
+                        src={imageUrl}
+                        alt="Preview"
+                        className="w-full h-full"
+                        style={{ objectFit: imageFit }}
+                      />
+                    ) : (
+                      <ImageIcon className="w-8 h-8 text-gray-600" />
+                    )}
+                  </div>
+
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsMediaSearchOpen(true)}
+                      className="w-full py-2 px-3 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
+                    >
+                      <Sparkles className="w-4 h-4 text-blue-400" />
+                      <span>{imageUrl ? 'Change Image / Search GIPHY' : 'Browse GIPHY & Images'}</span>
+                    </button>
+                    <span className="text-[10px] text-gray-500 block leading-tight">
+                      Search animated GIFs, transparent stickers, or free photos.
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Direct URL Input */}
+              <div>
+                <label className="text-xs font-semibold text-gray-300 block mb-1">
+                  Or Direct Image / GIF URL
+                </label>
+                <input
+                  type="url"
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  placeholder="https://.../animation.gif"
+                  className="w-full rounded-xl bg-gray-950 border border-gray-800 p-2.5 text-xs text-white focus:outline-none focus:border-blue-500 font-mono"
+                />
+              </div>
+
+              {/* Object Fit Selector */}
+              <div>
+                <label className="text-xs font-semibold text-gray-300 block mb-1">
+                  Image Scaling (Object Fit)
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'contain' as const, label: 'Contain', desc: 'Preserves aspect ratio' },
+                    { id: 'cover' as const, label: 'Cover', desc: 'Fills frame completely' },
+                    { id: 'fill' as const, label: 'Stretch', desc: 'Stretches to borders' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setImageFit(opt.id)}
+                      className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                        imageFit === opt.id
+                          ? 'bg-blue-600/20 border-blue-500 text-blue-300 font-bold shadow-sm'
+                          : 'bg-gray-950 border-gray-800 text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      <span className="text-xs block">{opt.label}</span>
+                      <span className="text-[10px] text-gray-500 font-normal">{opt.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Background Frame Style (Card vs Transparent Sticker) */}
+              <div className="flex items-center justify-between pt-2 border-t border-gray-800/60">
+                <div>
+                  <span className="text-xs text-gray-300 block font-semibold">Transparent Sticker Mode</span>
+                  <span className="text-[10px] text-gray-500">
+                    Removes dark background card so GIFs and stickers float directly on canvas
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setImageTransparentBg(!imageTransparentBg)}
+                  className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer ${
+                    imageTransparentBg ? 'bg-emerald-600' : 'bg-gray-700'
+                  }`}
+                >
+                  <div
+                    className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                      imageTransparentBg ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Optional Caption */}
+              <div>
+                <label className="text-xs font-semibold text-gray-300 block mb-1">
+                  Optional Caption (Banner at bottom)
+                </label>
+                <input
+                  type="text"
+                  value={imageCaption}
+                  onChange={(e) => setImageCaption(e.target.value)}
+                  placeholder="e.g. Happy Friday! ☕"
+                  className="w-full rounded-xl bg-gray-950 border border-gray-800 p-2.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {/* Optional Click-through Link */}
+              <div>
+                <label className="text-xs font-semibold text-gray-300 block mb-1">
+                  Optional Click-through Link
+                </label>
+                <input
+                  type="url"
+                  value={imageLinkUrl}
+                  onChange={(e) => setImageLinkUrl(e.target.value)}
+                  placeholder="https://..."
+                  className="w-full rounded-xl bg-gray-950 border border-gray-800 p-2.5 text-xs text-white focus:outline-none focus:border-blue-500 font-mono"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer Actions */}
@@ -2035,6 +2199,18 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       <CalendarUrlGuideModal
         isOpen={isCalendarGuideOpen}
         onClose={() => setIsCalendarGuideOpen(false)}
+      />
+
+      <MediaSearchModal
+        isOpen={isMediaSearchOpen}
+        onClose={() => setIsMediaSearchOpen(false)}
+        onSelect={(selectedUrl, selectedTitle) => {
+          setImageUrl(selectedUrl);
+          if (selectedTitle && !imageCaption) {
+            setImageCaption(selectedTitle);
+          }
+        }}
+        initialUrl={imageUrl}
       />
     </div>
   );

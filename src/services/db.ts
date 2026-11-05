@@ -44,6 +44,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   nightDimOpacity: 0.85,
   snapToGrid: false,
   isDockHidden: false,
+  autoHideCursor: true,
+  cursorIdleTimeoutSec: 3,
   commonPhotos: [],
   commonPhotoSourceLabel: undefined,
   commonPhotoSourceUrl: undefined,
@@ -51,6 +53,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   pinLockEnabled: false,
   pinHash: null,
   isLocked: false,
+  lockFullscreenKiosk: true,
+  lockCanvasEditing: false,
+  lockSettingsAccess: true,
   updated_at: new Date().toISOString(),
 };
 

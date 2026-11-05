@@ -26,7 +26,17 @@ export type WidgetType =
   | 'rss'
   | 'quotes'
   | 'embed'
-  | 'textbox';
+  | 'textbox'
+  | 'image';
+
+export interface ImageWidgetConfig {
+  url?: string;
+  title?: string;
+  caption?: string;
+  fit?: 'contain' | 'cover' | 'fill';
+  transparentBg?: boolean;
+  linkUrl?: string;
+}
 
 export interface GridDimensions {
   cols: number; // e.g., 12
@@ -121,6 +131,8 @@ export interface AppSettings {
   // Canvas & Dock Options
   snapToGrid?: boolean;
   isDockHidden?: boolean;
+  autoHideCursor?: boolean;
+  cursorIdleTimeoutSec?: number;
 
   // Common Photo Library (shared across photo widgets)
   commonPhotos?: PhotoItem[];
@@ -128,10 +140,13 @@ export interface AppSettings {
   commonPhotoSourceUrl?: string;
   commonPhotoSourceType?: 'plex' | 'local' | 'web' | 'curated';
 
-  // PIN Protection
+  // PIN Protection & Kid Kiosk Controls
   pinLockEnabled: boolean;
   pinHash?: string | null; // SHA-256 hex
   isLocked: boolean;
+  lockFullscreenKiosk?: boolean; // Prevent exiting fullscreen without PIN
+  lockCanvasEditing?: boolean;   // Disable modifying canvases (freezes moving, resizing, rotating & organizing)
+  lockSettingsAccess?: boolean;  // Require PIN to open settings
 
   updated_at: string;
 }

@@ -23,6 +23,7 @@ import {
   StickyNote,
   Globe,
   Hourglass,
+  Sparkles,
 } from 'lucide-react';
 import type { DashboardTab, DashboardWidget, StickyNoteItem } from '../../types/dashboard';
 import { APP_VERSION } from '../../data/changelog';
@@ -42,6 +43,7 @@ import { RssWidget } from '../widgets/RssWidget';
 import { QuotesWidget } from '../widgets/QuotesWidget';
 import { MediaEmbedWidget } from '../widgets/MediaEmbedWidget';
 import { TextBoxWidget } from '../widgets/TextBoxWidget';
+import { ImageWidget } from '../widgets/ImageWidget';
 
 interface MobileCompanionProps {
   tabs: DashboardTab[];
@@ -229,6 +231,8 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return Music;
       case 'textbox':
         return Type;
+      case 'image':
+        return Sparkles;
       case 'sticky_notes':
         return StickyNote;
       default:
@@ -258,6 +262,8 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return 'Media Player';
       case 'textbox':
         return 'Text Heading';
+      case 'image':
+        return 'Image / GIF';
       case 'sticky_notes':
         return 'Notes Tile';
       default:
@@ -373,6 +379,16 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
             letterSpacing={widget.config?.letterSpacing}
             bgStyle={widget.config?.bgStyle}
           />
+        );
+      case 'image':
+        return (
+          <div className="h-44 w-full">
+            <ImageWidget
+              id={widget.id}
+              config={widget.config || {}}
+              onUpdateConfig={(updates) => onUpdateWidget?.(widget.id, { config: { ...widget.config, ...updates } })}
+            />
+          </div>
         );
       case 'sticky_notes':
         return (

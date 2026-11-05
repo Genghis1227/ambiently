@@ -11,6 +11,19 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.1.22",
+    date: "November 5, 2026",
+    title: "Granular Kid Protection & Canvas Layout Lock, Single Image/GIF Widget with GIPHY Search, & Idle Cursor Auto-Hide",
+    highlights: [
+      "Granular Kid Protection & Kiosk Security: Introduced independent controls for locking canvas layout, locking fullscreen kiosk mode, and protecting command center settings.",
+      "Lock Canvas Layout & Content: Freezes all widget tiles and sticky notes in place, disabling tile dragging, rotating, resizing, deleting, adding widgets/canvases, or auto-organizing. Interactive widgets and checklist checkboxes remain usable. Can be toggled independently with or without a PIN.",
+      "Kid-Proof Fullscreen Kiosk: Traps the Escape key, integrates the Chromium Keyboard Lock API (navigator.keyboard.lock(['Escape'])), disables browser context menus, and automatically re-enters fullscreen on tap. Exiting fullscreen requires the parent PIN.",
+      "Single Image & GIF Widget: Added dedicated image & animated GIF widget with built-in GIPHY search, animated stickers, Wikimedia Commons public domain image search, custom image URLs, and local upload.",
+      "Transparent Frameless Stickers & Fit Controls: Supports borderless transparent sticker rendering, object-fit options (contain, cover, fill), optional captions, and click-through external hyperlinks.",
+      "Ambient Idle Mouse Cursor Auto-Hide: Automatically hides the idle mouse cursor after 3 seconds of inactivity (customizable in settings), accelerated to 1.2s in Night Mode, and immediately restores cursor visibility on pointer movement.",
+    ],
+  },
+  {
     version: "v0.1.21",
     date: "November 4, 2026",
     title: "Compact Calendar Layout for Short & Concurrent Events, Grid Height Scaling, & Dynamic Version Sync",
