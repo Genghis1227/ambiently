@@ -23,7 +23,7 @@ export const EMBED_PRESETS: { id: EmbedPresetId; label: string; description: str
 export function normalizeEmbedUrl(rawUrl: string, muted: boolean): string {
   const trimmed = rawUrl.trim();
   if (!trimmed) {
-    return `https://www.youtube-nocookie.com/embed/jfKfPfyJRdk?autoplay=1&mute=${muted ? 1 : 0}`;
+    return `https://www.youtube-nocookie.com/embed/rFZHOHl-L8A?autoplay=1&mute=${muted ? 1 : 0}`;
   }
 
   // Convert standard youtube.com/watch?v=ID or youtu.be/ID or youtube.com/live/ID
@@ -78,11 +78,11 @@ export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
     const m = muted ? 1 : 0;
     switch (preset) {
       case 'lofi':
-        return `https://www.youtube-nocookie.com/embed/jfKfPfyJRdk?autoplay=1&mute=${m}&rel=0`;
+        return `https://www.youtube-nocookie.com/embed/rFZHOHl-L8A?autoplay=1&mute=${m}&rel=0`;
       case 'fireplace':
         return `https://www.youtube-nocookie.com/embed/L_LUpnjgPso?autoplay=1&mute=${m}&loop=1&playlist=L_LUpnjgPso&rel=0`;
       case 'nasa':
-        return `https://www.youtube-nocookie.com/embed/xRPjKQtRXR8?autoplay=1&mute=${m}&rel=0`;
+        return `https://www.youtube-nocookie.com/embed/ROboUHfPUrU?autoplay=1&mute=${m}&rel=0`;
       case 'radar':
         return `https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=in&metricTemp=%C2%B0F&metricWind=mph&zoom=6&overlay=radar&product=radar&level=surface&lat=${latitude}&lon=${longitude}`;
       case 'custom':
