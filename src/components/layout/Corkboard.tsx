@@ -2277,7 +2277,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             </button>
           )}
 
-          {contextMenu.type === 'widget' && contextMenu.rotation && contextMenu.rotation !== 0 && onUpdateWidgetPos && (
+          {contextMenu.type === 'widget' && Boolean(contextMenu.rotation) && onUpdateWidgetPos && (
             <button
               type="button"
               onClick={() => {
