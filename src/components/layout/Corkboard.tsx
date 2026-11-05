@@ -1405,6 +1405,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               ) : widget.type === 'rss' ? (
                 <RssWidget
                   feedUrl={widget.config?.feedUrl}
+                  textSize={widget.config?.textSize}
+                  showSnippet={widget.config?.showSnippet !== false}
                   onUpdateConfig={(updates) => {
                     if (onUpdateWidget) {
                       onUpdateWidget(widget.id, {

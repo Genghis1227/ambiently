@@ -113,6 +113,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
 
   // RSS states
   const [rssFeedUrl, setRssFeedUrl] = useState('');
+  const [rssTextSize, setRssTextSize] = useState<'auto' | 'sm' | 'base' | 'lg' | 'xl'>('auto');
 
   // Calendar states
   const [calendarDefaultView, setCalendarDefaultView] = useState<'agenda' | '3day' | 'week' | 'month'>('agenda');
@@ -218,6 +219,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setWorldCitySearch('');
     } else if (widget.type === 'rss') {
       setRssFeedUrl(widget.config?.feedUrl || 'https://tony.trinhism.com/index.xml');
+      setRssTextSize(widget.config?.textSize || 'auto');
     } else if (widget.type === 'calendar') {
       setCalendarDefaultView(widget.config?.defaultView || 'agenda');
       setCalendarSources(
@@ -385,6 +387,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.cities = worldCities.length > 0 ? worldCities : DEFAULT_WORLD_CITIES;
     } else if (widget.type === 'rss') {
       configUpdates.feedUrl = rssFeedUrl.trim();
+      configUpdates.textSize = rssTextSize;
     } else if (widget.type === 'calendar') {
       configUpdates.defaultView = calendarDefaultView;
       configUpdates.sources = calendarSources;
@@ -1704,6 +1707,36 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                   placeholder="https://tony.trinhism.com/index.xml"
                   className="w-full rounded-xl bg-gray-950 border border-gray-800 p-2.5 text-xs text-white focus:outline-none focus:border-blue-500"
                 />
+              </div>
+
+              {/* Text Size & Readability Scale */}
+              <div className="pt-2 border-t border-gray-800/60">
+                <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-2">
+                  Text Size & Readability
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+                  {[
+                    { id: 'auto', label: 'Adaptive', desc: 'Auto-scales with tile' },
+                    { id: 'sm', label: 'Compact', desc: 'Small text' },
+                    { id: 'base', label: 'Normal', desc: 'Standard' },
+                    { id: 'lg', label: 'Large', desc: 'Big headlines' },
+                    { id: 'xl', label: 'Jumbo', desc: 'Wall kiosk & TV' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setRssTextSize(opt.id as any)}
+                      className={`p-2 rounded-xl text-left border transition-all cursor-pointer ${
+                        rssTextSize === opt.id
+                          ? 'bg-orange-500/20 border-orange-500 text-white shadow-xs'
+                          : 'bg-gray-950/60 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'
+                      }`}
+                    >
+                      <div className="text-xs font-bold leading-tight">{opt.label}</div>
+                      <div className="text-[10px] text-gray-500 truncate mt-0.5">{opt.desc}</div>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}
