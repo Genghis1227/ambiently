@@ -5,9 +5,22 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.1.16';
+export const APP_VERSION = '0.1.17';
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.1.17",
+    date: "November 4, 2026",
+    title: "Google Calendar-Style Month View, 3-Day & Weekly Views, Tabbed Settings, & Stream URL Polish",
+    highlights: [
+      "Google Calendar-Style Month View: Month day cells now show colored chips with start times and event titles, +N more counters, and full-detail day view popovers on click.",
+      "3-Day Multi-Schedule View: Side-by-side 3-day timeline with Today highlights, all-day event banners, location pins, and 3-day pagination.",
+      "7-Day Weekly Schedule View: Sunday–Saturday column grid with weekday headers, date badges, and weekly pagination.",
+      "Segmented Calendar Switcher: Instant header switcher to flip between [Agenda], [3-Day], [Week], and [Month] views.",
+      "Tabbed Command Center Settings: Reorganized the settings modal into 5 clean, focused tabs (Canvases, Display & Kiosk, Shared Photos, Sync & Backup, and Security & System).",
+      "Custom Stream URL Polish: Removed Lofi Girl fallback when custom URL was empty, added a dedicated inline setup screen with direct link pasting, and added an Edit URL pencil shortcut.",
+    ],
+  },
   {
     version: "v0.1.16",
     date: "November 4, 2026",
