@@ -28,6 +28,7 @@ import type { QuoteItem } from '../../services/quotes';
 import { EMBED_PRESETS, type EmbedPresetId } from './MediaEmbedWidget';
 import { DEFAULT_WORLD_CITIES, type WorldClockCity } from './WorldClockWidget';
 import type { TextBoxConfig } from './TextBoxWidget';
+import { CURATED_RSS_FEEDS } from '../../data/curatedFeeds';
 
 interface WidgetSettingsModalProps {
   isOpen: boolean;
@@ -1625,9 +1626,54 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
           {/* RSS Settings */}
           {widget.type === 'rss' && (
             <div className="space-y-4 pt-2 border-t border-gray-800">
+              {/* Curated Feeds Picker */}
               <div>
-                <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
-                  RSS Feed URL
+                <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-2">
+                  Featured & Recommended Feeds
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[260px] overflow-y-auto pr-1">
+                  {CURATED_RSS_FEEDS.map((feed) => {
+                    const isSelected = rssFeedUrl.trim().toLowerCase() === feed.url.toLowerCase();
+                    return (
+                      <button
+                        key={feed.id}
+                        type="button"
+                        onClick={() => {
+                          setRssFeedUrl(feed.url);
+                          if (!title || CURATED_RSS_FEEDS.some((f) => f.name === title)) {
+                            setTitle(feed.name);
+                          }
+                        }}
+                        className={`flex flex-col text-left p-2.5 rounded-xl border transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-orange-500/15 border-orange-500/80 shadow-sm'
+                            : 'bg-gray-950/60 border-gray-800/80 hover:bg-gray-800/50 hover:border-gray-700'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1.5 mb-1">
+                          <span className="text-xs font-bold text-white truncate">
+                            {feed.name}
+                          </span>
+                          <span
+                            className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md border shrink-0 uppercase tracking-wider ${feed.badgeColor}`}
+                          >
+                            {feed.category}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-gray-400 line-clamp-2 leading-relaxed">
+                          {feed.description}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Custom RSS URL Input */}
+              <div className="pt-2 border-t border-gray-800/60">
+                <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5 flex items-center justify-between">
+                  <span>Custom RSS / Atom URL</span>
+                  <span className="text-[10px] text-gray-500 font-normal">Any public .xml or /rss link</span>
                 </label>
                 <input
                   type="url"
