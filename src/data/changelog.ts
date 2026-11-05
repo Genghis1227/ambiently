@@ -5,9 +5,48 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.1.18';
+import packageJson from '../../package.json';
+
+export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.1.21",
+    date: "November 4, 2026",
+    title: "Compact Calendar Layout for Short & Concurrent Events, Grid Height Scaling, & Dynamic Version Sync",
+    highlights: [
+      "Compact Inline Layout for Short & Concurrent Events: Timed events under 46 minutes (including 30-minute events and concurrent overlapping lanes) now adaptively display in an inline single-row format ([Time] [Title]) with vertical centering, eliminating vertical clipping and squished text.",
+      "Hour Grid Scaling (60px/hr): Expanded hour height to 60px (28px height per 30-minute block) to provide generous breathing room and clean 2px gaps between back-to-back timed events.",
+      "Fixed Title Crowding in 1-Hour Events: Prevented full address locations from crowding and truncating the event title in 1-hour events (locations are rendered inline only when block height is >= 75px).",
+      "Rich Hover Tooltips: Added complete summary, time range, and location hover tooltips (title attribute) across all timed event cards.",
+      "Dynamic App Version Sync: Bound toolbar, companion, and settings version badges directly to package.json so the displayed version and changelog are always automatically in sync.",
+    ],
+  },
+  {
+    version: "v0.1.20",
+    date: "November 4, 2026",
+    title: "Calendar Recurrence Expansion, All-Day Drift Elimination, Cache & Polling, Saliency Face Centering, & Curated Feeds",
+    highlights: [
+      "iCal Recurrence (RRULE) Expansion: Expanded recurring events up to 90 days out using ical.js recurrence iterator in the Cloudflare Worker API.",
+      "All-Day Calendar Timezone Drift Fix: Replaced UTC-shifting with strict local date parsing (YYYY-MM-DDT00:00:00), eliminating off-by-one errors on multi-day and all-day events.",
+      "Calendar Memory & Storage Caching: Implemented localStorage and in-memory calendar event caching with 15-minute background auto-refresh and instant manual refresh.",
+      "Human & Face Saliency Centering in Photo Frame: Multi-pass skin-tone chrominance (YCbCr) saliency analysis dynamically computes centroid object-position so human faces remain centered across varying photo frame aspect ratios.",
+      "Prominent Add-Widget Badge: Added a bright plus (+) badge indicator directly on the navigation dock grid button.",
+      "RSS Entity Decoding & Defaults: Fully unescaped HTML entities in feed titles and updated the default feed to Tony's Tipbits (https://tony.trinhism.com/index.xml).",
+      "Curated RSS Catalog: Added a 1-click curated feed directory spanning Technology, News, Science, Culture, Design, and Business.",
+    ],
+  },
+  {
+    version: "v0.1.19",
+    date: "November 4, 2026",
+    title: "Timed 24-Hour Calendar Grid, Current Time Indicator, & Month Grid View Enlargement",
+    highlights: [
+      "24-Hour Timed Grid for 3-Day & Week Views: Introduced 24-hour vertically scrollable timed grids with hour gutters, horizontal grid guidelines, and auto-scroll to current hour.",
+      "Live Current-Time Indicator: Added a vibrant red line with pulse dot on today's column indicating the exact current time of day.",
+      "Enlarged Monthly Grid View: Significantly increased month cell heights and event chip font sizes with clean day popover detail dialogs.",
+      "Top Header Navigation Polish: Streamlined date navigation, today quick-jump, and segmented view toggles.",
+    ],
+  },
   {
     version: "v0.1.18",
     date: "November 4, 2026",
