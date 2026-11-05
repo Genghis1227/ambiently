@@ -95,8 +95,19 @@ export async function fetchCalendarEvents(sources: CalendarSource[]): Promise<Ca
   const results = await Promise.all(promises);
   const flattened: CalendarEvent[] = results.flat();
 
-  // Sort chronologically
-  return flattened.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+  // Sort chronologically (accounting for all-day date strings)
+  return flattened.sort((a, b) => {
+    const parseTime = (dateStr: string, isAllDay?: boolean) => {
+      if (isAllDay) {
+        const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (match) {
+          return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 0, 0, 0, 0).getTime();
+        }
+      }
+      return new Date(dateStr).getTime();
+    };
+    return parseTime(a.start, a.isAllDay) - parseTime(b.start, b.isAllDay);
+  });
 }
 
 export async function fetchRssFeed(feedUrl: string): Promise<{ title: string; items: RssArticle[] }> {

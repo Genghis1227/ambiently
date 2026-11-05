@@ -51,26 +51,87 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     const rangeStart = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
     const rangeEnd = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
 
-    const parsedEvents = vevents.map((v: any) => {
-      const event = new ICAL.Event(v);
-      const isAllDay = event.startDate ? event.startDate.isDate : false;
-      const startDate = event.startDate ? event.startDate.toJSDate().toISOString() : null;
-      const endDate = event.endDate ? event.endDate.toJSDate().toISOString() : null;
+    const parsedEvents: any[] = [];
 
-      return {
-        uid: event.uid || Math.random().toString(),
-        summary: event.summary || 'Untitled Event',
-        description: event.description || '',
-        location: event.location || '',
-        start: startDate,
-        end: endDate,
-        isAllDay,
-      };
-    }).filter((evt: any) => {
-      if (!evt.start) return false;
-      const evtDate = new Date(evt.start);
-      return evtDate >= rangeStart && evtDate <= rangeEnd;
-    });
+    for (const v of vevents) {
+      try {
+        const event = new ICAL.Event(v);
+        if (!event.startDate) continue;
+
+        const isAllDay = Boolean(event.startDate.isDate);
+
+        if (event.isRecurring()) {
+          const iter = event.iterator();
+          let nextTime: any;
+          let count = 0;
+          const maxIterations = 300;
+
+          while ((nextTime = iter.next()) && count < maxIterations) {
+            count++;
+            const occ = event.getOccurrenceDetails(nextTime);
+            const occStart = occ.startDate.toJSDate();
+
+            if (occStart > rangeEnd) {
+              break;
+            }
+
+            if (occStart >= rangeStart) {
+              let startStr: string;
+              let endStr: string | null = null;
+
+              if (isAllDay) {
+                startStr = `${String(occ.startDate.year).padStart(4, '0')}-${String(occ.startDate.month).padStart(2, '0')}-${String(occ.startDate.day).padStart(2, '0')}T00:00:00`;
+                if (occ.endDate) {
+                  endStr = `${String(occ.endDate.year).padStart(4, '0')}-${String(occ.endDate.month).padStart(2, '0')}-${String(occ.endDate.day).padStart(2, '0')}T00:00:00`;
+                }
+              } else {
+                startStr = occStart.toISOString();
+                endStr = occ.endDate ? occ.endDate.toJSDate().toISOString() : null;
+              }
+
+              parsedEvents.push({
+                uid: `${event.uid || Math.random().toString()}-${occ.startDate.toICALString()}`,
+                summary: event.summary || 'Untitled Event',
+                description: event.description || '',
+                location: event.location || '',
+                start: startStr,
+                end: endStr,
+                isAllDay,
+              });
+            }
+          }
+        } else {
+          // Single (non-recurring) event
+          const evtDate = event.startDate.toJSDate();
+          if (evtDate >= rangeStart && evtDate <= rangeEnd) {
+            let startStr: string;
+            let endStr: string | null = null;
+
+            if (isAllDay) {
+              startStr = `${String(event.startDate.year).padStart(4, '0')}-${String(event.startDate.month).padStart(2, '0')}-${String(event.startDate.day).padStart(2, '0')}T00:00:00`;
+              if (event.endDate) {
+                endStr = `${String(event.endDate.year).padStart(4, '0')}-${String(event.endDate.month).padStart(2, '0')}-${String(event.endDate.day).padStart(2, '0')}T00:00:00`;
+              }
+            } else {
+              startStr = evtDate.toISOString();
+              endStr = event.endDate ? event.endDate.toJSDate().toISOString() : null;
+            }
+
+            parsedEvents.push({
+              uid: event.uid || Math.random().toString(),
+              summary: event.summary || 'Untitled Event',
+              description: event.description || '',
+              location: event.location || '',
+              start: startStr,
+              end: endStr,
+              isAllDay,
+            });
+          }
+        }
+      } catch {
+        // Continue if single event parsing throws
+      }
+    }
 
     return new Response(JSON.stringify({ events: parsedEvents, total: parsedEvents.length }), {
       headers: {

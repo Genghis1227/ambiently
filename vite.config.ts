@@ -241,6 +241,131 @@ export default defineConfig({
             }
             return;
           }
+
+          if (req.url && (req.url.startsWith('/api/ical') || req.url.startsWith('/functions/api/ical'))) {
+            const parsed = new URL(req.url, 'http://localhost');
+            const icsUrl = parsed.searchParams.get('url');
+
+            if (!icsUrl) {
+              res.statusCode = 400;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: 'Missing "url" query parameter' }));
+              return;
+            }
+
+            let normalizedUrl = icsUrl.trim();
+            if (normalizedUrl.startsWith('webcal://')) {
+              normalizedUrl = 'https://' + normalizedUrl.slice(9);
+            } else if (normalizedUrl.startsWith('webcals://')) {
+              normalizedUrl = 'https://' + normalizedUrl.slice(10);
+            }
+
+            try {
+              const fetchRes = await fetch(normalizedUrl, {
+                headers: {
+                  'User-Agent': 'Ambiently-Display/1.0 (+https://dashboard.trinhism.com)',
+                  Accept: 'text/calendar, text/plain, */*',
+                },
+              });
+
+              if (!fetchRes.ok) {
+                res.statusCode = fetchRes.status;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ error: `Failed to fetch calendar feed: ${fetchRes.statusText}` }));
+                return;
+              }
+
+              const icsText = await fetchRes.text();
+              const icalMod = await import('ical.js');
+              const ICAL = (icalMod as any).default || icalMod;
+              const jcalData = ICAL.parse(icsText);
+              const comp = new ICAL.Component(jcalData);
+              const vevents = comp.getAllSubcomponents('vevent');
+
+              const now = new Date();
+              const rangeStart = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+              const rangeEnd = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+              const parsedEvents: any[] = [];
+
+              for (const v of vevents) {
+                try {
+                  const event = new ICAL.Event(v);
+                  if (!event.startDate) continue;
+                  const isAllDay = Boolean(event.startDate.isDate);
+
+                  if (event.isRecurring()) {
+                    const iter = event.iterator();
+                    let nextTime: any;
+                    let count = 0;
+                    while ((nextTime = iter.next()) && count < 300) {
+                      count++;
+                      const occ = event.getOccurrenceDetails(nextTime);
+                      const occStart = occ.startDate.toJSDate();
+                      if (occStart > rangeEnd) break;
+                      if (occStart >= rangeStart) {
+                        let startStr: string;
+                        let endStr: string | null = null;
+                        if (isAllDay) {
+                          startStr = `${String(occ.startDate.year).padStart(4, '0')}-${String(occ.startDate.month).padStart(2, '0')}-${String(occ.startDate.day).padStart(2, '0')}T00:00:00`;
+                          if (occ.endDate) {
+                            endStr = `${String(occ.endDate.year).padStart(4, '0')}-${String(occ.endDate.month).padStart(2, '0')}-${String(occ.endDate.day).padStart(2, '0')}T00:00:00`;
+                          }
+                        } else {
+                          startStr = occStart.toISOString();
+                          endStr = occ.endDate ? occ.endDate.toJSDate().toISOString() : null;
+                        }
+                        parsedEvents.push({
+                          uid: `${event.uid || Math.random().toString()}-${occ.startDate.toICALString()}`,
+                          summary: event.summary || 'Untitled Event',
+                          description: event.description || '',
+                          location: event.location || '',
+                          start: startStr,
+                          end: endStr,
+                          isAllDay,
+                        });
+                      }
+                    }
+                  } else {
+                    const evtDate = event.startDate.toJSDate();
+                    if (evtDate >= rangeStart && evtDate <= rangeEnd) {
+                      let startStr: string;
+                      let endStr: string | null = null;
+                      if (isAllDay) {
+                        startStr = `${String(event.startDate.year).padStart(4, '0')}-${String(event.startDate.month).padStart(2, '0')}-${String(event.startDate.day).padStart(2, '0')}T00:00:00`;
+                        if (event.endDate) {
+                          endStr = `${String(event.endDate.year).padStart(4, '0')}-${String(event.endDate.month).padStart(2, '0')}-${String(event.endDate.day).padStart(2, '0')}T00:00:00`;
+                        }
+                      } else {
+                        startStr = evtDate.toISOString();
+                        endStr = event.endDate ? event.endDate.toJSDate().toISOString() : null;
+                      }
+                      parsedEvents.push({
+                        uid: event.uid || Math.random().toString(),
+                        summary: event.summary || 'Untitled Event',
+                        description: event.description || '',
+                        location: event.location || '',
+                        start: startStr,
+                        end: endStr,
+                        isAllDay,
+                      });
+                    }
+                  }
+                } catch {
+                  // Skip single malformed event
+                }
+              }
+
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/json');
+              res.setHeader('Access-Control-Allow-Origin', '*');
+              res.end(JSON.stringify({ events: parsedEvents, total: parsedEvents.length }));
+            } catch (err: any) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: err.message }));
+            }
+            return;
+          }
           next();
         });
       },
