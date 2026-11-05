@@ -210,6 +210,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
       setPinSuccess(true);
       setTimeout(() => setPinSuccess(false), 2000);
       setPinInput('');
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
     }
   };
 
@@ -1267,9 +1270,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
             {/* Kid-Proof PIN Protection */}
             <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800">
               <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2 text-sm font-semibold text-white">
-                  <Shield className="w-4 h-4 text-blue-400" />
-                  Kid-Proof PIN Lock
+                <div>
+                  <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                    <Shield className="w-4 h-4 text-blue-400" />
+                    Kid-Proof Kiosk PIN Lock
+                  </div>
+                  <span className="text-[11px] text-gray-400 block mt-0.5">
+                    Locks fullscreen mode, traps Escape key, and requires parent PIN to exit fullscreen or access settings.
+                  </span>
                 </div>
                 {settings.pinLockEnabled ? (
                   <button

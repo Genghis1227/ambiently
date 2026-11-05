@@ -81,7 +81,7 @@ interface DashboardState {
   toggleNightModeManual: () => void;
   updateSettings: (updates: Partial<AppSettings>) => Promise<void>;
   setPinLock: (pin: string | null) => Promise<void>;
-  unlockKiosk: (enteredPin: string) => boolean;
+  unlockKiosk: (enteredPin: string) => Promise<boolean>;
   lockKiosk: () => void;
   saveLocalBackup: () => Promise<void>;
   syncRemoteNoteChange: (note: StickyNoteItem, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void;
@@ -475,17 +475,17 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     set({ settings: updated, isUnlocked: !pinLockEnabled });
   },
 
-  unlockKiosk: (enteredPin) => {
+  unlockKiosk: async (enteredPin) => {
     const { settings } = get();
-    if (!settings.pinLockEnabled || !settings.pinHash) {
+    if (!settings.pinLockEnabled || !settings.pinHash || enteredPin === '') {
       set({ isUnlocked: true });
       return true;
     }
-    hashPin(enteredPin).then((hash) => {
-      if (hash === settings.pinHash) {
-        set({ isUnlocked: true });
-      }
-    });
+    const hash = await hashPin(enteredPin);
+    if (hash === settings.pinHash) {
+      set({ isUnlocked: true });
+      return true;
+    }
     return false;
   },
 
