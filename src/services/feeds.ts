@@ -66,9 +66,75 @@ export interface RssArticle {
   description: string;
 }
 
-export async function fetchCalendarEvents(sources: CalendarSource[]): Promise<CalendarEvent[]> {
+export const CALENDAR_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes recommended refresh frequency
+const memoryCalendarCache = new Map<string, { timestamp: number; events: CalendarEvent[] }>();
+
+export function getCalendarCacheKey(sources: CalendarSource[]): string {
+  const enabled = sources.filter((s) => s.enabled && s.url.trim());
+  return enabled.map((s) => `${s.id}:${s.url.trim()}:${s.color}`).sort().join('|');
+}
+
+export function getCachedCalendarEvents(sources: CalendarSource[]): { events: CalendarEvent[]; isStale: boolean; lastFetched: number } | null {
+  const key = getCalendarCacheKey(sources);
+  if (!key) return null;
+
+  // 1. Check in-memory cache
+  let cached = memoryCalendarCache.get(key);
+
+  // 2. Fall back to localStorage
+  if (!cached && typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const stored = localStorage.getItem(`ambiently_cal_cache_${key}`);
+      if (stored) {
+        cached = JSON.parse(stored);
+        if (cached && Array.isArray(cached.events)) {
+          memoryCalendarCache.set(key, cached);
+        } else {
+          cached = undefined;
+        }
+      }
+    } catch {
+      // Storage quota or privacy restriction
+    }
+  }
+
+  if (!cached) return null;
+
+  const age = Date.now() - cached.timestamp;
+  return {
+    events: cached.events,
+    isStale: age > CALENDAR_CACHE_TTL_MS,
+    lastFetched: cached.timestamp,
+  };
+}
+
+export function setCachedCalendarEvents(sources: CalendarSource[], events: CalendarEvent[]): void {
+  const key = getCalendarCacheKey(sources);
+  if (!key) return;
+
+  const entry = { timestamp: Date.now(), events };
+  memoryCalendarCache.set(key, entry);
+
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      localStorage.setItem(`ambiently_cal_cache_${key}`, JSON.stringify(entry));
+    } catch {
+      // Storage quota restriction
+    }
+  }
+}
+
+export async function fetchCalendarEvents(sources: CalendarSource[], forceRefresh: boolean = false): Promise<CalendarEvent[]> {
   const enabledSources = sources.filter((s) => s.enabled && s.url.trim());
   if (enabledSources.length === 0) return [];
+
+  // Check cache unless forced on-demand refresh
+  if (!forceRefresh) {
+    const cached = getCachedCalendarEvents(sources);
+    if (cached && !cached.isStale) {
+      return cached.events;
+    }
+  }
 
   const promises = enabledSources.map(async (src) => {
     try {
@@ -96,7 +162,7 @@ export async function fetchCalendarEvents(sources: CalendarSource[]): Promise<Ca
   const flattened: CalendarEvent[] = results.flat();
 
   // Sort chronologically (accounting for all-day date strings)
-  return flattened.sort((a, b) => {
+  const sorted = flattened.sort((a, b) => {
     const parseTime = (dateStr: string, isAllDay?: boolean) => {
       if (isAllDay) {
         const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -108,6 +174,11 @@ export async function fetchCalendarEvents(sources: CalendarSource[]): Promise<Ca
     };
     return parseTime(a.start, a.isAllDay) - parseTime(b.start, b.isAllDay);
   });
+
+  // Update memory and localStorage cache
+  setCachedCalendarEvents(sources, sorted);
+
+  return sorted;
 }
 
 export async function fetchRssFeed(feedUrl: string): Promise<{ title: string; items: RssArticle[] }> {

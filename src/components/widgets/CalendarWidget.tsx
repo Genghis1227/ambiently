@@ -9,7 +9,7 @@ import {
   X,
   HelpCircle,
 } from 'lucide-react';
-import { fetchCalendarEvents, type CalendarEvent, type CalendarSource } from '../../services/feeds';
+import { fetchCalendarEvents, getCachedCalendarEvents, type CalendarEvent, type CalendarSource } from '../../services/feeds';
 import { CalendarUrlGuideModal } from '../calendar/CalendarUrlGuideModal';
 
 export type CalendarViewMode = 'agenda' | '3day' | 'week' | 'month';
@@ -154,8 +154,11 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
   onUpdateConfig,
 }) => {
   const [view, setView] = useState<CalendarViewMode>(defaultView);
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  // Initialize immediately from cache so canvas carousel/tab switching renders instantly with 0 blank wait
+  const [events, setEvents] = useState<CalendarEvent[]>(() => getCachedCalendarEvents(sources)?.events || []);
   const [loading, setLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<number | null>(() => getCachedCalendarEvents(sources)?.lastFetched || null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [baseDate, setBaseDate] = useState(new Date());
   const [selectedDayDetail, setSelectedDayDetail] = useState<{ date: Date; events: CalendarEvent[] } | null>(null);
@@ -167,20 +170,42 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
     setView(defaultView);
   }, [defaultView]);
 
-  const loadEvents = async () => {
-    setLoading(true);
+  const loadEvents = async (force: boolean = false, background: boolean = false) => {
+    if (!background && events.length === 0) {
+      setLoading(true);
+    }
+    setIsSyncing(true);
     try {
-      const data = await fetchCalendarEvents(sources);
+      const data = await fetchCalendarEvents(sources, force);
       setEvents(data);
+      setLastUpdated(Date.now());
     } catch (err) {
       console.warn('Failed to load events:', err);
     } finally {
       setLoading(false);
+      setIsSyncing(false);
     }
   };
 
   useEffect(() => {
-    loadEvents();
+    const cached = getCachedCalendarEvents(sources);
+    if (cached) {
+      setEvents(cached.events);
+      setLastUpdated(cached.lastFetched);
+      if (cached.isStale) {
+        // Silently revalidate in background if older than 15 minutes
+        loadEvents(true, true);
+      }
+    } else {
+      loadEvents(false, false);
+    }
+
+    // Recommended refresh frequency: 15-minute background polling
+    const interval = setInterval(() => {
+      loadEvents(true, true);
+    }, 15 * 60 * 1000);
+
+    return () => clearInterval(interval);
   }, [sources]);
 
   // Auto-scroll time grid to active morning/afternoon hours
@@ -363,12 +388,16 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
           </button>
           <button
             type="button"
-            onClick={loadEvents}
-            disabled={loading}
-            title="Reload calendar feeds"
+            onClick={() => loadEvents(true, false)}
+            disabled={isSyncing}
+            title={
+              lastUpdated
+                ? `Last updated: ${new Date(lastUpdated).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} (Click to refresh on-demand)`
+                : 'Refresh calendar feeds (Auto-refreshes every 15 min)'
+            }
             className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors cursor-pointer"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin text-blue-400' : ''}`} />
           </button>
         </div>
       </div>
