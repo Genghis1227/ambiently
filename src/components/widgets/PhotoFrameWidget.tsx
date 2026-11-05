@@ -564,7 +564,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     setFilmstripIndex((prev) => prev + 1);
   }, []);
 
-  // Detect photo aspect ratio and face location to intelligently crop portrait photos toward the top
+  // Detect photo aspect ratio and face location to intelligently center where faces and people are
   const handleImageLoad = useCallback((photoId: string, img: HTMLImageElement) => {
     if (photoFocalCache.has(photoId)) {
       const cached = photoFocalCache.get(photoId)!;
@@ -575,47 +575,135 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     const { naturalWidth, naturalHeight } = img;
     if (!naturalWidth || !naturalHeight) return;
 
-    // Detect if photo is portrait (taller than wide)
     const isPortrait = naturalHeight > naturalWidth * 1.05;
+    const defaultFocalPos = isPortrait ? 'center 25%' : 'center center';
 
-    if (!isPortrait) {
-      photoFocalCache.set(photoId, 'center center');
-      setPhotoFocals((prev) => ({ ...prev, [photoId]: 'center center' }));
-      return;
-    }
+    const applyFocal = (pos: string) => {
+      photoFocalCache.set(photoId, pos);
+      setPhotoFocals((prev) => ({ ...prev, [photoId]: pos }));
+    };
 
-    // Default portrait focal position: top 20% to keep heads & faces clearly in frame
-    const defaultPortraitPos = 'center 20%';
-
-    // Try modern browser FaceDetector API if supported (Chromium / Edge / Android)
+    // 1. Try modern browser FaceDetector API if supported (Chromium / Edge / Android)
     if (typeof window !== 'undefined' && 'FaceDetector' in window) {
       try {
-        const detector = new (window as any).FaceDetector({ fastMode: true, maxDetectedFaces: 3 });
+        const detector = new (window as any).FaceDetector({ fastMode: true, maxDetectedFaces: 5 });
         detector
           .detect(img)
           .then((faces: any[]) => {
             if (faces && faces.length > 0) {
-              // Find the top-most face to ensure heads are never cropped
-              const topFace = faces.reduce((prev: any, curr: any) =>
-                curr.boundingBox.top < prev.boundingBox.top ? curr : prev
+              const totalArea = faces.reduce(
+                (sum: number, f: any) => sum + (f.boundingBox.width || 1) * (f.boundingBox.height || 1),
+                0
               );
-              const faceY = topFace.boundingBox.top + topFace.boundingBox.height * 0.45;
-              const yPercent = Math.max(10, Math.min(50, Math.round((faceY / naturalHeight) * 100)));
-              const detectedPos = `center ${yPercent}%`;
-              photoFocalCache.set(photoId, detectedPos);
-              setPhotoFocals((prev) => ({ ...prev, [photoId]: detectedPos }));
+              const wX =
+                faces.reduce(
+                  (sum: number, f: any) =>
+                    sum +
+                    ((f.boundingBox.left || 0) + (f.boundingBox.width || 0) / 2) *
+                      ((f.boundingBox.width || 1) * (f.boundingBox.height || 1)),
+                  0
+                ) / totalArea;
+              const wY =
+                faces.reduce(
+                  (sum: number, f: any) =>
+                    sum +
+                    ((f.boundingBox.top || 0) + (f.boundingBox.height || 0) * 0.45) *
+                      ((f.boundingBox.width || 1) * (f.boundingBox.height || 1)),
+                  0
+                ) / totalArea;
+
+              const xPercent = Math.max(10, Math.min(90, Math.round((wX / naturalWidth) * 100)));
+              const yPercent = Math.max(10, Math.min(90, Math.round((wY / naturalHeight) * 100)));
+              applyFocal(`${xPercent}% ${yPercent}%`);
+              return;
             }
+            runSkinSaliencyAnalysis();
           })
           .catch(() => {
-            // Keep default portrait top-crop on CORS or detection error
+            runSkinSaliencyAnalysis();
           });
+        return;
       } catch {
-        // Fallback to default portrait top-crop
+        // Fall back to skin tone saliency analysis
       }
     }
 
-    photoFocalCache.set(photoId, defaultPortraitPos);
-    setPhotoFocals((prev) => ({ ...prev, [photoId]: defaultPortraitPos }));
+    runSkinSaliencyAnalysis();
+
+    function runSkinSaliencyAnalysis() {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 64;
+        canvas.height = 64;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (!ctx) {
+          applyFocal(defaultFocalPos);
+          return;
+        }
+
+        const computeFromImage = (source: CanvasImageSource) => {
+          try {
+            ctx.drawImage(source, 0, 0, 64, 64);
+            const imgData = ctx.getImageData(0, 0, 64, 64);
+            const data = imgData.data;
+            let skinCount = 0;
+            let sumX = 0;
+            let sumY = 0;
+
+            for (let y = 0; y < 64; y++) {
+              for (let x = 0; x < 64; x++) {
+                const idx = (y * 64 + x) * 4;
+                const r = data[idx];
+                const g = data[idx + 1];
+                const b = data[idx + 2];
+                const a = data[idx + 3];
+                if (a < 128) continue;
+
+                // Human skin tone detection in YCbCr color space
+                const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+                const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
+                const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
+
+                if (cr >= 133 && cr <= 175 && cb >= 77 && cb <= 128 && lum > 35 && lum < 242) {
+                  skinCount++;
+                  sumX += x;
+                  sumY += y;
+                }
+              }
+            }
+
+            // If we detected significant human skin tone clusters (~0.8% of image)
+            if (skinCount >= 32) {
+              const xPercent = Math.max(10, Math.min(90, Math.round((sumX / skinCount / 64) * 100)));
+              const yPercent = Math.max(10, Math.min(90, Math.round((sumY / skinCount / 64) * 100)));
+              applyFocal(`${xPercent}% ${yPercent}%`);
+              return;
+            }
+
+            applyFocal(defaultFocalPos);
+          } catch {
+            applyFocal(defaultFocalPos);
+          }
+        };
+
+        // Try direct canvas inspection if CORS allowed
+        try {
+          ctx.drawImage(img, 0, 0, 64, 64);
+          ctx.getImageData(0, 0, 1, 1);
+          computeFromImage(img);
+        } catch {
+          // If tainted due to CORS, create background Image with crossOrigin="anonymous"
+          const offscreen = new Image();
+          offscreen.crossOrigin = 'anonymous';
+          offscreen.referrerPolicy = 'no-referrer';
+          offscreen.onload = () => computeFromImage(offscreen);
+          offscreen.onerror = () => applyFocal(defaultFocalPos);
+          offscreen.src = img.src;
+        }
+      } catch {
+        applyFocal(defaultFocalPos);
+      }
+    }
   }, []);
 
   // Sync props to state when widget config updates
@@ -1031,7 +1119,11 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                       alt={item.photo.caption || 'Polaroid moment'}
                       referrerPolicy="no-referrer"
                       className="w-full h-full object-cover select-none pointer-events-none"
+                      style={{
+                        objectPosition: photoFocals[item.photo.id] || photoFocalCache.get(item.photo.id) || undefined,
+                      }}
                       loading="lazy"
+                      onLoad={(e) => handleImageLoad(item.photo.id, e.currentTarget)}
                       onError={() => handlePolaroidError(idx, item.photo.id)}
                     />
                   </div>
