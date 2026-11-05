@@ -49,6 +49,14 @@ export const CURATED_RSS_FEEDS: CuratedRssFeed[] = [
     badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
   },
   {
+    id: 'nbc-news',
+    name: 'NBC News',
+    description: 'Breaking news, US headlines, and world reporting',
+    url: 'https://feeds.nbcnews.com/nbcnews/public/news',
+    category: 'News',
+    badgeColor: 'bg-teal-500/20 text-teal-300 border-teal-500/30',
+  },
+  {
     id: 'npr-news',
     name: 'NPR Top Stories',
     description: 'Independent reporting, public radio journalism, and culture',

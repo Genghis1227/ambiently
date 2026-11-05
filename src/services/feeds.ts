@@ -184,10 +184,15 @@ export async function fetchCalendarEvents(sources: CalendarSource[], forceRefres
 export async function fetchRssFeed(feedUrl: string): Promise<{ title: string; items: RssArticle[] }> {
   if (!feedUrl || !feedUrl.trim()) return { title: '', items: [] };
 
+  let normalized = feedUrl.trim();
+  if (normalized.startsWith('http://')) {
+    normalized = 'https://' + normalized.slice(7);
+  }
+
   try {
-    let res = await fetch(`/api/rss?url=${encodeURIComponent(feedUrl.trim())}`);
+    let res = await fetch(`/api/rss?url=${encodeURIComponent(normalized)}`);
     if (res.status === 404) {
-      res = await fetch(`/functions/api/rss?url=${encodeURIComponent(feedUrl.trim())}`);
+      res = await fetch(`/functions/api/rss?url=${encodeURIComponent(normalized)}`);
     }
     if (!res.ok) return { title: '', items: [] };
     const ct = res.headers.get('content-type') || '';

@@ -38,8 +38,15 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     });
   }
 
+  let normalizedUrl = feedUrl.trim();
+  // Automatically upgrade insecure http:// to https:// to prevent Cloudflare Worker redirect hangs
+  if (normalizedUrl.startsWith('http://')) {
+    normalizedUrl = 'https://' + normalizedUrl.slice(7);
+  }
+
   try {
-    const fetchRes = await fetch(feedUrl, {
+    const fetchRes = await fetch(normalizedUrl, {
+      redirect: 'follow',
       headers: {
         'User-Agent': 'Ambiently-Display/1.0 (+https://dashboard.trinhism.com)',
         Accept: 'application/rss+xml, application/xml, text/xml, */*',
