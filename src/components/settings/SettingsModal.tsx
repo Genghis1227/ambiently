@@ -29,6 +29,7 @@ import {
   ImageIcon,
   FolderOpen,
   Sliders,
+  Settings,
   MousePointer,
 } from 'lucide-react';
 import { db } from '../../services/db';
@@ -1070,6 +1071,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                 />
               </button>
             </div>
+
+            {/* Lock Canvas Layout Setting */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-gray-800/40 border border-gray-800">
+              <div className="space-y-0.5 max-w-[80%]">
+                <div className="flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-amber-400" />
+                  <span className="text-sm font-medium text-gray-200">Lock Canvas Layout</span>
+                </div>
+                <p className="text-xs text-gray-400">
+                  Disable modifying canvases. Freezes tile positions, sizes, and layout. Disables moving, rotating, resizing, deleting, adding widgets/canvases, or auto-organizing.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => updateSettings({ lockCanvasEditing: !settings.lockCanvasEditing })}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                  settings.lockCanvasEditing ? 'bg-amber-600' : 'bg-gray-700'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    settings.lockCanvasEditing ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
             </>
             )}
 
@@ -1267,54 +1294,168 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
             {/* TAB 5: Security & System Settings */}
             {activeTab === 'system' && (
               <>
-            {/* Kid-Proof PIN Protection */}
-            <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800">
-              <div className="flex items-center justify-between mb-3">
+            {/* Kid Protection & Kiosk Security */}
+            <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800 space-y-4">
+              <div className="flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2 text-sm font-semibold text-white">
                     <Shield className="w-4 h-4 text-blue-400" />
-                    Kid-Proof Kiosk PIN Lock
+                    <span>Kid Protection & Kiosk Lock</span>
                   </div>
                   <span className="text-[11px] text-gray-400 block mt-0.5">
-                    Locks fullscreen mode, traps Escape key, and requires parent PIN to exit fullscreen or access settings.
+                    Configure granular locks independently to prevent kids or visitors from altering layouts or exiting kiosk mode.
                   </span>
                 </div>
-                {settings.pinLockEnabled ? (
+                {settings.pinLockEnabled && (
                   <button
                     onClick={handleDisablePin}
-                    className="text-xs text-red-400 hover:underline"
+                    className="text-xs text-red-400 hover:underline cursor-pointer"
                   >
-                    Disable Lock
+                    Disable PIN
                   </button>
-                ) : null}
+                )}
               </div>
 
-              {settings.pinLockEnabled ? (
-                <p className="text-xs text-emerald-400 flex items-center gap-1.5">
-                  <Lock className="w-3.5 h-3.5" /> PIN protection is currently active
-                </p>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="password"
-                    maxLength={4}
-                    placeholder="Enter 4-digit PIN"
-                    value={pinInput}
-                    onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
-                    className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500 w-44 font-mono tracking-widest text-center"
-                  />
+              {/* PIN Status / Setup */}
+              <div className="p-3 rounded-lg bg-gray-900/60 border border-gray-800">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-gray-300">Parent PIN Authorization</span>
+                  {settings.pinLockEnabled ? (
+                    <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
+                      <Lock className="w-3.5 h-3.5" /> PIN Active
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-400">No PIN configured</span>
+                  )}
+                </div>
+
+                {!settings.pinLockEnabled ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="password"
+                      maxLength={4}
+                      placeholder="Enter 4-digit PIN"
+                      value={pinInput}
+                      onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
+                      className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500 w-44 font-mono tracking-widest text-center"
+                    />
+                    <button
+                      onClick={handleSavePin}
+                      disabled={pinInput.length !== 4}
+                      className="py-1.5 px-3 rounded-lg bg-blue-600 disabled:opacity-40 text-xs font-medium text-white hover:bg-blue-500 transition-all cursor-pointer"
+                    >
+                      Set PIN
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[11px] text-gray-400">
+                      Emergency override: press and hold the PIN pad shield for 4 seconds.
+                    </span>
+                    <button
+                      onClick={() => {
+                        setPinInput('');
+                        updateSettings({ pinLockEnabled: false });
+                      }}
+                      className="text-xs text-blue-400 hover:text-blue-300 underline cursor-pointer"
+                    >
+                      Change PIN
+                    </button>
+                  </div>
+                )}
+                {pinSuccess && (
+                  <span className="text-xs text-emerald-400 mt-2 block">PIN successfully saved!</span>
+                )}
+              </div>
+
+              {/* Independent Protection Toggles */}
+              <div className="space-y-2.5 pt-1">
+                {/* 1. Lock Canvas Editing (Independent) */}
+                <div className="flex items-center justify-between p-3 rounded-lg bg-gray-900/60 border border-gray-800">
+                  <div className="space-y-0.5 pr-4">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
+                      <Lock className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Lock Canvas Layout & Content</span>
+                    </div>
+                    <span className="text-[11px] text-gray-400 block leading-tight">
+                      Disables modifying canvases. Freezes tiles in place — disables moving, resizing, rotating, deleting, adding widgets/canvases, or auto-organizing. Interactive widgets & chore checkboxes remain usable.
+                    </span>
+                  </div>
                   <button
-                    onClick={handleSavePin}
-                    disabled={pinInput.length !== 4}
-                    className="py-1.5 px-3 rounded-lg bg-blue-600 disabled:opacity-40 text-xs font-medium text-white hover:bg-blue-500 transition-all"
+                    type="button"
+                    onClick={() => updateSettings({ lockCanvasEditing: !settings.lockCanvasEditing })}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                      settings.lockCanvasEditing ? 'bg-amber-600' : 'bg-gray-700'
+                    }`}
                   >
-                    Set PIN
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        settings.lockCanvasEditing ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
                   </button>
                 </div>
-              )}
-              {pinSuccess && (
-                <span className="text-xs text-emerald-400 mt-2 block">PIN successfully set!</span>
-              )}
+
+                {/* 2. Lock Fullscreen Kiosk */}
+                <div className="flex items-center justify-between p-3 rounded-lg bg-gray-900/60 border border-gray-800">
+                  <div className="space-y-0.5 pr-4">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
+                      <Shield className="w-3.5 h-3.5 text-blue-400" />
+                      <span>Lock Fullscreen Kiosk Mode</span>
+                    </div>
+                    <span className="text-[11px] text-gray-400 block leading-tight">
+                      Traps Escape key, disables browser context menus, and auto-returns to fullscreen on touch. Requires parent PIN to exit.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateSettings({
+                        lockFullscreenKiosk: settings.lockFullscreenKiosk === false ? true : false,
+                      })
+                    }
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                      settings.lockFullscreenKiosk !== false ? 'bg-blue-600' : 'bg-gray-700'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        settings.lockFullscreenKiosk !== false ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* 3. Require PIN for Settings */}
+                <div className="flex items-center justify-between p-3 rounded-lg bg-gray-900/60 border border-gray-800">
+                  <div className="space-y-0.5 pr-4">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
+                      <Settings className="w-3.5 h-3.5 text-purple-400" />
+                      <span>Require PIN for Command Center Settings</span>
+                    </div>
+                    <span className="text-[11px] text-gray-400 block leading-tight">
+                      Prompts for parent PIN before opening settings, wallpaper configurations, and photo library controls.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateSettings({
+                        lockSettingsAccess: settings.lockSettingsAccess === false ? true : false,
+                      })
+                    }
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                      settings.lockSettingsAccess !== false ? 'bg-purple-600' : 'bg-gray-700'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        settings.lockSettingsAccess !== false ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Support & Donate Panel */}

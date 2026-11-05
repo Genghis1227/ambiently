@@ -109,10 +109,15 @@ export function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Granular kiosk & protection controls
+  const isFullscreenKioskLocked = Boolean(settings.pinLockEnabled && settings.lockFullscreenKiosk !== false);
+  const isSettingsLocked = Boolean(settings.pinLockEnabled && settings.lockSettingsAccess !== false);
+  const isCanvasLocked = Boolean(settings.lockCanvasEditing);
+
   // Keyboard shortcuts:
   // '\' (backslash) to toggle toolbar visibility
   // '1'-'9' and '0' (for 10) to switch between canvases
-  // Escape to prompt PIN if in fullscreen and PIN lock is enabled
+  // Escape to prompt PIN if in fullscreen and kiosk fullscreen lock is enabled
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -125,7 +130,7 @@ export function App() {
         return;
       }
 
-      if (e.key === 'Escape' && settings.pinLockEnabled && document.fullscreenElement) {
+      if (e.key === 'Escape' && isFullscreenKioskLocked && document.fullscreenElement) {
         e.preventDefault();
         setPinChallenge({
           action: 'exit_fullscreen',
@@ -157,7 +162,7 @@ export function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleDockHidden, tabs, setActiveTabId, settings.pinLockEnabled]);
+  }, [toggleDockHidden, tabs, setActiveTabId, isFullscreenKioskLocked]);
 
   // Fullscreen state listener + Keyboard Lock API (Chromium / Edge / Chrome Kiosk)
   useEffect(() => {
@@ -176,19 +181,19 @@ export function App() {
     return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
   }, []);
 
-  // Prevent context menu (right click / long press) when PIN lock is enabled to prevent kids accessing browser menu
+  // Prevent context menu (right click / long press) when kiosk fullscreen lock is enabled to prevent kids accessing browser menu
   useEffect(() => {
-    if (!settings.pinLockEnabled) return;
+    if (!isFullscreenKioskLocked) return;
     const handleContextMenu = (e: MouseEvent) => {
       e.preventDefault();
     };
     window.addEventListener('contextmenu', handleContextMenu);
     return () => window.removeEventListener('contextmenu', handleContextMenu);
-  }, [settings.pinLockEnabled]);
+  }, [isFullscreenKioskLocked]);
 
-  // Auto return to fullscreen on next tap/touch if PIN lock is active and screen is not in fullscreen
+  // Auto return to fullscreen on next tap/touch if kiosk fullscreen lock is active and screen is not in fullscreen
   useEffect(() => {
-    if (!settings.pinLockEnabled) return;
+    if (!isFullscreenKioskLocked) return;
 
     const handlePointerDown = () => {
       if (!document.fullscreenElement && !pinChallenge && !isSettingsOpen) {
@@ -198,7 +203,7 @@ export function App() {
 
     window.addEventListener('pointerdown', handlePointerDown);
     return () => window.removeEventListener('pointerdown', handlePointerDown);
-  }, [settings.pinLockEnabled, pinChallenge, isSettingsOpen]);
+  }, [isFullscreenKioskLocked, pinChallenge, isSettingsOpen]);
 
   const handleToggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -207,8 +212,8 @@ export function App() {
       });
       setIsFullscreen(true);
     } else {
-      // If kid-proof PIN lock is enabled, exiting fullscreen requires the parent PIN!
-      if (settings.pinLockEnabled) {
+      // If kid-proof kiosk fullscreen lock is enabled, exiting fullscreen requires the parent PIN!
+      if (isFullscreenKioskLocked) {
         setPinChallenge({
           action: 'exit_fullscreen',
           title: 'Exit Fullscreen Kiosk',
@@ -224,7 +229,7 @@ export function App() {
   };
 
   const handleOpenSettings = () => {
-    if (settings.pinLockEnabled) {
+    if (isSettingsLocked) {
       setPinChallenge({
         action: 'open_settings',
         title: 'Kiosk Settings Locked',
@@ -426,6 +431,7 @@ export function App() {
           onUpdateWidget={updateWidget}
           onUpdateTab={updateTab}
           snapToGrid={settings.snapToGrid}
+          isCanvasLocked={isCanvasLocked}
         />
       </div>
 
@@ -435,6 +441,7 @@ export function App() {
         activeTabId={activeTabIdResolved}
         dockPosition={settings.dockPosition}
         isLocked={Boolean(settings.pinLockEnabled)}
+        isCanvasLocked={isCanvasLocked}
         onSelectTab={setActiveTabId}
         onOpenSettings={handleOpenSettings}
         onToggleNightMode={toggleNightModeManual}
@@ -464,8 +471,8 @@ export function App() {
         onWake={toggleNightModeManual}
       />
 
-      {/* Kiosk Fullscreen Warning Banner when PIN lock is enabled but not in fullscreen */}
-      {settings.pinLockEnabled && !isFullscreen && !pinChallenge && (
+      {/* Kiosk Fullscreen Warning Banner when kiosk lock is enabled but not in fullscreen */}
+      {isFullscreenKioskLocked && !isFullscreen && !pinChallenge && (
         <div
           onClick={() => {
             document.documentElement.requestFullscreen().catch(() => {});

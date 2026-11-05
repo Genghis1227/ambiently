@@ -140,10 +140,13 @@ export interface AppSettings {
   commonPhotoSourceUrl?: string;
   commonPhotoSourceType?: 'plex' | 'local' | 'web' | 'curated';
 
-  // PIN Protection
+  // PIN Protection & Kid Kiosk Controls
   pinLockEnabled: boolean;
   pinHash?: string | null; // SHA-256 hex
   isLocked: boolean;
+  lockFullscreenKiosk?: boolean; // Prevent exiting fullscreen without PIN
+  lockCanvasEditing?: boolean;   // Disable modifying canvases (freezes moving, resizing, rotating & organizing)
+  lockSettingsAccess?: boolean;  // Require PIN to open settings
 
   updated_at: string;
 }

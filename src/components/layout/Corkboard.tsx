@@ -8,6 +8,7 @@ import type {
 import {
   CheckSquare,
   Square,
+  Lock,
   Pin,
   Plus,
   Trash2,
@@ -71,6 +72,7 @@ interface CorkboardProps {
   onUpdateWidget?: (widgetId: string, updates: Partial<DashboardWidget>) => void;
   onUpdateTab?: (tabId: string, updates: Partial<DashboardTab>) => void;
   snapToGrid?: boolean;
+  isCanvasLocked?: boolean;
 }
 
 const SNAP_COLUMNS = 24;
@@ -120,6 +122,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   onUpdateWidget,
   onUpdateTab,
   snapToGrid = false,
+  isCanvasLocked = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -531,6 +534,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   };
 
   const openNoteEditorForExisting = (note: StickyNoteItem) => {
+    if (isCanvasLocked) return;
     setEditingNoteId(note.id);
     setNewTitle(note.title || '');
     setNewContent(note.content || '');
@@ -579,6 +583,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     pos?: NonNullable<DashboardWidget['freeformPos']>
   ) => {
     e.stopPropagation();
+    if (isCanvasLocked) return;
     if (!containerRef.current) return;
 
     const cardEl = (e.currentTarget as HTMLElement).closest('[data-canvas-card="true"]');
@@ -614,6 +619,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     pos?: NonNullable<DashboardWidget['freeformPos']>
   ) => {
     e.stopPropagation();
+    if (isCanvasLocked) return;
     const cardEl = (e.currentTarget as HTMLElement).closest('[data-canvas-card="true"]');
     if (!cardEl) return;
 
@@ -646,6 +652,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     type: 'note' | 'widget',
     pos?: NonNullable<DashboardWidget['freeformPos']>
   ) => {
+    if (isCanvasLocked) return;
     if (e.button !== 0) return;
     if ((e.target as HTMLElement).closest('button, input, textarea, select, a, [role="button"], [data-no-drag="true"]')) return;
 
@@ -1024,26 +1031,35 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               Add live widgets (Weather, Photos, Calendar, Lofi Stream) or pin sticky notes to customize this board.
             </p>
             <div className="flex items-center justify-center gap-2.5 pt-1">
-              {onOpenAddWidget && (
-                <button
-                  onClick={onOpenAddWidget}
-                  className="flex items-center gap-1.5 py-2 px-3.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-semibold text-white border border-gray-700 transition-all cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5 text-blue-400" />
-                  <span>Add Tile</span>
-                </button>
-              )}
-              {onOpenCreator && (
-                <button
-                  onClick={() => {
-                    setSelectedNoteTabId(activeTabId);
-                    onOpenCreator();
-                  }}
-                  className="flex items-center gap-1.5 py-2 px-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white shadow-lg shadow-blue-500/25 transition-all cursor-pointer"
-                >
-                  <Pin className="w-3.5 h-3.5" />
-                  <span>Pin Note</span>
-                </button>
+              {isCanvasLocked ? (
+                <div className="flex items-center justify-center gap-1.5 text-xs text-amber-400 font-medium py-1.5 px-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Canvas layout is locked</span>
+                </div>
+              ) : (
+                <>
+                  {onOpenAddWidget && (
+                    <button
+                      onClick={onOpenAddWidget}
+                      className="flex items-center gap-1.5 py-2 px-3.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-semibold text-white border border-gray-700 transition-all cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-blue-400" />
+                      <span>Add Tile</span>
+                    </button>
+                  )}
+                  {onOpenCreator && (
+                    <button
+                      onClick={() => {
+                        setSelectedNoteTabId(activeTabId);
+                        onOpenCreator();
+                      }}
+                      className="flex items-center gap-1.5 py-2 px-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white shadow-lg shadow-blue-500/25 transition-all cursor-pointer"
+                    >
+                      <Pin className="w-3.5 h-3.5" />
+                      <span>Pin Note</span>
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -1087,13 +1103,14 @@ export const Corkboard: React.FC<CorkboardProps> = ({
           <div
             key={widget.id}
             data-canvas-card="true"
-            onPointerDown={(e) => !isFullScreen && handlePointerDown(e, widget.id, 'widget', pos)}
+            onPointerDown={(e) => !isFullScreen && !isCanvasLocked && handlePointerDown(e, widget.id, 'widget', pos)}
             onPointerDownCapture={() => {
-              if (!isFullScreen && !pos?.isBackground && (pos?.zIndex || 1) < getTopZIndex()) {
+              if (!isFullScreen && !isCanvasLocked && !pos?.isBackground && (pos?.zIndex || 1) < getTopZIndex()) {
                 handleBringToFront(widget.id, 'widget');
               }
             }}
             onContextMenu={(e) => {
+              if (isCanvasLocked) return;
               e.preventDefault();
               e.stopPropagation();
               setContextMenu({
@@ -1157,7 +1174,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               isFramelessWidget
                 ? 'bg-transparent text-white'
                 : 'bg-gray-900/80 backdrop-blur-md shadow-2xl text-white'
-            } cursor-grab active:cursor-grabbing touch-none select-none transition-shadow ${
+            } ${isCanvasLocked ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'} touch-none select-none transition-shadow ${
               isDragging || isRotating
                 ? 'ring-2 ring-blue-500 shadow-blue-500/20'
                 : isFramelessWidget
@@ -1166,7 +1183,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             } flex flex-col justify-between`}
           >
             {/* Elevated Grab-to-Rotate Handle (Prominent, impossible to obscure) */}
-            {!isFullScreen && onUpdateWidgetPos && (
+            {!isFullScreen && !isCanvasLocked && onUpdateWidgetPos && (
               <div
                 className={`absolute left-1/2 -translate-x-1/2 z-40 flex flex-col items-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${
                   isNearTopEdge ? '-bottom-8 flex-col-reverse' : '-top-7.5'
@@ -1206,7 +1223,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   : '-top-3.5 right-3'
               }`}
             >
-              {!isFullScreen && onUpdateWidgetPos && pos.rotation !== 0 && (
+              {!isFullScreen && !isCanvasLocked && onUpdateWidgetPos && pos.rotation !== 0 && (
                 <button
                   type="button"
                   onClick={(e) => {
@@ -1220,7 +1237,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   {pos.rotation}°
                 </button>
               )}
-              {onUpdateWidget && (
+              {!isCanvasLocked && onUpdateWidget && (
                 <button
                   type="button"
                   onClick={(e) => {
@@ -1234,7 +1251,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   <Settings className="w-3.5 h-3.5" />
                 </button>
               )}
-              {onUpdateWidgetPos && !isFullScreen && (
+              {!isCanvasLocked && onUpdateWidgetPos && !isFullScreen && (
                 <button
                   type="button"
                   onClick={(e) => {
@@ -1293,7 +1310,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 </button>
               )}
 
-              {onRemoveWidget && (
+              {!isCanvasLocked && onRemoveWidget && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -1309,7 +1326,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             </div>
 
             {/* Bottom Right Resize Handle */}
-            {!isFullScreen && (
+            {!isFullScreen && !isCanvasLocked && (
               <div
                 data-no-drag="true"
                 onPointerDown={(e) => handleResizePointerDown(e, widget.id, 'widget', pos)}
@@ -1511,13 +1528,14 @@ export const Corkboard: React.FC<CorkboardProps> = ({
           <div
             key={note.id}
             data-canvas-card="true"
-            onPointerDown={(e) => handlePointerDown(e, note.id, 'note', pos)}
+            onPointerDown={(e) => !isCanvasLocked && handlePointerDown(e, note.id, 'note', pos)}
             onPointerDownCapture={() => {
-              if (!pos?.isBackground && (pos?.zIndex || 1) < getTopZIndex()) {
+              if (!isCanvasLocked && !pos?.isBackground && (pos?.zIndex || 1) < getTopZIndex()) {
                 handleBringToFront(note.id, 'note');
               }
             }}
             onContextMenu={(e) => {
+              if (isCanvasLocked) return;
               e.preventDefault();
               e.stopPropagation();
               setContextMenu({
@@ -1570,7 +1588,9 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 ? 'none'
                 : 'left 0.3s cubic-bezier(0.22, 1, 0.36, 1), top 0.3s cubic-bezier(0.22, 1, 0.36, 1), width 0.3s cubic-bezier(0.22, 1, 0.36, 1), height 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.25s ease-out, box-shadow 0.2s',
             }}
-            className={`group rounded-2xl p-3.5 shadow-2xl text-gray-900 cursor-grab active:cursor-grabbing border border-black/10 touch-none select-none transition-all ${
+            className={`group rounded-2xl p-3.5 shadow-2xl text-gray-900 ${
+              isCanvasLocked ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
+            } border border-black/10 touch-none select-none transition-all ${
               isDragging || isRotating
                 ? 'ring-2 ring-blue-500/70 shadow-2xl'
                 : highlightedNoteId === note.id
@@ -1581,28 +1601,30 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             } flex flex-col justify-between`}
           >
             {/* Top-Center Grab-to-Rotate Handle with Stem (appears on hover) */}
-            <div className="absolute -top-7.5 left-1/2 -translate-x-1/2 flex flex-col items-center z-20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-              <div
-                data-no-drag="true"
-                onPointerDown={(e) => handleRotatePointerDown(e, note.id, 'note', pos)}
-                onDoubleClick={(e) => {
-                  e.stopPropagation();
-                  onUpdateNotePos(note.id, { ...pos, rotation: 0 });
-                }}
-                title="Grab and drag in a circle to rotate note (double-click to reset to 0°)"
-                className={`pointer-events-auto w-6 h-6 rounded-full bg-gray-900/95 border border-gray-700 hover:border-gray-500 text-white shadow-xl flex items-center justify-center cursor-grab active:cursor-grabbing hover:scale-110 active:scale-95 transition-all ${
-                  isRotating ? 'opacity-100 ring-2 ring-blue-400' : ''
-                }`}
-              >
-                <RotateCw className="w-3 h-3" />
+            {!isCanvasLocked && (
+              <div className="absolute -top-7.5 left-1/2 -translate-x-1/2 flex flex-col items-center z-20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                <div
+                  data-no-drag="true"
+                  onPointerDown={(e) => handleRotatePointerDown(e, note.id, 'note', pos)}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    onUpdateNotePos(note.id, { ...pos, rotation: 0 });
+                  }}
+                  title="Grab and drag in a circle to rotate note (double-click to reset to 0°)"
+                  className={`pointer-events-auto w-6 h-6 rounded-full bg-gray-900/95 border border-gray-700 hover:border-gray-500 text-white shadow-xl flex items-center justify-center cursor-grab active:cursor-grabbing hover:scale-110 active:scale-95 transition-all ${
+                    isRotating ? 'opacity-100 ring-2 ring-blue-400' : ''
+                  }`}
+                >
+                  <RotateCw className="w-3 h-3" />
+                </div>
+                <div className="w-0.5 h-1.5 bg-gray-600/70" />
+                {isRotating && (
+                  <span className="pointer-events-auto px-1.5 py-0.5 rounded-full bg-gray-900 text-white font-mono font-bold text-[10px] shadow mt-0.5">
+                    {displayPos.rotation}°
+                  </span>
+                )}
               </div>
-              <div className="w-0.5 h-1.5 bg-gray-600/70" />
-              {isRotating && (
-                <span className="pointer-events-auto px-1.5 py-0.5 rounded-full bg-gray-900 text-white font-mono font-bold text-[10px] shadow mt-0.5">
-                  {displayPos.rotation}°
-                </span>
-              )}
-            </div>
+            )}
 
             <div
               className="flex-1 overflow-y-auto min-h-0 pr-0.5 select-none touch-none"
@@ -1638,55 +1660,59 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                       {new Date(note.expiresAt).toLocaleDateString([], { month: 'numeric', day: 'numeric' })}
                     </span>
                   )}
-                  <button
-                    type="button"
-                    data-no-drag="true"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openNoteEditorForExisting(note);
-                    }}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    className="p-1 rounded-md text-gray-700 hover:text-blue-900 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
-                    title="Edit note"
-                  >
-                    <Edit2 className="w-3 h-3" />
-                  </button>
-                  <button
-                    type="button"
-                    data-no-drag="true"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      setContextMenu({
-                        x: rect.left,
-                        y: rect.bottom + 6,
-                        id: note.id,
-                        type: 'note',
-                        title: note.title || 'Sticky Note',
-                        currentZ: pos.zIndex || 1,
-                        isBackground: Boolean(pos.isBackground),
-                        rotation: pos.rotation,
-                      });
-                    }}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    className="p-1 rounded-md text-gray-700 hover:text-blue-900 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
-                    title="Layer order (Bring to Front / Send to Back)"
-                  >
-                    <Layers className="w-3 h-3" />
-                  </button>
-                  <button
-                    type="button"
-                    data-no-drag="true"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onUpdateNote(note.id, { isPinnedToCanvas: false });
-                    }}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    className="p-1 rounded-md text-gray-700 hover:text-red-900 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
-                    title="Close from canvas (remains saved in Notes Tile)"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
+                  {!isCanvasLocked && (
+                    <>
+                      <button
+                        type="button"
+                        data-no-drag="true"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openNoteEditorForExisting(note);
+                        }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        className="p-1 rounded-md text-gray-700 hover:text-blue-900 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
+                        title="Edit note"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        data-no-drag="true"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setContextMenu({
+                            x: rect.left,
+                            y: rect.bottom + 6,
+                            id: note.id,
+                            type: 'note',
+                            title: note.title || 'Sticky Note',
+                            currentZ: pos.zIndex || 1,
+                            isBackground: Boolean(pos.isBackground),
+                            rotation: pos.rotation,
+                          });
+                        }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        className="p-1 rounded-md text-gray-700 hover:text-blue-900 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
+                        title="Layer order (Bring to Front / Send to Back)"
+                      >
+                        <Layers className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        data-no-drag="true"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onUpdateNote(note.id, { isPinnedToCanvas: false });
+                        }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        className="p-1 rounded-md text-gray-700 hover:text-red-900 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
+                        title="Close from canvas (remains saved in Notes Tile)"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -1789,51 +1815,57 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 >
                   0°
                 </button>
-                <button
-                  type="button"
-                  data-no-drag="true"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openNoteEditorForExisting(note);
-                  }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  className="p-1.5 rounded-lg text-gray-700 hover:text-blue-800 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
-                  title="Edit note text, checklist, font size, or canvas board"
-                >
-                  <Edit2 className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  data-no-drag="true"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteNote(note.id);
-                  }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  className="p-1.5 rounded-lg text-gray-700 hover:text-red-700 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
-                  title="Archive note to Trash"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                {!isCanvasLocked && (
+                  <>
+                    <button
+                      type="button"
+                      data-no-drag="true"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openNoteEditorForExisting(note);
+                      }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      className="p-1.5 rounded-lg text-gray-700 hover:text-blue-800 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
+                      title="Edit note text, checklist, font size, or canvas board"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      data-no-drag="true"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteNote(note.id);
+                      }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      className="p-1.5 rounded-lg text-gray-700 hover:text-red-700 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
+                      title="Archive note to Trash"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
             {/* Bottom Right Resize Handle for Sticky Note */}
-            <div
-              data-no-drag="true"
-              onPointerDown={(e) => handleResizePointerDown(e, note.id, 'note', pos)}
-              title="Drag to resize note (from mini post-it to full poster)"
-              className="absolute bottom-1 right-1 p-1.5 cursor-nwse-resize z-20 opacity-50 group-hover:opacity-100 hover:opacity-100 touch-none text-gray-700 hover:text-black transition-opacity"
-            >
-              <svg width="12" height="12" viewBox="0 0 12 12" className="fill-current">
-                <circle cx="10" cy="10" r="1.5" />
-                <circle cx="6" cy="10" r="1.5" />
-                <circle cx="10" cy="6" r="1.5" />
-                <circle cx="2" cy="10" r="1.5" />
-                <circle cx="6" cy="6" r="1.5" />
-                <circle cx="10" cy="2" r="1.5" />
-              </svg>
-            </div>
+            {!isCanvasLocked && (
+              <div
+                data-no-drag="true"
+                onPointerDown={(e) => handleResizePointerDown(e, note.id, 'note', pos)}
+                title="Drag to resize note (from mini post-it to full poster)"
+                className="absolute bottom-1 right-1 p-1.5 cursor-nwse-resize z-20 opacity-50 group-hover:opacity-100 hover:opacity-100 touch-none text-gray-700 hover:text-black transition-opacity"
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" className="fill-current">
+                  <circle cx="10" cy="10" r="1.5" />
+                  <circle cx="6" cy="10" r="1.5" />
+                  <circle cx="10" cy="6" r="1.5" />
+                  <circle cx="2" cy="10" r="1.5" />
+                  <circle cx="6" cy="6" r="1.5" />
+                  <circle cx="10" cy="2" r="1.5" />
+                </svg>
+              </div>
+            )}
           </div>
         );
       })}

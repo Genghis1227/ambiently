@@ -53,6 +53,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   pinLockEnabled: false,
   pinHash: null,
   isLocked: false,
+  lockFullscreenKiosk: true,
+  lockCanvasEditing: false,
+  lockSettingsAccess: true,
   updated_at: new Date().toISOString(),
 };
 

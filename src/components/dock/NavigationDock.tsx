@@ -65,6 +65,7 @@ interface NavigationDockProps {
   isDockHidden?: boolean;
   onToggleDockHidden?: () => void;
   isNightMode?: boolean;
+  isCanvasLocked?: boolean;
 }
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -109,6 +110,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
   isDockHidden = false,
   onToggleDockHidden,
   isNightMode = false,
+  isCanvasLocked = false,
 }) => {
   const isVertical = dockPosition === 'left' || dockPosition === 'right';
   const [showOrganizeMenu, setShowOrganizeMenu] = useState(false);
@@ -360,7 +362,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
           })}
 
           {/* Create New Canvas Button */}
-          {onOpenAddCanvas && (
+          {onOpenAddCanvas && !isCanvasLocked && (
             <button
               onClick={tabs.length >= MAX_CANVASES ? undefined : onOpenAddCanvas}
               disabled={tabs.length >= MAX_CANVASES}
@@ -385,56 +387,65 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
         />
 
         {/* Board Creation & Organization Actions: Pin Note, Add Tile, Auto-Organize & Trash */}
-        <div className={`flex items-center gap-1.5 ${isVertical ? 'flex-col' : 'flex-row'}`}>
-          {onOpenCreateNote && (
-            <button
-              onClick={onOpenCreateNote}
-              title="New Sticky Note"
-              className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition-all cursor-pointer"
-            >
-              <StickyNote className="w-4 h-4" />
-            </button>
-          )}
+        {isCanvasLocked ? (
+          <div
+            title="Canvas layout & editing is locked (tiles, positions, and creation disabled)"
+            className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-xs"
+          >
+            <Lock className="w-4 h-4" />
+          </div>
+        ) : (
+          <div className={`flex items-center gap-1.5 ${isVertical ? 'flex-col' : 'flex-row'}`}>
+            {onOpenCreateNote && (
+              <button
+                onClick={onOpenCreateNote}
+                title="New Sticky Note"
+                className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition-all cursor-pointer"
+              >
+                <StickyNote className="w-4 h-4" />
+              </button>
+            )}
 
-          {onOpenAddWidget && (
-            <button
-              onClick={onOpenAddWidget}
-              title="Add Widget Tile to Canvas"
-              className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-blue-500/15 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 transition-all cursor-pointer group shadow-xs"
-            >
-              <LayoutGrid className="w-4 h-4 transition-transform group-hover:scale-105" />
-              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-md ring-1.5 ring-gray-950">
-                <Plus className="w-2.5 h-2.5 stroke-[3]" />
-              </span>
-            </button>
-          )}
+            {onOpenAddWidget && (
+              <button
+                onClick={onOpenAddWidget}
+                title="Add Widget Tile to Canvas"
+                className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-blue-500/15 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 transition-all cursor-pointer group shadow-xs"
+              >
+                <LayoutGrid className="w-4 h-4 transition-transform group-hover:scale-105" />
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-md ring-1.5 ring-gray-950">
+                  <Plus className="w-2.5 h-2.5 stroke-[3]" />
+                </span>
+              </button>
+            )}
 
-          {onAutoOrganize && (
-            <button
-              onClick={() => {
-                onAutoOrganize(activeMode);
-                setShowOrganizeMenu(true);
-              }}
-              title="Auto-Organize / Auto-Tile (Zero Overlap)"
-              className="flex items-center justify-center w-10 h-10 rounded-xl bg-purple-500/15 hover:bg-purple-500/30 text-purple-300 border border-purple-500/30 transition-all cursor-pointer"
-            >
-              <Wand2 className="w-4 h-4" />
-            </button>
-          )}
+            {onAutoOrganize && (
+              <button
+                onClick={() => {
+                  onAutoOrganize(activeMode);
+                  setShowOrganizeMenu(true);
+                }}
+                title="Auto-Organize / Auto-Tile (Zero Overlap)"
+                className="flex items-center justify-center w-10 h-10 rounded-xl bg-purple-500/15 hover:bg-purple-500/30 text-purple-300 border border-purple-500/30 transition-all cursor-pointer"
+              >
+                <Wand2 className="w-4 h-4" />
+              </button>
+            )}
 
-          {onOpenTrash && trashCount > 0 && (
-            <button
-              onClick={onOpenTrash}
-              title={`Archived & Expired Notes (${trashCount})`}
-              className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gray-800/80 hover:bg-gray-700 text-amber-400 border border-amber-500/30 transition-all cursor-pointer"
-            >
-              <Archive className="w-4 h-4" />
-              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 text-gray-950 font-mono font-bold text-[10px] flex items-center justify-center">
-                {trashCount}
-              </span>
-            </button>
-          )}
-        </div>
+            {onOpenTrash && trashCount > 0 && (
+              <button
+                onClick={onOpenTrash}
+                title={`Archived & Expired Notes (${trashCount})`}
+                className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gray-800/80 hover:bg-gray-700 text-amber-400 border border-amber-500/30 transition-all cursor-pointer"
+              >
+                <Archive className="w-4 h-4" />
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 text-gray-950 font-mono font-bold text-[10px] flex items-center justify-center">
+                  {trashCount}
+                </span>
+              </button>
+            )}
+          </div>
+        )}
 
         <div
           className={`bg-gray-800 ${isVertical ? 'w-6 h-px my-0.5' : 'h-6 w-px mx-0.5'}`}
