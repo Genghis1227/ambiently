@@ -5,9 +5,22 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.1.17';
+export const APP_VERSION = '0.1.18';
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.1.18",
+    date: "November 4, 2026",
+    title: "Google Calendar URL Guide & Live Validation, Normalized Layer Management, Elevated Rotation Controls, & Calendar View Scaling",
+    highlights: [
+      "Interactive Calendar Feed URL Guide: Added a visual step-by-step modal (CalendarUrlGuideModal) and in-line breadcrumbs guiding users on how to locate the 'Secret address in iCal format' (.ics) in Google Calendar, Apple iCloud, and Microsoft Outlook.",
+      "Smart Calendar URL Normalization & Validation: Auto-converts webcal:// links to https://, extracts calendar IDs from Google Calendar embed links, and displays instant live warnings when users mistakenly paste browser address bar links.",
+      "Normalized Sequential Layer Management: Fixed Bring to Front getting stuck at layer 45 by implementing unified stack re-indexing (1..N) across all active canvas tiles and sticky notes, guaranteeing clicked or promoted items are strictly on top without ties.",
+      "Elevated Canvas Rotation Handles: Replaced conflicting toolbar tilt buttons with an elevated 'lollipop' rotation handle on a connecting stem (z-40) that never collides with or obscures the action toolbar on small or tilted widgets.",
+      "Calendar Agenda Month Display: Added bold uppercase month labels (e.g., NOV, DEC) directly to the agenda date badge, added current month/year to the header title, and extended capacity to 30 smoothly scrollable events.",
+      "3-Day & Multi-Schedule View Scaling: Upgraded the 3-day timeline with high-impact 3xl date numbers, prominent weekday tags, bold event cards with clock & location pins, and enlarged event chips across all schedule views.",
+    ],
+  },
   {
     version: "v0.1.17",
     date: "November 4, 2026",
