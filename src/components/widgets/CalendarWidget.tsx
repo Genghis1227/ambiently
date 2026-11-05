@@ -30,7 +30,7 @@ const DEFAULT_SOURCES: CalendarSource[] = [
   },
 ];
 
-const HOUR_HEIGHT = 52; // pixels per hour
+const HOUR_HEIGHT = 60; // pixels per hour
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 function formatHourGutter(hour: number): string {
@@ -613,7 +613,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
 
                         {/* Timed Event Blocks */}
                         {timedLayout.map((item) => {
-                          const isCompact = item.height < 44;
+                          const isCompact = item.height < 46;
                           return (
                             <div
                               key={item.event.uid}
@@ -630,7 +630,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                                 borderLeftColor: item.event.color || '#3b82f6',
                               }}
                               className={`absolute rounded-lg border-l-4 border-t border-r border-b border-gray-700/50 ${
-                                isCompact ? 'px-2 py-0 justify-center' : 'p-1.5 justify-start'
+                                isCompact ? 'px-2 py-0 justify-center' : 'p-1.5 md:p-2 justify-start'
                               } text-left overflow-hidden transition-all hover:brightness-125 hover:z-30 cursor-pointer shadow-sm backdrop-blur-xs flex flex-col`}
                             >
                               {isCompact ? (
@@ -638,7 +638,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                                   <span className="text-[10px] md:text-[11px] font-mono font-bold text-blue-300 shrink-0">
                                     {formatTimeShort(new Date(item.event.start))}
                                   </span>
-                                  <span className="text-xs md:text-sm font-bold text-white truncate min-w-0">
+                                  <span className="text-[11px] md:text-xs font-bold text-white truncate min-w-0">
                                     {item.event.summary}
                                   </span>
                                 </div>
@@ -651,7 +651,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                                   <div className="text-xs md:text-sm font-bold text-white leading-tight truncate mt-0.5">
                                     {item.event.summary}
                                   </div>
-                                  {item.height > 52 && item.event.location && (
+                                  {item.height >= 75 && item.event.location && (
                                     <div className="text-[10px] text-gray-300 truncate flex items-center gap-1 mt-0.5 opacity-90">
                                       <MapPin className="w-2.5 h-2.5 shrink-0 text-gray-400" />
                                       <span className="truncate">{item.event.location}</span>
@@ -780,7 +780,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
 
                         {/* Timed Event Blocks */}
                         {timedLayout.map((item) => {
-                          const isCompact = item.height < 44;
+                          const isCompact = item.height < 46;
                           return (
                             <div
                               key={item.event.uid}
