@@ -11,6 +11,14 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.1.23",
+    date: "November 5, 2026",
+    title: "Sticky Note Toolbar Plus Badge Indicator",
+    highlights: [
+      "Sticky Note Toolbar Plus Badge: Added a prominent amber badge with a crisp '+' icon to the New Sticky Note button in the navigation dock, matching the design and hover scale interaction of the Add Widget Tile button.",
+    ],
+  },
+  {
     version: "v0.1.22",
     date: "November 5, 2026",
     title: "Granular Kid Protection & Canvas Layout Lock, Single Image/GIF Widget with GIPHY Search, & Idle Cursor Auto-Hide",
