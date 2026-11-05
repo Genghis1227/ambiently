@@ -30,7 +30,7 @@ const DEFAULT_SOURCES: CalendarSource[] = [
   },
 ];
 
-const HOUR_HEIGHT = 50; // pixels per hour
+const HOUR_HEIGHT = 52; // pixels per hour
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 function formatHourGutter(hour: number): string {
@@ -110,7 +110,7 @@ function layoutTimedEvents(dayEvents: CalendarEvent[], dayDate: Date): TimedEven
       const startMin = (startMs - dayStart) / (60 * 1000);
       const durationMin = Math.max(25, (endMs - startMs) / (60 * 1000));
       const top = (startMin / 60) * HOUR_HEIGHT;
-      const height = Math.max(24, (durationMin / 60) * HOUR_HEIGHT - 2);
+      const height = Math.max(24, Math.round((durationMin / 60) * HOUR_HEIGHT - 2));
 
       return {
         event: e,
@@ -612,35 +612,56 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                         )}
 
                         {/* Timed Event Blocks */}
-                        {timedLayout.map((item) => (
-                          <div
-                            key={item.event.uid}
-                            onClick={() => setSelectedDayDetail({ date: col.date, events: col.events })}
-                            style={{
-                              top: `${item.top}px`,
-                              height: `${item.height}px`,
-                              left: `calc(${(item.lane / item.totalLanes) * 100}% + 2px)`,
-                              width: `calc(${(1 / item.totalLanes) * 100}% - 4px)`,
-                              backgroundColor: `${item.event.color || '#3b82f6'}26`,
-                              borderLeftColor: item.event.color || '#3b82f6',
-                            }}
-                            className="absolute rounded-lg border-l-4 border-t border-r border-b border-gray-700/50 p-1.5 text-left overflow-hidden transition-all hover:brightness-125 hover:z-30 cursor-pointer shadow-sm backdrop-blur-xs flex flex-col justify-start"
-                          >
-                            <div className="text-[10px] md:text-[11px] font-mono font-bold text-blue-300 truncate leading-tight">
-                              {formatTimeShort(new Date(item.event.start))}
-                              {item.event.end && ` - ${formatTimeShort(new Date(item.event.end))}`}
+                        {timedLayout.map((item) => {
+                          const isCompact = item.height < 44;
+                          return (
+                            <div
+                              key={item.event.uid}
+                              onClick={() => setSelectedDayDetail({ date: col.date, events: col.events })}
+                              title={`${item.event.summary} (${formatTimeShort(new Date(item.event.start))}${
+                                item.event.end ? ` - ${formatTimeShort(new Date(item.event.end))}` : ''
+                              })${item.event.location ? ` • ${item.event.location}` : ''}`}
+                              style={{
+                                top: `${item.top}px`,
+                                height: `${item.height}px`,
+                                left: `calc(${(item.lane / item.totalLanes) * 100}% + 2px)`,
+                                width: `calc(${(1 / item.totalLanes) * 100}% - 4px)`,
+                                backgroundColor: `${item.event.color || '#3b82f6'}26`,
+                                borderLeftColor: item.event.color || '#3b82f6',
+                              }}
+                              className={`absolute rounded-lg border-l-4 border-t border-r border-b border-gray-700/50 ${
+                                isCompact ? 'px-2 py-0 justify-center' : 'p-1.5 justify-start'
+                              } text-left overflow-hidden transition-all hover:brightness-125 hover:z-30 cursor-pointer shadow-sm backdrop-blur-xs flex flex-col`}
+                            >
+                              {isCompact ? (
+                                <div className="flex items-center gap-1.5 min-w-0 w-full leading-none">
+                                  <span className="text-[10px] md:text-[11px] font-mono font-bold text-blue-300 shrink-0">
+                                    {formatTimeShort(new Date(item.event.start))}
+                                  </span>
+                                  <span className="text-xs md:text-sm font-bold text-white truncate min-w-0">
+                                    {item.event.summary}
+                                  </span>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="text-[10px] md:text-[11px] font-mono font-bold text-blue-300 truncate leading-tight">
+                                    {formatTimeShort(new Date(item.event.start))}
+                                    {item.event.end && ` - ${formatTimeShort(new Date(item.event.end))}`}
+                                  </div>
+                                  <div className="text-xs md:text-sm font-bold text-white leading-tight truncate mt-0.5">
+                                    {item.event.summary}
+                                  </div>
+                                  {item.height > 52 && item.event.location && (
+                                    <div className="text-[10px] text-gray-300 truncate flex items-center gap-1 mt-0.5 opacity-90">
+                                      <MapPin className="w-2.5 h-2.5 shrink-0 text-gray-400" />
+                                      <span className="truncate">{item.event.location}</span>
+                                    </div>
+                                  )}
+                                </>
+                              )}
                             </div>
-                            <div className="text-xs md:text-sm font-bold text-white leading-tight truncate mt-0.5">
-                              {item.event.summary}
-                            </div>
-                            {item.height > 44 && item.event.location && (
-                              <div className="text-[10px] text-gray-300 truncate flex items-center gap-1 mt-0.5 opacity-90">
-                                <MapPin className="w-2.5 h-2.5 shrink-0 text-gray-400" />
-                                <span className="truncate">{item.event.location}</span>
-                              </div>
-                            )}
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     );
                   })}
@@ -758,28 +779,49 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                         )}
 
                         {/* Timed Event Blocks */}
-                        {timedLayout.map((item) => (
-                          <div
-                            key={item.event.uid}
-                            onClick={() => setSelectedDayDetail({ date: col.date, events: col.events })}
-                            style={{
-                              top: `${item.top}px`,
-                              height: `${item.height}px`,
-                              left: `calc(${(item.lane / item.totalLanes) * 100}% + 1px)`,
-                              width: `calc(${(1 / item.totalLanes) * 100}% - 2px)`,
-                              backgroundColor: `${item.event.color || '#3b82f6'}26`,
-                              borderLeftColor: item.event.color || '#3b82f6',
-                            }}
-                            className="absolute rounded border-l-2 md:border-l-3 border-t border-r border-b border-gray-700/50 p-1 text-left overflow-hidden transition-all hover:brightness-125 hover:z-30 cursor-pointer shadow-sm backdrop-blur-xs flex flex-col justify-start"
-                          >
-                            <div className="text-[9px] md:text-[10px] font-mono font-bold text-blue-300 truncate leading-none">
-                              {formatTimeShort(new Date(item.event.start))}
+                        {timedLayout.map((item) => {
+                          const isCompact = item.height < 44;
+                          return (
+                            <div
+                              key={item.event.uid}
+                              onClick={() => setSelectedDayDetail({ date: col.date, events: col.events })}
+                              title={`${item.event.summary} (${formatTimeShort(new Date(item.event.start))}${
+                                item.event.end ? ` - ${formatTimeShort(new Date(item.event.end))}` : ''
+                              })${item.event.location ? ` • ${item.event.location}` : ''}`}
+                              style={{
+                                top: `${item.top}px`,
+                                height: `${item.height}px`,
+                                left: `calc(${(item.lane / item.totalLanes) * 100}% + 1px)`,
+                                width: `calc(${(1 / item.totalLanes) * 100}% - 2px)`,
+                                backgroundColor: `${item.event.color || '#3b82f6'}26`,
+                                borderLeftColor: item.event.color || '#3b82f6',
+                              }}
+                              className={`absolute rounded border-l-2 md:border-l-3 border-t border-r border-b border-gray-700/50 ${
+                                isCompact ? 'px-1 py-0 justify-center' : 'p-1 justify-start'
+                              } text-left overflow-hidden transition-all hover:brightness-125 hover:z-30 cursor-pointer shadow-sm backdrop-blur-xs flex flex-col`}
+                            >
+                              {isCompact ? (
+                                <div className="flex items-center gap-1 min-w-0 w-full leading-none">
+                                  <span className="text-[9px] md:text-[10px] font-mono font-bold text-blue-300 shrink-0">
+                                    {formatTimeShort(new Date(item.event.start))}
+                                  </span>
+                                  <span className="text-[10px] md:text-xs font-bold text-white truncate min-w-0">
+                                    {item.event.summary}
+                                  </span>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="text-[9px] md:text-[10px] font-mono font-bold text-blue-300 truncate leading-none">
+                                    {formatTimeShort(new Date(item.event.start))}
+                                  </div>
+                                  <div className="text-[10px] md:text-xs font-bold text-white leading-tight truncate mt-0.5">
+                                    {item.event.summary}
+                                  </div>
+                                </>
+                              )}
                             </div>
-                            <div className="text-[10px] md:text-xs font-bold text-white leading-tight truncate mt-0.5">
-                              {item.event.summary}
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     );
                   })}
