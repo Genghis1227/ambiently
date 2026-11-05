@@ -5,9 +5,24 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-export const APP_VERSION = '0.1.15';
+export const APP_VERSION = '0.1.16';
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.1.16",
+    date: "November 4, 2026",
+    title: "Curated Scenery Packs, 10-Canvas Limit & Hotkeys, Live Streams, & Note Toolbar Polish",
+    highlights: [
+      "9 Curated Ambient Scenery Packs: Integrated 9 themed photo packs (Mountains & Parks, Coastal Waters, Deep Forests, Deep Space & Cosmos, Museum Art & Gallery, Urban Nights, Cozy Cabin, Zen Botany, and Master Mix) with interactive preview cards and 1-click theme application.",
+      "10-Canvas Limit: Enforced a 10-canvas maximum across the dashboard store, navigation dock, and boards manager to preserve clean dock ergonomics and kiosk stability.",
+      "Canvas Hotkeys 1 to 10: Switch between canvases instantly using number keys 1 through 9 (for boards 1–9) and 0 (for board 10), with automatic typing-protection when editing notes, inputs, or dialogs.",
+      "Sticky Note Toolbar Collision Fix: Elevated tile hover action controls to float above the top card border, preventing + New Note and tabs from being obfuscated at compact sizes.",
+      "Responsive Notes Header: Enabled flexible header wrapping in the Notes tile so + New Note remains accessible and unobstructed at any tile aspect ratio.",
+      "Active Live Stream Presets: Updated Lofi Radio (rFZHOHl-L8A) and NASA Earth (ROboUHfPUrU) to verified active 24/7 streams, configured to run purely live without restart offsets.",
+      "Zero-Reload Audio Toggle: Seamlessly mute and unmute YouTube video streams via the postMessage API without reloading or unmounting the iframe player.",
+      "Smart Video Resume: Recorded videos and custom streams persist playback progress in sessionStorage and resume seamlessly via &start= across canvas tab switches.",
+    ],
+  },
   {
     version: "v0.1.15",
     date: "November 4, 2026",

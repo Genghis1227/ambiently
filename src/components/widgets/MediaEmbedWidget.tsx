@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Tv, Volume2, VolumeX, RefreshCw } from 'lucide-react';
 
 export type EmbedPresetId = 'lofi' | 'fireplace' | 'nasa' | 'radar' | 'custom';
@@ -20,10 +20,12 @@ export const EMBED_PRESETS: { id: EmbedPresetId; label: string; description: str
   { id: 'custom', label: 'Custom URL', description: 'YouTube or Web Dashboard' },
 ];
 
-export function normalizeEmbedUrl(rawUrl: string, muted: boolean): string {
+export function normalizeEmbedUrl(rawUrl: string, muted: boolean, savedTime = 0): string {
   const trimmed = rawUrl.trim();
+  const startParam = savedTime > 10 ? `&start=${savedTime}` : '';
+
   if (!trimmed) {
-    return `https://www.youtube-nocookie.com/embed/jfKfPfyJRdk?autoplay=1&mute=${muted ? 1 : 0}`;
+    return `https://www.youtube-nocookie.com/embed/rFZHOHl-L8A?autoplay=1&mute=${muted ? 1 : 0}&enablejsapi=1&rel=0`;
   }
 
   // Convert standard youtube.com/watch?v=ID or youtu.be/ID or youtube.com/live/ID
@@ -33,7 +35,7 @@ export function normalizeEmbedUrl(rawUrl: string, muted: boolean): string {
 
   if (ytMatch && ytMatch[1]) {
     const videoId = ytMatch[1];
-    return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=${muted ? 1 : 0}&rel=0`;
+    return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=${muted ? 1 : 0}${startParam}&enablejsapi=1&rel=0`;
   }
 
   return trimmed;
@@ -50,6 +52,7 @@ export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
   const [preset, setPreset] = useState<EmbedPresetId>(initialPreset);
   const [muted, setMuted] = useState<boolean>(initialMuted);
   const [reloadKey, setReloadKey] = useState<number>(0);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     setPreset(initialPreset);
@@ -69,8 +72,52 @@ export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
   const handleToggleMute = () => {
     const nextMuted = !muted;
     setMuted(nextMuted);
+
+    // Send postMessage to YouTube IFrame API to toggle sound without restarting video
+    if (iframeRef.current?.contentWindow) {
+      try {
+        iframeRef.current.contentWindow.postMessage(
+          JSON.stringify({ event: 'command', func: nextMuted ? 'mute' : 'unMute', args: [] }),
+          '*'
+        );
+      } catch {
+        // ignore cross-origin restrictions if non-YouTube embed
+      }
+    }
+
     if (onUpdateConfig) {
       onUpdateConfig({ muted: nextMuted });
+    }
+  };
+
+  // Listen for YouTube player time updates to resume recorded videos across tab switches
+  useEffect(() => {
+    const handleWindowMessage = (e: MessageEvent) => {
+      try {
+        if (typeof e.data !== 'string') return;
+        const parsed = JSON.parse(e.data);
+        if (parsed.event === 'infoDelivery' && parsed.info?.currentTime) {
+          const t = Math.floor(parsed.info.currentTime);
+          // Only track resume position for recorded/non-live videos
+          if (t > 5 && preset !== 'lofi' && preset !== 'nasa') {
+            const storageKey = preset === 'custom' ? `ambiently_pos_${customUrl}` : `ambiently_pos_${preset}`;
+            sessionStorage.setItem(storageKey, String(t));
+          }
+        }
+      } catch {
+        // non-JSON message
+      }
+    };
+    window.addEventListener('message', handleWindowMessage);
+    return () => window.removeEventListener('message', handleWindowMessage);
+  }, [preset, customUrl]);
+
+  const getSavedVideoTime = (key: string): number => {
+    try {
+      const saved = sessionStorage.getItem(`ambiently_pos_${key}`);
+      return saved ? parseInt(saved, 10) : 0;
+    } catch {
+      return 0;
     }
   };
 
@@ -78,16 +125,23 @@ export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
     const m = muted ? 1 : 0;
     switch (preset) {
       case 'lofi':
-        return `https://www.youtube-nocookie.com/embed/jfKfPfyJRdk?autoplay=1&mute=${m}&rel=0`;
-      case 'fireplace':
-        return `https://www.youtube-nocookie.com/embed/L_LUpnjgPso?autoplay=1&mute=${m}&loop=1&playlist=L_LUpnjgPso&rel=0`;
+        // Pure live broadcast: let YouTube stay completely live
+        return `https://www.youtube-nocookie.com/embed/rFZHOHl-L8A?autoplay=1&mute=${m}&enablejsapi=1&rel=0`;
+      case 'fireplace': {
+        const savedTime = getSavedVideoTime('fireplace');
+        const startParam = savedTime > 10 ? `&start=${savedTime}` : '';
+        return `https://www.youtube-nocookie.com/embed/L_LUpnjgPso?autoplay=1&mute=${m}&loop=1&playlist=L_LUpnjgPso${startParam}&enablejsapi=1&rel=0`;
+      }
       case 'nasa':
-        return `https://www.youtube-nocookie.com/embed/xRPjKQtRXR8?autoplay=1&mute=${m}&rel=0`;
+        // Pure live broadcast: let YouTube stay completely live
+        return `https://www.youtube-nocookie.com/embed/ROboUHfPUrU?autoplay=1&mute=${m}&enablejsapi=1&rel=0`;
       case 'radar':
         return `https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=in&metricTemp=%C2%B0F&metricWind=mph&zoom=6&overlay=radar&product=radar&level=surface&lat=${latitude}&lon=${longitude}`;
       case 'custom':
-      default:
-        return normalizeEmbedUrl(customUrl, muted);
+      default: {
+        const savedTime = getSavedVideoTime(customUrl);
+        return normalizeEmbedUrl(customUrl, muted, savedTime);
+      }
     }
   };
 
@@ -146,7 +200,8 @@ export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
       {/* Embedded Frame */}
       <div className="relative flex-1 w-full h-full rounded-xl overflow-hidden bg-black border border-gray-800/80">
         <iframe
-          key={`${preset}-${muted}-${reloadKey}-${customUrl}`}
+          ref={iframeRef}
+          key={`${preset}-${reloadKey}-${customUrl}`}
           src={iframeSrc}
           title="Ambient Stream Embed"
           className="w-full h-full border-0"
