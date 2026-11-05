@@ -400,9 +400,12 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
               <button
                 onClick={onOpenCreateNote}
                 title="New Sticky Note"
-                className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition-all cursor-pointer"
+                className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition-all cursor-pointer group shadow-xs"
               >
-                <StickyNote className="w-4 h-4" />
+                <StickyNote className="w-4 h-4 transition-transform group-hover:scale-105" />
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-gray-950 flex items-center justify-center shadow-md ring-1.5 ring-gray-950">
+                  <Plus className="w-2.5 h-2.5 stroke-[3]" />
+                </span>
               </button>
             )}
 
