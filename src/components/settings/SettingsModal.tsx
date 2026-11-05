@@ -28,6 +28,7 @@ import {
   Grid,
   ImageIcon,
   FolderOpen,
+  Sliders,
 } from 'lucide-react';
 import { db } from '../../services/db';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -61,12 +62,15 @@ import { PhotoSourcesModal } from '../photos/PhotoSourcesModal';
 
 import type { User } from '@supabase/supabase-js';
 
+export type SettingsTabId = 'boards' | 'display' | 'photos' | 'sync' | 'system';
+
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialTab?: SettingsTabId;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialTab = 'boards' }) => {
   const {
     settings,
     tabs,
@@ -87,6 +91,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     deleteTab,
     reorderTabs,
   } = useDashboardStore();
+
+  const [activeTab, setActiveTab] = useState<SettingsTabId>(initialTab);
 
   const [pinInput, setPinInput] = useState('');
   const [pinSuccess, setPinSuccess] = useState(false);
@@ -269,7 +275,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       >
         <div
           onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-xl rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden cursor-default"
+          className="w-full max-w-2xl rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden cursor-default"
         >
           {/* Pinned Header with Title, Clickable Version Badge, and Close Button */}
           <div className="flex items-center justify-between border-b border-gray-800 p-5 bg-gray-950/80 shrink-0">
@@ -299,8 +305,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             </button>
           </div>
 
-          <div className="p-6 overflow-y-auto space-y-6">
-            {/* Canvases & Boards Manager */}
+          {/* Navigation Tabs Header */}
+          <div className="flex items-center gap-1 px-4 pt-2 border-b border-gray-800 bg-gray-950/60 overflow-x-auto no-scrollbar shrink-0">
+            {[
+              { id: 'boards' as const, label: 'Canvases', icon: <Grid className="w-3.5 h-3.5" />, badge: tabs.length },
+              { id: 'display' as const, label: 'Display & Kiosk', icon: <Sliders className="w-3.5 h-3.5" /> },
+              { id: 'photos' as const, label: 'Shared Photos', icon: <ImageIcon className="w-3.5 h-3.5" /> },
+              { id: 'sync' as const, label: 'Sync & Backup', icon: <FolderSync className="w-3.5 h-3.5" /> },
+              { id: 'system' as const, label: 'Security & System', icon: <Shield className="w-3.5 h-3.5" /> },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-xl transition-all border-b-2 cursor-pointer whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? 'border-blue-500 text-blue-400 bg-gray-900/90 shadow-sm'
+                    : 'border-transparent text-gray-400 hover:text-gray-200 hover:bg-gray-900/30'
+                }`}
+              >
+                {tab.icon}
+                <span>{tab.label}</span>
+                {tab.badge !== undefined && (
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-gray-800 text-gray-300 font-mono">
+                    {tab.badge}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          <div className="p-6 overflow-y-auto space-y-6 flex-1">
+            {/* TAB 1: Canvases & Boards Manager */}
+            {activeTab === 'boards' && (
             <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800">
               <div className="flex items-center justify-between mb-3">
                 <div>
@@ -727,7 +764,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 })}
               </div>
             </div>
+            )}
 
+            {/* TAB 2: Display & Kiosk Settings */}
+            {activeTab === 'display' && (
+              <>
             {/* Automated Tab Carousel Section */}
             <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800">
               <div className="flex items-center justify-between mb-3">
@@ -978,8 +1019,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 />
               </button>
             </div>
+            </>
+            )}
 
-            {/* Common Photo Library Section */}
+            {/* TAB 3: Common Photo Library */}
+            {activeTab === 'photos' && (
             <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -1023,7 +1067,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 </div>
               </div>
             </div>
+            )}
 
+            {/* TAB 4: Cloud Sync & Local Backup */}
+            {activeTab === 'sync' && (
+              <>
             {/* Cloud SaaS Sync Section */}
             <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800 space-y-3">
               <div className="flex items-center justify-between">
@@ -1162,7 +1210,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 </button>
               </div>
             </div>
+            </>
+            )}
 
+            {/* TAB 5: Security & System Settings */}
+            {activeTab === 'system' && (
+              <>
             {/* Kid-Proof PIN Protection */}
             <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800">
               <div className="flex items-center justify-between mb-3">
@@ -1262,6 +1315,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 </div>
               )}
             </div>
+            </>
+            )}
           </div>
         </div>
       </div>
