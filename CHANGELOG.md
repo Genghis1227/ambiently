@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.21] - 2026-11-04
+
+### Fixed
+* **Short & Concurrent Calendar Event Display (`CalendarWidget.tsx`):**
+  * Eliminated vertical text squishing and clipping for 30-minute and short timed events in 3-Day and Week views.
+  * Implemented adaptive inline single-row layout (`[Time] [Title]`) with vertical centering (`justify-center`) for events under 46px.
+  * Increased grid `HOUR_HEIGHT` to `60px` (28px height per 30-minute event) to provide generous breathing room.
+  * Prevented event locations from crowding and truncating the event title in 1-hour events (locations are rendered inline only when `height >= 75px`).
+  * Added rich hover tooltips (`title` attribute) with complete summary, time range, and location across all timed event blocks.
+
+---
+
 ## [0.1.13] - 2026-11-03
 
 ### Added
