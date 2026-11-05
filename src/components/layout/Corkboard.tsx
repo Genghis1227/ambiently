@@ -129,7 +129,6 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   const dragStartPointerRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const dragTargetInitialPosRef = useRef<NonNullable<DashboardWidget['freeformPos']> | null>(null);
   const isDraggingRef = useRef(false);
-  const nextZIndexRef = useRef(1);
   const lastTapRef = useRef<{ id: string; time: number }>({ id: '', time: 0 });
 
   const notesRef = useRef(notes);
@@ -204,155 +203,236 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   }
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
-  const getNextZIndex = () => {
-    const widgetMax = widgets.reduce((m, w) => Math.max(m, w.freeformPos?.zIndex || 1), 1);
-    const noteMax = notes.reduce((m, n) => Math.max(m, n.freeformPos?.zIndex || 1), 1);
-    return Math.min(45, Math.max(widgetMax, noteMax) + 1);
+  interface CanvasItemRecord {
+    id: string;
+    type: 'widget' | 'note';
+    zIndex: number;
+    isBackground: boolean;
+    pos: NonNullable<DashboardWidget['freeformPos']>;
+    gridPos?: any;
+  }
+
+  const getUnifiedCanvasItems = (): CanvasItemRecord[] => {
+    const items: CanvasItemRecord[] = [];
+    widgets.forEach((w) => {
+      const pos = w.freeformPos || {
+        xRatio: 0.1,
+        yRatio: 0.1,
+        wRatio: 0.35,
+        hRatio: 0.45,
+        zIndex: 1,
+        rotation: 0,
+      };
+      items.push({
+        id: w.id,
+        type: 'widget',
+        zIndex: pos.isBackground ? 0 : (pos.zIndex ?? 1),
+        isBackground: Boolean(pos.isBackground),
+        pos,
+        gridPos: w.gridPos,
+      });
+    });
+
+    notes.forEach((n) => {
+      const pos = n.freeformPos || {
+        xRatio: 0.15,
+        yRatio: 0.15,
+        wRatio: 0.26,
+        hRatio: 0.3,
+        zIndex: 1,
+        rotation: 0,
+      };
+      items.push({
+        id: n.id,
+        type: 'note',
+        zIndex: pos.isBackground ? 0 : (pos.zIndex ?? 1),
+        isBackground: Boolean(pos.isBackground),
+        pos,
+      });
+    });
+
+    return items;
   };
 
   const getTopZIndex = () => {
-    const widgetMax = widgets.reduce((m, w) => Math.max(m, w.freeformPos?.zIndex || 1), 1);
-    const noteMax = notes.reduce((m, n) => Math.max(m, n.freeformPos?.zIndex || 1), 1);
-    return Math.max(widgetMax, noteMax);
+    const items = getUnifiedCanvasItems();
+    let max = 1;
+    for (const item of items) {
+      if (!item.isBackground && item.zIndex > max) {
+        max = item.zIndex;
+      }
+    }
+    return max;
+  };
+
+  const getNextZIndex = () => {
+    return getTopZIndex() + 1;
   };
 
   const handleBringToFront = (id: string, type: 'widget' | 'note') => {
-    const nextZ = getNextZIndex();
-    if (type === 'widget' && onUpdateWidgetPos) {
-      const w = widgets.find((x) => x.id === id);
-      if (w && w.freeformPos) {
-        onUpdateWidgetPos(id, w.gridPos, {
-          ...w.freeformPos,
-          zIndex: nextZ,
-          isBackground: false,
-        });
-      }
-    } else if (type === 'note' && onUpdateNotePos) {
-      const n = notes.find((x) => x.id === id);
-      if (n && n.freeformPos) {
-        onUpdateNotePos(id, {
-          ...n.freeformPos,
-          zIndex: nextZ,
-          isBackground: false,
-        });
-      }
+    const allItems = getUnifiedCanvasItems();
+    const targetItem = allItems.find((item) => item.id === id && item.type === type);
+    if (!targetItem) {
+      setContextMenu(null);
+      return;
     }
+
+    // Filter all foreground items excluding target
+    const foreground = allItems.filter(
+      (item) => !item.isBackground && !(item.id === id && item.type === type)
+    );
+
+    // Sort ascending by current zIndex
+    foreground.sort((a, b) => a.zIndex - b.zIndex);
+
+    // Re-index remaining foreground items sequentially to guarantee no ties or gaps
+    foreground.forEach((item, index) => {
+      const normalizedZ = index + 1;
+      if (item.zIndex !== normalizedZ) {
+        if (item.type === 'widget' && onUpdateWidgetPos) {
+          onUpdateWidgetPos(item.id, item.gridPos, {
+            ...item.pos,
+            zIndex: normalizedZ,
+            isBackground: false,
+          });
+        } else if (item.type === 'note' && onUpdateNotePos) {
+          onUpdateNotePos(item.id, {
+            ...item.pos,
+            zIndex: normalizedZ,
+            isBackground: false,
+          });
+        }
+      }
+    });
+
+    // Place target item strictly at the top layer
+    const topZ = foreground.length + 1;
+    if (targetItem.type === 'widget' && onUpdateWidgetPos) {
+      onUpdateWidgetPos(id, targetItem.gridPos, {
+        ...targetItem.pos,
+        zIndex: topZ,
+        isBackground: false,
+      });
+    } else if (targetItem.type === 'note' && onUpdateNotePos) {
+      onUpdateNotePos(id, {
+        ...targetItem.pos,
+        zIndex: topZ,
+        isBackground: false,
+      });
+    }
+
     setContextMenu(null);
   };
-
-  // Close Context Menu on click outside or Escape
-  useEffect(() => {
-    if (!contextMenu) return;
-    const handleClose = () => setContextMenu(null);
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setContextMenu(null);
-    };
-    window.addEventListener('pointerdown', handleClose);
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('pointerdown', handleClose);
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [contextMenu]);
 
   const handleSendToBack = (id: string, type: 'widget' | 'note') => {
     if (type === 'widget' && onUpdateWidgetPos) {
       const w = widgets.find((x) => x.id === id);
-      if (w && w.freeformPos) {
-        onUpdateWidgetPos(id, w.gridPos, {
-          ...w.freeformPos,
-          zIndex: 0,
-          isBackground: true,
-        });
-      }
+      const pos = w?.freeformPos || {
+        xRatio: 0.1,
+        yRatio: 0.1,
+        wRatio: 0.35,
+        hRatio: 0.45,
+        zIndex: 0,
+        rotation: 0,
+      };
+      onUpdateWidgetPos(id, w?.gridPos, {
+        ...pos,
+        zIndex: 0,
+        isBackground: true,
+      });
     } else if (type === 'note' && onUpdateNotePos) {
       const n = notes.find((x) => x.id === id);
-      if (n && n.freeformPos) {
-        onUpdateNotePos(id, {
-          ...n.freeformPos,
-          zIndex: 0,
-          isBackground: true,
-        });
-      }
+      const pos = n?.freeformPos || {
+        xRatio: 0.15,
+        yRatio: 0.15,
+        wRatio: 0.26,
+        hRatio: 0.3,
+        zIndex: 0,
+        rotation: 0,
+      };
+      onUpdateNotePos(id, {
+        ...pos,
+        zIndex: 0,
+        isBackground: true,
+      });
     }
     setContextMenu(null);
   };
-
-  // Close Context Menu on click outside or Escape
-  useEffect(() => {
-    if (!contextMenu) return;
-    const handleClose = () => setContextMenu(null);
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setContextMenu(null);
-    };
-    window.addEventListener('pointerdown', handleClose);
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('pointerdown', handleClose);
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [contextMenu]);
 
   const handleBringForward = (id: string, type: 'widget' | 'note') => {
-    if (type === 'widget' && onUpdateWidgetPos) {
-      const w = widgets.find((x) => x.id === id);
-      if (w && w.freeformPos) {
-        onUpdateWidgetPos(id, w.gridPos, {
-          ...w.freeformPos,
-          zIndex: Math.min(45, (w.freeformPos.zIndex || 1) + 1),
-          isBackground: false,
-        });
-      }
-    } else if (type === 'note' && onUpdateNotePos) {
-      const n = notes.find((x) => x.id === id);
-      if (n && n.freeformPos) {
-        onUpdateNotePos(id, {
-          ...n.freeformPos,
-          zIndex: Math.min(45, (n.freeformPos.zIndex || 1) + 1),
-          isBackground: false,
-        });
-      }
+    const allItems = getUnifiedCanvasItems();
+    const target = allItems.find((i) => i.id === id && i.type === type);
+    if (!target) {
+      setContextMenu(null);
+      return;
     }
+
+    if (target.isBackground) {
+      handleBringToFront(id, type);
+      return;
+    }
+
+    const foreground = allItems.filter((i) => !i.isBackground);
+    foreground.sort((a, b) => a.zIndex - b.zIndex);
+
+    const idx = foreground.findIndex((i) => i.id === id && i.type === type);
+    if (idx !== -1 && idx < foreground.length - 1) {
+      const temp = foreground[idx];
+      foreground[idx] = foreground[idx + 1];
+      foreground[idx + 1] = temp;
+    }
+
+    foreground.forEach((item, index) => {
+      const newZ = index + 1;
+      if (item.zIndex !== newZ) {
+        if (item.type === 'widget' && onUpdateWidgetPos) {
+          onUpdateWidgetPos(item.id, item.gridPos, { ...item.pos, zIndex: newZ, isBackground: false });
+        } else if (item.type === 'note' && onUpdateNotePos) {
+          onUpdateNotePos(item.id, { ...item.pos, zIndex: newZ, isBackground: false });
+        }
+      }
+    });
+
     setContextMenu(null);
   };
 
-  // Close Context Menu on click outside or Escape
-  useEffect(() => {
-    if (!contextMenu) return;
-    const handleClose = () => setContextMenu(null);
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setContextMenu(null);
-    };
-    window.addEventListener('pointerdown', handleClose);
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('pointerdown', handleClose);
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [contextMenu]);
-
   const handleSendBackward = (id: string, type: 'widget' | 'note') => {
-    if (type === 'widget' && onUpdateWidgetPos) {
-      const w = widgets.find((x) => x.id === id);
-      if (w && w.freeformPos) {
-        const newZ = Math.max(0, (w.freeformPos.zIndex || 1) - 1);
-        onUpdateWidgetPos(id, w.gridPos, {
-          ...w.freeformPos,
-          zIndex: newZ,
-          isBackground: newZ === 0 ? true : w.freeformPos.isBackground,
-        });
-      }
-    } else if (type === 'note' && onUpdateNotePos) {
-      const n = notes.find((x) => x.id === id);
-      if (n && n.freeformPos) {
-        const newZ = Math.max(0, (n.freeformPos.zIndex || 1) - 1);
-        onUpdateNotePos(id, {
-          ...n.freeformPos,
-          zIndex: newZ,
-          isBackground: newZ === 0 ? true : n.freeformPos.isBackground,
-        });
-      }
+    const allItems = getUnifiedCanvasItems();
+    const target = allItems.find((i) => i.id === id && i.type === type);
+    if (!target) {
+      setContextMenu(null);
+      return;
     }
+
+    if (target.isBackground) {
+      setContextMenu(null);
+      return;
+    }
+
+    const foreground = allItems.filter((i) => !i.isBackground);
+    foreground.sort((a, b) => a.zIndex - b.zIndex);
+
+    const idx = foreground.findIndex((i) => i.id === id && i.type === type);
+    if (idx <= 0) {
+      handleSendToBack(id, type);
+      return;
+    }
+
+    const temp = foreground[idx];
+    foreground[idx] = foreground[idx - 1];
+    foreground[idx - 1] = temp;
+
+    foreground.forEach((item, index) => {
+      const newZ = index + 1;
+      if (item.zIndex !== newZ) {
+        if (item.type === 'widget' && onUpdateWidgetPos) {
+          onUpdateWidgetPos(item.id, item.gridPos, { ...item.pos, zIndex: newZ, isBackground: false });
+        } else if (item.type === 'note' && onUpdateNotePos) {
+          onUpdateNotePos(item.id, { ...item.pos, zIndex: newZ, isBackground: false });
+        }
+      }
+    });
+
     setContextMenu(null);
   };
 
@@ -576,8 +656,6 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     const currentX = (pos?.xRatio ?? 0.1) * rect.width;
     const currentY = (pos?.yRatio ?? 0.1) * rect.height;
 
-    const targetZ = pos?.isBackground ? (pos?.zIndex || 0) : getNextZIndex();
-    nextZIndexRef.current = targetZ;
     dragTargetInitialPosRef.current = pos || null;
     dragStartPointerRef.current = { x: e.clientX, y: e.clientY };
     isDraggingRef.current = false;
@@ -694,7 +772,6 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     if (draggingId) {
       const finalPos = dragPosRef.current;
       const initialPos = dragTargetInitialPosRef.current;
-      const targetZ = nextZIndexRef.current || (initialPos?.zIndex || 1);
 
       if (isDraggingRef.current && finalPos && initialPos) {
         let targetX = finalPos.xRatio;
@@ -704,30 +781,24 @@ export const Corkboard: React.FC<CorkboardProps> = ({
           targetY = Math.max(0, Math.min(1.0 - SNAP_STEP_Y, Math.round(targetY / SNAP_STEP_Y) * SNAP_STEP_Y));
         }
         if (draggingType === 'note') {
+          const note = notes.find((n) => n.id === draggingId);
+          const currentZ = note?.freeformPos?.zIndex ?? initialPos.zIndex;
           onUpdateNotePos(draggingId, {
             ...initialPos,
             xRatio: targetX,
             yRatio: targetY,
-            zIndex: targetZ,
+            zIndex: currentZ,
           });
         } else if (draggingType === 'widget' && onUpdateWidgetPos) {
           const widget = widgetsRef.current.find((w) => w.id === draggingId);
           if (widget) {
+            const currentZ = widget.freeformPos?.zIndex ?? initialPos.zIndex;
             onUpdateWidgetPos(draggingId, widget.gridPos, {
               ...initialPos,
               xRatio: targetX,
               yRatio: targetY,
-              zIndex: targetZ,
+              zIndex: currentZ,
             });
-          }
-        }
-      } else if (initialPos && targetZ !== initialPos.zIndex) {
-        if (draggingType === 'note') {
-          onUpdateNotePos(draggingId, { ...initialPos, zIndex: targetZ });
-        } else if (draggingType === 'widget' && onUpdateWidgetPos) {
-          const widget = widgetsRef.current.find((w) => w.id === draggingId);
-          if (widget) {
-            onUpdateWidgetPos(draggingId, widget.gridPos, { ...initialPos, zIndex: targetZ });
           }
         }
       }
@@ -1089,34 +1160,38 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 : 'hover:shadow-blue-500/10'
             } flex flex-col justify-between`}
           >
-            {/* Top-Center Grab-to-Rotate Handle (hidden when maximized, appears on hover) */}
-            {!isFullScreen && (
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20">
-                {onUpdateWidgetPos && (
-                  <div
-                    data-no-drag="true"
-                    onPointerDown={(e) => handleRotatePointerDown(e, widget.id, 'widget', pos)}
-                    onDoubleClick={(e) => {
-                      e.stopPropagation();
-                      onUpdateWidgetPos(widget.id, widget.gridPos, { ...pos, rotation: 0 });
-                    }}
-                    title="Grab and drag to rotate tile (double-click to reset to 0°)"
-                    className={`w-6 h-6 rounded-full bg-gray-900/95 border border-gray-600 text-blue-300 hover:text-white hover:border-blue-400 shadow-lg flex items-center justify-center cursor-grab active:cursor-grabbing transition-opacity ${
-                      isRotating ? 'opacity-100 ring-2 ring-blue-400' : 'opacity-0 group-hover:opacity-100'
-                    }`}
-                  >
-                    <RotateCw className="w-3 h-3" />
-                  </div>
-                )}
+            {/* Elevated Grab-to-Rotate Handle (Prominent, impossible to obscure) */}
+            {!isFullScreen && onUpdateWidgetPos && (
+              <div
+                className={`absolute left-1/2 -translate-x-1/2 z-40 flex flex-col items-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${
+                  isNearTopEdge ? '-bottom-8 flex-col-reverse' : '-top-7.5'
+                }`}
+              >
+                <div
+                  data-no-drag="true"
+                  onPointerDown={(e) => handleRotatePointerDown(e, widget.id, 'widget', pos)}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    onUpdateWidgetPos(widget.id, widget.gridPos, { ...pos, rotation: 0 });
+                  }}
+                  title="Grab and drag in a circle to rotate tile (double-click to reset to 0°)"
+                  className={`pointer-events-auto w-6 h-6 rounded-full bg-gray-950 border border-blue-400 hover:border-blue-300 text-blue-300 hover:text-white shadow-xl flex items-center justify-center cursor-grab active:cursor-grabbing hover:scale-110 active:scale-95 transition-all ${
+                    isRotating ? 'opacity-100 ring-2 ring-blue-400 bg-blue-900/60' : ''
+                  }`}
+                >
+                  <RotateCw className="w-3 h-3" />
+                </div>
+                {/* Visual stem line */}
+                <div className="w-0.5 h-1.5 bg-blue-400/60" />
                 {isRotating && (
-                  <span className="px-2 py-0.5 rounded-full bg-blue-600 text-white font-mono font-bold text-[10px] shadow-lg">
-                    {pos.rotation}°
+                  <span className="pointer-events-auto px-1.5 py-0.5 rounded-full bg-blue-600 text-white font-mono font-bold text-[10px] shadow-lg mt-0.5">
+                    {displayPos.rotation}°
                   </span>
                 )}
               </div>
             )}
 
-            {/* Top Right Widget Controls: Tilt, Settings, Maximize/Restore & Remove */}
+            {/* Top Right Widget Controls: Reset Rotation (if tilted), Settings, Layer Order, Maximize/Restore & Remove */}
             <div
               className={`absolute z-30 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-950/90 backdrop-blur-md px-1.5 py-1 rounded-xl border border-gray-700/80 shadow-2xl ${
                 isFullScreen
@@ -1126,39 +1201,19 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   : '-top-3.5 right-3'
               }`}
             >
-              {!isFullScreen && onUpdateWidgetPos && (
-                <>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onUpdateWidgetPos(widget.id, widget.gridPos, {
-                        ...pos,
-                        rotation: Math.max(-60, (pos.rotation || 0) - 3),
-                      });
-                    }}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    title="Tilt counter-clockwise"
-                    className="p-1 rounded-lg hover:bg-gray-800 text-gray-300 hover:text-white transition-all cursor-pointer"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onUpdateWidgetPos(widget.id, widget.gridPos, {
-                        ...pos,
-                        rotation: Math.min(60, (pos.rotation || 0) + 3),
-                      });
-                    }}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    title="Tilt clockwise"
-                    className="p-1 rounded-lg hover:bg-gray-800 text-gray-300 hover:text-white transition-all cursor-pointer"
-                  >
-                    <RotateCw className="w-3 h-3" />
-                  </button>
-                </>
+              {!isFullScreen && onUpdateWidgetPos && pos.rotation !== 0 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onUpdateWidgetPos(widget.id, widget.gridPos, { ...pos, rotation: 0 });
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  title="Reset rotation to 0°"
+                  className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-500/20 text-blue-300 hover:bg-blue-600 hover:text-white transition-all cursor-pointer"
+                >
+                  {pos.rotation}°
+                </button>
               )}
               {onUpdateWidget && (
                 <button
@@ -1499,8 +1554,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 : 'hover:shadow-yellow-500/10'
             } flex flex-col justify-between`}
           >
-            {/* Top-Center Grab-to-Rotate Handle (appears on hover) */}
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center gap-1 z-20">
+            {/* Top-Center Grab-to-Rotate Handle with Stem (appears on hover) */}
+            <div className="absolute -top-7.5 left-1/2 -translate-x-1/2 flex flex-col items-center z-20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
               <div
                 data-no-drag="true"
                 onPointerDown={(e) => handleRotatePointerDown(e, note.id, 'note', pos)}
@@ -1509,14 +1564,15 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   onUpdateNotePos(note.id, { ...pos, rotation: 0 });
                 }}
                 title="Grab and drag in a circle to rotate note (double-click to reset to 0°)"
-                className={`w-6 h-6 rounded-full bg-gray-900/95 border border-gray-700 text-white shadow-md flex items-center justify-center cursor-grab active:cursor-grabbing transition-opacity ${
-                  isRotating ? 'opacity-100 ring-2 ring-blue-400' : 'opacity-0 group-hover:opacity-100'
+                className={`pointer-events-auto w-6 h-6 rounded-full bg-gray-900/95 border border-gray-700 hover:border-gray-500 text-white shadow-xl flex items-center justify-center cursor-grab active:cursor-grabbing hover:scale-110 active:scale-95 transition-all ${
+                  isRotating ? 'opacity-100 ring-2 ring-blue-400' : ''
                 }`}
               >
                 <RotateCw className="w-3 h-3" />
               </div>
+              <div className="w-0.5 h-1.5 bg-gray-600/70" />
               {isRotating && (
-                <span className="px-1.5 py-0.5 rounded-full bg-gray-900 text-white font-mono font-bold text-[10px] shadow">
+                <span className="pointer-events-auto px-1.5 py-0.5 rounded-full bg-gray-900 text-white font-mono font-bold text-[10px] shadow mt-0.5">
                   {displayPos.rotation}°
                 </span>
               )}

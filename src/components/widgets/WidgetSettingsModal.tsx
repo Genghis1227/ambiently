@@ -16,10 +16,14 @@ import {
   AlignRight,
   ImageIcon,
   Share2,
+  HelpCircle,
+  AlertTriangle,
+  ExternalLink,
 } from 'lucide-react';
 import { useDashboardStore } from '../../store/dashboardStore';
 import type { DashboardWidget } from '../../types/dashboard';
-import type { CalendarSource } from '../../services/feeds';
+import { type CalendarSource, normalizeCalendarUrl } from '../../services/feeds';
+import { CalendarUrlGuideModal } from '../calendar/CalendarUrlGuideModal';
 import type { QuoteItem } from '../../services/quotes';
 import { EMBED_PRESETS, type EmbedPresetId } from './MediaEmbedWidget';
 import { DEFAULT_WORLD_CITIES, type WorldClockCity } from './WorldClockWidget';
@@ -113,6 +117,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const [newCalName, setNewCalName] = useState('');
   const [newCalUrl, setNewCalUrl] = useState('');
   const [newCalColor, setNewCalColor] = useState(CALENDAR_COLORS[0]);
+  const [isCalendarGuideOpen, setIsCalendarGuideOpen] = useState(false);
 
   // Embed states
   const [embedPreset, setEmbedPreset] = useState<EmbedPresetId>('lofi');
@@ -284,10 +289,11 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
 
   const handleAddCalendarSource = () => {
     if (!newCalUrl.trim()) return;
+    const normalized = normalizeCalendarUrl(newCalUrl);
     const added: CalendarSource = {
       id: `cal-${Date.now()}`,
       name: newCalName.trim() || 'Custom Calendar',
-      url: newCalUrl.trim(),
+      url: normalized.url,
       color: newCalColor,
       enabled: true,
     };
@@ -1503,9 +1509,38 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
 
               {/* Add New iCal / Webcal URL Form */}
               <div className="p-3 rounded-xl bg-gray-950/70 border border-gray-800 space-y-2.5">
-                <span className="text-xs font-bold text-gray-200 block">
-                  + Add Google, Apple, or Outlook iCal Feed (.ics / webcal://)
-                </span>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-gray-200 block">
+                    + Add Google, Apple, or Outlook iCal Feed (.ics / webcal://)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsCalendarGuideOpen(true)}
+                    className="text-[11px] text-blue-400 hover:text-blue-300 flex items-center gap-1 font-semibold hover:underline cursor-pointer"
+                  >
+                    <HelpCircle className="w-3.5 h-3.5" />
+                    <span>How to find URL</span>
+                  </button>
+                </div>
+
+                {/* Helpful quick guide & official Google documentation link */}
+                <div className="p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-[11px] text-gray-300 leading-relaxed space-y-1">
+                  <div className="flex items-center justify-between font-semibold text-blue-300">
+                    <span>Google Calendar URL path:</span>
+                    <a
+                      href="https://support.google.com/calendar/answer/37648?hl=en"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-blue-400 hover:text-blue-300 hover:underline inline-flex items-center gap-1 text-[10px] font-normal"
+                    >
+                      Official Google Guide <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
+                  </div>
+                  <p className="text-gray-300 text-[11px]">
+                    Go to <strong className="text-white">Settings</strong> &gt; <strong className="text-white">Settings for my calendars</strong> &gt; <strong className="text-white">Integrate calendar</strong> &gt; copy <strong className="text-emerald-400">Secret address in iCal format</strong> (.ics).
+                  </p>
+                </div>
+
                 <input
                   type="text"
                   value={newCalName}
@@ -1520,6 +1555,44 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                   placeholder="https://calendar.google.com/calendar/ical/.../basic.ics"
                   className="w-full rounded-lg bg-gray-900 border border-gray-800 p-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
                 />
+
+                {/* Live Guiding Feedback */}
+                {(() => {
+                  const validation = normalizeCalendarUrl(newCalUrl);
+                  if (validation.warning) {
+                    return (
+                      <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-[11px] flex items-start gap-2 leading-relaxed">
+                        <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                        <div>
+                          {validation.warning}{' '}
+                          <button
+                            type="button"
+                            onClick={() => setIsCalendarGuideOpen(true)}
+                            className="text-amber-300 underline font-bold cursor-pointer"
+                          >
+                            View step-by-step guide
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (validation.isConverted) {
+                    return (
+                      <p className="text-[11px] text-cyan-400 flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Auto-converted to direct iCal feed address
+                      </p>
+                    );
+                  }
+                  if (!validation.warning && newCalUrl.trim().endsWith('.ics')) {
+                    return (
+                      <p className="text-[11px] text-emerald-400 flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Valid iCal format (.ics) detected
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
+
                 <div className="flex items-center justify-between pt-1">
                   <div className="flex items-center gap-1.5">
                     <span className="text-[11px] text-gray-400 mr-1">Color Tag:</span>
@@ -1912,6 +1985,11 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
           </button>
         </div>
       </div>
+
+      <CalendarUrlGuideModal
+        isOpen={isCalendarGuideOpen}
+        onClose={() => setIsCalendarGuideOpen(false)}
+      />
     </div>
   );
 };

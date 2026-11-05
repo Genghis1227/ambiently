@@ -21,6 +21,43 @@ export interface CalendarSource {
   enabled: boolean;
 }
 
+export function normalizeCalendarUrl(rawUrl: string): { url: string; warning?: string; isConverted?: boolean } {
+  let url = rawUrl.trim();
+  if (!url) return { url: '' };
+
+  // Convert webcal:// to https://
+  if (url.startsWith('webcal://')) {
+    return {
+      url: 'https://' + url.slice('webcal://'.length),
+      isConverted: true,
+    };
+  }
+
+  // Detect user pasting Google Calendar web browser URL (u/0/r)
+  if (
+    url.includes('calendar.google.com/calendar/u/') ||
+    (url.includes('calendar.google.com/calendar/r') && !url.includes('.ics'))
+  ) {
+    return {
+      url,
+      warning:
+        "This is your Google Calendar browser link. In Google Calendar Settings under 'Integrate calendar', copy the 'Secret address in iCal format' (.ics).",
+    };
+  }
+
+  // Detect Google Calendar embed URL and convert to public iCal feed
+  const embedMatch = url.match(/calendar\.google\.com\/calendar\/embed\?.*?src=([^&]+)/);
+  if (embedMatch && embedMatch[1]) {
+    const calendarId = decodeURIComponent(embedMatch[1]);
+    return {
+      url: `https://calendar.google.com/calendar/ical/${encodeURIComponent(calendarId)}/public/basic.ics`,
+      isConverted: true,
+    };
+  }
+
+  return { url };
+}
+
 export interface RssArticle {
   id: string;
   title: string;
