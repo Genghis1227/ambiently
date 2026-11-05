@@ -1317,6 +1317,13 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 <CalendarWidget
                   sources={widget.config?.sources}
                   defaultView={widget.config?.defaultView}
+                  onUpdateConfig={(updates) => {
+                    if (onUpdateWidget) {
+                      onUpdateWidget(widget.id, {
+                        config: { ...widget.config, ...updates },
+                      });
+                    }
+                  }}
                 />
               ) : widget.type === 'rss' ? (
                 <RssWidget feedUrl={widget.config?.feedUrl} />

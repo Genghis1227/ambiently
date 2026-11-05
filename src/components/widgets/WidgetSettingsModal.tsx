@@ -108,7 +108,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const [rssFeedUrl, setRssFeedUrl] = useState('');
 
   // Calendar states
-  const [calendarDefaultView, setCalendarDefaultView] = useState<'agenda' | 'month'>('agenda');
+  const [calendarDefaultView, setCalendarDefaultView] = useState<'agenda' | '3day' | 'week' | 'month'>('agenda');
   const [calendarSources, setCalendarSources] = useState<CalendarSource[]>(DEFAULT_CALENDAR_SOURCES);
   const [newCalName, setNewCalName] = useState('');
   const [newCalUrl, setNewCalUrl] = useState('');
@@ -1435,29 +1435,27 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                 <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
                   Default Calendar View
                 </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setCalendarDefaultView('agenda')}
-                    className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      calendarDefaultView === 'agenda'
-                        ? 'bg-emerald-600/30 border border-emerald-500 text-emerald-300'
-                        : 'bg-gray-950 border border-gray-800 text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    Agenda Schedule
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCalendarDefaultView('month')}
-                    className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      calendarDefaultView === 'month'
-                        ? 'bg-emerald-600/30 border border-emerald-500 text-emerald-300'
-                        : 'bg-gray-950 border border-gray-800 text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    Monthly Grid
-                  </button>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {(['agenda', '3day', 'week', 'month'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setCalendarDefaultView(mode)}
+                      className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        calendarDefaultView === mode
+                          ? 'bg-emerald-600/30 border border-emerald-500 text-emerald-300'
+                          : 'bg-gray-950 border border-gray-800 text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      {mode === 'agenda'
+                        ? 'Agenda'
+                        : mode === '3day'
+                        ? '3-Day'
+                        : mode === 'week'
+                        ? 'Weekly'
+                        : 'Monthly'}
+                    </button>
+                  ))}
                 </div>
               </div>
 
