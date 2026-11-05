@@ -11,50 +11,15 @@ export interface PhotoItem {
 
 export type PhotoDisplayStyle = 'ken_burns' | 'mosaic' | 'polaroid' | 'filmstrip';
 
-export const CURATED_AMBIENT_PHOTOS: PhotoItem[] = [
-  {
-    id: 'curated-1',
-    url: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1920&q=80',
-    caption: 'Yosemite Valley Mist',
-    author: 'Bailey Zindel',
-    source: 'curated',
-  },
-  {
-    id: 'curated-2',
-    url: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1920&q=80',
-    caption: 'Starry Mountain Night',
-    author: 'Benjamin Voros',
-    source: 'curated',
-  },
-  {
-    id: 'curated-3',
-    url: 'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=1920&q=80',
-    caption: 'Misty Redwood Forest',
-    author: 'Casey Horner',
-    source: 'curated',
-  },
-  {
-    id: 'curated-4',
-    url: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1920&q=80',
-    caption: 'Tropical Dawn',
-    author: 'Sean Oulashin',
-    source: 'curated',
-  },
-  {
-    id: 'curated-5',
-    url: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=1920&q=80',
-    caption: 'Sunbeam Woodland',
-    author: 'Luca Bravo',
-    source: 'curated',
-  },
-  {
-    id: 'curated-6',
-    url: 'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?auto=format&fit=crop&w=1920&q=80',
-    caption: 'Emerald Alpine Meadow',
-    author: 'Sébastien Goldberg',
-    source: 'curated',
-  },
-];
+import {
+  ALL_CURATED_PHOTOS,
+  CURATED_CATEGORIES,
+  getCuratedCategoryById,
+  type CuratedCategory,
+} from '../data/curatedScenery';
+
+export { CURATED_CATEGORIES, getCuratedCategoryById, type CuratedCategory };
+export const CURATED_AMBIENT_PHOTOS: PhotoItem[] = ALL_CURATED_PHOTOS;
 
 // Offline Photo Cache via Cache Storage API (preserves last 30-50 photos offline)
 const CACHE_NAME = 'ambiently-photo-cache-v1';

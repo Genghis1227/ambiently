@@ -13,6 +13,15 @@ import {
   ExternalLink,
   ImageIcon,
   Loader2,
+  Sparkles,
+  Mountain,
+  Waves,
+  Trees,
+  Telescope,
+  Palette,
+  Building2,
+  Coffee,
+  Leaf,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -30,7 +39,8 @@ import {
   type PlexLibrarySection,
 } from '../../services/plex';
 import {
-  CURATED_AMBIENT_PHOTOS,
+  CURATED_CATEGORIES,
+  getCuratedCategoryById,
   pickLocalPhotoDirectory,
   parseFileListToPhotos,
   cachePhotosLocally,
@@ -42,6 +52,18 @@ import {
   type PhotoItem,
   type PhotoDisplayStyle,
 } from '../../services/photos';
+
+const CATEGORY_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+  Sparkles,
+  Mountain,
+  Waves,
+  Trees,
+  Telescope,
+  Palette,
+  Building2,
+  Coffee,
+  Leaf,
+};
 
 interface SelectedFolderInfo {
   id: string;
@@ -113,6 +135,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
 
   // Web / Google Drive state
   const [webUrlsText, setWebUrlsText] = useState(initialWebUrls || '');
+  const [selectedCuratedCategoryId, setSelectedCuratedCategoryId] = useState<string>('all');
 
   const detectedSources = useMemo(() => {
     const lines = webUrlsText
@@ -392,11 +415,19 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   };
 
   // Curated Preset
-  const handleApplyCurated = () => {
-    onPhotosLoaded(CURATED_AMBIENT_PHOTOS, 'Curated Ambient', undefined, 'curated', applyToAll);
-    cachePhotosLocally(CURATED_AMBIENT_PHOTOS);
-    setStatusMessage('Curated ambient scenery loaded.');
+  const handleApplyCuratedCategory = (catId?: string) => {
+    const targetId = catId || selectedCuratedCategoryId;
+    const cat = getCuratedCategoryById(targetId);
+    setSelectedCuratedCategoryId(targetId);
+    const label = targetId === 'all' ? 'Curated Ambient' : `Curated (${cat.name})`;
+    onPhotosLoaded(cat.photos, label, undefined, 'curated', applyToAll);
+    cachePhotosLocally(cat.photos);
+    setStatusMessage(`Loaded ${cat.photos.length} photos from "${cat.name}"!`);
     setTimeout(() => onClose(), 1000);
+  };
+
+  const handleApplyCurated = () => {
+    handleApplyCuratedCategory('all');
   };
 
   useEffect(() => {
@@ -431,7 +462,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-xl rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] cursor-default"
+        className="w-full max-w-2xl rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] cursor-default"
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-950/60">
@@ -1047,26 +1078,112 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
             </div>
           )}
 
-          {/* TAB 4: CURATED PRESETS */}
+          {/* TAB 4: CURATED PRESETS & THEMED CATEGORIES */}
           {activeTab === 'curated' && (
-            <div className="space-y-4 text-center py-4">
-              <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center mx-auto border border-cyan-500/20">
-                <Cloud className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-white">Curated Ambient Photography</h3>
-                <p className="text-xs text-gray-400 max-w-sm mx-auto mt-1">
-                  High-definition curated landscapes, mountain vistas, star fields, and ambient nature photos by verified photographers.
-                </p>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-cyan-400" />
+                    <span>Curated Ambient Scenery Packs</span>
+                  </h3>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Select a themed collection or shuffle all categories. No setup or accounts needed.
+                  </p>
+                </div>
+                <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+                  {CURATED_CATEGORIES.length} Categories
+                </span>
               </div>
 
-              <button
-                onClick={handleApplyCurated}
-                className="py-2.5 px-6 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow-lg transition-all cursor-pointer inline-flex items-center gap-2"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Use Curated Scenery</span>
-              </button>
+              {/* Category Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-[46vh] overflow-y-auto pr-1">
+                {CURATED_CATEGORIES.map((cat) => {
+                  const Icon = CATEGORY_ICON_MAP[cat.icon] || Sparkles;
+                  const isSelected = selectedCuratedCategoryId === cat.id;
+
+                  return (
+                    <div
+                      key={cat.id}
+                      onClick={() => setSelectedCuratedCategoryId(cat.id)}
+                      onDoubleClick={() => handleApplyCuratedCategory(cat.id)}
+                      className={`relative rounded-xl overflow-hidden border p-3 flex flex-col justify-between transition-all cursor-pointer group text-left min-h-[105px] select-none ${
+                        isSelected
+                          ? 'border-cyan-400 bg-cyan-950/50 ring-1 ring-cyan-400/60 shadow-lg'
+                          : 'border-gray-800 bg-gray-950/90 hover:border-gray-700 hover:bg-gray-900'
+                      }`}
+                    >
+                      {/* Background Thumbnail with dark gradient overlay */}
+                      <div
+                        className="absolute inset-0 bg-cover bg-center opacity-30 group-hover:opacity-45 transition-opacity"
+                        style={{ backgroundImage: `url(${cat.previewUrl})` }}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/75 to-gray-950/40" />
+
+                      {/* Card Header Content */}
+                      <div className="relative z-10">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div
+                            className={`w-7 h-7 rounded-lg flex items-center justify-center border shadow-sm ${
+                              isSelected
+                                ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                                : 'bg-gray-900/80 text-gray-300 border-gray-700/60'
+                            }`}
+                          >
+                            <Icon className="w-3.5 h-3.5" />
+                          </div>
+                          {isSelected && (
+                            <div className="w-5 h-5 rounded-full bg-cyan-500 text-black flex items-center justify-center shadow">
+                              <Check className="w-3 h-3 stroke-[3]" />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="font-bold text-xs text-white leading-tight line-clamp-1">
+                          {cat.name}
+                        </div>
+                        <div className="text-[10px] text-gray-400 line-clamp-2 mt-0.5 leading-tight">
+                          {cat.description}
+                        </div>
+                      </div>
+
+                      {/* Footer Badge / Count */}
+                      <div className="relative z-10 mt-2 flex items-center justify-between text-[10px]">
+                        <span className="font-mono text-cyan-300/90 bg-cyan-950/70 px-1.5 py-0.5 rounded border border-cyan-500/20">
+                          {cat.photos.length} photos
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleApplyCuratedCategory(cat.id);
+                          }}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-semibold text-white bg-cyan-600 hover:bg-cyan-500 px-2 py-0.5 rounded shadow cursor-pointer"
+                        >
+                          Use Now
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Bottom Apply Selected Theme Button */}
+              {(() => {
+                const activeCat = getCuratedCategoryById(selectedCuratedCategoryId);
+                return (
+                  <button
+                    type="button"
+                    onClick={() => handleApplyCuratedCategory(selectedCuratedCategoryId)}
+                    className="w-full py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>
+                      Apply {activeCat.name} ({activeCat.photos.length} Photos)
+                    </span>
+                  </button>
+                );
+              })()}
             </div>
           )}
         </div>
