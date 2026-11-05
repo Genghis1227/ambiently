@@ -38,6 +38,7 @@ import { RssWidget } from '../widgets/RssWidget';
 import { PhotoFrameWidget } from '../widgets/PhotoFrameWidget';
 import { StickyNotesWidget } from '../widgets/StickyNotesWidget';
 import { MediaEmbedWidget } from '../widgets/MediaEmbedWidget';
+import { ImageWidget } from '../widgets/ImageWidget';
 import { WidgetSettingsModal } from '../widgets/WidgetSettingsModal';
 import { PhotoSourcesModal } from '../photos/PhotoSourcesModal';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -1068,6 +1069,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         const isTransparentTextbox =
           widget.type === 'textbox' &&
           (!widget.config?.bgStyle || widget.config?.bgStyle === 'transparent');
+        const isTransparentImage = widget.type === 'image' && Boolean(widget.config?.transparentBg);
+        const isFramelessWidget = isTransparentTextbox || isTransparentImage;
 
         const displayPos = {
           ...pos,
@@ -1128,7 +1131,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                     width: `${displayPos.wRatio * 100}%`,
                     height: `${displayPos.hRatio * 100}%`,
                     minWidth: '180px',
-                    minHeight: isTransparentTextbox ? '60px' : '140px',
+                    minHeight: isFramelessWidget ? '50px' : '140px',
                     maxWidth: '100%',
                     maxHeight: '100%',
                     transform: `rotate(${displayPos.rotation}deg) ${isDragging ? 'scale(1.02)' : 'scale(1)'}`,
@@ -1145,17 +1148,19 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             className={`group ${
               isFullScreen
                 ? 'rounded-none border-0 p-0 overflow-hidden'
-                : isTransparentTextbox
-                ? 'rounded-2xl border border-dashed border-transparent hover:border-white/20 p-2'
+                : isFramelessWidget
+                ? 'rounded-2xl border border-dashed border-transparent hover:border-white/20 p-1'
+                : widget.type === 'image'
+                ? 'rounded-2xl border border-gray-800/90 p-0 overflow-hidden'
                 : 'rounded-2xl border border-gray-800/90 p-4'
             } ${
-              isTransparentTextbox
+              isFramelessWidget
                 ? 'bg-transparent text-white'
                 : 'bg-gray-900/80 backdrop-blur-md shadow-2xl text-white'
             } cursor-grab active:cursor-grabbing touch-none select-none transition-shadow ${
               isDragging || isRotating
                 ? 'ring-2 ring-blue-500 shadow-blue-500/20'
-                : isTransparentTextbox
+                : isFramelessWidget
                 ? 'hover:bg-white/5'
                 : 'hover:shadow-blue-500/10'
             } flex flex-col justify-between`}
@@ -1438,6 +1443,18 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   textTransform={widget.config?.textTransform}
                   letterSpacing={widget.config?.letterSpacing}
                   bgStyle={widget.config?.bgStyle}
+                  onUpdateConfig={(updates) => {
+                    if (onUpdateWidget) {
+                      onUpdateWidget(widget.id, {
+                        config: { ...widget.config, ...updates },
+                      });
+                    }
+                  }}
+                />
+              ) : widget.type === 'image' ? (
+                <ImageWidget
+                  id={widget.id}
+                  config={widget.config || {}}
                   onUpdateConfig={(updates) => {
                     if (onUpdateWidget) {
                       onUpdateWidget(widget.id, {

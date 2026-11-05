@@ -32,6 +32,8 @@ const WIDGET_PRIORITY: Record<string, number> = {
   rss: 8,
   countdown: 9,
   quotes: 10,
+  image: 6,
+  textbox: 11,
 };
 
 /**

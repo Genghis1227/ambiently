@@ -26,7 +26,17 @@ export type WidgetType =
   | 'rss'
   | 'quotes'
   | 'embed'
-  | 'textbox';
+  | 'textbox'
+  | 'image';
+
+export interface ImageWidgetConfig {
+  url?: string;
+  title?: string;
+  caption?: string;
+  fit?: 'contain' | 'cover' | 'fill';
+  transparentBg?: boolean;
+  linkUrl?: string;
+}
 
 export interface GridDimensions {
   cols: number; // e.g., 12
