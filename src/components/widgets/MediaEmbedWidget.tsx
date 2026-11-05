@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Tv, Volume2, VolumeX, RefreshCw } from 'lucide-react';
+import { Tv, Volume2, VolumeX, RefreshCw, Edit2, Check } from 'lucide-react';
 
 export type EmbedPresetId = 'lofi' | 'fireplace' | 'nasa' | 'radar' | 'custom';
 
@@ -25,7 +25,7 @@ export function normalizeEmbedUrl(rawUrl: string, muted: boolean, savedTime = 0)
   const startParam = savedTime > 10 ? `&start=${savedTime}` : '';
 
   if (!trimmed) {
-    return `https://www.youtube-nocookie.com/embed/rFZHOHl-L8A?autoplay=1&mute=${muted ? 1 : 0}&enablejsapi=1&rel=0`;
+    return '';
   }
 
   // Convert standard youtube.com/watch?v=ID or youtu.be/ID or youtube.com/live/ID
@@ -52,11 +52,20 @@ export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
   const [preset, setPreset] = useState<EmbedPresetId>(initialPreset);
   const [muted, setMuted] = useState<boolean>(initialMuted);
   const [reloadKey, setReloadKey] = useState<number>(0);
+  const [urlDraft, setUrlDraft] = useState<string>(customUrl);
+  const [isEditingCustom, setIsEditingCustom] = useState<boolean>(initialPreset === 'custom' && !customUrl.trim());
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     setPreset(initialPreset);
-  }, [initialPreset]);
+    if (initialPreset === 'custom' && !customUrl.trim()) {
+      setIsEditingCustom(true);
+    }
+  }, [initialPreset, customUrl]);
+
+  useEffect(() => {
+    setUrlDraft(customUrl);
+  }, [customUrl]);
 
   useEffect(() => {
     setMuted(initialMuted);
@@ -64,9 +73,24 @@ export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
 
   const handleSelectPreset = (nextPreset: EmbedPresetId) => {
     setPreset(nextPreset);
+    if (nextPreset === 'custom' && !customUrl.trim()) {
+      setIsEditingCustom(true);
+    } else {
+      setIsEditingCustom(false);
+    }
     if (onUpdateConfig) {
       onUpdateConfig({ preset: nextPreset });
     }
+  };
+
+  const handleSaveCustomUrl = () => {
+    const trimmed = urlDraft.trim();
+    if (!trimmed) return;
+    if (onUpdateConfig) {
+      onUpdateConfig({ preset: 'custom', customUrl: trimmed });
+    }
+    setIsEditingCustom(false);
+    setReloadKey((k) => k + 1);
   };
 
   const handleToggleMute = () => {
@@ -139,6 +163,7 @@ export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
         return `https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=in&metricTemp=%C2%B0F&metricWind=mph&zoom=6&overlay=radar&product=radar&level=surface&lat=${latitude}&lon=${longitude}`;
       case 'custom':
       default: {
+        if (!customUrl.trim()) return '';
         const savedTime = getSavedVideoTime(customUrl);
         return normalizeEmbedUrl(customUrl, muted, savedTime);
       }
@@ -172,6 +197,19 @@ export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
         </div>
 
         <div className="flex items-center gap-1 shrink-0 pr-16">
+          {preset === 'custom' && customUrl.trim() && !isEditingCustom && (
+            <button
+              type="button"
+              onClick={() => {
+                setUrlDraft(customUrl);
+                setIsEditingCustom(true);
+              }}
+              title="Edit custom stream URL"
+              className="p-1 rounded-lg bg-gray-800/70 hover:bg-gray-700 text-gray-400 hover:text-white transition-all cursor-pointer"
+            >
+              <Edit2 className="w-3.5 h-3.5" />
+            </button>
+          )}
           {preset !== 'radar' && (
             <button
               type="button"
@@ -197,17 +235,68 @@ export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
         </div>
       </div>
 
-      {/* Embedded Frame */}
+      {/* Embedded Frame or Custom URL Configuration Prompt */}
       <div className="relative flex-1 w-full h-full rounded-xl overflow-hidden bg-black border border-gray-800/80">
-        <iframe
-          ref={iframeRef}
-          key={`${preset}-${reloadKey}-${customUrl}`}
-          src={iframeSrc}
-          title="Ambient Stream Embed"
-          className="w-full h-full border-0"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-          referrerPolicy="strict-origin-when-cross-origin"
-        />
+        {preset === 'custom' && (!customUrl.trim() || isEditingCustom) ? (
+          <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-gradient-to-br from-gray-950 via-gray-900 to-black text-center select-text">
+            <div className="w-12 h-12 rounded-2xl bg-pink-500/15 border border-pink-500/30 flex items-center justify-center mb-3 shadow-lg shadow-pink-500/10">
+              <Tv className="w-6 h-6 text-pink-400" />
+            </div>
+            <h3 className="text-sm font-bold text-white mb-1">Custom Stream or Web Embed</h3>
+            <p className="text-xs text-gray-400 max-w-sm mb-4 leading-relaxed">
+              Paste any YouTube video or live broadcast link, or enter a web embed URL:
+            </p>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSaveCustomUrl();
+              }}
+              className="w-full max-w-sm space-y-2.5"
+            >
+              <input
+                type="url"
+                value={urlDraft}
+                onChange={(e) => setUrlDraft(e.target.value)}
+                placeholder="https://www.youtube.com/watch?v=... or https://..."
+                autoFocus
+                className="w-full px-3 py-2 rounded-xl bg-gray-900/90 border border-gray-700 focus:border-pink-500 text-xs text-white placeholder-gray-500 focus:outline-none transition-colors select-text"
+              />
+              <div className="flex items-center justify-center gap-2">
+                {customUrl.trim() && (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingCustom(false)}
+                    className="px-3.5 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-semibold text-gray-300 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  disabled={!urlDraft.trim()}
+                  className="px-4 py-1.5 rounded-xl bg-pink-600 hover:bg-pink-500 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold text-white shadow-lg shadow-pink-500/25 transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Set Custom Stream</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        ) : iframeSrc ? (
+          <iframe
+            ref={iframeRef}
+            key={`${preset}-${reloadKey}-${customUrl}`}
+            src={iframeSrc}
+            title="Ambient Stream Embed"
+            className="w-full h-full border-0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+            referrerPolicy="strict-origin-when-cross-origin"
+          />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center text-gray-500 text-xs">
+            <span>No stream URL configured.</span>
+          </div>
+        )}
       </div>
     </div>
   );
