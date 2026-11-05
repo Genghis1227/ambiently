@@ -29,6 +29,7 @@ import {
   ImageIcon,
   FolderOpen,
   Sliders,
+  MousePointer,
 } from 'lucide-react';
 import { db } from '../../services/db';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -863,6 +864,53 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                     }`}
                   />
                 </button>
+              </div>
+
+              {/* Auto-Hide Inactive Cursor Toggle (Kiosk Mode) */}
+              <div className="space-y-2 pt-2 border-t border-gray-800/60">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <MousePointer className="w-3.5 h-3.5 text-cyan-400" />
+                    <div>
+                      <span className="text-xs text-gray-300 block">Auto-Hide Mouse Cursor (Kiosk Mode)</span>
+                      <span className="text-[10px] text-gray-500">Hides cursor when idle (1.2s in Night Mode)</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => updateSettings({ autoHideCursor: settings.autoHideCursor === false })}
+                    className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                      settings.autoHideCursor !== false ? 'bg-emerald-600' : 'bg-gray-700'
+                    }`}
+                  >
+                    <div
+                      className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                        settings.autoHideCursor !== false ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {settings.autoHideCursor !== false && (
+                  <div className="flex items-center justify-between pl-5">
+                    <span className="text-[11px] text-gray-400">Idle timeout:</span>
+                    <div className="flex gap-1.5">
+                      {[2, 3, 5, 10].map((sec) => (
+                        <button
+                          key={sec}
+                          type="button"
+                          onClick={() => updateSettings({ cursorIdleTimeoutSec: sec })}
+                          className={`px-2 py-0.5 rounded text-[10px] font-mono transition-all cursor-pointer ${
+                            (settings.cursorIdleTimeoutSec || 3) === sec
+                              ? 'bg-cyan-600/30 border border-cyan-500 text-cyan-300 font-bold'
+                              : 'bg-gray-800/80 text-gray-400 hover:text-white border border-transparent'
+                          }`}
+                        >
+                          {sec}s
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Night Mode Style Selector */}

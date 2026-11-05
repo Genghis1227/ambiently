@@ -44,6 +44,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   nightDimOpacity: 0.85,
   snapToGrid: false,
   isDockHidden: false,
+  autoHideCursor: true,
+  cursorIdleTimeoutSec: 3,
   commonPhotos: [],
   commonPhotoSourceLabel: undefined,
   commonPhotoSourceUrl: undefined,

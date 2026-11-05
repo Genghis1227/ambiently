@@ -121,6 +121,8 @@ export interface AppSettings {
   // Canvas & Dock Options
   snapToGrid?: boolean;
   isDockHidden?: boolean;
+  autoHideCursor?: boolean;
+  cursorIdleTimeoutSec?: number;
 
   // Common Photo Library (shared across photo widgets)
   commonPhotos?: PhotoItem[];

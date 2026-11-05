@@ -49,3 +49,10 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(148, 163, 184, 0.7);
 }
+
+/* Ambient Kiosk & Night Mode Idle Cursor Auto-Hide */
+.idle-cursor-hidden,
+.idle-cursor-hidden * {
+  cursor: none !important;
+}
+

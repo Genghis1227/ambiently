@@ -11,6 +11,7 @@ import { AddWidgetModal } from './components/widgets/AddWidgetModal';
 import { CreateCanvasModal } from './components/dock/CreateCanvasModal';
 import { openLocalFileBinding } from './services/fileSync';
 import { subscribeToRealtimeBoard, joinBoardByCode } from './services/supabase';
+import { useIdleCursor } from './hooks/useIdleCursor';
 
 export function App() {
   const {
@@ -86,6 +87,14 @@ export function App() {
   useEffect(() => {
     initStore();
   }, [initStore]);
+
+  // Ambient Kiosk & Night Mode Idle Cursor Auto-Hide
+  useIdleCursor({
+    enabled: settings.autoHideCursor !== false,
+    timeoutMs: (settings.cursorIdleTimeoutSec || 3) * 1000,
+    nightModeTimeoutMs: 1200,
+    isNightMode: settings.nightModeEnabled,
+  });
 
   useEffect(() => {
     const handleResize = () => {
