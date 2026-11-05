@@ -20,8 +20,10 @@ export const EMBED_PRESETS: { id: EmbedPresetId; label: string; description: str
   { id: 'custom', label: 'Custom URL', description: 'YouTube or Web Dashboard' },
 ];
 
-export function normalizeEmbedUrl(rawUrl: string, muted: boolean): string {
+export function normalizeEmbedUrl(rawUrl: string, muted: boolean, savedTime = 0): string {
   const trimmed = rawUrl.trim();
+  const startParam = savedTime > 10 ? `&start=${savedTime}` : '';
+
   if (!trimmed) {
     return `https://www.youtube-nocookie.com/embed/rFZHOHl-L8A?autoplay=1&mute=${muted ? 1 : 0}&enablejsapi=1&rel=0`;
   }
@@ -33,7 +35,7 @@ export function normalizeEmbedUrl(rawUrl: string, muted: boolean): string {
 
   if (ytMatch && ytMatch[1]) {
     const videoId = ytMatch[1];
-    return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=${muted ? 1 : 0}&enablejsapi=1&rel=0`;
+    return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=${muted ? 1 : 0}${startParam}&enablejsapi=1&rel=0`;
   }
 
   return trimmed;
@@ -88,20 +90,34 @@ export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
     }
   };
 
-  const handleIframeLoad = () => {
-    // For live broadcasts (Lofi Girl, NASA Earth), seek past buffer to clamp to the true live edge
-    if (iframeRef.current?.contentWindow && (preset === 'lofi' || preset === 'nasa')) {
+  // Listen for YouTube player time updates to resume recorded videos across tab switches
+  useEffect(() => {
+    const handleWindowMessage = (e: MessageEvent) => {
       try {
-        // Give YouTube player 800ms to initialize its internal player state before seeking to live head
-        setTimeout(() => {
-          iframeRef.current?.contentWindow?.postMessage(
-            JSON.stringify({ event: 'command', func: 'seekTo', args: [9999999, true] }),
-            '*'
-          );
-        }, 800);
+        if (typeof e.data !== 'string') return;
+        const parsed = JSON.parse(e.data);
+        if (parsed.event === 'infoDelivery' && parsed.info?.currentTime) {
+          const t = Math.floor(parsed.info.currentTime);
+          // Only track resume position for recorded/non-live videos
+          if (t > 5 && preset !== 'lofi' && preset !== 'nasa') {
+            const storageKey = preset === 'custom' ? `ambiently_pos_${customUrl}` : `ambiently_pos_${preset}`;
+            sessionStorage.setItem(storageKey, String(t));
+          }
+        }
       } catch {
-        // ignore
+        // non-JSON message
       }
+    };
+    window.addEventListener('message', handleWindowMessage);
+    return () => window.removeEventListener('message', handleWindowMessage);
+  }, [preset, customUrl]);
+
+  const getSavedVideoTime = (key: string): number => {
+    try {
+      const saved = sessionStorage.getItem(`ambiently_pos_${key}`);
+      return saved ? parseInt(saved, 10) : 0;
+    } catch {
+      return 0;
     }
   };
 
@@ -109,16 +125,23 @@ export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
     const m = muted ? 1 : 0;
     switch (preset) {
       case 'lofi':
+        // Pure live broadcast: let YouTube stay completely live
         return `https://www.youtube-nocookie.com/embed/rFZHOHl-L8A?autoplay=1&mute=${m}&enablejsapi=1&rel=0`;
-      case 'fireplace':
-        return `https://www.youtube-nocookie.com/embed/L_LUpnjgPso?autoplay=1&mute=${m}&loop=1&playlist=L_LUpnjgPso&enablejsapi=1&rel=0`;
+      case 'fireplace': {
+        const savedTime = getSavedVideoTime('fireplace');
+        const startParam = savedTime > 10 ? `&start=${savedTime}` : '';
+        return `https://www.youtube-nocookie.com/embed/L_LUpnjgPso?autoplay=1&mute=${m}&loop=1&playlist=L_LUpnjgPso${startParam}&enablejsapi=1&rel=0`;
+      }
       case 'nasa':
+        // Pure live broadcast: let YouTube stay completely live
         return `https://www.youtube-nocookie.com/embed/ROboUHfPUrU?autoplay=1&mute=${m}&enablejsapi=1&rel=0`;
       case 'radar':
         return `https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=in&metricTemp=%C2%B0F&metricWind=mph&zoom=6&overlay=radar&product=radar&level=surface&lat=${latitude}&lon=${longitude}`;
       case 'custom':
-      default:
-        return normalizeEmbedUrl(customUrl, muted);
+      default: {
+        const savedTime = getSavedVideoTime(customUrl);
+        return normalizeEmbedUrl(customUrl, muted, savedTime);
+      }
     }
   };
 
@@ -180,7 +203,6 @@ export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
           ref={iframeRef}
           key={`${preset}-${reloadKey}-${customUrl}`}
           src={iframeSrc}
-          onLoad={handleIframeLoad}
           title="Ambient Stream Embed"
           className="w-full h-full border-0"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
