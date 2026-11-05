@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.23] - 2026-11-05
+
+### Added
+* **Sticky Note Toolbar Plus Badge (`NavigationDock.tsx`):**
+  * Added a prominent amber badge with a `+` icon (`Plus` stroke `3`) to the **New Sticky Note** button in the navigation toolbar.
+  * Harmonized micro-interactions (`group-hover:scale-105`) and styling to mirror the adjacent Add Widget Tile button.
+
+---
+
 ## [0.1.22] - 2026-11-05
 
 ### Added
