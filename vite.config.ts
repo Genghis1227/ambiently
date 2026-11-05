@@ -366,6 +366,112 @@ export default defineConfig({
             }
             return;
           }
+
+          if (req.url && (req.url.startsWith('/api/rss') || req.url.startsWith('/functions/api/rss'))) {
+            const parsed = new URL(req.url, 'http://localhost');
+            const feedUrl = parsed.searchParams.get('url');
+
+            if (!feedUrl) {
+              res.statusCode = 400;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: 'Missing "url" query parameter' }));
+              return;
+            }
+
+            try {
+              const fetchRes = await fetch(feedUrl, {
+                headers: {
+                  'User-Agent': 'Ambiently-Display/1.0 (+https://dashboard.trinhism.com)',
+                  Accept: 'application/rss+xml, application/xml, text/xml, */*',
+                },
+              });
+
+              if (!fetchRes.ok) {
+                res.statusCode = fetchRes.status;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ error: `Failed to fetch RSS feed: ${fetchRes.statusText}` }));
+                return;
+              }
+
+              const xmlText = await fetchRes.text();
+              const { XMLParser } = await import('fast-xml-parser');
+              const parser = new XMLParser({
+                ignoreAttributes: false,
+                attributeNamePrefix: '@_',
+              });
+              const parsedXml = parser.parse(xmlText);
+
+              const decodeHtmlEntities = (str: string) => {
+                if (!str) return '';
+                return str
+                  .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(Number(dec)))
+                  .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+                  .replace(/&quot;/g, '"')
+                  .replace(/&apos;/g, "'")
+                  .replace(/&amp;/g, '&')
+                  .replace(/&lt;/g, '<')
+                  .replace(/&gt;/g, '>')
+                  .replace(/&nbsp;/g, ' ')
+                  .replace(/&copy;/g, '©')
+                  .replace(/&reg;/g, '®')
+                  .replace(/&mdash;/g, '—')
+                  .replace(/&ndash;/g, '–')
+                  .replace(/&hellip;/g, '…')
+                  .replace(/&bull;/g, '•')
+                  .trim();
+              };
+
+              let rawItems: any[] = [];
+              let feedTitle = 'RSS Feed';
+
+              if (parsedXml.rss && parsedXml.rss.channel) {
+                feedTitle = decodeHtmlEntities(parsedXml.rss.channel.title || feedTitle);
+                rawItems = Array.isArray(parsedXml.rss.channel.item)
+                  ? parsedXml.rss.channel.item
+                  : parsedXml.rss.channel.item
+                  ? [parsedXml.rss.channel.item]
+                  : [];
+              } else if (parsedXml.feed && parsedXml.feed.entry) {
+                feedTitle = decodeHtmlEntities(parsedXml.feed.title || feedTitle);
+                rawItems = Array.isArray(parsedXml.feed.entry)
+                  ? parsedXml.feed.entry
+                  : [parsedXml.feed.entry];
+              }
+
+              const items = rawItems.slice(0, 25).map((item: any, idx: number) => {
+                const title = decodeHtmlEntities(
+                  typeof item.title === 'string' ? item.title : item.title?.['#text'] || 'Untitled'
+                );
+                const link = typeof item.link === 'string' ? item.link : item.link?.['@_href'] || '';
+                const pubDate = item.pubDate || item.published || item.updated || new Date().toISOString();
+                const rawDesc =
+                  typeof item.description === 'string'
+                    ? item.description.replace(/<[^>]*>?/gm, '').slice(0, 200)
+                    : typeof item.summary === 'string'
+                    ? item.summary.replace(/<[^>]*>?/gm, '').slice(0, 200)
+                    : '';
+                const description = decodeHtmlEntities(rawDesc);
+
+                return {
+                  id: item.guid?.['#text'] || item.id || `item-${idx}`,
+                  title,
+                  link,
+                  pubDate,
+                  description,
+                };
+              });
+
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/json');
+              res.setHeader('Access-Control-Allow-Origin', '*');
+              res.end(JSON.stringify({ title: feedTitle, items }));
+            } catch (err: any) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: err.message }));
+            }
+            return;
+          }
           next();
         });
       },

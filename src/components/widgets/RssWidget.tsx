@@ -7,10 +7,30 @@ interface RssWidgetProps {
   displayMode?: 'ticker' | 'list';
 }
 
+function decodeHtmlEntities(str: string): string {
+  if (!str) return '';
+  return str
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(Number(dec)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&copy;/g, '©')
+    .replace(/&reg;/g, '®')
+    .replace(/&mdash;/g, '—')
+    .replace(/&ndash;/g, '–')
+    .replace(/&hellip;/g, '…')
+    .replace(/&bull;/g, '•')
+    .trim();
+}
+
 export const RssWidget: React.FC<RssWidgetProps> = ({
-  feedUrl = 'https://news.ycombinator.com/rss',
+  feedUrl = 'https://tony.trinhism.com/index.xml',
 }) => {
-  const [feedTitle, setFeedTitle] = useState('News Feed');
+  const [feedTitle, setFeedTitle] = useState("Tony's Tipbits");
   const [articles, setArticles] = useState<RssArticle[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -18,8 +38,14 @@ export const RssWidget: React.FC<RssWidgetProps> = ({
     setLoading(true);
     try {
       const data = await fetchRssFeed(feedUrl);
-      if (data.title) setFeedTitle(data.title);
-      setArticles(data.items || []);
+      if (data.title) setFeedTitle(decodeHtmlEntities(data.title));
+      setArticles(
+        (data.items || []).map((item) => ({
+          ...item,
+          title: decodeHtmlEntities(item.title),
+          description: decodeHtmlEntities(item.description),
+        }))
+      );
     } catch (err) {
       console.warn('RSS load error:', err);
     } finally {
@@ -29,6 +55,8 @@ export const RssWidget: React.FC<RssWidgetProps> = ({
 
   useEffect(() => {
     loadFeed();
+    const interval = setInterval(loadFeed, 15 * 60 * 1000);
+    return () => clearInterval(interval);
   }, [feedUrl]);
 
   return (
@@ -44,7 +72,8 @@ export const RssWidget: React.FC<RssWidgetProps> = ({
         <button
           onClick={loadFeed}
           disabled={loading}
-          className="p-1 rounded text-gray-400 hover:text-white hover:bg-gray-800 shrink-0"
+          title="Refresh RSS feed"
+          className="p-1 rounded text-gray-400 hover:text-white hover:bg-gray-800 shrink-0 transition-colors cursor-pointer"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
         </button>
@@ -72,7 +101,7 @@ export const RssWidget: React.FC<RssWidgetProps> = ({
                 <ExternalLink className="w-3 h-3 text-gray-600 group-hover:text-orange-400 shrink-0 mt-0.5" />
               </div>
               {item.description && (
-                <p className="text-[11px] text-gray-500 line-clamp-2 mt-1">
+                <p className="text-[11px] text-gray-400 line-clamp-2 mt-1 leading-relaxed">
                   {item.description}
                 </p>
               )}

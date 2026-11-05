@@ -206,7 +206,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       );
       setWorldCitySearch('');
     } else if (widget.type === 'rss') {
-      setRssFeedUrl(widget.config?.feedUrl || 'https://news.ycombinator.com/rss');
+      setRssFeedUrl(widget.config?.feedUrl || 'https://tony.trinhism.com/index.xml');
     } else if (widget.type === 'calendar') {
       setCalendarDefaultView(widget.config?.defaultView || 'agenda');
       setCalendarSources(
@@ -1633,7 +1633,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                   type="url"
                   value={rssFeedUrl}
                   onChange={(e) => setRssFeedUrl(e.target.value)}
-                  placeholder="https://news.ycombinator.com/rss"
+                  placeholder="https://tony.trinhism.com/index.xml"
                   className="w-full rounded-xl bg-gray-950 border border-gray-800 p-2.5 text-xs text-white focus:outline-none focus:border-blue-500"
                 />
               </div>

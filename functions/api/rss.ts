@@ -7,6 +7,26 @@ interface PagesContext {
   request: Request;
 }
 
+function decodeHtmlEntities(str: string): string {
+  if (!str) return '';
+  return str
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(Number(dec)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&copy;/g, '©')
+    .replace(/&reg;/g, '®')
+    .replace(/&mdash;/g, '—')
+    .replace(/&ndash;/g, '–')
+    .replace(/&hellip;/g, '…')
+    .replace(/&bull;/g, '•')
+    .trim();
+}
+
 export async function onRequestGet(context: PagesContext): Promise<Response> {
   const url = new URL(context.request.url);
   const feedUrl = url.searchParams.get('url');
@@ -45,24 +65,29 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     let feedTitle = 'RSS Feed';
 
     if (parsed.rss && parsed.rss.channel) {
-      feedTitle = parsed.rss.channel.title || feedTitle;
+      feedTitle = decodeHtmlEntities(parsed.rss.channel.title || feedTitle);
       rawItems = Array.isArray(parsed.rss.channel.item)
         ? parsed.rss.channel.item
         : parsed.rss.channel.item
         ? [parsed.rss.channel.item]
         : [];
     } else if (parsed.feed && parsed.feed.entry) {
-      feedTitle = parsed.feed.title || feedTitle;
+      feedTitle = decodeHtmlEntities(parsed.feed.title || feedTitle);
       rawItems = Array.isArray(parsed.feed.entry)
         ? parsed.feed.entry
         : [parsed.feed.entry];
     }
 
-    const items = rawItems.slice(0, 20).map((item: any, idx: number) => {
-      const title = item.title || 'Untitled';
+    const items = rawItems.slice(0, 25).map((item: any, idx: number) => {
+      const title = decodeHtmlEntities(typeof item.title === 'string' ? item.title : item.title?.['#text'] || 'Untitled');
       const link = typeof item.link === 'string' ? item.link : item.link?.['@_href'] || '';
       const pubDate = item.pubDate || item.published || item.updated || new Date().toISOString();
-      const description = typeof item.description === 'string' ? item.description.replace(/<[^>]*>?/gm, '').slice(0, 160) : '';
+      const rawDesc = typeof item.description === 'string'
+        ? item.description.replace(/<[^>]*>?/gm, '').slice(0, 200)
+        : typeof item.summary === 'string'
+        ? item.summary.replace(/<[^>]*>?/gm, '').slice(0, 200)
+        : '';
+      const description = decodeHtmlEntities(rawDesc);
 
       return {
         id: item.guid?.['#text'] || item.id || `item-${idx}`,
