@@ -25,6 +25,7 @@ interface TextBoxWidgetProps {
   letterSpacing?: TextBoxConfig['letterSpacing'];
   bgStyle?: TextBoxConfig['bgStyle'];
   onUpdateConfig?: (updates: Partial<TextBoxConfig>) => void;
+  isLight?: boolean;
 }
 
 export const FONT_SIZE_MAP: Record<NonNullable<TextBoxConfig['fontSize']>, string> = {
@@ -119,6 +120,7 @@ export const TextBoxWidget: React.FC<TextBoxWidgetProps> = ({
   letterSpacing = 'normal',
   bgStyle = 'transparent',
   onUpdateConfig,
+  isLight = false,
 }) => {
   const [isInlineEditing, setIsInlineEditing] = useState(false);
   const [editingText, setEditingText] = useState(content);
@@ -157,6 +159,9 @@ export const TextBoxWidget: React.FC<TextBoxWidgetProps> = ({
   const familyClass = FONT_FAMILY_MAP[fontFamily] || 'font-sans';
   const spacingClass = LETTER_SPACING_MAP[letterSpacing] || 'tracking-normal';
 
+  const effectiveColor = isLight && (!textColor || textColor.toLowerCase() === '#ffffff') ? '#0f172a' : textColor;
+  const effectiveShadow = isLight && effectiveColor === '#0f172a' ? false : textShadow;
+
   const transformStyle =
     textTransform !== 'none' ? ({ textTransform } as React.CSSProperties) : {};
 
@@ -170,9 +175,13 @@ export const TextBoxWidget: React.FC<TextBoxWidgetProps> = ({
       }}
       className={`w-full h-full flex flex-col justify-center ${alignClass} select-none transition-all p-2 ${
         bgStyle === 'glass'
-          ? 'rounded-2xl bg-gray-950/40 backdrop-blur-md border border-white/10'
+          ? isLight
+            ? 'rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200 shadow-sm'
+            : 'rounded-2xl bg-gray-950/40 backdrop-blur-md border border-white/10'
           : bgStyle === 'solid'
-          ? 'rounded-2xl bg-gray-900/90 border border-gray-800'
+          ? isLight
+            ? 'rounded-2xl bg-white border border-slate-200 shadow-sm'
+            : 'rounded-2xl bg-gray-900/90 border border-gray-800'
           : 'bg-transparent'
       }`}
     >
@@ -188,7 +197,11 @@ export const TextBoxWidget: React.FC<TextBoxWidgetProps> = ({
             onChange={(e) => setEditingText(e.target.value)}
             onBlur={handleSaveInline}
             onKeyDown={handleKeyDown}
-            className={`w-full h-full resize-none bg-black/60 text-white rounded-xl p-3 border border-blue-500/80 focus:outline-none focus:ring-2 focus:ring-blue-500 font-sans ${sizeClass}`}
+            className={`w-full h-full resize-none rounded-xl p-3 border focus:outline-none focus:ring-2 focus:ring-blue-500 font-sans ${sizeClass} ${
+              isLight
+                ? 'bg-white text-slate-900 border-blue-400'
+                : 'bg-black/60 text-white border-blue-500/80'
+            }`}
             placeholder="Type your message, heading, or notes..."
           />
           <div className="flex items-center justify-between mt-1 px-1 text-[10px] text-gray-400">
@@ -205,8 +218,8 @@ export const TextBoxWidget: React.FC<TextBoxWidgetProps> = ({
         <div
           className={`w-full flex flex-col justify-center ${alignClass} ${familyClass} ${sizeClass} ${weightClass} ${spacingClass} leading-snug break-words`}
           style={{
-            color: textColor,
-            ...(textShadow
+            color: effectiveColor,
+            ...(effectiveShadow
               ? {
                   textShadow:
                     '0 2px 8px rgba(0,0,0,0.85), 0 1px 2px rgba(0,0,0,0.95), 0 0 1px rgba(0,0,0,0.95)',

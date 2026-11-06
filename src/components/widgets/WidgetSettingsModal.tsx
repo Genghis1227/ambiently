@@ -19,14 +19,20 @@ import {
   HelpCircle,
   AlertTriangle,
   ExternalLink,
+  Sun,
+  Moon,
+  GripVertical,
+  ChevronUp,
+  ChevronDown,
+  ArrowUpDown,
 } from 'lucide-react';
 import { useDashboardStore } from '../../store/dashboardStore';
-import type { DashboardWidget } from '../../types/dashboard';
+import type { DashboardWidget, WidgetThemeMode } from '../../types/dashboard';
 import { type CalendarSource, normalizeCalendarUrl } from '../../services/feeds';
 import { CalendarUrlGuideModal } from '../calendar/CalendarUrlGuideModal';
 import type { QuoteItem } from '../../services/quotes';
 import { EMBED_PRESETS, type EmbedPresetId } from './MediaEmbedWidget';
-import { DEFAULT_WORLD_CITIES, type WorldClockCity } from './WorldClockWidget';
+import { DEFAULT_WORLD_CITIES, type WorldClockCity, getZoneOffsetMinutes } from './WorldClockWidget';
 import type { TextBoxConfig } from './TextBoxWidget';
 import { CURATED_RSS_FEEDS } from '../../data/curatedFeeds';
 import { MediaSearchModal } from './MediaSearchModal';
@@ -79,6 +85,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const settings = useDashboardStore((state) => state.settings);
   const applyCommonPhotosToAllWidgets = useDashboardStore((state) => state.applyCommonPhotosToAllWidgets);
   const [title, setTitle] = useState('');
+  const [themeMode, setThemeMode] = useState<WidgetThemeMode>('auto');
 
   // Countdown states
   const [countdownDate, setCountdownDate] = useState('');
@@ -110,6 +117,8 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const [clockAlign, setClockAlign] = useState<'center' | 'left'>('center');
   const [worldCities, setWorldCities] = useState<WorldClockCity[]>(DEFAULT_WORLD_CITIES);
   const [worldCitySearch, setWorldCitySearch] = useState('');
+  const [cityDragIndex, setCityDragIndex] = useState<number | null>(null);
+  const [cityDragOverIndex, setCityDragOverIndex] = useState<number | null>(null);
 
   // RSS states
   const [rssFeedUrl, setRssFeedUrl] = useState('');
@@ -160,6 +169,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     if (!widget) return;
 
     setTitle(widget.title || '');
+    setThemeMode((widget.config?.themeMode as WidgetThemeMode) || 'auto');
     setGeoStatus('');
     setGeoHits([]);
 
@@ -347,8 +357,50 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     setCustomQuotes(customQuotes.filter((q) => q.id !== id));
   };
 
+  const handleReorderCity = (fromIdx: number, toIdx: number) => {
+    if (
+      fromIdx === toIdx ||
+      fromIdx < 0 ||
+      toIdx < 0 ||
+      fromIdx >= worldCities.length ||
+      toIdx >= worldCities.length
+    )
+      return;
+    const next = [...worldCities];
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    setWorldCities(next);
+  };
+
+  const handleMoveCity = (idx: number, direction: 'up' | 'down') => {
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    handleReorderCity(idx, targetIdx);
+  };
+
+  const handleSortCitiesByOffset = () => {
+    const now = new Date();
+    const sorted = [...worldCities].sort((a, b) => {
+      const offA = getZoneOffsetMinutes(now, a.timezone);
+      const offB = getZoneOffsetMinutes(now, b.timezone);
+      return offA - offB;
+    });
+    setWorldCities(sorted);
+  };
+
+  const handleSortCitiesByName = () => {
+    const sorted = [...worldCities].sort((a, b) => a.cityName.localeCompare(b.cityName));
+    setWorldCities(sorted);
+  };
+
+  const handleReverseCities = () => {
+    setWorldCities([...worldCities].reverse());
+  };
+
   const handleSave = () => {
-    const configUpdates: Record<string, any> = { ...widget.config };
+    const configUpdates: Record<string, any> = {
+      ...widget.config,
+      themeMode,
+    };
 
     if (widget.type === 'countdown') {
       const dtString = `${countdownDate || '2026-12-25'}T${countdownTime || '00:00'}:00`;
@@ -470,6 +522,59 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
               placeholder="e.g., Vacation Countdown, Family Photos..."
               className="w-full rounded-xl bg-gray-950 border border-gray-800 p-2.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
             />
+          </div>
+
+          {/* Tile Appearance & Color Theme */}
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
+              Card Appearance & Theme
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setThemeMode('auto')}
+                className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                  themeMode === 'auto'
+                    ? 'bg-blue-600/20 border-blue-500 text-white font-semibold shadow'
+                    : 'bg-gray-950/60 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'
+                }`}
+              >
+                <span className="text-xs font-semibold">Auto</span>
+                <span className="text-[10px] text-gray-400 mt-0.5">Inherits canvas</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setThemeMode('light')}
+                className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                  themeMode === 'light'
+                    ? 'bg-amber-500/20 border-amber-400 text-amber-200 font-semibold shadow'
+                    : 'bg-gray-950/60 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'
+                }`}
+              >
+                <div className="flex items-center gap-1">
+                  <Sun className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="text-xs font-semibold">Light</span>
+                </div>
+                <span className="text-[10px] text-gray-400 mt-0.5">Daylight card</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setThemeMode('dark')}
+                className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                  themeMode === 'dark'
+                    ? 'bg-indigo-600/20 border-indigo-500 text-indigo-200 font-semibold shadow'
+                    : 'bg-gray-950/60 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'
+                }`}
+              >
+                <div className="flex items-center gap-1">
+                  <Moon className="w-3.5 h-3.5 text-indigo-400" />
+                  <span className="text-xs font-semibold">Dark</span>
+                </div>
+                <span className="text-[10px] text-gray-400 mt-0.5">Night slate card</span>
+              </button>
+            </div>
           </div>
 
           {/* Countdown Settings */}
@@ -1420,40 +1525,159 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                     )}
                   </div>
 
-                  {/* Active Cities List */}
-                  <div className="space-y-1.5">
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 block">
-                      Active Timezone Cities ({worldCities.length}) —{' '}
-                      {worldCities.length === 1 ? 'Single Hero Clock' : 'Multi-City List'}
-                    </span>
-                    {worldCities.map((c) => (
-                      <div
-                        key={c.id}
-                        className="flex items-center justify-between p-2.5 rounded-xl bg-gray-950 border border-gray-800 text-xs"
-                      >
-                        <div>
-                          <span className="font-bold text-white">
-                            {c.cityName}
-                            {c.country ? `, ${c.country}` : ''}
-                          </span>
-                          <span className="text-[10px] font-mono text-cyan-400 ml-2">
-                            {c.timezone}
-                          </span>
-                        </div>
-                        {worldCities.length > 1 && (
+                  {/* Active Cities List with Sorter */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between flex-wrap gap-1">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 block">
+                        Active Timezone Cities ({worldCities.length}) —{' '}
+                        {worldCities.length === 1 ? 'Single Hero Clock' : 'Multi-City List'}
+                      </span>
+                      {worldCities.length > 1 && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-gray-500 font-medium mr-0.5">Quick Sort:</span>
                           <button
                             type="button"
-                            onClick={() =>
-                              setWorldCities(worldCities.filter((item) => item.id !== c.id))
-                            }
-                            className="p-1 text-gray-500 hover:text-red-400 cursor-pointer"
-                            title="Remove city"
+                            onClick={handleSortCitiesByOffset}
+                            title="Sort cities by timezone offset (West to East)"
+                            className="px-2 py-0.5 rounded-md bg-gray-950 hover:bg-gray-800 border border-gray-800 text-gray-300 hover:text-white text-[10px] font-medium transition-colors cursor-pointer flex items-center gap-1"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <ArrowUpDown className="w-2.5 h-2.5 text-cyan-400" />
+                            <span>By Time</span>
                           </button>
-                        )}
-                      </div>
-                    ))}
+                          <button
+                            type="button"
+                            onClick={handleSortCitiesByName}
+                            title="Sort cities alphabetically (A to Z)"
+                            className="px-2 py-0.5 rounded-md bg-gray-950 hover:bg-gray-800 border border-gray-800 text-gray-300 hover:text-white text-[10px] font-medium transition-colors cursor-pointer"
+                          >
+                            A-Z
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleReverseCities}
+                            title="Reverse current city order"
+                            className="px-2 py-0.5 rounded-md bg-gray-950 hover:bg-gray-800 border border-gray-800 text-gray-300 hover:text-white text-[10px] font-medium transition-colors cursor-pointer"
+                          >
+                            Reverse
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {worldCities.length > 1 && (
+                      <p className="text-[10px] text-gray-500 leading-tight">
+                        💡 Grab the handle to drag & drop cities into your preferred order, or use the ▲ / ▼ arrows.
+                      </p>
+                    )}
+
+                    <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                      {worldCities.map((c, idx) => {
+                        const isDragging = cityDragIndex === idx;
+                        const isDragOver = cityDragOverIndex === idx && cityDragIndex !== idx;
+                        const isFirst = idx === 0;
+                        const isLast = idx === worldCities.length - 1;
+
+                        return (
+                          <div
+                            key={c.id}
+                            draggable={worldCities.length > 1}
+                            onDragStart={(e) => {
+                              if (worldCities.length <= 1) return;
+                              e.dataTransfer.setData('text/plain', String(idx));
+                              e.dataTransfer.effectAllowed = 'move';
+                              setCityDragIndex(idx);
+                            }}
+                            onDragOver={(e) => {
+                              if (worldCities.length <= 1) return;
+                              e.preventDefault();
+                              e.dataTransfer.dropEffect = 'move';
+                              if (cityDragOverIndex !== idx) setCityDragOverIndex(idx);
+                            }}
+                            onDragLeave={() => {
+                              if (cityDragOverIndex === idx) setCityDragOverIndex(null);
+                            }}
+                            onDrop={(e) => {
+                              if (worldCities.length <= 1) return;
+                              e.preventDefault();
+                              if (cityDragIndex !== null) {
+                                handleReorderCity(cityDragIndex, idx);
+                              }
+                              setCityDragIndex(null);
+                              setCityDragOverIndex(null);
+                            }}
+                            onDragEnd={() => {
+                              setCityDragIndex(null);
+                              setCityDragOverIndex(null);
+                            }}
+                            className={`flex items-center justify-between p-2.5 rounded-xl border text-xs transition-all ${
+                              isDragging ? 'opacity-35 scale-[0.98]' : ''
+                            } ${
+                              isDragOver
+                                ? 'border-cyan-400 ring-2 ring-cyan-500/50 bg-cyan-950/40'
+                                : 'bg-gray-950 border-gray-800 hover:border-gray-700'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0 flex-1 pr-2">
+                              {worldCities.length > 1 && (
+                                <div
+                                  className="cursor-grab active:cursor-grabbing p-1 text-gray-500 hover:text-cyan-400 hover:bg-gray-800 rounded touch-none shrink-0"
+                                  title="Grab and drag to sort city"
+                                >
+                                  <GripVertical className="w-3.5 h-3.5" />
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <span className="font-bold text-white block truncate">
+                                  {c.cityName}
+                                  {c.country ? `, ${c.country}` : ''}
+                                </span>
+                                <span className="text-[10px] font-mono text-cyan-400">
+                                  {c.timezone}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1 shrink-0">
+                              {worldCities.length > 1 && (
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={isFirst}
+                                    onClick={() => handleMoveCity(idx, 'up')}
+                                    className="p-1 rounded text-gray-400 hover:text-white hover:bg-gray-800 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                                    title="Move city up"
+                                  >
+                                    <ChevronUp className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={isLast}
+                                    onClick={() => handleMoveCity(idx, 'down')}
+                                    className="p-1 rounded text-gray-400 hover:text-white hover:bg-gray-800 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                                    title="Move city down"
+                                  >
+                                    <ChevronDown className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              )}
+
+                              {worldCities.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setWorldCities(worldCities.filter((item) => item.id !== c.id))
+                                  }
+                                  className="p-1 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors cursor-pointer ml-1"
+                                  title="Remove city"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               )}

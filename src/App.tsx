@@ -13,6 +13,7 @@ import { CreateCanvasModal } from './components/dock/CreateCanvasModal';
 import { openLocalFileBinding } from './services/fileSync';
 import { subscribeToRealtimeBoard, joinBoardByCode } from './services/supabase';
 import { useIdleCursor } from './hooks/useIdleCursor';
+import { isCanvasThemeLight } from './data/canvasThemes';
 
 export function App() {
   const {
@@ -394,6 +395,8 @@ export function App() {
         bottom: 'pb-20',
       }[settings.dockPosition];
 
+  const isCanvasLight = isCanvasThemeLight(activeTab?.backgroundTheme);
+
   return (
     <div
       onPointerDown={() => {
@@ -401,7 +404,9 @@ export function App() {
           pauseCarouselTemporarily(20000);
         }
       }}
-      className="relative w-screen h-screen overflow-hidden bg-[#090d16] select-none"
+      className={`relative w-screen h-screen overflow-hidden ${
+        isCanvasLight ? 'bg-slate-100 text-slate-800' : 'bg-[#090d16] text-white'
+      } select-none`}
     >
       {/* Full native 1:1 Canvas */}
       <div className="w-full h-full">
