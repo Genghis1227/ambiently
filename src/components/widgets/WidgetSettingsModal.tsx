@@ -19,9 +19,11 @@ import {
   HelpCircle,
   AlertTriangle,
   ExternalLink,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { useDashboardStore } from '../../store/dashboardStore';
-import type { DashboardWidget } from '../../types/dashboard';
+import type { DashboardWidget, WidgetThemeMode } from '../../types/dashboard';
 import { type CalendarSource, normalizeCalendarUrl } from '../../services/feeds';
 import { CalendarUrlGuideModal } from '../calendar/CalendarUrlGuideModal';
 import type { QuoteItem } from '../../services/quotes';
@@ -79,6 +81,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const settings = useDashboardStore((state) => state.settings);
   const applyCommonPhotosToAllWidgets = useDashboardStore((state) => state.applyCommonPhotosToAllWidgets);
   const [title, setTitle] = useState('');
+  const [themeMode, setThemeMode] = useState<WidgetThemeMode>('auto');
 
   // Countdown states
   const [countdownDate, setCountdownDate] = useState('');
@@ -160,6 +163,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     if (!widget) return;
 
     setTitle(widget.title || '');
+    setThemeMode((widget.config?.themeMode as WidgetThemeMode) || 'auto');
     setGeoStatus('');
     setGeoHits([]);
 
@@ -348,7 +352,10 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   };
 
   const handleSave = () => {
-    const configUpdates: Record<string, any> = { ...widget.config };
+    const configUpdates: Record<string, any> = {
+      ...widget.config,
+      themeMode,
+    };
 
     if (widget.type === 'countdown') {
       const dtString = `${countdownDate || '2026-12-25'}T${countdownTime || '00:00'}:00`;
@@ -470,6 +477,59 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
               placeholder="e.g., Vacation Countdown, Family Photos..."
               className="w-full rounded-xl bg-gray-950 border border-gray-800 p-2.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
             />
+          </div>
+
+          {/* Tile Appearance & Color Theme */}
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
+              Card Appearance & Theme
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setThemeMode('auto')}
+                className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                  themeMode === 'auto'
+                    ? 'bg-blue-600/20 border-blue-500 text-white font-semibold shadow'
+                    : 'bg-gray-950/60 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'
+                }`}
+              >
+                <span className="text-xs font-semibold">Auto</span>
+                <span className="text-[10px] text-gray-400 mt-0.5">Inherits canvas</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setThemeMode('light')}
+                className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                  themeMode === 'light'
+                    ? 'bg-amber-500/20 border-amber-400 text-amber-200 font-semibold shadow'
+                    : 'bg-gray-950/60 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'
+                }`}
+              >
+                <div className="flex items-center gap-1">
+                  <Sun className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="text-xs font-semibold">Light</span>
+                </div>
+                <span className="text-[10px] text-gray-400 mt-0.5">Daylight card</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setThemeMode('dark')}
+                className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                  themeMode === 'dark'
+                    ? 'bg-indigo-600/20 border-indigo-500 text-indigo-200 font-semibold shadow'
+                    : 'bg-gray-950/60 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'
+                }`}
+              >
+                <div className="flex items-center gap-1">
+                  <Moon className="w-3.5 h-3.5 text-indigo-400" />
+                  <span className="text-xs font-semibold">Dark</span>
+                </div>
+                <span className="text-[10px] text-gray-400 mt-0.5">Night slate card</span>
+              </button>
+            </div>
           </div>
 
           {/* Countdown Settings */}

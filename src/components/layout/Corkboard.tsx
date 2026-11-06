@@ -4,6 +4,7 @@ import type {
   DashboardWidget,
   CanvasBackgroundTheme,
   DashboardTab,
+  WidgetThemeMode,
 } from '../../types/dashboard';
 import {
   CheckSquare,
@@ -26,6 +27,8 @@ import {
   SendToBack,
   ArrowUp,
   ArrowDown,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { ClockWeatherWidget } from '../widgets/ClockWeatherWidget';
 import { ClockWidget } from '../widgets/ClockWidget';
@@ -43,7 +46,7 @@ import { ImageWidget } from '../widgets/ImageWidget';
 import { WidgetSettingsModal } from '../widgets/WidgetSettingsModal';
 import { PhotoSourcesModal } from '../photos/PhotoSourcesModal';
 import { useDashboardStore } from '../../store/dashboardStore';
-import { CANVAS_THEMES } from '../../data/canvasThemes';
+import { CANVAS_THEMES, isCanvasThemeLight } from '../../data/canvasThemes';
 import { findOpenCanvasSpot } from '../../utils/autoLayout';
 
 interface CorkboardProps {
@@ -1068,6 +1071,10 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
       {/* Render Freeform Widgets on Corkboard */}
       {widgets.map((widget) => {
+        const isCanvasLight = isCanvasThemeLight(backgroundTheme);
+        const widgetThemeMode = (widget.config?.themeMode as WidgetThemeMode) || 'auto';
+        const isWidgetLight = widgetThemeMode === 'light' || (widgetThemeMode === 'auto' && isCanvasLight);
+
         const pos = widget.freeformPos || {
           xRatio: 0.1,
           yRatio: 0.1,
@@ -1168,17 +1175,19 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 : isFramelessWidget
                 ? 'rounded-2xl border border-dashed border-transparent hover:border-white/20 p-1'
                 : widget.type === 'image'
-                ? 'rounded-2xl border border-gray-800/90 p-0 overflow-hidden'
-                : 'rounded-2xl border border-gray-800/90 p-4'
+                ? isWidgetLight ? 'rounded-2xl border border-slate-200/90 p-0 overflow-hidden' : 'rounded-2xl border border-gray-800/90 p-0 overflow-hidden'
+                : isWidgetLight ? 'rounded-2xl border border-slate-200/90 p-4' : 'rounded-2xl border border-gray-800/90 p-4'
             } ${
               isFramelessWidget
-                ? 'bg-transparent text-white'
+                ? isWidgetLight ? 'bg-transparent text-slate-800' : 'bg-transparent text-white'
+                : isWidgetLight
+                ? 'bg-white/95 backdrop-blur-md shadow-xl text-slate-800'
                 : 'bg-gray-900/80 backdrop-blur-md shadow-2xl text-white'
             } ${isCanvasLocked ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'} touch-none select-none transition-shadow ${
               isDragging || isRotating
                 ? 'ring-2 ring-blue-500 shadow-blue-500/20'
                 : isFramelessWidget
-                ? 'hover:bg-white/5'
+                ? isWidgetLight ? 'hover:bg-black/5' : 'hover:bg-white/5'
                 : 'hover:shadow-blue-500/10'
             } flex flex-col justify-between`}
           >
@@ -1215,7 +1224,11 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
             {/* Top Right Widget Controls: Reset Rotation (if tilted), Settings, Layer Order, Maximize/Restore & Remove */}
             <div
-              className={`absolute z-30 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-950/90 backdrop-blur-md px-1.5 py-1 rounded-xl border border-gray-700/80 shadow-2xl ${
+              className={`absolute z-30 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-md px-1.5 py-1 rounded-xl shadow-xl ${
+                isWidgetLight
+                  ? 'bg-white/95 border border-slate-300/90 text-slate-700'
+                  : 'bg-gray-950/90 border border-gray-700/80 shadow-2xl text-gray-300'
+              } ${
                 isFullScreen
                   ? 'top-3 right-3'
                   : isNearTopEdge
@@ -1232,7 +1245,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
                   title="Reset rotation to 0°"
-                  className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-500/20 text-blue-300 hover:bg-blue-600 hover:text-white transition-all cursor-pointer"
+                  className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-500/20 text-blue-400 hover:bg-blue-600 hover:text-white transition-all cursor-pointer"
                 >
                   {pos.rotation}°
                 </button>
@@ -1246,7 +1259,11 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
                   title="Configure tile title and settings"
-                  className="p-1 rounded-lg hover:bg-gray-800 text-gray-300 hover:text-white transition-all cursor-pointer"
+                  className={`p-1 rounded-lg transition-all cursor-pointer ${
+                    isWidgetLight
+                      ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
+                      : 'hover:bg-gray-800 text-gray-300 hover:text-white'
+                  }`}
                 >
                   <Settings className="w-3.5 h-3.5" />
                 </button>
@@ -1269,8 +1286,12 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                     });
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
-                  title="Layer order (Bring to Front / Send to Back)"
-                  className="p-1 rounded-lg hover:bg-gray-800 text-gray-300 hover:text-white transition-all cursor-pointer"
+                  title="Layer order & appearance"
+                  className={`p-1 rounded-lg transition-all cursor-pointer ${
+                    isWidgetLight
+                      ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
+                      : 'hover:bg-gray-800 text-gray-300 hover:text-white'
+                  }`}
                 >
                   <Layers className="w-3.5 h-3.5" />
                 </button>
@@ -1304,7 +1325,11 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
                   title={isFullScreen ? 'Restore card size' : 'Fill full screen / canvas'}
-                  className="p-1 rounded-lg hover:bg-gray-800 text-gray-300 hover:text-white transition-all cursor-pointer"
+                  className={`p-1 rounded-lg transition-all cursor-pointer ${
+                    isWidgetLight
+                      ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
+                      : 'hover:bg-gray-800 text-gray-300 hover:text-white'
+                  }`}
                 >
                   {isFullScreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
                 </button>
@@ -1331,7 +1356,9 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 data-no-drag="true"
                 onPointerDown={(e) => handleResizePointerDown(e, widget.id, 'widget', pos)}
                 title="Drag to resize tile"
-                className="absolute bottom-1 right-1 p-1.5 cursor-nwse-resize z-20 opacity-40 group-hover:opacity-100 hover:opacity-100 touch-none text-gray-400 hover:text-white transition-opacity"
+                className={`absolute bottom-1 right-1 p-1.5 cursor-nwse-resize z-20 opacity-40 group-hover:opacity-100 hover:opacity-100 touch-none transition-opacity ${
+                  isWidgetLight ? 'text-slate-400 hover:text-slate-800' : 'text-gray-400 hover:text-white'
+                }`}
               >
                 <svg width="12" height="12" viewBox="0 0 12 12" className="fill-current">
                   <circle cx="10" cy="10" r="1.5" />
@@ -1344,6 +1371,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               </div>
             )}
 
+
             {/* Widget Inner Renderers */}
             <div className="w-full h-full flex flex-col justify-between overflow-hidden">
               {widget.type === 'weather' ? (
@@ -1352,6 +1380,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   latitude={widget.config?.latitude}
                   longitude={widget.config?.longitude}
                   unit={widget.config?.unit || 'F'}
+                  isLight={isWidgetLight}
                 />
               ) : widget.type === 'clock' ? (
                 <ClockWidget
@@ -1360,6 +1389,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   showSeconds={widget.config?.showSeconds ?? true}
                   timezone={widget.config?.timezone}
                   locationName={widget.config?.locationName}
+                  isLight={isWidgetLight}
                 />
               ) : widget.type === 'world_clock' ? (
                 <WorldClockWidget
@@ -1367,6 +1397,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   cities={widget.config?.cities}
                   clockFace={widget.config?.clockFace || 'digital'}
                   showSeconds={widget.config?.showSeconds ?? true}
+                  isLight={isWidgetLight}
                 />
               ) : widget.type === 'clock_weather' ? (
                 <ClockWeatherWidget
@@ -1378,22 +1409,26 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   showSeconds={widget.config?.showSeconds ?? true}
                   timezone={widget.config?.timezone}
                   clockAlign={widget.config?.clockAlign || 'center'}
+                  isLight={isWidgetLight}
                 />
               ) : widget.type === 'countdown' ? (
                 <CountdownWidget
                   eventName={widget.title || widget.config?.eventName}
                   targetDate={widget.config?.targetDate}
+                  isLight={isWidgetLight}
                 />
               ) : widget.type === 'quotes' ? (
                 <QuotesWidget
                   customQuotes={widget.config?.customQuotes}
                   quoteMode={widget.config?.quoteMode}
                   rotationIntervalSec={widget.config?.rotationIntervalSec ?? widget.config?.quoteIntervalSec}
+                  isLight={isWidgetLight}
                 />
               ) : widget.type === 'calendar' ? (
                 <CalendarWidget
                   sources={widget.config?.sources}
                   defaultView={widget.config?.defaultView}
+                  isLight={isWidgetLight}
                   onUpdateConfig={(updates) => {
                     if (onUpdateWidget) {
                       onUpdateWidget(widget.id, {
@@ -1407,6 +1442,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   feedUrl={widget.config?.feedUrl}
                   textSize={widget.config?.textSize}
                   showSnippet={widget.config?.showSnippet !== false}
+                  isLight={isWidgetLight}
                   onUpdateConfig={(updates) => {
                     if (onUpdateWidget) {
                       onUpdateWidget(widget.id, {
@@ -1462,6 +1498,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   textTransform={widget.config?.textTransform}
                   letterSpacing={widget.config?.letterSpacing}
                   bgStyle={widget.config?.bgStyle}
+                  isLight={isWidgetLight}
                   onUpdateConfig={(updates) => {
                     if (onUpdateWidget) {
                       onUpdateWidget(widget.id, {
@@ -1490,6 +1527,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   onDeleteNote={onDeleteNote}
                   onPinNoteToCanvas={handlePinNoteToCanvas}
                   onUnpinNoteFromCanvas={handleUnpinNoteFromCanvas}
+                  isLight={isWidgetLight}
                 />
               ) : null}
             </div>
@@ -2237,105 +2275,140 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       })()}
 
       {/* Floating Context Menu for Z-Order & Layer Management */}
-      {contextMenu && (
-        <div
-          data-no-drag="true"
-          onClick={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
-          style={{
-            left: Math.min(contextMenu.x, window.innerWidth - 225),
-            top: Math.min(contextMenu.y, window.innerHeight - 290),
-          }}
-          className="fixed z-[100] w-56 rounded-2xl bg-gray-950/95 backdrop-blur-2xl border border-gray-800 p-2 shadow-2xl text-xs text-gray-200 select-none animate-in fade-in zoom-in-95 duration-100"
-        >
-          {/* Header */}
-          <div className="px-2.5 py-1.5 mb-1 border-b border-gray-800/80 flex items-center justify-between">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <Layers className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-              <span className="font-bold text-white truncate text-[11px]">
-                {contextMenu.title || (contextMenu.type === 'widget' ? 'Widget' : 'Sticky Note')}
-              </span>
+      {contextMenu && (() => {
+        const activeWidget = contextMenu.type === 'widget' ? widgets.find((x) => x.id === contextMenu.id) : null;
+        const currentThemeMode: WidgetThemeMode = (activeWidget?.config?.themeMode as WidgetThemeMode) || 'auto';
+
+        return (
+          <div
+            data-no-drag="true"
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            style={{
+              left: Math.min(contextMenu.x, window.innerWidth - 250),
+              top: Math.min(contextMenu.y, window.innerHeight - 360),
+            }}
+            className="fixed z-[100] w-60 rounded-2xl bg-gray-950/95 backdrop-blur-2xl border border-gray-800 p-2 shadow-2xl text-xs text-gray-200 select-none animate-in fade-in zoom-in-95 duration-100"
+          >
+            {/* Header */}
+            <div className="px-2.5 py-1.5 mb-1 border-b border-gray-800/80 flex items-center justify-between">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Layers className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                <span className="font-bold text-white truncate text-[11px]">
+                  {contextMenu.title || (contextMenu.type === 'widget' ? 'Widget' : 'Sticky Note')}
+                </span>
+              </div>
+              {contextMenu.isBackground ? (
+                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                  Background
+                </span>
+              ) : (
+                <span className="text-[10px] font-mono text-gray-400">
+                  L{contextMenu.currentZ}
+                </span>
+              )}
             </div>
-            {contextMenu.isBackground ? (
-              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                Background
-              </span>
-            ) : (
-              <span className="text-[10px] font-mono text-gray-400">
-                L{contextMenu.currentZ}
-              </span>
+
+            {/* Layer Order Actions */}
+            <div className="space-y-0.5">
+              <button
+                type="button"
+                onClick={() => handleBringToFront(contextMenu.id, contextMenu.type)}
+                className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
+              >
+                <BringToFront className="w-4 h-4 text-emerald-400 shrink-0" />
+                <div>
+                  <div className="font-semibold text-xs">Bring to Front</div>
+                  <div className="text-[10px] text-gray-400">Place on top of all cards</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleBringForward(contextMenu.id, contextMenu.type)}
+                className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
+              >
+                <ArrowUp className="w-4 h-4 text-blue-400 shrink-0" />
+                <div>
+                  <div className="font-semibold text-xs">Bring Forward</div>
+                  <div className="text-[10px] text-gray-400">Step up 1 layer</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSendBackward(contextMenu.id, contextMenu.type)}
+                className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
+              >
+                <ArrowDown className="w-4 h-4 text-amber-400 shrink-0" />
+                <div>
+                  <div className="font-semibold text-xs">Send Backward</div>
+                  <div className="text-[10px] text-gray-400">Step down 1 layer</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSendToBack(contextMenu.id, contextMenu.type)}
+                className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
+              >
+                <SendToBack className="w-4 h-4 text-purple-400 shrink-0" />
+                <div>
+                  <div className="font-semibold text-xs">Send to Back</div>
+                  <div className="text-[10px] text-gray-400">Pin as background layer</div>
+                </div>
+              </button>
+            </div>
+
+            {/* Context Options Divider */}
+            <div className="border-t border-gray-800/80 my-1" />
+
+            {/* Quick Context Settings */}
+            {contextMenu.type === 'widget' && (
+              <div className="space-y-1.5 my-1">
+                <div className="px-2 pt-0.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center justify-between">
+                  <span>Card Appearance</span>
+                  <span className="capitalize text-blue-400 font-bold">{currentThemeMode}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-1 px-1">
+                  {(['auto', 'light', 'dark'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => {
+                        if (onUpdateWidget && activeWidget) {
+                          onUpdateWidget(activeWidget.id, {
+                            config: { ...activeWidget.config, themeMode: mode },
+                          });
+                        }
+                        setContextMenu(null);
+                      }}
+                      className={`flex items-center justify-center gap-1 py-1 px-1.5 rounded-lg text-xs font-medium capitalize transition-all cursor-pointer ${
+                        currentThemeMode === mode
+                          ? 'bg-blue-600 text-white font-semibold shadow'
+                          : 'bg-gray-800/70 hover:bg-gray-700/80 text-gray-300'
+                      }`}
+                    >
+                      {mode === 'light' && <Sun className="w-3 h-3 text-amber-300" />}
+                      {mode === 'dark' && <Moon className="w-3 h-3 text-indigo-300" />}
+                      <span>{mode}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (activeWidget) setEditingWidget(activeWidget);
+                    setContextMenu(null);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-300 hover:text-white transition-colors cursor-pointer text-left"
+                >
+                  <Settings className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                  <span>Tile Settings</span>
+                </button>
+              </div>
             )}
-          </div>
-
-          {/* Layer Order Actions */}
-          <div className="space-y-0.5">
-            <button
-              type="button"
-              onClick={() => handleBringToFront(contextMenu.id, contextMenu.type)}
-              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
-            >
-              <BringToFront className="w-4 h-4 text-emerald-400 shrink-0" />
-              <div>
-                <div className="font-semibold text-xs">Bring to Front</div>
-                <div className="text-[10px] text-gray-400">Place on top of all cards</div>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleBringForward(contextMenu.id, contextMenu.type)}
-              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
-            >
-              <ArrowUp className="w-4 h-4 text-blue-400 shrink-0" />
-              <div>
-                <div className="font-semibold text-xs">Bring Forward</div>
-                <div className="text-[10px] text-gray-400">Step up 1 layer</div>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSendBackward(contextMenu.id, contextMenu.type)}
-              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
-            >
-              <ArrowDown className="w-4 h-4 text-amber-400 shrink-0" />
-              <div>
-                <div className="font-semibold text-xs">Send Backward</div>
-                <div className="text-[10px] text-gray-400">Step down 1 layer</div>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSendToBack(contextMenu.id, contextMenu.type)}
-              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
-            >
-              <SendToBack className="w-4 h-4 text-purple-400 shrink-0" />
-              <div>
-                <div className="font-semibold text-xs">Send to Back</div>
-                <div className="text-[10px] text-gray-400">Pin as background layer</div>
-              </div>
-            </button>
-          </div>
-
-          {/* Context Options Divider */}
-          <div className="border-t border-gray-800/80 my-1" />
-
-          {/* Quick Context Settings */}
-          {contextMenu.type === 'widget' && (
-            <button
-              type="button"
-              onClick={() => {
-                const w = widgets.find((x) => x.id === contextMenu.id);
-                if (w) setEditingWidget(w);
-                setContextMenu(null);
-              }}
-              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-300 hover:text-white transition-colors cursor-pointer text-left"
-            >
-              <Settings className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-              <span>Tile Settings</span>
-            </button>
-          )}
 
           {contextMenu.type === 'widget' && Boolean(contextMenu.rotation) && onUpdateWidgetPos && (
             <button
@@ -2387,7 +2460,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             <span>Remove from Canvas</span>
           </button>
         </div>
-      )}
+      );
+    })()}
     </div>
   );
 };

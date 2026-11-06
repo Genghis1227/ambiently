@@ -4,11 +4,13 @@ import { Calendar, Sparkles } from 'lucide-react';
 interface CountdownWidgetProps {
   eventName?: string;
   targetDate?: string; // ISO string
+  isLight?: boolean;
 }
 
 export const CountdownWidget: React.FC<CountdownWidgetProps> = ({
   eventName = 'Upcoming Milestone',
   targetDate = '2026-12-25T00:00:00Z',
+  isLight = false,
 }) => {
   const [timeLeft, setTimeLeft] = useState<{
     days: number;
@@ -53,54 +55,72 @@ export const CountdownWidget: React.FC<CountdownWidgetProps> = ({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Calendar className="w-4 h-4 text-purple-400" />
-          <h4 className="text-sm font-bold text-white tracking-wide truncate max-w-[200px]">
+          <h4 className={`text-sm font-bold tracking-wide truncate max-w-[200px] ${isLight ? 'text-slate-900' : 'text-white'}`}>
             {eventName}
           </h4>
         </div>
-        <span className="text-[11px] text-gray-500 font-medium">{targetDateFormatted}</span>
+        <span className={`text-[11px] font-medium ${isLight ? 'text-slate-500' : 'text-gray-500'}`}>{targetDateFormatted}</span>
       </div>
 
       {/* Countdown Grid */}
       <div className="grid grid-cols-4 gap-2 my-auto">
-        <div className="flex flex-col items-center bg-gray-950/60 border border-gray-800/80 rounded-xl py-2 px-1 text-center shadow-inner">
-          <span className="text-2xl md:text-3xl font-extrabold text-purple-400 font-mono">
+        <div className={`flex flex-col items-center rounded-xl py-2 px-1 text-center border ${
+          isLight
+            ? 'bg-slate-100/90 border-slate-200 shadow-xs'
+            : 'bg-gray-950/60 border-gray-800/80 shadow-inner'
+        }`}>
+          <span className={`text-2xl md:text-3xl font-extrabold font-mono ${isLight ? 'text-purple-600' : 'text-purple-400'}`}>
             {timeLeft.days}
           </span>
-          <span className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mt-0.5">
+          <span className={`text-[10px] uppercase tracking-wider font-semibold mt-0.5 ${isLight ? 'text-slate-500' : 'text-gray-500'}`}>
             Days
           </span>
         </div>
 
-        <div className="flex flex-col items-center bg-gray-950/60 border border-gray-800/80 rounded-xl py-2 px-1 text-center shadow-inner">
-          <span className="text-2xl md:text-3xl font-extrabold text-blue-400 font-mono">
+        <div className={`flex flex-col items-center rounded-xl py-2 px-1 text-center border ${
+          isLight
+            ? 'bg-slate-100/90 border-slate-200 shadow-xs'
+            : 'bg-gray-950/60 border-gray-800/80 shadow-inner'
+        }`}>
+          <span className={`text-2xl md:text-3xl font-extrabold font-mono ${isLight ? 'text-blue-600' : 'text-blue-400'}`}>
             {timeLeft.hours.toString().padStart(2, '0')}
           </span>
-          <span className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mt-0.5">
+          <span className={`text-[10px] uppercase tracking-wider font-semibold mt-0.5 ${isLight ? 'text-slate-500' : 'text-gray-500'}`}>
             Hours
           </span>
         </div>
 
-        <div className="flex flex-col items-center bg-gray-950/60 border border-gray-800/80 rounded-xl py-2 px-1 text-center shadow-inner">
-          <span className="text-2xl md:text-3xl font-extrabold text-cyan-400 font-mono">
+        <div className={`flex flex-col items-center rounded-xl py-2 px-1 text-center border ${
+          isLight
+            ? 'bg-slate-100/90 border-slate-200 shadow-xs'
+            : 'bg-gray-950/60 border-gray-800/80 shadow-inner'
+        }`}>
+          <span className={`text-2xl md:text-3xl font-extrabold font-mono ${isLight ? 'text-cyan-600' : 'text-cyan-400'}`}>
             {timeLeft.minutes.toString().padStart(2, '0')}
           </span>
-          <span className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mt-0.5">
+          <span className={`text-[10px] uppercase tracking-wider font-semibold mt-0.5 ${isLight ? 'text-slate-500' : 'text-gray-500'}`}>
             Mins
           </span>
         </div>
 
-        <div className="flex flex-col items-center bg-gray-950/60 border border-gray-800/80 rounded-xl py-2 px-1 text-center shadow-inner">
-          <span className="text-2xl md:text-3xl font-extrabold text-emerald-400 font-mono">
+        <div className={`flex flex-col items-center rounded-xl py-2 px-1 text-center border ${
+          isLight
+            ? 'bg-slate-100/90 border-slate-200 shadow-xs'
+            : 'bg-gray-950/60 border-gray-800/80 shadow-inner'
+        }`}>
+          <span className={`text-2xl md:text-3xl font-extrabold font-mono ${isLight ? 'text-emerald-600' : 'text-emerald-400'}`}>
             {timeLeft.seconds.toString().padStart(2, '0')}
           </span>
-          <span className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mt-0.5">
+          <span className={`text-[10px] uppercase tracking-wider font-semibold mt-0.5 ${isLight ? 'text-slate-500' : 'text-gray-500'}`}>
             Secs
           </span>
         </div>
       </div>
 
-      <div className="flex items-center justify-between text-[11px] text-gray-500 pt-2 border-t border-gray-800/40">
-        <span className="flex items-center gap-1 text-purple-300/80">
+      <div className={`flex items-center justify-between text-[11px] pt-2 border-t ${
+        isLight ? 'border-slate-200 text-slate-500' : 'border-gray-800/40 text-gray-500'
+      }`}>
+        <span className={`flex items-center gap-1 ${isLight ? 'text-purple-700 font-semibold' : 'text-purple-300/80'}`}>
           <Sparkles className="w-3 h-3" />
           {timeLeft.isPast ? 'Event has arrived!' : 'Countdown in progress'}
         </span>

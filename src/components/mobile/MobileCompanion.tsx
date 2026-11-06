@@ -25,7 +25,8 @@ import {
   Hourglass,
   Sparkles,
 } from 'lucide-react';
-import type { DashboardTab, DashboardWidget, StickyNoteItem } from '../../types/dashboard';
+import type { DashboardTab, DashboardWidget, StickyNoteItem, WidgetThemeMode } from '../../types/dashboard';
+import { isCanvasThemeLight } from '../../data/canvasThemes';
 import { APP_VERSION } from '../../data/changelog';
 import { ChangelogModal } from '../changelog/ChangelogModal';
 import { WidgetSettingsModal } from '../widgets/WidgetSettingsModal';
@@ -271,7 +272,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
     }
   };
 
-  const renderWidgetContent = (widget: DashboardWidget) => {
+  const renderWidgetContent = (widget: DashboardWidget, isLight: boolean = false) => {
     switch (widget.type) {
       case 'clock_weather':
         return (
@@ -284,6 +285,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
             showSeconds={widget.config?.showSeconds ?? true}
             timezone={widget.config?.timezone}
             clockAlign={widget.config?.clockAlign || 'center'}
+            isLight={isLight}
           />
         );
       case 'clock':
@@ -291,6 +293,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
           <ClockWidget
             clockFace={widget.config?.clockFace || 'digital'}
             showSeconds={widget.config?.showSeconds ?? true}
+            isLight={isLight}
           />
         );
       case 'world_clock':
@@ -299,6 +302,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
             cities={widget.config?.cities}
             clockFace={widget.config?.clockFace || 'digital'}
             showSeconds={widget.config?.showSeconds ?? true}
+            isLight={isLight}
           />
         );
       case 'weather':
@@ -308,6 +312,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
             latitude={widget.config?.latitude}
             longitude={widget.config?.longitude}
             unit={widget.config?.unit || 'F'}
+            isLight={isLight}
           />
         );
       case 'countdown':
@@ -315,6 +320,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
           <CountdownWidget
             eventName={widget.title || widget.config?.eventName}
             targetDate={widget.config?.targetDate}
+            isLight={isLight}
           />
         );
       case 'calendar':
@@ -322,6 +328,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
           <CalendarWidget
             sources={widget.config?.sources}
             defaultView={widget.config?.defaultView}
+            isLight={isLight}
           />
         );
       case 'photo_frame':
@@ -348,6 +355,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
               feedUrl={widget.config?.feedUrl}
               textSize={widget.config?.textSize}
               showSnippet={widget.config?.showSnippet !== false}
+              isLight={isLight}
             />
           </div>
         );
@@ -357,6 +365,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
             customQuotes={widget.config?.customQuotes}
             quoteMode={widget.config?.quoteMode}
             rotationIntervalSec={widget.config?.rotationIntervalSec ?? widget.config?.quoteIntervalSec}
+            isLight={isLight}
           />
         );
       case 'embed':
@@ -382,6 +391,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
             textTransform={widget.config?.textTransform}
             letterSpacing={widget.config?.letterSpacing}
             bgStyle={widget.config?.bgStyle}
+            isLight={isLight}
           />
         );
       case 'image':
@@ -571,6 +581,11 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
                 </div>
               ) : (
                 sortedWidgets.map((widget, idx) => {
+                  const currentTab = tabs.find((t) => t.id === activeTabId);
+                  const isCanvasLight = isCanvasThemeLight(currentTab?.backgroundTheme);
+                  const widgetThemeMode = (widget.config?.themeMode as WidgetThemeMode) || 'auto';
+                  const isWidgetLight = widgetThemeMode === 'light' || (widgetThemeMode === 'auto' && isCanvasLight);
+
                   const IconComp = getWidgetIcon(widget.type);
                   const isFirst = idx === 0;
                   const isLast = idx === sortedWidgets.length - 1;
@@ -578,19 +593,23 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
                   return (
                     <div
                       key={widget.id}
-                      className="rounded-2xl p-3.5 bg-gray-900/90 border border-gray-800 shadow-xl space-y-3 transition-all"
+                      className={`rounded-2xl p-3.5 shadow-xl space-y-3 transition-all ${
+                        isWidgetLight
+                          ? 'bg-white/95 border border-slate-200/90 text-slate-800'
+                          : 'bg-gray-900/90 border border-gray-800 text-gray-200'
+                      }`}
                     >
                       {/* Widget Header with Icon, Title, and Action Controls */}
-                      <div className="flex items-center justify-between border-b border-gray-800/80 pb-2">
+                      <div className={`flex items-center justify-between border-b pb-2 ${isWidgetLight ? 'border-slate-200' : 'border-gray-800/80'}`}>
                         <div className="flex items-center gap-2 min-w-0">
-                          <div className="p-1.5 rounded-lg bg-black/50 border border-white/5 text-blue-400 shrink-0">
+                          <div className={`p-1.5 rounded-lg border shrink-0 ${isWidgetLight ? 'bg-slate-100 border-slate-300 text-blue-600' : 'bg-black/50 border-white/5 text-blue-400'}`}>
                             <IconComp className="w-4 h-4" />
                           </div>
                           <div className="min-w-0">
-                            <span className="font-bold text-xs text-white block truncate">
+                            <span className={`font-bold text-xs block truncate ${isWidgetLight ? 'text-slate-900' : 'text-white'}`}>
                               {widget.title}
                             </span>
-                            <span className="text-[10px] text-gray-400 uppercase tracking-wider font-mono">
+                            <span className={`text-[10px] uppercase tracking-wider font-mono ${isWidgetLight ? 'text-slate-500' : 'text-gray-400'}`}>
                               {getWidgetTypeLabel(widget.type)}
                             </span>
                           </div>
@@ -649,8 +668,12 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
                       </div>
 
                       {/* Widget Body Content */}
-                      <div className="min-h-12 overflow-hidden rounded-xl bg-gray-950/60 p-2.5 border border-gray-800/40">
-                        {renderWidgetContent(widget)}
+                      <div className={`min-h-12 overflow-hidden rounded-xl p-2.5 border ${
+                        isWidgetLight
+                          ? 'bg-slate-50/90 border-slate-200'
+                          : 'bg-gray-950/60 border-gray-800/40'
+                      }`}>
+                        {renderWidgetContent(widget, isWidgetLight)}
                       </div>
                     </div>
                   );

@@ -126,6 +126,7 @@ interface WorldClockWidgetProps {
   cities?: WorldClockCity[];
   clockFace?: 'digital' | 'minimal' | 'analog';
   showSeconds?: boolean;
+  isLight?: boolean;
 }
 
 export const WorldClockWidget: React.FC<WorldClockWidgetProps> = ({
@@ -133,6 +134,7 @@ export const WorldClockWidget: React.FC<WorldClockWidgetProps> = ({
   cities,
   clockFace = 'digital',
   showSeconds = true,
+  isLight = false,
 }) => {
   const [now, setNow] = useState(new Date());
 
@@ -144,7 +146,7 @@ export const WorldClockWidget: React.FC<WorldClockWidgetProps> = ({
   const activeCities =
     Array.isArray(cities) && cities.length > 0 ? cities : DEFAULT_WORLD_CITIES;
 
-  // Single-City Hero Mode
+  // Single-City Focus Mode
   if (activeCities.length === 1) {
     const city = activeCities[0];
     const zt = getFormattedTimeForZone(now, city.timezone);
@@ -154,19 +156,27 @@ export const WorldClockWidget: React.FC<WorldClockWidgetProps> = ({
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 min-w-0">
             <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-            <span className="text-xs font-bold text-white truncate">
+            <span className={`text-xs font-bold truncate ${isLight ? 'text-slate-800' : 'text-white'}`}>
               {city.cityName}
               {city.country ? `, ${city.country}` : ''}
             </span>
           </div>
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 shrink-0">
+          <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full shrink-0 ${
+            isLight
+              ? 'bg-cyan-50 text-cyan-800 border border-cyan-200'
+              : 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
+          }`}>
             {zt.tzShort} • {zt.diffLabel}
           </span>
         </div>
 
         <div className="my-auto py-2 flex flex-col items-center justify-center text-center">
           {clockFace === 'analog' ? (
-            <div className="relative w-32 h-32 md:w-36 md:h-36 rounded-full border-2 border-gray-700 bg-gray-950/70 flex items-center justify-center shadow-inner my-1">
+            <div className={`relative w-32 h-32 md:w-36 md:h-36 rounded-full border-2 flex items-center justify-center my-1 ${
+              isLight
+                ? 'border-slate-300 bg-slate-100/90 shadow-sm'
+                : 'border-gray-700 bg-gray-950/70 shadow-inner'
+            }`}>
               {[0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330].map((deg) => (
                 <div
                   key={deg}
@@ -175,14 +185,16 @@ export const WorldClockWidget: React.FC<WorldClockWidgetProps> = ({
                 >
                   <div
                     className={`w-0.5 ${
-                      deg % 90 === 0 ? 'h-2.5 bg-gray-400' : 'h-1.5 bg-gray-700'
+                      deg % 90 === 0
+                        ? isLight ? 'h-2.5 bg-slate-700' : 'h-2.5 bg-gray-400'
+                        : isLight ? 'h-1.5 bg-slate-400' : 'h-1.5 bg-gray-700'
                     } rounded-full`}
                   />
                 </div>
               ))}
               {/* Hour Hand */}
               <div
-                className="absolute w-1.5 h-9 bg-white origin-bottom rounded-full shadow"
+                className={`absolute w-1.5 h-9 origin-bottom rounded-full shadow ${isLight ? 'bg-slate-900' : 'bg-white'}`}
                 style={{
                   transform: `rotate(${(zt.hour24 % 12) * 30 + zt.minuteNum * 0.5}deg)`,
                   bottom: '50%',
@@ -190,7 +202,7 @@ export const WorldClockWidget: React.FC<WorldClockWidgetProps> = ({
               />
               {/* Minute Hand */}
               <div
-                className="absolute w-1 h-12 bg-cyan-400 origin-bottom rounded-full shadow"
+                className={`absolute w-1 h-12 origin-bottom rounded-full shadow ${isLight ? 'bg-cyan-600' : 'bg-cyan-400'}`}
                 style={{
                   transform: `rotate(${zt.minuteNum * 6}deg)`,
                   bottom: '50%',
@@ -206,42 +218,42 @@ export const WorldClockWidget: React.FC<WorldClockWidgetProps> = ({
                   }}
                 />
               )}
-              <div className="w-2.5 h-2.5 rounded-full bg-white z-10 ring-2 ring-gray-900" />
+              <div className={`w-2.5 h-2.5 rounded-full z-10 ${isLight ? 'bg-slate-900 ring-2 ring-slate-100' : 'bg-white ring-2 ring-gray-900'}`} />
             </div>
           ) : clockFace === 'minimal' ? (
             <div className="flex flex-col items-center">
-              <span className="text-5xl md:text-6xl font-sans font-bold tracking-tighter text-white">
+              <span className={`text-5xl md:text-6xl font-sans font-bold tracking-tighter ${isLight ? 'text-slate-900' : 'text-white'}`}>
                 {zt.hoursMinutes}
               </span>
-              <span className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-400 mt-1">
+              <span className={`text-xs font-semibold uppercase tracking-[0.25em] mt-1 ${isLight ? 'text-cyan-600' : 'text-cyan-400'}`}>
                 {zt.ampm} {showSeconds ? `• ${zt.seconds}s` : ''}
               </span>
             </div>
           ) : (
-            <div className="flex items-baseline justify-center font-mono tracking-tight font-extralight text-white">
+            <div className={`flex items-baseline justify-center font-mono tracking-tight font-extralight ${isLight ? 'text-slate-900' : 'text-white'}`}>
               <span className="text-5xl md:text-7xl font-extralight">{zt.hoursMinutes}</span>
               {showSeconds && (
-                <span className="text-2xl md:text-3xl text-gray-400 font-light ml-1.5 w-10 text-left">
+                <span className={`text-2xl md:text-3xl font-light ml-1.5 w-10 text-left ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
                   :{zt.seconds}
                 </span>
               )}
-              <span className="text-sm md:text-base font-medium text-cyan-400 ml-2 uppercase">
+              <span className={`text-sm md:text-base font-medium ml-2 uppercase ${isLight ? 'text-cyan-600' : 'text-cyan-400'}`}>
                 {zt.ampm}
               </span>
             </div>
           )}
 
-          <div className="text-sm text-gray-300 font-medium mt-2 flex items-center gap-1.5">
+          <div className={`text-sm font-medium mt-2 flex items-center gap-1.5 ${isLight ? 'text-slate-700' : 'text-gray-300'}`}>
             {zt.isDaytime ? (
               <Sun className="w-3.5 h-3.5 text-amber-400" />
             ) : (
-              <Moon className="w-3.5 h-3.5 text-indigo-300" />
+              <Moon className="w-3.5 h-3.5 text-indigo-400" />
             )}
             <span>{zt.dateStr}</span>
           </div>
         </div>
 
-        <div className="text-[10px] text-gray-500 text-center font-mono truncate">
+        <div className={`text-[10px] text-center font-mono truncate ${isLight ? 'text-slate-500' : 'text-gray-500'}`}>
           {city.timezone}
         </div>
       </div>
@@ -251,14 +263,14 @@ export const WorldClockWidget: React.FC<WorldClockWidgetProps> = ({
   // Multi-City World Timezone List Mode
   return (
     <div className="w-full h-full flex flex-col justify-between select-none p-1 overflow-hidden">
-      <div className="flex items-center justify-between border-b border-gray-800/80 pb-2 mb-2 shrink-0">
+      <div className={`flex items-center justify-between border-b pb-2 mb-2 shrink-0 ${isLight ? 'border-slate-200' : 'border-gray-800/80'}`}>
         <div className="flex items-center gap-1.5">
           <Globe className="w-3.5 h-3.5 text-cyan-400" />
-          <span className="text-xs font-bold uppercase tracking-wider text-gray-300">
+          <span className={`text-xs font-bold uppercase tracking-wider ${isLight ? 'text-slate-700' : 'text-gray-300'}`}>
             {title || 'World Timezones'}
           </span>
         </div>
-        <span className="text-[10px] text-gray-500 font-mono">
+        <span className={`text-[10px] font-mono ${isLight ? 'text-slate-500' : 'text-gray-500'}`}>
           {activeCities.length} {activeCities.length === 1 ? 'City' : 'Cities'}
         </span>
       </div>
@@ -269,33 +281,41 @@ export const WorldClockWidget: React.FC<WorldClockWidgetProps> = ({
           return (
             <div
               key={city.id}
-              className="flex items-center justify-between p-2.5 rounded-xl bg-gray-950/60 border border-gray-800/80"
+              className={`flex items-center justify-between p-2.5 rounded-xl border ${
+                isLight
+                  ? 'bg-slate-100/90 border-slate-200/90'
+                  : 'bg-gray-950/60 border-gray-800/80'
+              }`}
             >
               <div className="min-w-0 flex-1 pr-2">
                 <div className="flex items-center gap-1.5">
                   {zt.isDaytime ? (
                     <Sun className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                   ) : (
-                    <Moon className="w-3.5 h-3.5 text-indigo-300 shrink-0" />
+                    <Moon className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                   )}
-                  <span className="text-xs md:text-sm font-bold text-white truncate">
+                  <span className={`text-xs md:text-sm font-bold truncate ${isLight ? 'text-slate-900' : 'text-white'}`}>
                     {city.cityName}
                   </span>
-                  <span className="text-[10px] font-mono text-cyan-400 bg-cyan-500/10 px-1.5 py-0.2 rounded">
+                  <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${
+                    isLight
+                      ? 'text-cyan-800 bg-cyan-100'
+                      : 'text-cyan-400 bg-cyan-500/10'
+                  }`}>
                     {zt.tzShort}
                   </span>
                 </div>
-                <div className="text-[10px] text-gray-400 mt-0.5 truncate">
-                  {zt.dateStr} • <span className="text-gray-500">{zt.diffLabel}</span>
+                <div className={`text-[10px] mt-0.5 truncate ${isLight ? 'text-slate-600' : 'text-gray-400'}`}>
+                  {zt.dateStr} • <span className={isLight ? 'text-slate-500' : 'text-gray-500'}>{zt.diffLabel}</span>
                 </div>
               </div>
 
-              <div className="flex items-baseline font-mono text-white shrink-0">
+              <div className={`flex items-baseline font-mono shrink-0 ${isLight ? 'text-slate-900' : 'text-white'}`}>
                 <span className="text-xl md:text-2xl font-light">{zt.hoursMinutes}</span>
                 {showSeconds && (
-                  <span className="text-xs text-gray-400 ml-0.5">:{zt.seconds}</span>
+                  <span className={`text-xs ml-0.5 ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>:{zt.seconds}</span>
                 )}
-                <span className="text-[10px] font-bold text-cyan-400 ml-1">{zt.ampm}</span>
+                <span className={`text-[10px] font-bold ml-1 ${isLight ? 'text-cyan-700' : 'text-cyan-400'}`}>{zt.ampm}</span>
               </div>
             </div>
           );

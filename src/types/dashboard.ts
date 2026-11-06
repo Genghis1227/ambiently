@@ -10,7 +10,12 @@ export type CanvasBackgroundTheme =
   | 'oled_black'
   | 'aurora'
   | 'blueprint'
+  | 'paper_dots'
+  | 'warm_linen'
+  | 'minimal_light'
   | 'custom';
+
+export type WidgetThemeMode = 'auto' | 'light' | 'dark';
 
 export type AutoOrganizeMode = 'bento' | 'pack' | 'split';
 

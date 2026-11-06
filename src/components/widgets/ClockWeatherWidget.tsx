@@ -23,6 +23,7 @@ interface ClockWeatherWidgetProps {
   showSeconds?: boolean;
   timezone?: string;
   clockAlign?: 'center' | 'left';
+  isLight?: boolean;
 }
 
 const renderWeatherIcon = (code: number, isDay: boolean) => {
@@ -48,6 +49,7 @@ export const ClockWeatherWidget: React.FC<ClockWeatherWidgetProps> = ({
   showSeconds = true,
   timezone,
   clockAlign = 'center',
+  isLight = false,
 }) => {
   const [time, setTime] = useState(new Date());
   const [weather, setWeather] = useState<WeatherData | null>(null);
@@ -85,17 +87,21 @@ export const ClockWeatherWidget: React.FC<ClockWeatherWidgetProps> = ({
       {/* Clock Section */}
       <div className={`flex flex-col justify-center ${clockAlign === 'left' ? 'items-start text-left' : 'items-center text-center'}`}>
         {clockFace === 'analog' ? (
-          <div className="relative w-28 h-28 rounded-full border-2 border-gray-700 bg-gray-950/60 flex items-center justify-center my-2 shadow-inner">
+          <div className={`relative w-28 h-28 rounded-full border-2 flex items-center justify-center my-2 ${
+            isLight
+              ? 'border-slate-300 bg-slate-100/90 shadow-sm'
+              : 'border-gray-700 bg-gray-950/60 shadow-inner'
+          }`}>
             {/* Analog Clock Hands */}
             <div
-              className="absolute w-1 h-8 bg-white origin-bottom rounded-full"
+              className={`absolute w-1 h-8 origin-bottom rounded-full ${isLight ? 'bg-slate-900' : 'bg-white'}`}
               style={{
                 transform: `rotate(${(zt.hour24 % 12) * 30 + zt.minuteNum * 0.5}deg)`,
                 bottom: '50%',
               }}
             />
             <div
-              className="absolute w-0.5 h-11 bg-blue-400 origin-bottom rounded-full"
+              className={`absolute w-0.5 h-11 origin-bottom rounded-full ${isLight ? 'bg-blue-600' : 'bg-blue-400'}`}
               style={{
                 transform: `rotate(${zt.minuteNum * 6}deg)`,
                 bottom: '50%',
@@ -110,35 +116,35 @@ export const ClockWeatherWidget: React.FC<ClockWeatherWidgetProps> = ({
                 }}
               />
             )}
-            <div className="w-2 h-2 rounded-full bg-white z-10" />
+            <div className={`w-2 h-2 rounded-full z-10 ${isLight ? 'bg-slate-900' : 'bg-white'}`} />
           </div>
         ) : clockFace === 'minimal' ? (
           <div className={`flex items-baseline gap-2.5 ${clockAlign === 'left' ? 'justify-start' : 'justify-center'}`}>
-            <span className="text-5xl md:text-6xl font-sans font-bold tracking-tighter text-white">
+            <span className={`text-5xl md:text-6xl font-sans font-bold tracking-tighter ${isLight ? 'text-slate-900' : 'text-white'}`}>
               {zt.hoursMinutes}
             </span>
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-400">
+            <span className={`text-xs font-semibold uppercase tracking-[0.2em] ${isLight ? 'text-blue-600' : 'text-blue-400'}`}>
               {zt.ampm} {showSeconds ? `• ${zt.seconds}s` : ''}
             </span>
           </div>
         ) : (
           <div className={`flex items-baseline gap-2 ${clockAlign === 'left' ? 'justify-start' : 'justify-center'}`}>
-            <span className="text-5xl md:text-6xl font-light tracking-tight text-white font-mono">
+            <span className={`text-5xl md:text-6xl font-light tracking-tight font-mono ${isLight ? 'text-slate-900' : 'text-white'}`}>
               {zt.hoursMinutes}
             </span>
-            <div className="flex flex-col text-xs text-gray-400 font-mono items-start text-left">
-              <span className="font-semibold text-blue-400">{zt.ampm}</span>
-              {showSeconds && <span className="text-gray-500">{zt.seconds}s</span>}
+            <div className="flex flex-col text-xs font-mono items-start text-left">
+              <span className={`font-semibold ${isLight ? 'text-blue-600' : 'text-blue-400'}`}>{zt.ampm}</span>
+              {showSeconds && <span className={isLight ? 'text-slate-500' : 'text-gray-500'}>{zt.seconds}s</span>}
             </div>
           </div>
         )}
-        <span className="text-xs md:text-sm text-gray-400 font-medium tracking-wide mt-1">
+        <span className={`text-xs md:text-sm font-medium tracking-wide mt-1 ${isLight ? 'text-slate-600' : 'text-gray-400'}`}>
           {zt.dateStr}
         </span>
       </div>
 
       {/* Divider */}
-      <div className="w-full h-px bg-gray-800/80 my-2" />
+      <div className={`w-full h-px my-2 ${isLight ? 'bg-slate-200' : 'bg-gray-800/80'}`} />
 
       {/* Weather Section */}
       {weather ? (
@@ -148,43 +154,50 @@ export const ClockWeatherWidget: React.FC<ClockWeatherWidgetProps> = ({
               {renderWeatherIcon(weather.conditionCode, weather.isDay)}
               <div>
                 <div className="flex items-baseline gap-1">
-                  <span className="text-2xl font-bold text-white">
+                  <span className={`text-2xl font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>
                     {weather.currentTemp}°{weather.unit}
                   </span>
-                  <span className="text-xs text-gray-400">
+                  <span className={`text-xs ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
                     Feels {weather.apparentTemp}°
                   </span>
                 </div>
-                <div className="text-xs text-gray-300 font-medium">
+                <div className={`text-xs font-medium ${isLight ? 'text-slate-700' : 'text-gray-300'}`}>
                   {weather.conditionText}
                 </div>
               </div>
             </div>
 
             <div className="text-right">
-              <div className="flex items-center justify-end gap-1 text-[11px] text-gray-400">
+              <div className={`flex items-center justify-end gap-1 text-[11px] ${isLight ? 'text-slate-600' : 'text-gray-400'}`}>
                 <MapPin className="w-3 h-3 text-blue-400" />
                 <span className="truncate max-w-[100px]">{weather.locationName}</span>
               </div>
-              <div className="text-[11px] text-gray-500 mt-0.5">
+              <div className={`text-[11px] mt-0.5 ${isLight ? 'text-slate-500' : 'text-gray-500'}`}>
                 H: {weather.highTemp}° • L: {weather.lowTemp}°
               </div>
             </div>
           </div>
 
           {/* 3-day micro forecast strip */}
-          <div className="grid grid-cols-3 gap-1.5 pt-1.5 border-t border-gray-800/40">
+          <div className={`grid grid-cols-3 gap-1.5 pt-1.5 border-t ${isLight ? 'border-slate-200' : 'border-gray-800/40'}`}>
             {weather.forecast.slice(1, 4).map((f) => (
-              <div key={f.date} className="flex flex-col items-center bg-gray-950/40 rounded-lg py-1 px-1 text-center">
-                <span className="text-[10px] text-gray-400">{f.dayName}</span>
-                <span className="text-xs font-semibold text-gray-200 mt-0.5">{f.maxTemp}°</span>
-                <span className="text-[9px] text-gray-500">{f.minTemp}°</span>
+              <div
+                key={f.date}
+                className={`flex flex-col items-center rounded-lg py-1 px-1 text-center ${
+                  isLight
+                    ? 'bg-slate-100/90 border border-slate-200/80 text-slate-800'
+                    : 'bg-gray-950/40'
+                }`}
+              >
+                <span className={`text-[10px] ${isLight ? 'text-slate-600' : 'text-gray-400'}`}>{f.dayName}</span>
+                <span className={`text-xs font-semibold mt-0.5 ${isLight ? 'text-slate-900' : 'text-gray-200'}`}>{f.maxTemp}°</span>
+                <span className={`text-[9px] ${isLight ? 'text-slate-500' : 'text-gray-500'}`}>{f.minTemp}°</span>
               </div>
             ))}
           </div>
         </div>
       ) : (
-        <div className="flex items-center justify-center py-4 text-xs text-gray-500 gap-2">
+        <div className={`flex items-center justify-center py-4 text-xs gap-2 ${isLight ? 'text-slate-500' : 'text-gray-500'}`}>
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           <span>{loading ? 'Fetching weather...' : 'No weather data'}</span>
         </div>

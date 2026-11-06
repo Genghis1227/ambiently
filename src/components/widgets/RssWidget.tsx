@@ -9,6 +9,7 @@ interface RssWidgetProps {
   textSize?: 'auto' | 'sm' | 'base' | 'lg' | 'xl';
   showSnippet?: boolean;
   onUpdateConfig?: (updates: Record<string, any>) => void;
+  isLight?: boolean;
 }
 
 function decodeHtmlEntities(str: string): string {
@@ -58,6 +59,7 @@ export const RssWidget: React.FC<RssWidgetProps> = ({
   textSize = 'auto',
   showSnippet = true,
   onUpdateConfig,
+  isLight = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({
@@ -188,10 +190,10 @@ export const RssWidget: React.FC<RssWidgetProps> = ({
   return (
     <div ref={containerRef} className="w-full h-full flex flex-col justify-between overflow-hidden select-none">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-gray-800/80 pb-2 mb-2 pr-28">
+      <div className={`flex items-center justify-between border-b pb-2 mb-2 pr-28 ${isLight ? 'border-slate-200' : 'border-gray-800/80'}`}>
         <div className="flex items-center gap-2 min-w-0">
-          <Rss className={`${sizeStyles.headerIcon} text-orange-400 shrink-0`} />
-          <span className={`${sizeStyles.header} font-bold text-white uppercase tracking-wider truncate`}>
+          <Rss className={`${sizeStyles.headerIcon} text-orange-500 shrink-0`} />
+          <span className={`${sizeStyles.header} font-bold uppercase tracking-wider truncate ${isLight ? 'text-slate-900' : 'text-white'}`}>
             {feedTitle}
           </span>
         </div>
@@ -199,7 +201,11 @@ export const RssWidget: React.FC<RssWidgetProps> = ({
           onClick={loadFeed}
           disabled={loading}
           title="Refresh RSS feed"
-          className="p-1 rounded text-gray-400 hover:text-white hover:bg-gray-800 shrink-0 transition-colors cursor-pointer"
+          className={`p-1 rounded shrink-0 transition-colors cursor-pointer ${
+            isLight
+              ? 'text-slate-400 hover:text-slate-900 hover:bg-slate-200'
+              : 'text-gray-400 hover:text-white hover:bg-gray-800'
+          }`}
         >
           <RefreshCw className={`${sizeStyles.headerIcon} ${loading ? 'animate-spin' : ''}`} />
         </button>
@@ -236,22 +242,30 @@ export const RssWidget: React.FC<RssWidgetProps> = ({
                 href={item.link || '#'}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={`group block ${sizeStyles.card} bg-gray-950/40 border border-gray-800/60 hover:border-orange-500/50 hover:bg-gray-900/40 transition-all shadow-xs`}
+                className={`group block ${sizeStyles.card} border transition-all shadow-xs ${
+                  isLight
+                    ? 'bg-slate-100/80 border-slate-200/90 hover:border-orange-500/70 hover:bg-slate-100'
+                    : 'bg-gray-950/40 border-gray-800/60 hover:border-orange-500/50 hover:bg-gray-900/40'
+                }`}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <span className={`${sizeStyles.title} text-gray-200 group-hover:text-orange-400 transition-colors`}>
+                  <span className={`${sizeStyles.title} transition-colors ${
+                    isLight ? 'text-slate-900 group-hover:text-orange-600' : 'text-gray-200 group-hover:text-orange-400'
+                  }`}>
                     {item.title}
                   </span>
-                  <ExternalLink className={`${sizeStyles.icon} text-gray-600 group-hover:text-orange-400 shrink-0 mt-0.5 transition-colors`} />
+                  <ExternalLink className={`${sizeStyles.icon} shrink-0 mt-0.5 transition-colors ${
+                    isLight ? 'text-slate-400 group-hover:text-orange-600' : 'text-gray-600 group-hover:text-orange-400'
+                  }`} />
                 </div>
                 {showSnippet && item.description && (
-                  <p className={sizeStyles.desc}>
+                  <p className={`${sizeStyles.desc} ${isLight ? 'text-slate-600' : ''}`}>
                     {item.description}
                   </p>
                 )}
                 {item.pubDate && (
                   <div className="flex items-center gap-1.5 mt-2">
-                    <span className={`${sizeStyles.date} font-mono tracking-wide`}>
+                    <span className={`${sizeStyles.date} font-mono tracking-wide ${isLight ? 'text-slate-500' : ''}`}>
                       {formatArticleDate(item.pubDate)}
                     </span>
                   </div>

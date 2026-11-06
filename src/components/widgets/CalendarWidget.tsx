@@ -18,6 +18,7 @@ interface CalendarWidgetProps {
   sources?: CalendarSource[];
   defaultView?: CalendarViewMode;
   onUpdateConfig?: (updates: Record<string, any>) => void;
+  isLight?: boolean;
 }
 
 const DEFAULT_SOURCES: CalendarSource[] = [
@@ -152,6 +153,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
   sources = DEFAULT_SOURCES,
   defaultView = 'agenda',
   onUpdateConfig,
+  isLight = false,
 }) => {
   const [view, setView] = useState<CalendarViewMode>(defaultView);
   // Initialize immediately from cache so canvas carousel/tab switching renders instantly with 0 blank wait
@@ -318,22 +320,30 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
   return (
     <div className="w-full h-full flex flex-col justify-between overflow-hidden select-none relative">
       {/* Widget Header with Prominent Top Navigation */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-800/80 pb-2 mb-2 pr-28 shrink-0">
+      <div className={`flex flex-wrap items-center justify-between gap-2 border-b pb-2 mb-2 pr-28 shrink-0 ${isLight ? 'border-slate-200' : 'border-gray-800/80'}`}>
         {/* Left: Title + Prominent Navigation Buttons */}
         <div className="flex items-center gap-2 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
             <CalendarIcon className="w-4 h-4 text-blue-400 shrink-0" />
-            <span className="text-xs md:text-sm font-black text-white uppercase tracking-wider truncate">
+            <span className={`text-xs md:text-sm font-black uppercase tracking-wider truncate ${isLight ? 'text-slate-900' : 'text-white'}`}>
               {getHeaderTitle()}
             </span>
           </div>
 
           {/* Top Navigation: Prev / Today / Next */}
-          <div className="flex items-center bg-gray-900/90 border border-gray-700/80 rounded-xl p-0.5 shadow-sm shrink-0">
+          <div className={`flex items-center rounded-xl p-0.5 shadow-sm shrink-0 border ${
+            isLight
+              ? 'bg-slate-100/90 border-slate-300'
+              : 'bg-gray-900/90 border-gray-700/80'
+          }`}>
             <button
               type="button"
               onClick={handlePrev}
-              className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-gray-200 hover:text-white hover:bg-gray-800 rounded-lg transition-all cursor-pointer"
+              className={`flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                isLight
+                  ? 'text-slate-700 hover:text-slate-900 hover:bg-slate-200'
+                  : 'text-gray-200 hover:text-white hover:bg-gray-800'
+              }`}
               title="Previous"
             >
               <ChevronLeft className="w-4 h-4 text-blue-400" />
@@ -342,7 +352,11 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
             <button
               type="button"
               onClick={handleToday}
-              className="px-2.5 py-1 text-xs font-black uppercase tracking-wider text-blue-400 hover:text-blue-300 hover:bg-blue-950/60 rounded-lg transition-all cursor-pointer border border-blue-500/30 bg-blue-500/10"
+              className={`px-2.5 py-1 text-xs font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer border ${
+                isLight
+                  ? 'text-blue-700 hover:bg-blue-100 border-blue-300 bg-blue-50'
+                  : 'text-blue-400 hover:text-blue-300 hover:bg-blue-950/60 border-blue-500/30 bg-blue-500/10'
+              }`}
               title="Jump to Today"
             >
               Today
@@ -350,7 +364,11 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
             <button
               type="button"
               onClick={handleNext}
-              className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-gray-200 hover:text-white hover:bg-gray-800 rounded-lg transition-all cursor-pointer"
+              className={`flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                isLight
+                  ? 'text-slate-700 hover:text-slate-900 hover:bg-slate-200'
+                  : 'text-gray-200 hover:text-white hover:bg-gray-800'
+              }`}
               title="Next"
             >
               <span className="hidden sm:inline">Next</span>
@@ -361,7 +379,11 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
 
         {/* Right: Segmented View Switcher + Guide + Refresh */}
         <div className="flex items-center gap-1.5 shrink-0">
-          <div className="flex items-center bg-gray-950/90 p-0.5 rounded-xl border border-gray-800">
+          <div className={`flex items-center p-0.5 rounded-xl border ${
+            isLight
+              ? 'bg-slate-100 border-slate-300'
+              : 'bg-gray-950/90 border-gray-800'
+          }`}>
             {(['agenda', '3day', 'week', 'month'] as const).map((v) => (
               <button
                 key={v}
@@ -370,6 +392,8 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                 className={`px-2.5 py-1 text-[11px] md:text-xs font-bold rounded-lg transition-all cursor-pointer ${
                   view === v
                     ? 'bg-blue-600 text-white shadow-sm'
+                    : isLight
+                    ? 'text-slate-600 hover:text-slate-900'
                     : 'text-gray-400 hover:text-white'
                 }`}
               >
@@ -382,7 +406,11 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
             type="button"
             onClick={() => setIsGuideOpen(true)}
             title="How to connect Google Calendar (.ics)"
-            className="p-1.5 rounded-lg text-gray-400 hover:text-blue-400 hover:bg-gray-800 transition-colors cursor-pointer"
+            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+              isLight
+                ? 'text-slate-500 hover:text-blue-600 hover:bg-slate-200'
+                : 'text-gray-400 hover:text-blue-400 hover:bg-gray-800'
+            }`}
           >
             <HelpCircle className="w-4 h-4" />
           </button>
@@ -395,7 +423,11 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                 ? `Last updated: ${new Date(lastUpdated).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} (Click to refresh on-demand)`
                 : 'Refresh calendar feeds (Auto-refreshes every 15 min)'
             }
-            className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors cursor-pointer"
+            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+              isLight
+                ? 'text-slate-500 hover:text-slate-900 hover:bg-slate-200'
+                : 'text-gray-400 hover:text-white hover:bg-gray-800'
+            }`}
           >
             <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin text-blue-400' : ''}`} />
           </button>
@@ -430,7 +462,11 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                   key={evt.uid}
                   className={`flex items-start gap-3 p-3 rounded-2xl border transition-all ${
                     isToday
-                      ? 'bg-blue-950/25 border-blue-500/50 shadow-sm'
+                      ? isLight
+                        ? 'bg-blue-50/80 border-blue-400/80 shadow-xs'
+                        : 'bg-blue-950/25 border-blue-500/50 shadow-sm'
+                      : isLight
+                      ? 'bg-slate-100/90 border-slate-200/90 hover:border-slate-300'
                       : 'bg-gray-950/50 border-gray-800/80 hover:border-gray-700/90'
                   }`}
                 >
@@ -441,14 +477,20 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                   />
 
                   {/* Date badge: Month + Day + Weekday */}
-                  <div className="flex flex-col items-center justify-center px-2.5 py-1.5 rounded-xl bg-gray-900 border border-gray-800 shrink-0 text-center min-w-[56px] shadow-sm">
-                    <span className="text-[10px] uppercase font-black tracking-wider text-blue-400">
+                  <div className={`flex flex-col items-center justify-center px-2.5 py-1.5 rounded-xl border shrink-0 text-center min-w-[56px] shadow-sm ${
+                    isLight
+                      ? 'bg-white border-slate-200'
+                      : 'bg-gray-900 border-gray-800'
+                  }`}>
+                    <span className="text-[10px] uppercase font-black tracking-wider text-blue-500">
                       {startDate.toLocaleDateString([], { month: 'short' })}
                     </span>
-                    <span className={`text-base md:text-lg font-black font-mono leading-none my-0.5 ${isToday ? 'text-blue-400' : 'text-white'}`}>
+                    <span className={`text-base md:text-lg font-black font-mono leading-none my-0.5 ${
+                      isToday ? 'text-blue-600' : isLight ? 'text-slate-900' : 'text-white'
+                    }`}>
                       {startDate.getDate()}
                     </span>
-                    <span className="text-[10px] uppercase font-bold text-gray-400">
+                    <span className={`text-[10px] uppercase font-bold ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
                       {startDate.toLocaleDateString([], { weekday: 'short' })}
                     </span>
                   </div>
@@ -456,31 +498,39 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                   {/* Event Details */}
                   <div className="flex-1 min-w-0 py-0.5">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm md:text-base font-bold text-gray-100 truncate">
+                      <div className={`text-sm md:text-base font-bold truncate ${isLight ? 'text-slate-900' : 'text-gray-100'}`}>
                         {evt.summary}
                       </div>
                       {isToday && (
-                        <span className="text-[9px] uppercase font-extrabold px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-300 border border-blue-500/30 shrink-0">
+                        <span className={`text-[9px] uppercase font-extrabold px-2 py-0.5 rounded-md border shrink-0 ${
+                          isLight
+                            ? 'bg-blue-100 text-blue-700 border-blue-300'
+                            : 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                        }`}>
                           Today
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-1 text-xs text-gray-300 font-medium">
-                      <span className="flex items-center gap-1.5 font-mono text-gray-300">
-                        <Clock className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                    <div className={`flex items-center flex-wrap gap-x-3 gap-y-1 mt-1 text-xs font-medium ${isLight ? 'text-slate-600' : 'text-gray-300'}`}>
+                      <span className={`flex items-center gap-1.5 font-mono ${isLight ? 'text-slate-700' : 'text-gray-300'}`}>
+                        <Clock className="w-3.5 h-3.5 text-blue-500 shrink-0" />
                         {evt.isAllDay
                           ? 'All Day'
                           : startDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                         {evt.end && !evt.isAllDay && ` – ${new Date(evt.end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
                       </span>
                       {evt.location && (
-                        <span className="flex items-center gap-1 text-gray-400 truncate max-w-[200px]">
-                          <MapPin className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+                        <span className={`flex items-center gap-1 truncate max-w-[200px] ${isLight ? 'text-slate-600' : 'text-gray-400'}`}>
+                          <MapPin className={`w-3.5 h-3.5 shrink-0 ${isLight ? 'text-slate-500' : 'text-gray-500'}`} />
                           <span className="truncate">{evt.location}</span>
                         </span>
                       )}
                       {evt.calendarName && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/5 text-gray-400 border border-white/5 truncate max-w-[120px] hidden sm:inline">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-md border truncate max-w-[120px] hidden sm:inline ${
+                          isLight
+                            ? 'bg-slate-200/80 text-slate-700 border-slate-300'
+                            : 'bg-white/5 text-gray-400 border-white/5'
+                        }`}>
                           {evt.calendarName}
                         </span>
                       )}
@@ -834,7 +884,9 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
         /* Monthly Grid View (Enlarged events and spacious cells) */
         <div className="flex-1 flex flex-col justify-between overflow-hidden">
           {/* Weekday Labels */}
-          <div className="grid grid-cols-7 gap-1 text-center text-xs font-black text-gray-400 pb-1.5 border-b border-gray-800 shrink-0">
+          <div className={`grid grid-cols-7 gap-1 text-center text-xs font-black pb-1.5 border-b shrink-0 ${
+            isLight ? 'text-slate-600 border-slate-200' : 'text-gray-400 border-gray-800'
+          }`}>
             {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((d) => (
               <span key={d}>{d}</span>
             ))}
@@ -844,7 +896,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
           <div className="grid grid-cols-7 gap-1.5 flex-1 py-1.5 overflow-hidden">
             {/* Blank leading days */}
             {Array.from({ length: startDayOfWeek }).map((_, i) => (
-              <div key={`blank-${i}`} className="p-1 rounded-xl bg-gray-950/10 border border-transparent" />
+              <div key={`blank-${i}`} className={`p-1 rounded-xl border border-transparent ${isLight ? 'bg-slate-200/20' : 'bg-gray-950/10'}`} />
             ))}
 
             {/* Calendar Days */}
@@ -863,10 +915,14 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                     }
                   }}
                   className={`flex flex-col justify-start p-2 rounded-xl border transition-all overflow-hidden ${
-                    dayEvents.length > 0 ? 'cursor-pointer hover:border-gray-600' : ''
+                    dayEvents.length > 0 ? isLight ? 'cursor-pointer hover:border-slate-400' : 'cursor-pointer hover:border-gray-600' : ''
                   } ${
                     isToday
-                      ? 'bg-blue-600/15 border-blue-500/80 shadow-md'
+                      ? isLight
+                        ? 'bg-blue-50/70 border-blue-400/80 shadow-xs'
+                        : 'bg-blue-600/15 border-blue-500/80 shadow-md'
+                      : isLight
+                      ? 'border-slate-200 bg-slate-50/70 hover:bg-slate-100/90'
                       : 'border-gray-800/60 bg-gray-950/40 hover:bg-gray-800/40'
                   }`}
                 >
@@ -874,7 +930,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                   <div className="flex items-center justify-between mb-1 shrink-0">
                     <span
                       className={`text-xs md:text-sm font-black w-6 h-6 flex items-center justify-center rounded-full ${
-                        isToday ? 'bg-blue-600 text-white shadow' : 'text-gray-200'
+                        isToday ? 'bg-blue-600 text-white shadow' : isLight ? 'text-slate-800' : 'text-gray-200'
                       }`}
                     >
                       {day}
@@ -894,9 +950,13 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                         key={de.uid}
                         title={`${de.summary} (${formatEventTime(de)})${de.location ? ` - ${de.location}` : ''}`}
                         style={{
-                          backgroundColor: de.isAllDay ? (de.color || '#3b82f6') : `${de.color || '#3b82f6'}26`,
+                          backgroundColor: de.isAllDay
+                            ? (de.color || '#3b82f6')
+                            : isLight
+                            ? `${de.color || '#3b82f6'}33`
+                            : `${de.color || '#3b82f6'}26`,
                           borderLeftColor: de.color || '#3b82f6',
-                          color: de.isAllDay ? '#ffffff' : '#f1f5f9',
+                          color: de.isAllDay ? '#ffffff' : isLight ? '#0f172a' : '#f1f5f9',
                         }}
                         className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-semibold truncate border-l-4 leading-tight shadow-2xs"
                       >

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.0] - 2026-11-05
+
+### Added
+* **Dual-Tier Light Theming & Daylight Canvases (`canvasThemes.ts`, `Corkboard.tsx`, `MobileCompanion.tsx`, `App.tsx`):**
+  * Added 3 daylight canvas themes: **Daylight Dots** (`paper_dots`, crisp off-white stationery with soft slate dot matrix), **Warm Linen** (`warm_linen`, natural cream parchment with warm fiber grain), and **Studio White** (`minimal_light`, modern minimal light gray studio backdrop).
+  * Automatically sets the root viewport background to light mode when a daylight canvas is active to eliminate dark border and transition flashes.
+* **Per-Widget Theme Customization (`Corkboard.tsx`, `WidgetSettingsModal.tsx`, `types/dashboard.ts`):**
+  * Added `themeMode?: 'auto' | 'light' | 'dark'` to widget configurations.
+  * In `auto` mode, widgets dynamically inherit the board theme (light canvas -> light card, dark canvas -> dark card).
+  * In `light` or `dark` mode, widgets override the canvas (e.g. crisp paper cards on photo or dark canvases, or dark cards on daylight boards).
+  * Added **Card Appearance** 3-button selector directly into the right-click tile context menu and Tile Settings modal.
+* **Widget Light Palette Refinements:**
+  * Adapted Clock, Weather, Clock-Weather, World Clock, Calendar, Quotes, RSS, Countdown, TextBox, and Sticky Notes widgets with high-contrast slate typography, light card containers, and daylight forecast/calendar accents.
+* **Mobile Companion Light Mode (`MobileCompanion.tsx`):**
+  * Fully synchronized light styling for widget cards and inner renderers in the mobile companion stream.
+
+---
+
 ## [0.1.24] - 2026-11-05
 
 ### Added

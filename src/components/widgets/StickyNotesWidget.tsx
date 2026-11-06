@@ -19,6 +19,7 @@ interface StickyNotesWidgetProps {
   onToggleArchive?: (noteId: string) => void;
   onPinNoteToCanvas?: (noteId: string) => void;
   onUnpinNoteFromCanvas?: (noteId: string) => void;
+  isLight?: boolean;
 }
 
 const COLOR_PALETTE = [
@@ -37,6 +38,7 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
   onDeleteNote,
   onPinNoteToCanvas,
   onUnpinNoteFromCanvas,
+  isLight = false,
 }) => {
   const [activeTab, setActiveTab] = useState<'active' | 'trash'>('active');
   const [isCreating, setIsCreating] = useState(false);
@@ -116,13 +118,17 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
   return (
     <div className="w-full h-full flex flex-col justify-between overflow-hidden">
       {/* Header Tabs & Quick Actions */}
-      <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-gray-800/80 pb-2 mb-2">
-        <div className="flex items-center gap-1 bg-gray-950/60 p-0.5 rounded-lg border border-gray-800 shrink-0">
+      <div className={`flex flex-wrap items-center justify-between gap-1.5 border-b pb-2 mb-2 ${isLight ? 'border-slate-200' : 'border-gray-800/80'}`}>
+        <div className={`flex items-center gap-1 p-0.5 rounded-lg border shrink-0 ${
+          isLight ? 'bg-slate-100 border-slate-300' : 'bg-gray-950/60 border-gray-800'
+        }`}>
           <button
             onClick={() => setActiveTab('active')}
             className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all cursor-pointer ${
               activeTab === 'active'
                 ? 'bg-blue-600 text-white shadow-sm'
+                : isLight
+                ? 'text-slate-600 hover:text-slate-900'
                 : 'text-gray-400 hover:text-white'
             }`}
           >
@@ -132,7 +138,11 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
             onClick={() => setActiveTab('trash')}
             className={`px-2 py-1 text-xs rounded-md font-medium transition-all flex items-center gap-1 cursor-pointer ${
               activeTab === 'trash'
-                ? 'bg-red-950/60 text-red-300 border border-red-800/50'
+                ? isLight
+                  ? 'bg-red-100 text-red-700 border border-red-300'
+                  : 'bg-red-950/60 text-red-300 border border-red-800/50'
+                : isLight
+                ? 'text-slate-500 hover:text-slate-800'
                 : 'text-gray-500 hover:text-gray-300'
             }`}
           >
@@ -154,20 +164,26 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
 
       {/* Note Creator Drawer */}
       {isCreating ? (
-        <div className="flex-1 overflow-y-auto p-3 rounded-xl bg-gray-950 border border-gray-800 flex flex-col gap-2.5">
+        <div className={`flex-1 overflow-y-auto p-3 rounded-xl border flex flex-col gap-2.5 ${
+          isLight ? 'bg-slate-100 border-slate-300 text-slate-800' : 'bg-gray-950 border-gray-800'
+        }`}>
           <input
             type="text"
             placeholder="Note title (optional)..."
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
-            className="w-full bg-gray-900 border border-gray-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
+            className={`w-full border rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-blue-500 ${
+              isLight ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400' : 'bg-gray-900 border-gray-800 text-white'
+            }`}
           />
 
           <div className="flex items-center gap-2">
             <button
               onClick={() => setIsChecklist(false)}
               className={`px-2.5 py-1 text-[11px] rounded font-medium ${
-                !isChecklist ? 'bg-gray-800 text-white' : 'text-gray-400'
+                !isChecklist
+                  ? isLight ? 'bg-slate-300 text-slate-900' : 'bg-gray-800 text-white'
+                  : isLight ? 'text-slate-600' : 'text-gray-400'
               }`}
             >
               Text
@@ -175,10 +191,12 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
             <button
               onClick={() => setIsChecklist(true)}
               className={`px-2.5 py-1 text-[11px] rounded font-medium flex items-center gap-1 ${
-                isChecklist ? 'bg-gray-800 text-white' : 'text-gray-400'
+                isChecklist
+                  ? isLight ? 'bg-slate-300 text-slate-900' : 'bg-gray-800 text-white'
+                  : isLight ? 'text-slate-600' : 'text-gray-400'
               }`}
             >
-              <CheckSquare className="w-3 h-3 text-emerald-400" />
+              <CheckSquare className="w-3 h-3 text-emerald-500" />
               Checklist
             </button>
           </div>
@@ -192,19 +210,23 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
                   value={newChecklistText}
                   onChange={(e) => setNewChecklistText(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && addChecklistItem()}
-                  className="flex-1 bg-gray-900 border border-gray-800 rounded px-2 py-1 text-xs text-white"
+                  className={`flex-1 border rounded px-2 py-1 text-xs ${
+                    isLight ? 'bg-white border-slate-300 text-slate-900' : 'bg-gray-900 border-gray-800 text-white'
+                  }`}
                 />
                 <button
                   onClick={addChecklistItem}
-                  className="px-2 py-1 bg-gray-800 text-xs text-white rounded"
+                  className={`px-2 py-1 text-xs rounded ${
+                    isLight ? 'bg-slate-300 text-slate-800' : 'bg-gray-800 text-white'
+                  }`}
                 >
                   Add
                 </button>
               </div>
               <div className="max-h-24 overflow-y-auto space-y-1">
                 {tempChecklist.map((item) => (
-                  <div key={item.id} className="text-xs text-gray-300 flex items-center gap-1.5">
-                    <Square className="w-3 h-3 text-gray-500" />
+                  <div key={item.id} className={`text-xs flex items-center gap-1.5 ${isLight ? 'text-slate-700' : 'text-gray-300'}`}>
+                    <Square className={`w-3 h-3 ${isLight ? 'text-slate-400' : 'text-gray-500'}`} />
                     <span>{item.text}</span>
                   </div>
                 ))}
@@ -216,7 +238,9 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
               value={newContent}
               onChange={(e) => setNewContent(e.target.value)}
               rows={3}
-              className="w-full bg-gray-900 border border-gray-800 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-blue-500 resize-none"
+              className={`w-full border rounded-lg p-2 text-xs focus:outline-none focus:border-blue-500 resize-none ${
+                isLight ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400' : 'bg-gray-900 border-gray-800 text-white'
+              }`}
             />
           )}
 
