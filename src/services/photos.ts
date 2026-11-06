@@ -48,7 +48,7 @@ export async function cachePhotosLocally(photos: PhotoItem[]): Promise<void> {
   }
 }
 
-async function scanDirectoryHandle(
+export async function scanDirectoryHandle(
   dirHandle: any,
   photos: PhotoItem[],
   maxPhotos = Infinity,
@@ -113,6 +113,215 @@ async function scanDirectoryHandle(
   }
 }
 
+export interface LocalSubfolderItem {
+  name: string;
+  handle?: any;
+  files?: File[];
+  isYear?: boolean;
+  yearNum?: number;
+}
+
+export interface LocalDirectoryInspection {
+  rootName: string;
+  dirHandle?: any;
+  files?: File[];
+  subfolders: LocalSubfolderItem[];
+  hasDirectPhotos: boolean;
+  directPhotosCount: number;
+}
+
+export async function promptLocalDirectoryHandle(): Promise<{
+  success: boolean;
+  dirHandle?: any;
+  error?: string;
+  cancelled?: boolean;
+}> {
+  try {
+    if (!('showDirectoryPicker' in window)) {
+      return {
+        success: false,
+        error: 'Directory Picker is not supported in this browser. Please use the folder browse fallback.',
+      };
+    }
+    const dirHandle = await (window as any).showDirectoryPicker({
+      id: 'ambiently-photos',
+      mode: 'read',
+    });
+    return { success: true, dirHandle };
+  } catch (err: any) {
+    if (err.name === 'AbortError') {
+      return { success: false, cancelled: true };
+    }
+    return { success: false, error: err.message };
+  }
+}
+
+export async function inspectLocalDirectory(dirHandle: any): Promise<LocalDirectoryInspection> {
+  const rootName = dirHandle.name || 'Selected Folder';
+  const subfolders: LocalSubfolderItem[] = [];
+  let hasDirectPhotos = false;
+  let directPhotosCount = 0;
+
+  for await (const entry of dirHandle.values()) {
+    if (entry.kind === 'directory') {
+      const isYear = /^(19|20)\d{2}$/.test(entry.name.trim());
+      const yearNum = isYear ? parseInt(entry.name.trim(), 10) : undefined;
+      subfolders.push({
+        name: entry.name,
+        handle: entry,
+        isYear,
+        yearNum,
+      });
+    } else if (entry.kind === 'file') {
+      if (IMAGE_EXT_REGEX.test(entry.name)) {
+        hasDirectPhotos = true;
+        directPhotosCount++;
+      }
+    }
+  }
+
+  // Sort subfolders: newest years first (e.g. 2026, 2025, 2024...), then natural alphanumeric sort
+  subfolders.sort((a, b) => {
+    if (a.isYear && b.isYear && a.yearNum && b.yearNum) {
+      return b.yearNum - a.yearNum;
+    }
+    return b.name.localeCompare(a.name, undefined, { numeric: true });
+  });
+
+  return { rootName, dirHandle, subfolders, hasDirectPhotos, directPhotosCount };
+}
+
+export function inspectLocalFileList(files: FileList | File[]): LocalDirectoryInspection {
+  let detectedRoot = 'Selected Folder';
+  const subfolderMap = new Map<string, File[]>();
+  let hasDirectPhotos = false;
+  let directPhotosCount = 0;
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const path = (file as any).webkitRelativePath || file.name;
+    const parts = path.split('/');
+    if (parts.length > 1) {
+      if (detectedRoot === 'Selected Folder') {
+        detectedRoot = parts[0];
+      }
+      const subName = parts[1];
+      if (!subfolderMap.has(subName)) {
+        subfolderMap.set(subName, []);
+      }
+      if (IMAGE_EXT_REGEX.test(file.name) || (file.type && file.type.startsWith('image/'))) {
+        subfolderMap.get(subName)!.push(file);
+      }
+    } else {
+      if (IMAGE_EXT_REGEX.test(file.name) || (file.type && file.type.startsWith('image/'))) {
+        hasDirectPhotos = true;
+        directPhotosCount++;
+      }
+    }
+  }
+
+  const subfolders: LocalSubfolderItem[] = Array.from(subfolderMap.entries()).map(([name, subFiles]) => {
+    const isYear = /^(19|20)\d{2}$/.test(name.trim());
+    const yearNum = isYear ? parseInt(name.trim(), 10) : undefined;
+    return {
+      name,
+      files: subFiles,
+      isYear,
+      yearNum,
+    };
+  });
+
+  subfolders.sort((a, b) => {
+    if (a.isYear && b.isYear && a.yearNum && b.yearNum) {
+      return b.yearNum - a.yearNum;
+    }
+    return b.name.localeCompare(a.name, undefined, { numeric: true });
+  });
+
+  return { rootName: detectedRoot, files: Array.from(files), subfolders, hasDirectPhotos, directPhotosCount };
+}
+
+export async function scanSelectedSubfolders(
+  inspection: LocalDirectoryInspection,
+  selectedSubfolderNames: Set<string>,
+  includeRootPhotos: boolean,
+  maxPhotos = Infinity,
+  onProgress?: (count: number, currentDirName: string) => void
+): Promise<{ folderEntries: { id: string; name: string; photos: PhotoItem[] }[]; totalPhotos: PhotoItem[] }> {
+  const folderEntries: { id: string; name: string; photos: PhotoItem[] }[] = [];
+  const totalPhotos: PhotoItem[] = [];
+  const isUnlimited = !maxPhotos || maxPhotos <= 0 || !isFinite(maxPhotos);
+
+  if (inspection.dirHandle) {
+    if (includeRootPhotos && inspection.hasDirectPhotos) {
+      const rootPhotos: PhotoItem[] = [];
+      for await (const entry of inspection.dirHandle.values()) {
+        if (!isUnlimited && totalPhotos.length >= maxPhotos) break;
+        if (entry.kind === 'file' && IMAGE_EXT_REGEX.test(entry.name)) {
+          try {
+            const file = await entry.getFile();
+            const url = URL.createObjectURL(file);
+            const p: PhotoItem = {
+              id: `local-${entry.name}-${file.lastModified}-${Math.random().toString(36).slice(2, 7)}`,
+              url,
+              caption: entry.name.replace(/\.[^/.]+$/, ''),
+              date: new Date(file.lastModified).toLocaleDateString(),
+              source: 'local',
+            };
+            rootPhotos.push(p);
+            totalPhotos.push(p);
+          } catch {
+            // ignore
+          }
+        }
+      }
+      if (rootPhotos.length > 0) {
+        folderEntries.push({
+          id: `folder-root-${Date.now()}`,
+          name: `${inspection.rootName} (Root)`,
+          photos: rootPhotos,
+        });
+      }
+    }
+
+    for (const sub of inspection.subfolders) {
+      if (!selectedSubfolderNames.has(sub.name)) continue;
+      if (!isUnlimited && totalPhotos.length >= maxPhotos) break;
+
+      const subPhotos: PhotoItem[] = [];
+      const remainingLimit = isUnlimited ? Infinity : maxPhotos - totalPhotos.length;
+      await scanDirectoryHandle(sub.handle, subPhotos, remainingLimit, 0, 12, onProgress);
+      if (subPhotos.length > 0) {
+        totalPhotos.push(...subPhotos);
+        folderEntries.push({
+          id: `folder-${sub.name}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          name: `${inspection.rootName} ❯ ${sub.name}`,
+          photos: subPhotos,
+        });
+      }
+    }
+  } else if (inspection.files) {
+    for (const sub of inspection.subfolders) {
+      if (!selectedSubfolderNames.has(sub.name)) continue;
+      if (!isUnlimited && totalPhotos.length >= maxPhotos) break;
+
+      const subFiles = sub.files || [];
+      const remainingLimit = isUnlimited ? Infinity : maxPhotos - totalPhotos.length;
+      const { photos } = parseFileListToPhotos(subFiles, remainingLimit);
+      if (photos.length > 0) {
+        totalPhotos.push(...photos);
+        folderEntries.push({
+          id: `folder-${sub.name}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          name: `${inspection.rootName} ❯ ${sub.name}`,
+          photos,
+        });
+      }
+    }
+  }
+
+  return { folderEntries, totalPhotos };
+}
+
 // Local Directory Picker (showDirectoryPicker) for local PC / mapped NAS photos
 export async function pickLocalPhotoDirectory(
   maxPhotos = Infinity,
@@ -124,19 +333,15 @@ export async function pickLocalPhotoDirectory(
   error?: string;
 }> {
   try {
-    if (!('showDirectoryPicker' in window)) {
-      return {
-        success: false,
-        photos: [],
-        error: 'Directory Picker is not supported in this browser. Please use the folder browse fallback.',
-      };
+    const promptRes = await promptLocalDirectoryHandle();
+    if (!promptRes.success) {
+      if (promptRes.cancelled) {
+        return { success: false, photos: [] };
+      }
+      return { success: false, photos: [], error: promptRes.error };
     }
 
-    const dirHandle = await (window as any).showDirectoryPicker({
-      id: 'ambiently-photos',
-      mode: 'read',
-    });
-
+    const dirHandle = promptRes.dirHandle;
     const folderName = dirHandle.name || 'Selected Folder';
     const localPhotos: PhotoItem[] = [];
     await scanDirectoryHandle(dirHandle, localPhotos, maxPhotos, 0, 12, onProgress);

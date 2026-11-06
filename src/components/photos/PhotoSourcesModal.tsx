@@ -24,6 +24,11 @@ import {
   Leaf,
   QrCode,
   Copy,
+  Calendar,
+  CheckSquare,
+  Square,
+  Search,
+  ArrowLeft,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -45,7 +50,12 @@ import {
 import {
   CURATED_CATEGORIES,
   getCuratedCategoryById,
-  pickLocalPhotoDirectory,
+  promptLocalDirectoryHandle,
+  inspectLocalDirectory,
+  inspectLocalFileList,
+  scanSelectedSubfolders,
+  scanDirectoryHandle,
+  type LocalDirectoryInspection,
   parseFileListToPhotos,
   cachePhotosLocally,
   resolveWebAndCloudPhotoUrls,
@@ -140,6 +150,12 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   const [isScanning, setIsScanning] = useState(false);
   const [scanLimit, setScanLimit] = useState<number>(Infinity);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Local Subfolder Multi-Select State
+  const [subfolderInspection, setSubfolderInspection] = useState<LocalDirectoryInspection | null>(null);
+  const [selectedSubfolderNames, setSelectedSubfolderNames] = useState<Set<string>>(new Set());
+  const [includeRootPhotos, setIncludeRootPhotos] = useState<boolean>(true);
+  const [subfolderSearchQuery, setSubfolderSearchQuery] = useState<string>('');
 
   // Web / Google Drive state
   const [webUrlsText, setWebUrlsText] = useState(initialWebUrls || '');
@@ -357,31 +373,144 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   };
 
   // Local Multi-Folder Pickers & Handlers
-  const handlePickFolder = async () => {
+  const handleSelectAllSubfolders = () => {
+    if (!subfolderInspection) return;
+    const all = new Set<string>(subfolderInspection.subfolders.map((s) => s.name));
+    setSelectedSubfolderNames(all);
+    setIncludeRootPhotos(true);
+  };
+
+  const handleDeselectAllSubfolders = () => {
+    setSelectedSubfolderNames(new Set());
+    setIncludeRootPhotos(false);
+  };
+
+  const handleSelectRecentYears = (yearCount: number) => {
+    if (!subfolderInspection) return;
+    const yearSubfolders = subfolderInspection.subfolders.filter((s) => s.isYear);
+    const targetPool = yearSubfolders.length > 0 ? yearSubfolders : subfolderInspection.subfolders;
+    const selected = new Set<string>(targetPool.slice(0, yearCount).map((s) => s.name));
+    setSelectedSubfolderNames(selected);
+  };
+
+  const handleToggleSubfolder = (name: string) => {
+    setSelectedSubfolderNames((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) {
+        next.delete(name);
+      } else {
+        next.add(name);
+      }
+      return next;
+    });
+  };
+
+  const filteredSubfolders = useMemo(() => {
+    if (!subfolderInspection) return [];
+    const query = subfolderSearchQuery.trim().toLowerCase();
+    if (!query) return subfolderInspection.subfolders;
+    return subfolderInspection.subfolders.filter((s) => s.name.toLowerCase().includes(query));
+  }, [subfolderInspection, subfolderSearchQuery]);
+
+  const handleConfirmSubfolderSelection = async () => {
+    if (!subfolderInspection) return;
+    if (selectedSubfolderNames.size === 0 && (!includeRootPhotos || !subfolderInspection.hasDirectPhotos)) {
+      setStatusMessage('Please select at least one subfolder to import.');
+      return;
+    }
+
     setIsScanning(true);
     setStatusMessage(
-      isFinite(scanLimit)
-        ? `Scanning folder and subfolders (up to ${scanLimit.toLocaleString()} photos)...`
-        : 'Scanning folder and subfolders (unlimited photos)...'
+      `Scanning ${selectedSubfolderNames.size} selected subfolder(s) in "${subfolderInspection.rootName}"...`
     );
     try {
-      const res = await pickLocalPhotoDirectory(scanLimit, (count, dirName) => {
-        setStatusMessage(`Scanning "${dirName}": ${count} photos found...`);
-      });
-      if (res.success && res.photos.length > 0) {
-        const folderName = res.folderName || 'Selected Folder';
-        setSelectedFolders((prev) => [
-          ...prev,
-          {
-            id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            name: folderName,
-            photos: res.photos,
-          },
-        ]);
-        setStatusMessage(`Added "${folderName}" with ${res.photos.length} photos.`);
-      } else if (res.error) {
-        setStatusMessage(res.error);
+      const { folderEntries, totalPhotos } = await scanSelectedSubfolders(
+        subfolderInspection,
+        selectedSubfolderNames,
+        includeRootPhotos,
+        scanLimit,
+        (count, dirName) => {
+          setStatusMessage(`Scanning "${dirName}": ${count} photos found...`);
+        }
+      );
+
+      if (folderEntries.length > 0) {
+        setSelectedFolders((prev) => [...prev, ...folderEntries]);
+        setStatusMessage(
+          `Successfully added ${totalPhotos.length.toLocaleString()} photos from ${folderEntries.length} subfolder(s)!`
+        );
+        setSubfolderInspection(null);
+      } else {
+        setStatusMessage('No photos found in the selected subfolders.');
       }
+    } catch (err: any) {
+      setStatusMessage(`Error scanning subfolders: ${err.message}`);
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const handlePickFolder = async () => {
+    setIsScanning(true);
+    setStatusMessage('Opening directory picker...');
+    try {
+      const promptRes = await promptLocalDirectoryHandle();
+      if (!promptRes.success) {
+        if (!promptRes.cancelled && promptRes.error) {
+          setStatusMessage(promptRes.error);
+        }
+        return;
+      }
+
+      const dirHandle = promptRes.dirHandle;
+      setStatusMessage(`Inspecting "${dirHandle.name}" for subfolders...`);
+      const inspection = await inspectLocalDirectory(dirHandle);
+
+      if (inspection.subfolders.length === 0) {
+        // Flat folder without subdirectories: scan directly
+        setStatusMessage(
+          isFinite(scanLimit)
+            ? `Scanning folder (up to ${scanLimit.toLocaleString()} photos)...`
+            : 'Scanning folder (unlimited photos)...'
+        );
+        const localPhotos: PhotoItem[] = [];
+        await scanDirectoryHandle(dirHandle, localPhotos, scanLimit, 0, 12, (count, dirName) => {
+          setStatusMessage(`Scanning "${dirName}": ${count} photos found...`);
+        });
+
+        if (localPhotos.length > 0) {
+          const folderName = dirHandle.name || 'Selected Folder';
+          setSelectedFolders((prev) => [
+            ...prev,
+            {
+              id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              name: folderName,
+              photos: localPhotos,
+            },
+          ]);
+          setStatusMessage(`Added "${folderName}" with ${localPhotos.length} photos.`);
+        } else {
+          setStatusMessage(`No photos (.jpg, .png, .webp, .heic) found in "${dirHandle.name}".`);
+        }
+      } else {
+        // Subfolders detected! Prompt subfolder multi-selection
+        setSubfolderInspection(inspection);
+        const initialSelected = new Set<string>();
+        const yearSubfolders = inspection.subfolders.filter((s) => s.isYear);
+        if (yearSubfolders.length >= 5) {
+          yearSubfolders.slice(0, 5).forEach((s) => initialSelected.add(s.name));
+        } else {
+          inspection.subfolders.forEach((s) => initialSelected.add(s.name));
+        }
+        setSelectedSubfolderNames(initialSelected);
+        setIncludeRootPhotos(inspection.hasDirectPhotos);
+        setSubfolderSearchQuery('');
+        setStatusMessage(
+          `Found ${inspection.subfolders.length} subfolders in "${inspection.rootName}". Select the ones you want to import.`
+        );
+      }
+    } catch (err: any) {
+      setStatusMessage(`Error: ${err.message}`);
     } finally {
       setIsScanning(false);
     }
@@ -390,21 +519,39 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
     setIsScanning(true);
-    setStatusMessage('Reading folder files...');
+    setStatusMessage('Inspecting selected folder...');
     try {
-      const { folderName, photos } = parseFileListToPhotos(e.target.files, scanLimit);
-      if (photos.length > 0) {
-        setSelectedFolders((prev) => [
-          ...prev,
-          {
-            id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            name: folderName,
-            photos,
-          },
-        ]);
-        setStatusMessage(`Added "${folderName}" with ${photos.length} photos.`);
+      const inspection = inspectLocalFileList(e.target.files);
+      if (inspection.subfolders.length === 0) {
+        const { folderName, photos } = parseFileListToPhotos(e.target.files, scanLimit);
+        if (photos.length > 0) {
+          setSelectedFolders((prev) => [
+            ...prev,
+            {
+              id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              name: folderName,
+              photos,
+            },
+          ]);
+          setStatusMessage(`Added "${folderName}" with ${photos.length} photos.`);
+        } else {
+          setStatusMessage(`No photos found in "${folderName}".`);
+        }
       } else {
-        setStatusMessage(`No photos (.jpg, .png, .webp, .heic) found in "${folderName}".`);
+        setSubfolderInspection(inspection);
+        const initialSelected = new Set<string>();
+        const yearSubfolders = inspection.subfolders.filter((s) => s.isYear);
+        if (yearSubfolders.length >= 5) {
+          yearSubfolders.slice(0, 5).forEach((s) => initialSelected.add(s.name));
+        } else {
+          inspection.subfolders.forEach((s) => initialSelected.add(s.name));
+        }
+        setSelectedSubfolderNames(initialSelected);
+        setIncludeRootPhotos(inspection.hasDirectPhotos);
+        setSubfolderSearchQuery('');
+        setStatusMessage(
+          `Found ${inspection.subfolders.length} subfolders in "${inspection.rootName}". Select the ones you want to import.`
+        );
       }
     } finally {
       setIsScanning(false);
@@ -925,7 +1072,194 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                 </div>
               </div>
 
-              {selectedFolders.length === 0 ? (
+              {subfolderInspection ? (
+                <div className="space-y-3.5">
+                  {/* Subfolder Picker Header */}
+                  <div className="flex items-center justify-between pb-2 border-b border-gray-800">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSubfolderInspection(null)}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors cursor-pointer"
+                        title="Back to folders"
+                      >
+                        <ArrowLeft className="w-4 h-4" />
+                      </button>
+                      <div>
+                        <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                          <FolderOpen className="w-3.5 h-3.5 text-blue-400" />
+                          <span>Subfolders in &quot;{subfolderInspection.rootName}&quot;</span>
+                        </h4>
+                        <p className="text-[10px] text-gray-400">
+                          {subfolderInspection.subfolders.length} subfolders detected. Choose which years/folders to include.
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                      {selectedSubfolderNames.size} Selected
+                    </span>
+                  </div>
+
+                  {/* Search & Quick Filter Presets */}
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-gray-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={subfolderSearchQuery}
+                        onChange={(e) => setSubfolderSearchQuery(e.target.value)}
+                        placeholder="Filter subfolders (e.g. 2020)..."
+                        className="w-full pl-8 pr-7 py-1.5 bg-gray-950 border border-gray-800 rounded-lg text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                      />
+                      {subfolderSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setSubfolderSearchQuery('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white text-xs cursor-pointer"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Preset Action Buttons */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleSelectRecentYears(5)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/30 text-blue-300 text-[11px] font-semibold transition-all cursor-pointer"
+                      >
+                        <Calendar className="w-3 h-3 text-blue-400" />
+                        <span>Last 5 Years</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectRecentYears(3)}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-900 hover:bg-gray-800 border border-gray-800 text-gray-300 text-[11px] font-medium transition-all cursor-pointer"
+                      >
+                        <span>Last 3 Years</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSelectAllSubfolders}
+                        className="px-2 py-1 rounded-lg bg-gray-900 hover:bg-gray-800 border border-gray-800 text-gray-300 text-[11px] font-medium transition-all cursor-pointer"
+                      >
+                        Select All ({subfolderInspection.subfolders.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDeselectAllSubfolders}
+                        className="px-2 py-1 rounded-lg bg-gray-900 hover:bg-gray-800 border border-gray-800 text-gray-400 hover:text-red-400 text-[11px] font-medium transition-all cursor-pointer"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Scrollable Subfolder Checklist */}
+                  <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                    {subfolderInspection.hasDirectPhotos && (
+                      <div
+                        onClick={() => setIncludeRootPhotos(!includeRootPhotos)}
+                        className={`p-2 rounded-lg border text-xs flex items-center justify-between gap-2.5 cursor-pointer transition-all ${
+                          includeRootPhotos
+                            ? 'bg-blue-500/10 border-blue-500/30 text-white'
+                            : 'bg-gray-950/60 border-gray-800/80 text-gray-400 hover:border-gray-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          {includeRootPhotos ? (
+                            <CheckSquare className="w-4 h-4 text-blue-400 shrink-0" />
+                          ) : (
+                            <Square className="w-4 h-4 text-gray-600 shrink-0" />
+                          )}
+                          <span className="font-semibold">Direct Photos in &quot;{subfolderInspection.rootName}&quot;</span>
+                        </div>
+                        <span className="text-[10px] text-gray-500 font-mono">
+                          {subfolderInspection.directPhotosCount} photos
+                        </span>
+                      </div>
+                    )}
+
+                    {filteredSubfolders.map((sub) => {
+                      const isSelected = selectedSubfolderNames.has(sub.name);
+                      return (
+                        <div
+                          key={sub.name}
+                          onClick={() => handleToggleSubfolder(sub.name)}
+                          className={`p-2 rounded-lg border text-xs flex items-center justify-between gap-2.5 cursor-pointer transition-all ${
+                            isSelected
+                              ? 'bg-blue-500/10 border-blue-500/30 text-white'
+                              : 'bg-gray-950/60 border-gray-800/80 text-gray-400 hover:border-gray-700'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            {isSelected ? (
+                              <CheckSquare className="w-4 h-4 text-blue-400 shrink-0" />
+                            ) : (
+                              <Square className="w-4 h-4 text-gray-600 shrink-0" />
+                            )}
+                            <FolderOpen className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-blue-400' : 'text-gray-500'}`} />
+                            <span className="font-semibold truncate">{sub.name}</span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {sub.isYear && (
+                              <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                Year
+                              </span>
+                            )}
+                            {sub.files && (
+                              <span className="text-[10px] text-gray-500 font-mono">
+                                {sub.files.length} items
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {filteredSubfolders.length === 0 && (
+                      <div className="text-center py-6 text-gray-500 text-xs">
+                        No subfolders matching &quot;{subfolderSearchQuery}&quot;
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Subfolder Picker Action Footer */}
+                  <div className="pt-2 border-t border-gray-800 flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSubfolderInspection(null)}
+                      disabled={isScanning}
+                      className="px-3 py-1.5 rounded-lg text-xs text-gray-400 hover:text-white transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleConfirmSubfolderSelection}
+                        disabled={isScanning || (selectedSubfolderNames.size === 0 && (!includeRootPhotos || !subfolderInspection.hasDirectPhotos))}
+                        className="flex items-center gap-1.5 py-1.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-xs shadow-lg transition-all cursor-pointer"
+                      >
+                        {isScanning ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Scanning Subfolders...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Import Selected ({selectedSubfolderNames.size})</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : selectedFolders.length === 0 ? (
                 <div className="text-center py-6 space-y-4">
                   <div className="w-12 h-12 rounded-2xl bg-blue-500/10 text-blue-400 flex items-center justify-center mx-auto border border-blue-500/20">
                     <FolderOpen className="w-6 h-6" />

@@ -13,8 +13,11 @@ export const RELEASES: ReleaseEntry[] = [
   {
     version: "v0.3.2",
     date: "November 6, 2026",
-    title: "Plex Direct Play Full Camera Resolution & 4K Image Transcode Quality",
+    title: "Local Subdirectory Multi-Select, Plex Direct Play Camera Resolution & 4K Streaming",
     highlights: [
+      "Local Subfolder Multi-Select & Checklist: Added interactive subfolder inspection when selecting parent folders (e.g. media/personal/2011, media/personal/2012 ... media/personal/2020), allowing users to selectively import specific subdirectories with checkboxes.",
+      "1-Click 'Last 5 Years' & 'Last 3 Years' Presets: Automatically identifies year-formatted folders and selects the 5 or 3 most recent years with a single click, instantly isolating recent memories from decades of archives.",
+      "Subfolder Search & Live Previews: Added instant search filtering and direct photos support for mixed root/subfolder structures, keeping selection organized.",
       "Eliminated Blurry Plex Photos: Diagnosed that Plex folder listings omit Part keys in summary responses, which previously caused photos to fall back to low-resolution thumbnails (~256x256) upscaled to 1080p.",
       "Direct Play Native Resolution: Standard image formats (JPEG, PNG, WebP) now direct play full uncompressed original files from Plex Media Server, achieving 100% native camera sensor clarity with zero compression artifacts and zero server transcoding load.",
       "4K Transcoding Bounds & Upscaling Guard: Upgraded photo transcode bounds to full 4K UHD (3840x2160), set high-fidelity quality (quality=95), and disabled upscaling (upscale=0) to prevent artificial pixel stretching.",

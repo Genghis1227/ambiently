@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.3.2] - 2026-11-06
 
+### Added
+* **Local Folder Subdirectory Multi-Select & Year Presets (`src/services/photos.ts`, `src/components/photos/PhotoSourcesModal.tsx`):**
+  * **Interactive Subfolder Multi-Selection:** When picking a parent folder containing decades of archived photos (e.g. `media\personal\2011`, `media\personal\2012` ... `media\personal\2020`), Ambiently now immediately detects all subdirectories and opens an interactive subfolder selection checklist.
+  * **1-Click "Last 5 Years" & "Last 3 Years" Presets:** Automatically detects year-formatted folders (e.g. `2020`–`2024`) and selects the 5 or 3 most recent years with a single click, allowing users with 20+ years of photos to effortlessly isolate recent years.
+  * **Search & Subdirectory Filtering:** Added instant search filtering to quickly locate specific years or events within large photo collections.
+  * **Selective Folder Scanning:** Scans only the checked subdirectories (`scanSelectedSubfolders`), creating clean labeled folder entries in the selection list and avoiding unwanted historical archives.
+
 ### Fixed
 * **Plex High-Resolution & Direct Play Photo Streaming (`src/services/plex.ts`, `src/services/photos.ts`):**
   * **Eliminated Blurry Plex Photos:** Diagnosed the root cause of blurry Plex photos—Plex folder listings omit the `Media[0].Part[0].key` in directory responses, causing image URLs to fall back to Plex's tiny pre-rendered thumbnails (`item.thumb`, ~256x256), which were then upscaled (`upscale=1`) to 1080p, resulting in heavily pixelated and blurry images.
