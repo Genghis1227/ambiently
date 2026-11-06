@@ -51,15 +51,16 @@ export async function cachePhotosLocally(photos: PhotoItem[]): Promise<void> {
 async function scanDirectoryHandle(
   dirHandle: any,
   photos: PhotoItem[],
-  maxPhotos = 5000,
+  maxPhotos = Infinity,
   currentDepth = 0,
-  maxDepth = 8,
+  maxDepth = 12,
   onProgress?: (count: number, currentDirName: string) => void
 ): Promise<void> {
-  if (currentDepth > maxDepth || photos.length >= maxPhotos) return;
+  const isUnlimited = !maxPhotos || maxPhotos <= 0 || !isFinite(maxPhotos);
+  if (currentDepth > maxDepth || (!isUnlimited && photos.length >= maxPhotos)) return;
 
   for await (const entry of dirHandle.values()) {
-    if (photos.length >= maxPhotos) break;
+    if (!isUnlimited && photos.length >= maxPhotos) break;
 
     if (entry.kind === 'file') {
       const isImgExt = IMAGE_EXT_REGEX.test(entry.name);
@@ -114,7 +115,7 @@ async function scanDirectoryHandle(
 
 // Local Directory Picker (showDirectoryPicker) for local PC / mapped NAS photos
 export async function pickLocalPhotoDirectory(
-  maxPhotos = 5000,
+  maxPhotos = Infinity,
   onProgress?: (count: number, currentDirName: string) => void
 ): Promise<{
   success: boolean;
@@ -138,7 +139,7 @@ export async function pickLocalPhotoDirectory(
 
     const folderName = dirHandle.name || 'Selected Folder';
     const localPhotos: PhotoItem[] = [];
-    await scanDirectoryHandle(dirHandle, localPhotos, maxPhotos, 0, 8, onProgress);
+    await scanDirectoryHandle(dirHandle, localPhotos, maxPhotos, 0, 12, onProgress);
 
     if (localPhotos.length === 0) {
       return {

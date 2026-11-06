@@ -12,7 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 * **Plex Recursive Photo Discovery & Deep Folder Traversal (`src/services/plex.ts`):**
   * Fixed Plex photo loading when parent directories are selected (e.g., `Photos > Personal > 2018 > pictures.jpg`). Previously, parent directories returned only child directory cards (`Old`, `Wallace Falls`, etc.) rather than the pictures inside them.
-  * Implemented breadth-first recursive directory traversal (`getPlexPhotosFromSection`) that automatically explores child folders and sub-subfolders (up to 6 levels deep) to gather all leaf photo items.
+  * Implemented breadth-first recursive directory traversal (`getPlexPhotosFromSection`) that automatically explores child folders and sub-subfolders (up to 12 levels deep) to gather all leaf photo items.
+  * Removed arbitrary photo limits: Plex photo scanning now supports **unlimited** photos (`maxPhotos = Infinity`) with live progress reporting, allowing users with 10,000+ photo libraries to load every picture.
   * Enhanced `getPlexSectionFolders` to discover immediate subdirectories (`depth: 1`) so users can optionally select specific subfolders (e.g. `Personal ❯ 2018`) directly from the dropdown.
 * **Plex Image Transcode URL Resolution & Fallback (`src/services/plex.ts`, `src/components/widgets/PhotoFrameWidget.tsx`):**
   * Fixed Plex `/photo/:/transcode` target URLs: previously used `item.key` (`/library/metadata/{ratingKey}` which is an API endpoint), causing HTTP 400/500 transcode errors and triggering continuous photo cycling in `PhotoFrameWidget`.

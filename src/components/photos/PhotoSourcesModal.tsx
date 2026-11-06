@@ -138,7 +138,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   // Local NAS / PC multi-folder state
   const [selectedFolders, setSelectedFolders] = useState<SelectedFolderInfo[]>([]);
   const [isScanning, setIsScanning] = useState(false);
-  const [scanLimit, setScanLimit] = useState<number>(5000);
+  const [scanLimit, setScanLimit] = useState<number>(Infinity);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Web / Google Drive state
@@ -318,6 +318,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
     if (!selectedServer || !selectedSectionKey || !plexToken) return;
     const uri = getBestPlexConnectionUri(selectedServer);
     setPlexLoading(true);
+    setStatusMessage('Scanning Plex library & subfolders (unlimited)...');
     try {
       const currentSection = photoSections.find((s) => s.key === selectedSectionKey);
       const currentFolder = sectionFolders.find((f) => f.key === selectedFolderKey);
@@ -326,7 +327,11 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
         uri,
         selectedServer.accessToken || plexToken,
         selectedSectionKey,
-        selectedFolderKey
+        selectedFolderKey,
+        Infinity,
+        (count) => {
+          setStatusMessage(`Scanning Plex photos: ${count.toLocaleString()} loaded so far...`);
+        }
       );
       if (photos.length > 0) {
         const sectionTitle = currentSection?.title || 'Photos';
@@ -354,7 +359,11 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   // Local Multi-Folder Pickers & Handlers
   const handlePickFolder = async () => {
     setIsScanning(true);
-    setStatusMessage(`Scanning folder and subfolders (up to ${scanLimit.toLocaleString()} photos)...`);
+    setStatusMessage(
+      isFinite(scanLimit)
+        ? `Scanning folder and subfolders (up to ${scanLimit.toLocaleString()} photos)...`
+        : 'Scanning folder and subfolders (unlimited photos)...'
+    );
     try {
       const res = await pickLocalPhotoDirectory(scanLimit, (count, dirName) => {
         setStatusMessage(`Scanning "${dirName}": ${count} photos found...`);
@@ -899,9 +908,9 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                   <span className="text-[10px] text-gray-500">Max photos to scan across folders and subdirectories</span>
                 </div>
                 <div className="flex items-center gap-1 bg-black/40 p-1 rounded-lg border border-white/5">
-                  {([1000, 2500, 5000, 10000] as const).map((limit) => (
+                  {([1000, 5000, 10000, Infinity] as const).map((limit) => (
                     <button
-                      key={limit}
+                      key={String(limit)}
                       type="button"
                       onClick={() => setScanLimit(limit)}
                       className={`px-2 py-0.5 rounded text-xs font-mono font-semibold transition-all cursor-pointer ${
@@ -910,7 +919,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                           : 'text-gray-400 hover:text-white'
                       }`}
                     >
-                      {limit >= 1000 ? `${limit / 1000}k` : limit}
+                      {isFinite(limit) ? (limit >= 1000 ? `${limit / 1000}k` : limit) : '∞ All'}
                     </button>
                   ))}
                 </div>

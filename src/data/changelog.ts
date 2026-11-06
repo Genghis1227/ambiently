@@ -15,7 +15,8 @@ export const RELEASES: ReleaseEntry[] = [
     date: "November 6, 2026",
     title: "Plex Recursive Deep Folder Traversal, Subfolder Discovery & Transcode URL Fix",
     highlights: [
-      "Recursive Deep Folder Traversal: Added automatic breadth-first folder traversal in Plex photo libraries up to 6 levels deep (e.g. Photos > Personal > 2018 > pictures.jpg), gathering all nested leaf photos when selecting parent folders or entire libraries.",
+      "Recursive Deep Folder Traversal: Added automatic breadth-first folder traversal in Plex photo libraries up to 12 levels deep (e.g. Photos > Personal > 2018 > pictures.jpg), gathering all nested leaf photos when selecting parent folders or entire libraries.",
+      "Unlimited Photo Capacity: Removed arbitrary photo limits from Plex scanning (maxPhotos = Infinity) with live incremental progress indicators, effortlessly loading libraries of any scale.",
       "Fixed Plex Photo Transcode URLs: Corrected photo transcode URL generation to use the actual image part resource key (item.Media[0].Part[0].key) or thumb rather than item.key (which is a JSON/XML metadata endpoint).",
       "Eliminated Photo Skipping & Cycling Loops: Resolved the rapid cycle/skip loop in Photo Frame widgets caused by HTTP 400/500 errors on invalid transcode URLs.",
       "Direct Raw Photo Fallback: Equipped PhotoItem with fallbackUrl pointing directly to the raw media part on Plex Media Server, ensuring images display even if transcode fails or is throttled.",

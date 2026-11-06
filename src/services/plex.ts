@@ -438,7 +438,8 @@ export async function getPlexPhotosFromSection(
   serverAccessToken: string,
   sectionKey: string,
   folderOrAlbumKey?: string,
-  maxPhotos = 5000
+  maxPhotos: number = Infinity,
+  onProgress?: (count: number) => void
 ): Promise<PhotoItem[]> {
   const cleanUri = serverUri.replace(/\/$/, '');
   const tokenParam = `X-Plex-Token=${encodeURIComponent(serverAccessToken)}`;
@@ -447,15 +448,20 @@ export async function getPlexPhotosFromSection(
     folderOrAlbumKey && folderOrAlbumKey.trim() !== '' && folderOrAlbumKey !== 'all'
   );
 
+  const isUnlimited = !maxPhotos || maxPhotos <= 0 || !isFinite(maxPhotos);
+
   const photos: PhotoItem[] = [];
   const seenPhotoIds = new Set<string>();
   const visitedDirectoryKeys = new Set<string>();
   const directoryQueue: { key: string; depth: number }[] = [];
 
   const addPhoto = (photo: PhotoItem) => {
-    if (!seenPhotoIds.has(photo.id) && photos.length < maxPhotos) {
+    if (!seenPhotoIds.has(photo.id) && (isUnlimited || photos.length < maxPhotos)) {
       seenPhotoIds.add(photo.id);
       photos.push(photo);
+      if (onProgress && photos.length % 25 === 0) {
+        onProgress(photos.length);
+      }
     }
   };
 
@@ -480,8 +486,9 @@ export async function getPlexPhotosFromSection(
       console.warn('Plex /all?type=13 query failed, falling back to folder traversal:', e);
     }
 
-    // If type=13 returned photos across the library, return them
+    // If type=13 returned photos across the library, report progress & return them
     if (photos.length > 0) {
+      if (onProgress) onProgress(photos.length);
       return photos;
     }
 
@@ -489,11 +496,11 @@ export async function getPlexPhotosFromSection(
     directoryQueue.push({ key: `/library/sections/${sectionKey}/folder`, depth: 0 });
   }
 
-  // Breadth-first recursive directory traversal (up to depth 6, maxPhotos)
-  const MAX_DEPTH = 6;
-  const BATCH_SIZE = 4;
+  // Breadth-first recursive directory traversal (up to depth 12, unlimited photos)
+  const MAX_DEPTH = 12;
+  const BATCH_SIZE = 6;
 
-  while (directoryQueue.length > 0 && photos.length < maxPhotos) {
+  while (directoryQueue.length > 0 && (isUnlimited || photos.length < maxPhotos)) {
     const currentBatch = directoryQueue.splice(0, BATCH_SIZE);
 
     const batchPromises = currentBatch.map(async ({ key, depth }) => {
@@ -524,12 +531,12 @@ export async function getPlexPhotosFromSection(
         const photo = extractPlexPhotoItem(item, cleanUri, tokenParam);
         if (photo) {
           addPhoto(photo);
-          if (photos.length >= maxPhotos) break;
+          if (!isUnlimited && photos.length >= maxPhotos) break;
         }
       }
 
       // 2. Discover subdirectories to traverse recursively
-      if (depth < MAX_DEPTH && photos.length < maxPhotos) {
+      if (depth < MAX_DEPTH && (isUnlimited || photos.length < maxPhotos)) {
         const directories = data.MediaContainer?.Directory || [];
         for (const dir of directories) {
           if (dir.key && !visitedDirectoryKeys.has(dir.key)) {
@@ -540,5 +547,6 @@ export async function getPlexPhotosFromSection(
     }
   }
 
+  if (onProgress) onProgress(photos.length);
   return photos;
 }
