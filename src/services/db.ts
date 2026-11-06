@@ -57,7 +57,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lockFullscreenKiosk: true,
   lockCanvasEditing: false,
   lockSettingsAccess: true,
-  updated_at: new Date().toISOString(),
+  updated_at: '1970-01-01T00:00:00.000Z',
 };
 
 export const DEFAULT_TABS: DashboardTab[] = [
@@ -70,7 +70,7 @@ export const DEFAULT_TABS: DashboardTab[] = [
     layoutMode: "freeform",
     autoRotateDurationSec: 30,
     enabled: true,
-    updated_at: new Date().toISOString(),
+    updated_at: '1970-01-01T00:00:00.000Z',
   },
 ];
 
@@ -83,7 +83,7 @@ export const DEFAULT_WIDGETS: DashboardWidget[] = [
     gridPos: { x: 0, y: 0, w: 4, h: 4 },
     freeformPos: { xRatio: 0.05, yRatio: 0.05, wRatio: 0.35, hRatio: 0.45, zIndex: 1, rotation: 0 },
     config: { face: 'digital', locationName: 'Austin, TX', latitude: 30.2672, longitude: -97.7431 },
-    updated_at: new Date().toISOString(),
+    updated_at: '1970-01-01T00:00:00.000Z',
   },
   {
     id: 'widget-notes-tile',
@@ -93,7 +93,7 @@ export const DEFAULT_WIDGETS: DashboardWidget[] = [
     gridPos: { x: 4, y: 0, w: 4, h: 8 },
     freeformPos: { xRatio: 0.45, yRatio: 0.05, wRatio: 0.4, hRatio: 0.6, zIndex: 2, rotation: 0 },
     config: {},
-    updated_at: new Date().toISOString(),
+    updated_at: '1970-01-01T00:00:00.000Z',
   },
   {
     id: 'widget-photo-tile',
@@ -103,7 +103,7 @@ export const DEFAULT_WIDGETS: DashboardWidget[] = [
     gridPos: { x: 8, y: 0, w: 4, h: 8 },
     freeformPos: { xRatio: 0.45, yRatio: 0.55, wRatio: 0.5, hRatio: 0.4, zIndex: 3, rotation: 0 },
     config: { displayStyle: 'ken_burns', source: 'curated' },
-    updated_at: new Date().toISOString(),
+    updated_at: '1970-01-01T00:00:00.000Z',
   },
   {
     id: 'widget-countdown-tile',
@@ -113,7 +113,7 @@ export const DEFAULT_WIDGETS: DashboardWidget[] = [
     gridPos: { x: 0, y: 4, w: 4, h: 4 },
     freeformPos: { xRatio: 0.05, yRatio: 0.55, wRatio: 0.35, hRatio: 0.4, zIndex: 1, rotation: 0 },
     config: { eventName: 'Family Vacation', targetDate: '2026-12-25T00:00:00Z' },
-    updated_at: new Date().toISOString(),
+    updated_at: '1970-01-01T00:00:00.000Z',
   },
 ];
 
@@ -127,7 +127,7 @@ export const DEFAULT_NOTES: StickyNoteItem[] = [
     bgColor: '#fef08a', // Amber light
     fontSize: 'base',
     freeformPos: { xRatio: 0.1, yRatio: 0.15, wRatio: 0.35, hRatio: 0.35, zIndex: 10, rotation: -2 },
-    updated_at: new Date().toISOString(),
+    updated_at: '1970-01-01T00:00:00.000Z',
   },
   {
     id: 'note-groceries',
@@ -144,6 +144,6 @@ export const DEFAULT_NOTES: StickyNoteItem[] = [
     bgColor: '#bbf7d0', // Emerald light
     fontSize: 'base',
     freeformPos: { xRatio: 0.52, yRatio: 0.2, wRatio: 0.38, hRatio: 0.45, zIndex: 11, rotation: 3 },
-    updated_at: new Date().toISOString(),
+    updated_at: '1970-01-01T00:00:00.000Z',
   },
 ];

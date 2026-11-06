@@ -377,6 +377,17 @@ export async function pushToCloud(
     const widgetsToPush = dbWidgets.length > 0 ? dbWidgets : widgets;
     const notesToPush = dbNotes.length > 0 ? dbNotes : notes;
 
+    // 3. Query remote updated_at timestamps to avoid stomping newer remote edits from other devices
+    const [remoteTabsRes, remoteWidgetsRes, remoteNotesRes] = await Promise.all([
+      sb.from('tabs').select('id, updated_at').eq('user_id', user.id),
+      sb.from('widgets').select('id, updated_at').eq('user_id', user.id),
+      sb.from('notes').select('id, updated_at').eq('user_id', user.id),
+    ]);
+
+    const remoteTabsMap = new Map((remoteTabsRes.data || []).map((t: any) => [t.id, new Date(t.updated_at || 0).getTime()]));
+    const remoteWidgetsMap = new Map((remoteWidgetsRes.data || []).map((w: any) => [w.id, new Date(w.updated_at || 0).getTime()]));
+    const remoteNotesMap = new Map((remoteNotesRes.data || []).map((n: any) => [n.id, new Date(n.updated_at || 0).getTime()]));
+
     // Upsert Tabs
     if (tabsToPush.length > 0) {
       const formattedTabs = tabsToPush.map((t) => ({
@@ -391,8 +402,17 @@ export async function pushToCloud(
         updated_at: t.updated_at,
         deleted_at: t.deleted_at || null,
       }));
-      const { error: tabErr } = await sb.from('tabs').upsert(formattedTabs);
-      if (tabErr) throw tabErr;
+
+      const tabsToUpsert = formattedTabs.filter((t) => {
+        const remoteTime = remoteTabsMap.get(t.id);
+        if (remoteTime === undefined) return true;
+        return new Date(t.updated_at || 0).getTime() >= remoteTime;
+      });
+
+      if (tabsToUpsert.length > 0) {
+        const { error: tabErr } = await sb.from('tabs').upsert(tabsToUpsert);
+        if (tabErr) throw tabErr;
+      }
     }
 
     // Upsert Widgets
@@ -410,8 +430,17 @@ export async function pushToCloud(
         updated_at: w.updated_at,
         deleted_at: w.deleted_at || null,
       }));
-      const { error: widgetErr } = await sb.from('widgets').upsert(formattedWidgets);
-      if (widgetErr) throw widgetErr;
+
+      const widgetsToUpsert = formattedWidgets.filter((w) => {
+        const remoteTime = remoteWidgetsMap.get(w.id);
+        if (remoteTime === undefined) return true;
+        return new Date(w.updated_at || 0).getTime() >= remoteTime;
+      });
+
+      if (widgetsToUpsert.length > 0) {
+        const { error: widgetErr } = await sb.from('widgets').upsert(widgetsToUpsert);
+        if (widgetErr) throw widgetErr;
+      }
     }
 
     // Upsert Notes
@@ -434,8 +463,17 @@ export async function pushToCloud(
         updated_at: n.updated_at,
         deleted_at: n.deleted_at || null,
       }));
-      const { error: noteErr } = await sb.from('notes').upsert(formattedNotes);
-      if (noteErr) throw noteErr;
+
+      const notesToUpsert = formattedNotes.filter((n) => {
+        const remoteTime = remoteNotesMap.get(n.id);
+        if (remoteTime === undefined) return true;
+        return new Date(n.updated_at || 0).getTime() >= remoteTime;
+      });
+
+      if (notesToUpsert.length > 0) {
+        const { error: noteErr } = await sb.from('notes').upsert(notesToUpsert);
+        if (noteErr) throw noteErr;
+      }
     }
 
     return { success: true };
@@ -469,69 +507,168 @@ export async function pullFromCloud(): Promise<{ success: boolean; error?: strin
     }
 
     if (dashRes.data?.settings) {
-      await db.settings.put({
-        ...dashRes.data.settings,
-        id: 'global',
-        updated_at: dashRes.data.updated_at || new Date().toISOString(),
-      });
+      const currentSettings = await db.settings.get('global');
+      const localTime = new Date(currentSettings?.updated_at || 0).getTime();
+      const cloudTime = new Date(dashRes.data.updated_at || 0).getTime();
+      if (cloudTime >= localTime || !currentSettings) {
+        await db.settings.put({
+          ...dashRes.data.settings,
+          id: 'global',
+          updated_at: dashRes.data.updated_at || new Date().toISOString(),
+        });
+      }
     }
 
     const canvasThemes = dashRes.data?.settings?.canvasThemes || {};
     if (tabsRes.data && tabsRes.data.length > 0) {
-      const mappedTabs: DashboardTab[] = tabsRes.data.map((t: any) => ({
-        id: t.id,
-        name: t.name,
-        icon: t.icon,
-        order: t.order_index,
-        layoutMode: t.layout_mode,
-        autoRotateDurationSec: t.auto_rotate_duration_sec,
-        backgroundTheme: canvasThemes[t.id]?.backgroundTheme || t.background_theme || 'midnight_dots',
-        customWallpaperUrl: canvasThemes[t.id]?.customWallpaperUrl || t.custom_wallpaper_url,
-        backgroundDimLevel: canvasThemes[t.id]?.backgroundDimLevel ?? t.background_dim_level ?? 45,
-        hideNotes: canvasThemes[t.id]?.hideNotes ?? t.hide_notes ?? false,
-        isHome: canvasThemes[t.id]?.isHome ?? t.is_home ?? false,
-        updated_at: t.updated_at,
-        deleted_at: t.deleted_at,
-      }));
-      await db.tabs.clear();
-      await db.tabs.bulkAdd(mappedTabs);
+      const localTabs = await db.tabs.toArray();
+      const localMap = new Map(localTabs.map((t) => [t.id, t]));
+      const cloudTabIds = new Set(tabsRes.data.map((t: any) => t.id));
+
+      const tabsToPut: DashboardTab[] = [];
+      for (const t of tabsRes.data) {
+        const mapped: DashboardTab = {
+          id: t.id,
+          name: t.name,
+          icon: t.icon,
+          order: t.order_index,
+          layoutMode: t.layout_mode,
+          autoRotateDurationSec: t.auto_rotate_duration_sec,
+          backgroundTheme: canvasThemes[t.id]?.backgroundTheme || t.background_theme || 'midnight_dots',
+          customWallpaperUrl: canvasThemes[t.id]?.customWallpaperUrl || t.custom_wallpaper_url,
+          backgroundDimLevel: canvasThemes[t.id]?.backgroundDimLevel ?? t.background_dim_level ?? 45,
+          hideNotes: canvasThemes[t.id]?.hideNotes ?? t.hide_notes ?? false,
+          isHome: canvasThemes[t.id]?.isHome ?? t.is_home ?? false,
+          updated_at: t.updated_at,
+          deleted_at: t.deleted_at,
+        };
+
+        const local = localMap.get(t.id);
+        if (!local) {
+          tabsToPut.push(mapped);
+        } else {
+          const localTime = new Date(local.updated_at || 0).getTime();
+          const cloudTime = new Date(mapped.updated_at || 0).getTime();
+          if (cloudTime >= localTime) {
+            tabsToPut.push(mapped);
+          }
+        }
+      }
+
+      // Clean up default placeholder tab if cloud already has tabs and default tab was never edited
+      const toDeleteTabIds: string[] = [];
+      for (const lt of localTabs) {
+        if (!cloudTabIds.has(lt.id) && lt.id === 'tab-corkboard' && lt.updated_at === '1970-01-01T00:00:00.000Z') {
+          toDeleteTabIds.push(lt.id);
+        }
+      }
+
+      if (tabsToPut.length > 0) {
+        await db.tabs.bulkPut(tabsToPut);
+      }
+      if (toDeleteTabIds.length > 0) {
+        await db.tabs.bulkDelete(toDeleteTabIds);
+      }
     }
 
     if (widgetsRes.data && widgetsRes.data.length > 0) {
-      const mappedWidgets: DashboardWidget[] = widgetsRes.data.map((w: any) => ({
-        id: w.id,
-        tabId: w.tab_id,
-        type: w.type,
-        title: w.title,
-        gridPos: w.grid_pos,
-        freeformPos: w.freeform_pos,
-        config: w.config,
-        updated_at: w.updated_at,
-        deleted_at: w.deleted_at,
-      }));
-      await db.widgets.clear();
-      await db.widgets.bulkAdd(mappedWidgets);
+      const localWidgets = await db.widgets.toArray();
+      const localMap = new Map(localWidgets.map((w) => [w.id, w]));
+      const cloudWidgetIds = new Set(widgetsRes.data.map((w: any) => w.id));
+
+      const widgetsToPut: DashboardWidget[] = [];
+      for (const w of widgetsRes.data) {
+        const mapped: DashboardWidget = {
+          id: w.id,
+          tabId: w.tab_id,
+          type: w.type,
+          title: w.title,
+          gridPos: w.grid_pos,
+          freeformPos: w.freeform_pos,
+          config: w.config,
+          updated_at: w.updated_at,
+          deleted_at: w.deleted_at,
+        };
+
+        const local = localMap.get(w.id);
+        if (!local) {
+          widgetsToPut.push(mapped);
+        } else {
+          const localTime = new Date(local.updated_at || 0).getTime();
+          const cloudTime = new Date(mapped.updated_at || 0).getTime();
+          if (cloudTime >= localTime) {
+            widgetsToPut.push(mapped);
+          }
+        }
+      }
+
+      // Clean up seeded default widgets that do not exist in cloud and were never edited
+      const defaultWidgetIds = new Set(['widget-clock', 'widget-notes-tile', 'widget-photo-tile', 'widget-countdown-tile']);
+      const toDeleteWidgetIds: string[] = [];
+      for (const lw of localWidgets) {
+        if (!cloudWidgetIds.has(lw.id) && defaultWidgetIds.has(lw.id) && lw.updated_at === '1970-01-01T00:00:00.000Z') {
+          toDeleteWidgetIds.push(lw.id);
+        }
+      }
+
+      if (widgetsToPut.length > 0) {
+        await db.widgets.bulkPut(widgetsToPut);
+      }
+      if (toDeleteWidgetIds.length > 0) {
+        await db.widgets.bulkDelete(toDeleteWidgetIds);
+      }
     }
 
     if (notesRes.data && notesRes.data.length > 0) {
-      const mappedNotes: StickyNoteItem[] = notesRes.data.map((n: any) => ({
-        id: n.id,
-        tabId: n.tab_id,
-        widgetId: n.widget_id,
-        title: n.title,
-        content: n.content,
-        isChecklist: n.is_checklist,
-        checklistItems: n.checklist_items,
-        bgColor: n.bg_color,
-        fontSize: n.font_size,
-        expiresAt: n.expires_at,
-        archivedAt: n.archived_at,
-        freeformPos: n.freeform_pos,
-        updated_at: n.updated_at,
-        deleted_at: n.deleted_at,
-      }));
-      await db.notes.clear();
-      await db.notes.bulkAdd(mappedNotes);
+      const localNotes = await db.notes.toArray();
+      const localMap = new Map(localNotes.map((n) => [n.id, n]));
+      const cloudNoteIds = new Set(notesRes.data.map((n: any) => n.id));
+
+      const notesToPut: StickyNoteItem[] = [];
+      for (const n of notesRes.data) {
+        const mapped: StickyNoteItem = {
+          id: n.id,
+          tabId: n.tab_id,
+          widgetId: n.widget_id,
+          title: n.title,
+          content: n.content,
+          isChecklist: n.is_checklist,
+          checklistItems: n.checklist_items,
+          bgColor: n.bg_color,
+          fontSize: n.font_size,
+          expiresAt: n.expires_at,
+          archivedAt: n.archived_at,
+          freeformPos: n.freeform_pos,
+          updated_at: n.updated_at,
+          deleted_at: n.deleted_at,
+        };
+
+        const local = localMap.get(n.id);
+        if (!local) {
+          notesToPut.push(mapped);
+        } else {
+          const localTime = new Date(local.updated_at || 0).getTime();
+          const cloudTime = new Date(mapped.updated_at || 0).getTime();
+          if (cloudTime >= localTime) {
+            notesToPut.push(mapped);
+          }
+        }
+      }
+
+      const defaultNoteIds = new Set(['note-welcome', 'note-groceries']);
+      const toDeleteNoteIds: string[] = [];
+      for (const ln of localNotes) {
+        if (!cloudNoteIds.has(ln.id) && defaultNoteIds.has(ln.id) && ln.updated_at === '1970-01-01T00:00:00.000Z') {
+          toDeleteNoteIds.push(ln.id);
+        }
+      }
+
+      if (notesToPut.length > 0) {
+        await db.notes.bulkPut(notesToPut);
+      }
+      if (toDeleteNoteIds.length > 0) {
+        await db.notes.bulkDelete(toDeleteNoteIds);
+      }
     }
 
     return { success: true };

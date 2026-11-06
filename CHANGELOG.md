@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.7] - 2026-11-06
+
+### Fixed
+* **Multi-Device Last-Write-Wins (LWW) Timestamp Protection (`src/store/dashboardStore.ts`):**
+  * Added timestamp comparisons on incoming Supabase Realtime WebSocket events (`syncRemoteWidgetChange`, `syncRemoteTabChange`, `syncRemoteNoteChange`).
+  * If a remote event has an `updated_at` older than the local record in memory/Dexie, the stale event is ignored. This guarantees that moving a widget on Screen A is never stomped or reverted by delayed broadcasts from Screen B.
+* **Non-Stomping Cloud Push (`src/services/supabase.ts`):**
+  * In `pushToCloud`, remote timestamps (`updated_at`) are queried before performing upserts.
+  * Only records that are newly created locally or have a timestamp newer than or equal to the remote record are included in the upsert batch, preventing an idle or lagging device from overwriting fresher edits in Supabase Cloud.
+* **Timestamp-Aware Dexie Pull (`src/services/supabase.ts`):**
+  * Replaced blind destructive `db.*.clear()` in `pullFromCloud` with non-destructive, timestamp-aware record merging.
+  * Local modifications made prior to a background poll or wake sync are preserved.
+  * Seeded default templates with epoch timestamps (`1970-01-01T00:00:00.000Z`) that do not exist in the cloud are safely cleaned up so second displays cleanly adopt the remote board without retaining unreferenced default widgets.
+* **Active Canvas Preservation During Background Sync (`src/store/dashboardStore.ts`):**
+  * Updated `initStore` to preserve the user's currently active canvas (`activeTabId`) if it remains valid, preventing background sync polls, auth updates, or display wakeups from resetting the user back to the home canvas.
+
+---
+
 ## [0.2.6] - 2026-11-06
 
 ### Fixed
