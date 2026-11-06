@@ -7,7 +7,13 @@ import { PinOverlay } from './components/kiosk/PinOverlay';
 import { NightMode } from './components/kiosk/NightMode';
 import { MobileCompanion } from './components/mobile/MobileCompanion';
 import { openLocalFileBinding, useFileSync, checkFileBindingStatus } from './services/fileSync';
-import { subscribeToRealtimeBoard, joinBoardByCode, onAuthStateChange } from './services/supabase';
+import {
+  subscribeToRealtimeBoard,
+  joinBoardByCode,
+  onAuthStateChange,
+  pullFromCloud,
+  getCurrentUser,
+} from './services/supabase';
 import { useIdleCursor } from './hooks/useIdleCursor';
 import { isCanvasThemeLight } from './data/canvasThemes';
 import { initUpdateChecker } from './services/updateChecker';
@@ -73,6 +79,8 @@ export function App() {
   const fileSync = useFileSync();
   const hasFileBound = fileSync.status === 'connected';
   const syncRemoteNoteChange = useDashboardStore((s) => s.syncRemoteNoteChange);
+  const syncRemoteWidgetChange = useDashboardStore((s) => s.syncRemoteWidgetChange);
+  const syncRemoteTabChange = useDashboardStore((s) => s.syncRemoteTabChange);
 
   // Initialize and check persistent PC Auto-Sync file binding
   useEffect(() => {
@@ -87,13 +95,21 @@ export function App() {
 
   // Listen for Supabase Auth state changes (cleans up URL hash/code after magic link login)
   useEffect(() => {
-    const unsubscribe = onAuthStateChange((user) => {
+    const unsubscribe = onAuthStateChange(async (user) => {
       if (user) {
         console.log('Ambiently authenticated as:', user.email);
+        try {
+          const res = await pullFromCloud();
+          if (res.success) {
+            await initStore();
+          }
+        } catch (err) {
+          console.warn('Initial cloud pull on auth change failed:', err);
+        }
       }
     });
     return () => unsubscribe();
-  }, []);
+  }, [initStore]);
 
   // Auto-join shared board if ?join=CODE is in URL
   useEffect(() => {
@@ -109,13 +125,55 @@ export function App() {
     }
   }, [initStore]);
 
-  // Live Supabase Realtime WebSocket subscription
+  // Live Supabase Realtime WebSocket subscription for live cross-device sync (Notes, Widgets, Canvases)
   useEffect(() => {
-    const unsubscribe = subscribeToRealtimeBoard('default', (note, eventType) => {
-      syncRemoteNoteChange(note, eventType);
+    const unsubscribe = subscribeToRealtimeBoard('default', {
+      onRemoteNoteChange: (note, eventType) => syncRemoteNoteChange(note, eventType),
+      onRemoteWidgetChange: (widget, eventType) => syncRemoteWidgetChange(widget, eventType),
+      onRemoteTabChange: (tab, eventType) => syncRemoteTabChange(tab, eventType),
     });
     return () => unsubscribe();
-  }, [syncRemoteNoteChange]);
+  }, [syncRemoteNoteChange, syncRemoteWidgetChange, syncRemoteTabChange]);
+
+  // Cloud Pull: fetch fresh state on boot if logged in, on screen wake (visibilitychange), and 60s fallback poll
+  useEffect(() => {
+    let isCancelled = false;
+
+    const pullFreshCloudData = async () => {
+      try {
+        const user = await getCurrentUser();
+        if (!user || isCancelled) return;
+        const res = await pullFromCloud();
+        if (res.success && !isCancelled) {
+          await initStore();
+        }
+      } catch (err) {
+        console.warn('Background cloud pull failed:', err);
+      }
+    };
+
+    // 1. Initial boot pull
+    pullFreshCloudData();
+
+    // 2. Pull immediately when device / kiosk screen wakes up or tab becomes visible
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        pullFreshCloudData();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // 3. Fallback interval poll (every 60s) for always-on wall kiosks
+    const intervalTimer = setInterval(() => {
+      pullFreshCloudData();
+    }, 60000);
+
+    return () => {
+      isCancelled = true;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearInterval(intervalTimer);
+    };
+  }, [initStore]);
 
   // Responsive Mobile Detection (< 768px) with manual toggle override
   const [isMobileViewport, setIsMobileViewport] = useState(

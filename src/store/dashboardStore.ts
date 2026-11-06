@@ -20,8 +20,29 @@ import { MAX_CANVASES } from '../types/dashboard';
 import { saveSnapshotToFile, hasActiveLocalFile } from '../services/fileSync';
 import { computeNonOverlappingLayout, findOpenCanvasSpot } from '../utils/autoLayout';
 import type { PhotoItem } from '../services/photos';
+import { getSupabase, getCurrentUser, pushToCloud } from '../services/supabase';
 
 let backupDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+let cloudAutoSyncTimer: ReturnType<typeof setTimeout> | null = null;
+
+async function scheduleCloudAutoPush(get: () => DashboardState) {
+  try {
+    const sb = getSupabase();
+    if (!sb) return;
+    const user = await getCurrentUser();
+    if (!user) return;
+
+    if (cloudAutoSyncTimer) {
+      clearTimeout(cloudAutoSyncTimer);
+    }
+    cloudAutoSyncTimer = setTimeout(async () => {
+      const state = get();
+      await pushToCloud(state.settings, state.tabs, state.widgets, state.notes);
+    }, 1200);
+  } catch (err) {
+    console.warn('Cloud auto-push skipped:', err);
+  }
+}
 
 interface LayoutSnapshot {
   tabId: string;
@@ -88,6 +109,8 @@ interface DashboardState {
   saveLocalBackup: () => Promise<void>;
   saveLocalBackupImmediate: () => Promise<void>;
   syncRemoteNoteChange: (note: StickyNoteItem, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void;
+  syncRemoteWidgetChange: (widget: DashboardWidget, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void;
+  syncRemoteTabChange: (tab: DashboardTab, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void;
 
   // Auto-Organize / Auto-Tile Actions
   autoOrganizeCanvas: (tabId: string, mode?: AutoOrganizeMode) => Promise<void>;
@@ -509,6 +532,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   saveLocalBackup: async () => {
+    scheduleCloudAutoPush(get);
     if (!hasActiveLocalFile()) return;
     if (backupDebounceTimer) {
       clearTimeout(backupDebounceTimer);
@@ -527,6 +551,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   saveLocalBackupImmediate: async () => {
+    scheduleCloudAutoPush(get);
     if (!hasActiveLocalFile()) return;
     if (backupDebounceTimer) {
       clearTimeout(backupDebounceTimer);
@@ -690,15 +715,71 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   syncRemoteNoteChange: (remoteNote, eventType) => {
     if (eventType === 'DELETE' || remoteNote.deleted_at) {
       set({ notes: get().notes.filter((n) => n.id !== remoteNote.id) });
+      db.notes.delete(remoteNote.id).catch(() => {});
     } else if (eventType === 'INSERT') {
       const exists = get().notes.some((n) => n.id === remoteNote.id);
       if (!exists) {
         set({ notes: [remoteNote, ...get().notes] });
+        db.notes.put(remoteNote).catch(() => {});
       }
     } else if (eventType === 'UPDATE') {
-      set({
-        notes: get().notes.map((n) => (n.id === remoteNote.id ? remoteNote : n)),
-      });
+      const exists = get().notes.some((n) => n.id === remoteNote.id);
+      if (exists) {
+        set({
+          notes: get().notes.map((n) => (n.id === remoteNote.id ? remoteNote : n)),
+        });
+      } else {
+        set({ notes: [remoteNote, ...get().notes] });
+      }
+      db.notes.put(remoteNote).catch(() => {});
+    }
+  },
+
+  syncRemoteWidgetChange: (remoteWidget, eventType) => {
+    if (eventType === 'DELETE' || remoteWidget.deleted_at) {
+      set({ widgets: get().widgets.filter((w) => w.id !== remoteWidget.id) });
+      db.widgets.delete(remoteWidget.id).catch(() => {});
+    } else if (eventType === 'INSERT') {
+      const exists = get().widgets.some((w) => w.id === remoteWidget.id);
+      if (!exists) {
+        set({ widgets: [...get().widgets, remoteWidget] });
+        db.widgets.put(remoteWidget).catch(() => {});
+      }
+    } else if (eventType === 'UPDATE') {
+      const exists = get().widgets.some((w) => w.id === remoteWidget.id);
+      if (exists) {
+        set({
+          widgets: get().widgets.map((w) => (w.id === remoteWidget.id ? remoteWidget : w)),
+        });
+      } else {
+        set({ widgets: [...get().widgets, remoteWidget] });
+      }
+      db.widgets.put(remoteWidget).catch(() => {});
+    }
+  },
+
+  syncRemoteTabChange: (remoteTab, eventType) => {
+    if (eventType === 'DELETE' || remoteTab.deleted_at) {
+      set({ tabs: get().tabs.filter((t) => t.id !== remoteTab.id) });
+      db.tabs.delete(remoteTab.id).catch(() => {});
+    } else if (eventType === 'INSERT') {
+      const exists = get().tabs.some((t) => t.id === remoteTab.id);
+      if (!exists) {
+        const nextTabs = [...get().tabs, remoteTab].sort((a, b) => a.order - b.order);
+        set({ tabs: nextTabs });
+        db.tabs.put(remoteTab).catch(() => {});
+      }
+    } else if (eventType === 'UPDATE') {
+      const exists = get().tabs.some((t) => t.id === remoteTab.id);
+      let nextTabs: DashboardTab[];
+      if (exists) {
+        nextTabs = get().tabs.map((t) => (t.id === remoteTab.id ? remoteTab : t));
+      } else {
+        nextTabs = [...get().tabs, remoteTab];
+      }
+      nextTabs.sort((a, b) => a.order - b.order);
+      set({ tabs: nextTabs });
+      db.tabs.put(remoteTab).catch(() => {});
     }
   },
 

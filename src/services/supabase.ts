@@ -90,13 +90,25 @@ export async function signOutSupabase(): Promise<void> {
   }
 }
 
-// Subscribe to Realtime WebSocket updates for live multi-user syncing
+export interface RealtimeBoardHandlers {
+  onRemoteNoteChange?: (note: StickyNoteItem, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void;
+  onRemoteWidgetChange?: (widget: DashboardWidget, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void;
+  onRemoteTabChange?: (tab: DashboardTab, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void;
+}
+
+// Subscribe to Realtime WebSocket updates for live multi-user syncing (Notes, Widgets, Canvases)
 export function subscribeToRealtimeBoard(
   boardId: string,
-  onRemoteNoteChange: (note: StickyNoteItem, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void
+  handlers:
+    | RealtimeBoardHandlers
+    | ((note: StickyNoteItem, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void)
 ): () => void {
   const sb = getSupabase();
   if (!sb) return () => {};
+
+  const noteHandler = typeof handlers === 'function' ? handlers : handlers.onRemoteNoteChange;
+  const widgetHandler = typeof handlers === 'object' ? handlers.onRemoteWidgetChange : undefined;
+  const tabHandler = typeof handlers === 'object' ? handlers.onRemoteTabChange : undefined;
 
   if (realtimeChannel) {
     sb.removeChannel(realtimeChannel);
@@ -112,6 +124,7 @@ export function subscribeToRealtimeBoard(
         table: 'notes',
       },
       (payload) => {
+        if (!noteHandler) return;
         const eventType = payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE';
         const raw = (payload.new || payload.old) as any;
         if (!raw) return;
@@ -133,7 +146,65 @@ export function subscribeToRealtimeBoard(
           deleted_at: raw.deleted_at,
         };
 
-        onRemoteNoteChange(note, eventType);
+        noteHandler(note, eventType);
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'widgets',
+      },
+      (payload) => {
+        if (!widgetHandler) return;
+        const eventType = payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE';
+        const raw = (payload.new || payload.old) as any;
+        if (!raw) return;
+
+        const widget: DashboardWidget = {
+          id: raw.id,
+          tabId: raw.tab_id,
+          type: raw.type,
+          title: raw.title,
+          gridPos: raw.grid_pos || { x: 0, y: 0, w: 4, h: 4 },
+          freeformPos: raw.freeform_pos || {},
+          config: raw.config || {},
+          updated_at: raw.updated_at || new Date().toISOString(),
+          deleted_at: raw.deleted_at,
+        };
+
+        widgetHandler(widget, eventType);
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'tabs',
+      },
+      (payload) => {
+        if (!tabHandler) return;
+        const eventType = payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE';
+        const raw = (payload.new || payload.old) as any;
+        if (!raw) return;
+
+        const tab: DashboardTab = {
+          id: raw.id,
+          name: raw.name,
+          icon: raw.icon,
+          order: raw.order_index,
+          layoutMode: raw.layout_mode,
+          autoRotateDurationSec: raw.auto_rotate_duration_sec,
+          backgroundTheme: raw.background_theme,
+          customWallpaperUrl: raw.custom_wallpaper_url,
+          backgroundDimLevel: raw.background_dim_level,
+          updated_at: raw.updated_at || new Date().toISOString(),
+          deleted_at: raw.deleted_at,
+        };
+
+        tabHandler(tab, eventType);
       }
     )
     .subscribe();
@@ -294,9 +365,20 @@ export async function pushToCloud(
       updated_at: new Date().toISOString(),
     });
 
-    // 2. Upsert Tabs
-    if (tabs.length > 0) {
-      const formattedTabs = tabs.map((t) => ({
+    // 2. Query Dexie to include all active and soft-deleted records so remote devices sync additions and deletions
+    const [dbTabs, dbWidgets, dbNotes] = await Promise.all([
+      db.tabs.toArray(),
+      db.widgets.toArray(),
+      db.notes.toArray(),
+    ]);
+
+    const tabsToPush = dbTabs.length > 0 ? dbTabs : tabs;
+    const widgetsToPush = dbWidgets.length > 0 ? dbWidgets : widgets;
+    const notesToPush = dbNotes.length > 0 ? dbNotes : notes;
+
+    // Upsert Tabs
+    if (tabsToPush.length > 0) {
+      const formattedTabs = tabsToPush.map((t) => ({
         id: t.id,
         dashboard_id: user.id,
         user_id: user.id,
@@ -311,9 +393,9 @@ export async function pushToCloud(
       await sb.from('tabs').upsert(formattedTabs);
     }
 
-    // 3. Upsert Widgets
-    if (widgets.length > 0) {
-      const formattedWidgets = widgets.map((w) => ({
+    // Upsert Widgets
+    if (widgetsToPush.length > 0) {
+      const formattedWidgets = widgetsToPush.map((w) => ({
         id: w.id,
         dashboard_id: user.id,
         tab_id: w.tabId,
@@ -329,9 +411,9 @@ export async function pushToCloud(
       await sb.from('widgets').upsert(formattedWidgets);
     }
 
-    // 4. Upsert Notes
-    if (notes.length > 0) {
-      const formattedNotes = notes.map((n) => ({
+    // Upsert Notes
+    if (notesToPush.length > 0) {
+      const formattedNotes = notesToPush.map((n) => ({
         id: n.id,
         dashboard_id: user.id,
         user_id: user.id,

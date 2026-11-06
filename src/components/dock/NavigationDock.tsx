@@ -34,6 +34,18 @@ import {
   ChevronUp,
   ChevronDown,
   Newspaper,
+  Utensils,
+  ChefHat,
+  Briefcase,
+  GraduationCap,
+  Dumbbell,
+  ShoppingCart,
+  Compass,
+  Baby,
+  Gamepad2,
+  CloudSun,
+  Lightbulb,
+  Bell,
 } from 'lucide-react';
 import type {
   AutoOrganizeMode,
@@ -90,6 +102,18 @@ const iconMap: Record<string, React.ReactNode> = {
   Folder: <Folder className="w-5 h-5" />,
   Clock: <Clock className="w-5 h-5" />,
   Newspaper: <Newspaper className="w-5 h-5" />,
+  Utensils: <Utensils className="w-5 h-5" />,
+  ChefHat: <ChefHat className="w-5 h-5" />,
+  Briefcase: <Briefcase className="w-5 h-5" />,
+  GraduationCap: <GraduationCap className="w-5 h-5" />,
+  Dumbbell: <Dumbbell className="w-5 h-5" />,
+  ShoppingCart: <ShoppingCart className="w-5 h-5" />,
+  Compass: <Compass className="w-5 h-5" />,
+  Baby: <Baby className="w-5 h-5" />,
+  Gamepad2: <Gamepad2 className="w-5 h-5" />,
+  CloudSun: <CloudSun className="w-5 h-5" />,
+  Lightbulb: <Lightbulb className="w-5 h-5" />,
+  Bell: <Bell className="w-5 h-5" />,
 };
 
 export const NavigationDock: React.FC<NavigationDockProps> = ({
