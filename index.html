@@ -4,17 +4,81 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="referrer" content="no-referrer" />
     <meta name="theme-color" content="#090d16" />
-    <meta name="description" content="Ambient smart-display & dashboard command center (dashboard.trinhism.com)" />
-    <meta property="og:title" content="Ambiently Smart Display" />
-    <meta property="og:description" content="Ambient smart-display & command center PWA under the Trinhism ecosystem" />
-    <meta property="og:image" content="/og-banner.png" />
-    <title>Ambiently — Ambient Smart Display</title>
+    <meta name="color-scheme" content="dark" />
+    <meta name="application-name" content="Ambiently" />
+    <meta name="author" content="Trinhism" />
+    <meta name="robots" content="index, follow" />
+    <meta
+      name="description"
+      content="Self-hosted ambient smart display for a wall or tablet. Calendars, weather, photo frames, notes, and news on one offline-first dashboard."
+    />
+    <link rel="canonical" href="https://dashboard.trinhism.com/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Ambiently" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:url" content="https://dashboard.trinhism.com/" />
+    <meta property="og:title" content="Ambiently | Self-hosted smart display" />
+    <meta
+      property="og:description"
+      content="Self-hosted ambient smart display for a wall or tablet. Calendars, weather, photo frames, notes, and news on one offline-first dashboard."
+    />
+    <meta property="og:image" content="https://dashboard.trinhism.com/og-banner.png" />
+    <meta property="og:image:secure_url" content="https://dashboard.trinhism.com/og-banner.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Ambiently dashboard with calendar, weather, photos, and notes on a dark display" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Ambiently | Self-hosted smart display" />
+    <meta
+      name="twitter:description"
+      content="Self-hosted ambient smart display for a wall or tablet. Calendars, weather, photo frames, notes, and news on one offline-first dashboard."
+    />
+    <meta name="twitter:image" content="https://dashboard.trinhism.com/og-banner.png" />
+    <meta name="twitter:image:alt" content="Ambiently dashboard with calendar, weather, photos, and notes on a dark display" />
+
+    <title>Ambiently | Self-hosted smart display</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Ambiently",
+        "url": "https://dashboard.trinhism.com/",
+        "applicationCategory": "LifestyleApplication",
+        "operatingSystem": "Web",
+        "browserRequirements": "Requires JavaScript",
+        "description": "Self-hosted ambient smart display for a wall or tablet. Calendars, weather, photo frames, notes, and news on one offline-first dashboard.",
+        "image": "https://dashboard.trinhism.com/og-banner.png",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "author": {
+          "@type": "Organization",
+          "name": "Trinhism"
+        },
+        "license": "https://www.gnu.org/licenses/agpl-3.0.html"
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <main>
+        <h1>Ambiently</h1>
+        <p>
+          Self-hosted ambient smart display for a wall or tablet. Calendars, weather, photo frames, notes, and news on one
+          offline-first dashboard.
+        </p>
+        <p><a href="https://github.com/Genghis1227/ambiently">Source on GitHub</a></p>
+      </main>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
