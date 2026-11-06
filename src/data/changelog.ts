@@ -11,6 +11,17 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.2.3",
+    date: "November 5, 2026",
+    title: "Card-Based Day Columns for Calendar 3-Day & Week Views",
+    highlights: [
+      "Card-Based Day Columns: Redesigned 3-day and week views into clean, card-based day columns matching the readability and design language of Agenda and Month views.",
+      "Eliminated Cramped 24-Hour Timeline: Replaced the squished vertical hour grid with chronologically stacked event cards (All-Day banners + timed event cards with time, bold title, location, and calendar badges).",
+      "Interactive Day Details & Modal: Clicking day column headers or individual event cards opens the complete day agenda popover.",
+      "Full Light & Dark Theme Support: Supported light mode tokens (isLight prop) across day cards, borders, headers, and the day detail modal.",
+    ],
+  },
+  {
     version: "v0.2.2",
     date: "November 5, 2026",
     title: "Technical SEO Overhaul, JSON-LD Graph Schema, and Core Web Vitals Bundle Splitting",

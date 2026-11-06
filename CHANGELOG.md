@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.3] - 2026-11-05
+
+### Added
+* **Card-based Day Columns for Calendar 3-Day & Week Views (`src/components/widgets/CalendarWidget.tsx`):**
+  * Redesigned the 3-day and week view modes into clean, card-based day columns matching the readability and design language of Agenda and Month views.
+  * Eliminated the cramped 24-hour vertical timeline grid, replacing it with chronologically stacked event cards (All-Day banners + timed events with start/end times, bold titles, locations, and calendar badges).
+  * 3-Day View features full-width card columns with rich date headers, "Today" badge, event count pills, and detailed agenda cards.
+  * Week View features a 7-column card layout with weekday headers, date pills, compact event cards, and horizontal scroll preservation on narrow viewports (`min-w-[560px]`).
+  * Day column headers and event cards link directly to the interactive `selectedDayDetail` popup with full event details.
+* **Light Mode & Daylight Theme Support in Calendar Modal (`src/components/widgets/CalendarWidget.tsx`):**
+  * Added complete `isLight` theming across day column cards, borders, headers, and the `selectedDayDetail` agenda popup.
+
+---
+
 ## [0.2.2] - 2026-11-05
 
 ### Added
