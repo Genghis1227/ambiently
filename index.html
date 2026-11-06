@@ -7,13 +7,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="referrer" content="no-referrer" />
     <meta name="theme-color" content="#090d16" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="color-scheme" content="dark light" />
     <meta name="application-name" content="Ambiently" />
     <meta name="author" content="Trinhism" />
     <meta name="robots" content="index, follow" />
     <meta
       name="description"
-      content="Self-hosted ambient smart display for a wall or tablet. Calendars, weather, photo frames, notes, and news on one offline-first dashboard."
+      content="Self-hosted, offline-first smart display and digital family calendar for wall monitors or tablets. Sync iCal calendars, Google Photos, Plex, weather, RSS news, and sticky notes."
     />
     <link rel="canonical" href="https://dashboard.trinhism.com/" />
 
@@ -21,49 +21,97 @@
     <meta property="og:site_name" content="Ambiently" />
     <meta property="og:locale" content="en_US" />
     <meta property="og:url" content="https://dashboard.trinhism.com/" />
-    <meta property="og:title" content="Ambiently | Self-hosted smart display" />
+    <meta property="og:title" content="Ambiently — Free Smart Display, Family Calendar & Wall Dashboard" />
     <meta
       property="og:description"
-      content="Self-hosted ambient smart display for a wall or tablet. Calendars, weather, photo frames, notes, and news on one offline-first dashboard."
+      content="Self-hosted, offline-first smart display and digital family calendar for wall monitors or tablets. Sync iCal calendars, Google Photos, Plex, weather, RSS news, and sticky notes."
     />
     <meta property="og:image" content="https://dashboard.trinhism.com/og-banner.png" />
     <meta property="og:image:secure_url" content="https://dashboard.trinhism.com/og-banner.png" />
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Ambiently dashboard with calendar, weather, photos, and notes on a dark display" />
+    <meta property="og:image:alt" content="Ambiently dashboard with calendar, weather, photos, and notes on a smart display" />
 
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Ambiently | Self-hosted smart display" />
+    <meta name="twitter:title" content="Ambiently — Free Smart Display, Family Calendar & Wall Dashboard" />
     <meta
       name="twitter:description"
-      content="Self-hosted ambient smart display for a wall or tablet. Calendars, weather, photo frames, notes, and news on one offline-first dashboard."
+      content="Self-hosted, offline-first smart display and digital family calendar for wall monitors or tablets. Sync iCal calendars, Google Photos, Plex, weather, RSS news, and sticky notes."
     />
     <meta name="twitter:image" content="https://dashboard.trinhism.com/og-banner.png" />
-    <meta name="twitter:image:alt" content="Ambiently dashboard with calendar, weather, photos, and notes on a dark display" />
+    <meta name="twitter:image:alt" content="Ambiently dashboard with calendar, weather, photos, and notes on a smart display" />
 
-    <title>Ambiently | Self-hosted smart display</title>
+    <title>Ambiently — Free Smart Display, Family Calendar & Wall Dashboard</title>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "WebApplication",
-        "name": "Ambiently",
-        "url": "https://dashboard.trinhism.com/",
-        "applicationCategory": "LifestyleApplication",
-        "operatingSystem": "Web",
-        "browserRequirements": "Requires JavaScript",
-        "description": "Self-hosted ambient smart display for a wall or tablet. Calendars, weather, photo frames, notes, and news on one offline-first dashboard.",
-        "image": "https://dashboard.trinhism.com/og-banner.png",
-        "offers": {
-          "@type": "Offer",
-          "price": "0",
-          "priceCurrency": "USD"
-        },
-        "author": {
-          "@type": "Organization",
-          "name": "Trinhism"
-        },
-        "license": "https://www.gnu.org/licenses/agpl-3.0.html"
+        "@graph": [
+          {
+            "@type": "WebApplication",
+            "name": "Ambiently",
+            "alternateName": "Ambiently Smart Display",
+            "url": "https://dashboard.trinhism.com/",
+            "softwareVersion": "0.2.2",
+            "applicationCategory": "LifestyleApplication",
+            "operatingSystem": "All (Web PWA, iOS, Android, Windows, macOS, Linux, Raspberry Pi)",
+            "browserRequirements": "Requires JavaScript and IndexedDB",
+            "description": "Self-hosted, offline-first ambient smart display and digital family command center for wall monitors or tablets. Combine calendars, weather, photo frames, sticky notes, and RSS news on an interactive freeform corkboard.",
+            "image": "https://dashboard.trinhism.com/og-banner.png",
+            "screenshot": "https://dashboard.trinhism.com/og-banner.png",
+            "codeRepository": "https://github.com/Genghis1227/ambiently",
+            "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+            "featureList": [
+              "Offline-first IndexedDB storage with 0ms local boot",
+              "Multi-canvas freeform corkboard with Daylight and Dark themes",
+              "Unified iCal / WebCal multi-calendar agenda and monthly grid",
+              "Google Photos shared albums, Google Drive, Plex, and local NAS photo frames",
+              "World Timezone Clock with drag-and-drop city sorting",
+              "OLED burn-in protection with pixel-shifting night mode clock",
+              "Real-time Chromium PC file auto-sync and 1-click JSON backups",
+              "Mobile companion remote view with QR code family sharing"
+            ],
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            },
+            "author": {
+              "@type": "Organization",
+              "name": "Trinhism",
+              "url": "https://github.com/Genghis1227/ambiently"
+            }
+          },
+          {
+            "@type": "FAQPage",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "What is Ambiently?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Ambiently is a free, open-source, self-hosted smart display and family command center PWA designed as a privacy-first alternative to DAKboard, Skylight Calendar, and Mango Display."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Does Ambiently work offline without a subscription?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. Ambiently runs 100% locally in your browser using IndexedDB and supports automatic local JSON file mirroring to your hard drive, requiring zero cloud subscriptions."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Can I use an old iPad, Android tablet, or Raspberry Pi as a wall display?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. Ambiently is an installable Progressive Web App (PWA) with fullscreen kiosk locks, Screen Wake Lock, display density scaling (75% to 150%), and OLED pixel-shift burn-in protection."
+                }
+              }
+            ]
+          }
+        ]
       }
     </script>
   </head>
@@ -71,12 +119,20 @@
     <div id="root"></div>
     <noscript>
       <main>
-        <h1>Ambiently</h1>
+        <h1>Ambiently — Free Self-Hosted Smart Display &amp; Digital Family Calendar</h1>
         <p>
-          Self-hosted ambient smart display for a wall or tablet. Calendars, weather, photo frames, notes, and news on one
-          offline-first dashboard.
+          Ambiently is an open-source, offline-first smart display and family command center Progressive Web App (PWA) built for wall-mounted monitors, tablets, iPads, and Raspberry Pi kiosks. It serves as a privacy-first alternative to DAKboard, Skylight Calendar, and Mango Display with zero subscriptions.
         </p>
-        <p><a href="https://github.com/Genghis1227/ambiently">Source on GitHub</a></p>
+        <h2>Core Features &amp; Widgets</h2>
+        <ul>
+          <li><strong>Multi-Canvas Freeform Corkboard:</strong> Create custom boards with Daylight and Dark themes, sticky notes, checklists, and auto-rotating kiosk carousels.</li>
+          <li><strong>Unified Multi-Calendar Agenda &amp; Grid:</strong> Merge Google Calendar, Apple iCloud, and Outlook iCal / WebCal feeds with color-coded tags.</li>
+          <li><strong>Multi-Source Ambient Photo Frame:</strong> Stream slideshows from Google Photos shared albums, Google Drive folders, Plex Media Servers, or local NAS folders with Ken Burns, Polaroid, and Collage modes.</li>
+          <li><strong>Weather, World Clock &amp; RSS Newsstand:</strong> Live local weather forecasts, multi-city world timezone clocks, milestone countdowns, daily quotes, and adaptive multi-column RSS news feeds.</li>
+          <li><strong>3-Tier Local-First Persistence:</strong> Instant IndexedDB storage, real-time Chromium PC file auto-sync (<code>ambiently-data.json</code>), and optional Supabase family cloud sync.</li>
+          <li><strong>Kiosk Hardware Protection:</strong> Scheduled Night Mode with pixel-shifting OLED clock, Kid-Proof PIN locks, and auto-hiding idle cursor.</li>
+        </ul>
+        <p><a href="https://github.com/Genghis1227/ambiently">View Documentation &amp; Source Code on GitHub</a></p>
       </main>
     </noscript>
     <script type="module" src="/src/main.tsx"></script>

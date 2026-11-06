@@ -29,10 +29,7 @@ import type { DashboardTab, DashboardWidget, StickyNoteItem, WidgetThemeMode } f
 import { isCanvasThemeLight } from '../../data/canvasThemes';
 import { APP_VERSION } from '../../data/changelog';
 import { ChangelogModal } from '../changelog/ChangelogModal';
-import { WidgetSettingsModal } from '../widgets/WidgetSettingsModal';
-import { PhotoSourcesModal } from '../photos/PhotoSourcesModal';
 import { useDashboardStore } from '../../store/dashboardStore';
-import { AddWidgetModal } from '../widgets/AddWidgetModal';
 import { CalendarWidget } from '../widgets/CalendarWidget';
 import { ClockWeatherWidget } from '../widgets/ClockWeatherWidget';
 import { ClockWidget } from '../widgets/ClockWidget';
@@ -43,6 +40,16 @@ import { PhotoFrameWidget } from '../widgets/PhotoFrameWidget';
 import { RssWidget } from '../widgets/RssWidget';
 import { QuotesWidget } from '../widgets/QuotesWidget';
 import { MediaEmbedWidget } from '../widgets/MediaEmbedWidget';
+
+const WidgetSettingsModal = React.lazy(() =>
+  import('../widgets/WidgetSettingsModal').then((m) => ({ default: m.WidgetSettingsModal }))
+);
+const PhotoSourcesModal = React.lazy(() =>
+  import('../photos/PhotoSourcesModal').then((m) => ({ default: m.PhotoSourcesModal }))
+);
+const AddWidgetModal = React.lazy(() =>
+  import('../widgets/AddWidgetModal').then((m) => ({ default: m.AddWidgetModal }))
+);
 import { TextBoxWidget } from '../widgets/TextBoxWidget';
 import { ImageWidget } from '../widgets/ImageWidget';
 
@@ -432,7 +439,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         {/* Top Mobile Bar with Clickable Version Tag */}
         <div className="flex items-center justify-between border-b border-gray-800 pb-3 mb-3 shrink-0">
           <div className="flex items-center gap-2.5">
-            <img src="/logo.png" alt="Ambiently" className="w-8 h-8 rounded-lg shadow-sm" />
+            <img src="/logo.png" alt="Ambiently Logo" width={32} height={32} className="w-8 h-8 rounded-lg shadow-sm" />
             <div>
               <h1 className="text-sm font-bold tracking-tight text-white leading-tight">
                 Ambiently Companion
@@ -881,94 +888,98 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         onClose={() => setIsChangelogOpen(false)}
       />
 
-      {/* Widget Settings Modal for modifying tiles on mobile */}
-      <WidgetSettingsModal
-        isOpen={Boolean(editingWidget)}
-        onClose={() => setEditingWidget(null)}
-        widget={editingWidget}
-        onOpenPhotoSources={(asCommonSource) => {
-          if (editingWidget) {
-            setPhotoSourcesTarget({
-              widget: editingWidget,
-              isCommon:
-                asCommonSource !== undefined
-                  ? asCommonSource
-                  : editingWidget.config?.useCommonSource !== false,
-            });
-          }
-        }}
-        onSave={(widgetId, updates) => {
-          if (onUpdateWidget) {
-            onUpdateWidget(widgetId, updates);
-          }
-          setEditingWidget(null);
-        }}
-      />
-
-      {/* Photo Sources Modal when triggered from mobile widget settings */}
-      {photoSourcesTarget && (() => {
-        const activePhotoWidget =
-          widgets.find((w) => w.id === photoSourcesTarget.widget.id) || photoSourcesTarget.widget;
-        const isUsingCommon = photoSourcesTarget.isCommon;
-
-        return (
-          <PhotoSourcesModal
-            isOpen={Boolean(photoSourcesTarget)}
-            onClose={() => setPhotoSourcesTarget(null)}
-            isCommonSource={isUsingCommon}
-            initialWebUrls={
-              (isUsingCommon
-                ? settings.commonPhotoSourceUrl || activePhotoWidget.config?.sourceUrl
-                : activePhotoWidget.config?.sourceUrl || settings.commonPhotoSourceUrl) || ''
-            }
-            currentSourceLabel={
-              isUsingCommon
-                ? settings.commonPhotoSourceLabel ||
-                  (settings.commonPhotos?.length ? 'Shared Library' : activePhotoWidget.config?.sourceLabel)
-                : activePhotoWidget.config?.sourceLabel
-            }
-            currentSourceType={
-              isUsingCommon
-                ? settings.commonPhotoSourceType || activePhotoWidget.config?.sourceType
-                : activePhotoWidget.config?.sourceType || settings.commonPhotoSourceType
-            }
-            currentPhotoCount={
-              isUsingCommon
-                ? (settings.commonPhotos?.length ?? activePhotoWidget.config?.customPhotos?.length)
-                : (activePhotoWidget.config?.customPhotos?.length ?? settings.commonPhotos?.length)
-            }
-            onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType, applyToAll) => {
-              if (applyToAll || isUsingCommon) {
-                applyCommonPhotosToAllWidgets(newPhotos, sourceName, sourceUrl, sourceType);
-              } else if (onUpdateWidget && newPhotos.length > 0) {
-                onUpdateWidget(activePhotoWidget.id, {
-                  config: {
-                    ...activePhotoWidget.config,
-                    useCommonSource: false,
-                    customPhotos: newPhotos,
-                    sourceLabel: sourceName,
-                    sourceUrl: sourceUrl !== undefined ? sourceUrl : activePhotoWidget.config?.sourceUrl,
-                    sourceType: sourceType !== undefined ? sourceType : activePhotoWidget.config?.sourceType,
-                  },
+      <React.Suspense fallback={null}>
+        {/* Widget Settings Modal for modifying tiles on mobile */}
+        {editingWidget && (
+          <WidgetSettingsModal
+            isOpen={Boolean(editingWidget)}
+            onClose={() => setEditingWidget(null)}
+            widget={editingWidget}
+            onOpenPhotoSources={(asCommonSource) => {
+              if (editingWidget) {
+                setPhotoSourcesTarget({
+                  widget: editingWidget,
+                  isCommon:
+                    asCommonSource !== undefined
+                      ? asCommonSource
+                      : editingWidget.config?.useCommonSource !== false,
                 });
               }
             }}
+            onSave={(widgetId, updates) => {
+              if (onUpdateWidget) {
+                onUpdateWidget(widgetId, updates);
+              }
+              setEditingWidget(null);
+            }}
           />
-        );
-      })()}
+        )}
 
-      {/* Add Widget Modal for adding new tiles directly from mobile */}
-      {onAddWidget && (
-        <AddWidgetModal
-          isOpen={isAddWidgetOpen}
-          onClose={() => setIsAddWidgetOpen(false)}
-          activeTabId={activeTabId}
-          onAddWidget={(newWidget) => {
-            onAddWidget(newWidget);
-            setIsAddWidgetOpen(false);
-          }}
-        />
-      )}
+        {/* Photo Sources Modal when triggered from mobile widget settings */}
+        {photoSourcesTarget && (() => {
+          const activePhotoWidget =
+            widgets.find((w) => w.id === photoSourcesTarget.widget.id) || photoSourcesTarget.widget;
+          const isUsingCommon = photoSourcesTarget.isCommon;
+
+          return (
+            <PhotoSourcesModal
+              isOpen={Boolean(photoSourcesTarget)}
+              onClose={() => setPhotoSourcesTarget(null)}
+              isCommonSource={isUsingCommon}
+              initialWebUrls={
+                (isUsingCommon
+                  ? settings.commonPhotoSourceUrl || activePhotoWidget.config?.sourceUrl
+                  : activePhotoWidget.config?.sourceUrl || settings.commonPhotoSourceUrl) || ''
+              }
+              currentSourceLabel={
+                isUsingCommon
+                  ? settings.commonPhotoSourceLabel ||
+                    (settings.commonPhotos?.length ? 'Shared Library' : activePhotoWidget.config?.sourceLabel)
+                  : activePhotoWidget.config?.sourceLabel
+              }
+              currentSourceType={
+                isUsingCommon
+                  ? settings.commonPhotoSourceType || activePhotoWidget.config?.sourceType
+                  : activePhotoWidget.config?.sourceType || settings.commonPhotoSourceType
+              }
+              currentPhotoCount={
+                isUsingCommon
+                  ? (settings.commonPhotos?.length ?? activePhotoWidget.config?.customPhotos?.length)
+                  : (activePhotoWidget.config?.customPhotos?.length ?? settings.commonPhotos?.length)
+              }
+              onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType, applyToAll) => {
+                if (applyToAll || isUsingCommon) {
+                  applyCommonPhotosToAllWidgets(newPhotos, sourceName, sourceUrl, sourceType);
+                } else if (onUpdateWidget && newPhotos.length > 0) {
+                  onUpdateWidget(activePhotoWidget.id, {
+                    config: {
+                      ...activePhotoWidget.config,
+                      useCommonSource: false,
+                      customPhotos: newPhotos,
+                      sourceLabel: sourceName,
+                      sourceUrl: sourceUrl !== undefined ? sourceUrl : activePhotoWidget.config?.sourceUrl,
+                      sourceType: sourceType !== undefined ? sourceType : activePhotoWidget.config?.sourceType,
+                    },
+                  });
+                }
+              }}
+            />
+          );
+        })()}
+
+        {/* Add Widget Modal for adding new tiles directly from mobile */}
+        {onAddWidget && isAddWidgetOpen && (
+          <AddWidgetModal
+            isOpen={isAddWidgetOpen}
+            onClose={() => setIsAddWidgetOpen(false)}
+            activeTabId={activeTabId}
+            onAddWidget={(newWidget) => {
+              onAddWidget(newWidget);
+              setIsAddWidgetOpen(false);
+            }}
+          />
+        )}
+      </React.Suspense>
     </>
   );
 };

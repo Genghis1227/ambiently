@@ -488,9 +488,8 @@ export default defineConfig({
         'favicon.png',
         'apple-touch-icon.png',
         'logo.png',
-        'og-banner.png',
-        'icon-192.png',
-        'icon-512.png',
+        'pwa-192x192.png',
+        'pwa-512x512.png',
         'icon-maskable-192.png',
         'icon-maskable-512.png',
       ],
@@ -498,7 +497,7 @@ export default defineConfig({
         name: 'Ambiently Smart Display',
         short_name: 'Ambiently',
         description:
-          'Self-hosted ambient smart display for a wall or tablet. Calendars, weather, photo frames, notes, and news on one offline-first dashboard.',
+          'Self-hosted, offline-first smart display and digital family calendar for wall monitors or tablets. Sync iCal calendars, Google Photos, Plex, weather, RSS news, and sticky notes.',
         theme_color: '#090d16',
         background_color: '#090d16',
         display: 'fullscreen',
@@ -529,8 +528,25 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,jpg,jpeg}'],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globIgnores: ['**/og-banner.png', '**/assets/**'],
       },
     }),
   ],
+  build: {
+    rolldownOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react-dom') || id.includes('/react/') || id.includes('scheduler')) return 'vendor-react';
+            if (id.includes('ical.js')) return 'vendor-ical';
+            if (id.includes('@supabase')) return 'vendor-supabase';
+            if (id.includes('framer-motion')) return 'vendor-motion';
+            if (id.includes('lucide-react')) return 'vendor-icons';
+            if (id.includes('dexie')) return 'vendor-db';
+          }
+        },
+      },
+    },
+  },
 });

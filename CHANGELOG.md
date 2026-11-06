@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.2] - 2026-11-05
+
+### Added
+* **Rich JSON-LD `@graph` Structured Data (`index.html`):**
+  * Upgraded structured data to a multi-entity `@graph` combining `WebApplication` (with `featureList`, `softwareVersion`, `codeRepository`, `screenshot`, and `alternateName`) and `FAQPage` targeting long-tail smart display search queries.
+* **Semantic Crawler & Screen-Reader Heading Hierarchy (`index.html`, `src/App.tsx`):**
+  * Added an accessible `sr-only` `<header><h1>` in `App.tsx` so desktop and tablet views expose a primary `<h1>` heading to crawlers and screen readers.
+  * Expanded `<noscript>` fallback in `index.html` with structured `<h1>`/`<h2>` feature breakdowns covering Multi-Canvas Corkboard, Unified iCal Calendars, Photo Frames, Local-First Persistence, and Kiosk Protection.
+* **Core Web Vitals Code-Splitting (`vite.config.ts`, `src/App.tsx`):**
+  * Converted heavy secondary modals (`SettingsModal`, `LocalBackupModal`, `AddWidgetModal`, `CreateCanvasModal`) to `React.lazy()` dynamic imports wrapped in `<Suspense>`.
+  * Configured Rollup/Rolldown `manualChunks` to split `ical.js`, `@supabase`, `framer-motion`, `lucide-react`, and `dexie` into dedicated vendor bundles, eliminating Vite's >500 kB chunk warning and improving initial LCP/INP.
+* **PWA Precache & Brand Asset Compression (`scripts/generate-icons.js`, `vite.config.ts`):**
+  * Added `sharp` PNG palette compression (`compressionLevel: 9, palette: true`) across generated icons and Open Graph banners, cutting image weights by ~65%.
+  * Removed duplicate `icon-192.png` and `icon-512.png` files and excluded `og-banner.png` and `/assets/*` from Workbox precaching.
+  * Automated build-time synchronization of `sitemap.xml` `<lastmod>` and `index.html` `softwareVersion`.
+* **Image Attributes & Crawl Hygiene (`public/robots.txt`, `SupportPanel.tsx`, `SettingsModal.tsx`, `ChangelogModal.tsx`, `MobileCompanion.tsx`):**
+  * Added `Disallow: /*?join=` to `robots.txt` to prevent duplicate query-string indexing.
+  * Added explicit `width`, `height`, and `loading="lazy"` attributes to UI and modal `<img>` elements.
+
+---
+
 ## [0.2.1] - 2026-11-05
 
 ### Added

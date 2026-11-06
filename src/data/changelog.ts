@@ -11,6 +11,18 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.2.2",
+    date: "November 5, 2026",
+    title: "Technical SEO Overhaul, JSON-LD Graph Schema, and Core Web Vitals Bundle Splitting",
+    highlights: [
+      "Rich JSON-LD @graph Structured Data: Upgraded index.html with comprehensive WebApplication + FAQPage schema (including featureList, softwareVersion, codeRepository, and screenshot).",
+      "Semantic Crawler & Screen-Reader Architecture: Added desktop sr-only <h1> heading hierarchy in App.tsx and expanded <noscript> fallback with full feature documentation for search and AI crawlers.",
+      "Core Web Vitals Code-Splitting: Lazy-loaded heavy configuration modals (SettingsModal, LocalBackupModal, AddWidgetModal, CreateCanvasModal) via React.lazy and split vendor chunks (ical.js, Supabase, Framer Motion, Lucide, Dexie) to eliminate the 1 MB monolithic JS bundle.",
+      "PWA Precache & Asset Compression: Enabled sharp PNG palette compression in generate-icons.js, removed duplicate 192px/512px icon pairs, and excluded og-banner.png and QR assets from initial Service Worker precaching.",
+      "Automated Sitemap & Robots Hardening: Added Disallow: /*?join= to robots.txt and automated <lastmod> and softwareVersion synchronization during prebuild.",
+    ],
+  },
+  {
     version: "v0.2.1",
     date: "November 5, 2026",
     title: "Persistent PC Auto-Sync, 1-Click Session Reconnect, and Newsstand Canvas Icon",

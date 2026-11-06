@@ -1,19 +1,28 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import { Lock } from 'lucide-react';
 import { useDashboardStore } from './store/dashboardStore';
 import { NavigationDock } from './components/dock/NavigationDock';
 import { Corkboard } from './components/layout/Corkboard';
 import { PinOverlay } from './components/kiosk/PinOverlay';
 import { NightMode } from './components/kiosk/NightMode';
-import { SettingsModal } from './components/settings/SettingsModal';
-import { LocalBackupModal } from './components/kiosk/LocalBackupModal';
 import { MobileCompanion } from './components/mobile/MobileCompanion';
-import { AddWidgetModal } from './components/widgets/AddWidgetModal';
-import { CreateCanvasModal } from './components/dock/CreateCanvasModal';
 import { openLocalFileBinding, useFileSync, checkFileBindingStatus } from './services/fileSync';
 import { subscribeToRealtimeBoard, joinBoardByCode } from './services/supabase';
 import { useIdleCursor } from './hooks/useIdleCursor';
 import { isCanvasThemeLight } from './data/canvasThemes';
+
+const SettingsModal = lazy(() =>
+  import('./components/settings/SettingsModal').then((m) => ({ default: m.SettingsModal }))
+);
+const LocalBackupModal = lazy(() =>
+  import('./components/kiosk/LocalBackupModal').then((m) => ({ default: m.LocalBackupModal }))
+);
+const AddWidgetModal = lazy(() =>
+  import('./components/widgets/AddWidgetModal').then((m) => ({ default: m.AddWidgetModal }))
+);
+const CreateCanvasModal = lazy(() =>
+  import('./components/dock/CreateCanvasModal').then((m) => ({ default: m.CreateCanvasModal }))
+);
 
 export function App() {
   const {
@@ -370,10 +379,14 @@ export function App() {
           onToggleDesktopView={() => setForceDesktopMode(true)}
           onOpenSettings={handleOpenSettings}
         />
-        <SettingsModal
-          isOpen={isSettingsOpen}
-          onClose={() => setIsSettingsOpen(false)}
-        />
+        {isSettingsOpen && (
+          <Suspense fallback={null}>
+            <SettingsModal
+              isOpen={isSettingsOpen}
+              onClose={() => setIsSettingsOpen(false)}
+            />
+          </Suspense>
+        )}
       </>
     );
   }
@@ -411,6 +424,14 @@ export function App() {
         isCanvasLight ? 'bg-slate-100 text-slate-800' : 'bg-[#090d16] text-white'
       } select-none`}
     >
+      {/* Semantic Screen-Reader & Crawler Heading Hierarchy */}
+      <header className="sr-only">
+        <h1>{settings.dashboardTitle || 'Ambiently — Smart Display, Family Calendar & Wall Dashboard'}</h1>
+        <p>
+          Self-hosted, offline-first ambient smart display and digital family command center for wall monitors or tablets.
+        </p>
+      </header>
+
       {/* Full native 1:1 Canvas */}
       <div className="w-full h-full">
         <Corkboard
@@ -514,36 +535,46 @@ export function App() {
         />
       )}
 
-      {/* Local Backup Info Modal */}
-      <LocalBackupModal
-        isOpen={isBackupModalOpen}
-        hasFileBound={hasFileBound}
-        onClose={() => setIsBackupModalOpen(false)}
-        onSelectLocation={handleConnectFile}
-      />
+      <Suspense fallback={null}>
+        {/* Local Backup Info Modal */}
+        {isBackupModalOpen && (
+          <LocalBackupModal
+            isOpen={isBackupModalOpen}
+            hasFileBound={hasFileBound}
+            onClose={() => setIsBackupModalOpen(false)}
+            onSelectLocation={handleConnectFile}
+          />
+        )}
 
-      {/* Add Widget Catalog Modal */}
-      <AddWidgetModal
-        isOpen={isAddWidgetOpen}
-        onClose={() => setIsAddWidgetOpen(false)}
-        activeTabId={activeTabIdResolved}
-        onAddWidget={addWidget}
-      />
+        {/* Add Widget Catalog Modal */}
+        {isAddWidgetOpen && (
+          <AddWidgetModal
+            isOpen={isAddWidgetOpen}
+            onClose={() => setIsAddWidgetOpen(false)}
+            activeTabId={activeTabIdResolved}
+            onAddWidget={addWidget}
+          />
+        )}
 
-      <CreateCanvasModal
-        isOpen={isCreateCanvasOpen}
-        onClose={() => setIsCreateCanvasOpen(false)}
-        existingCanvasCount={tabs.length}
-        onCreateCanvas={(name, icon, theme, wallpaperUrl, dimLevel) => {
-          addTab(name, icon, theme, wallpaperUrl, dimLevel);
-        }}
-      />
+        {isCreateCanvasOpen && (
+          <CreateCanvasModal
+            isOpen={isCreateCanvasOpen}
+            onClose={() => setIsCreateCanvasOpen(false)}
+            existingCanvasCount={tabs.length}
+            onCreateCanvas={(name, icon, theme, wallpaperUrl, dimLevel) => {
+              addTab(name, icon, theme, wallpaperUrl, dimLevel);
+            }}
+          />
+        )}
 
-      {/* Settings & Customization Modal */}
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-      />
+        {/* Settings & Customization Modal */}
+        {isSettingsOpen && (
+          <SettingsModal
+            isOpen={isSettingsOpen}
+            onClose={() => setIsSettingsOpen(false)}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }

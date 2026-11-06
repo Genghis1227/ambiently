@@ -63,7 +63,10 @@ import { CreateCanvasModal } from '../dock/CreateCanvasModal';
 import { ChangelogModal } from '../changelog/ChangelogModal';
 import { SupportPanel } from './SupportPanel';
 import { ShareBoardModal } from './ShareBoardModal';
-import { PhotoSourcesModal } from '../photos/PhotoSourcesModal';
+
+const PhotoSourcesModal = React.lazy(() =>
+  import('../photos/PhotoSourcesModal').then((m) => ({ default: m.PhotoSourcesModal }))
+);
 
 import type { User } from '@supabase/supabase-js';
 
@@ -296,7 +299,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
           {/* Pinned Header with Title, Clickable Version Badge, and Close Button */}
           <div className="flex items-center justify-between border-b border-gray-800 p-5 bg-gray-950/80 shrink-0">
             <div className="flex items-center gap-3">
-              <img src="/logo.png" alt="Ambiently" className="w-8 h-8 rounded-lg shadow-sm" />
+              <img src="/logo.png" alt="Ambiently Logo" width={32} height={32} loading="lazy" className="w-8 h-8 rounded-lg shadow-sm" />
               <div>
                 <h2 className="text-base font-bold text-white leading-tight">
                   Ambiently Command Center
@@ -1601,18 +1604,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
       />
 
       {/* Common Photo Sources Hub */}
-      <PhotoSourcesModal
-        isOpen={isCommonPhotoModalOpen}
-        onClose={() => setIsCommonPhotoModalOpen(false)}
-        isCommonSource={true}
-        initialWebUrls={settings.commonPhotoSourceUrl || ''}
-        currentSourceLabel={settings.commonPhotoSourceLabel}
-        currentSourceType={settings.commonPhotoSourceType}
-        currentPhotoCount={settings.commonPhotos?.length}
-        onPhotosLoaded={(photos, sourceLabel, sourceUrl, sourceType) => {
-          applyCommonPhotosToAllWidgets(photos, sourceLabel, sourceUrl, sourceType);
-        }}
-      />
+      {isCommonPhotoModalOpen && (
+        <React.Suspense fallback={null}>
+          <PhotoSourcesModal
+            isOpen={isCommonPhotoModalOpen}
+            onClose={() => setIsCommonPhotoModalOpen(false)}
+            isCommonSource={true}
+            initialWebUrls={settings.commonPhotoSourceUrl || ''}
+            currentSourceLabel={settings.commonPhotoSourceLabel}
+            currentSourceType={settings.commonPhotoSourceType}
+            currentPhotoCount={settings.commonPhotos?.length}
+            onPhotosLoaded={(photos, sourceLabel, sourceUrl, sourceType) => {
+              applyCommonPhotosToAllWidgets(photos, sourceLabel, sourceUrl, sourceType);
+            }}
+          />
+        </React.Suspense>
+      )}
     </>
   );
 };

@@ -34,7 +34,7 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({ isOpen, onClose 
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-gray-800/80 bg-gray-950/40">
           <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="Ambiently" className="w-9 h-9 rounded-xl shadow-md border border-gray-700/60" />
+            <img src="/logo.png" alt="Ambiently Logo" width={36} height={36} loading="lazy" className="w-9 h-9 rounded-xl shadow-md border border-gray-700/60" />
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-bold text-white leading-tight">Ambiently Changelog</h2>

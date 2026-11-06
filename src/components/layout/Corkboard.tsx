@@ -43,11 +43,16 @@ import { PhotoFrameWidget } from '../widgets/PhotoFrameWidget';
 import { StickyNotesWidget } from '../widgets/StickyNotesWidget';
 import { MediaEmbedWidget } from '../widgets/MediaEmbedWidget';
 import { ImageWidget } from '../widgets/ImageWidget';
-import { WidgetSettingsModal } from '../widgets/WidgetSettingsModal';
-import { PhotoSourcesModal } from '../photos/PhotoSourcesModal';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { CANVAS_THEMES, isCanvasThemeLight } from '../../data/canvasThemes';
 import { findOpenCanvasSpot } from '../../utils/autoLayout';
+
+const WidgetSettingsModal = React.lazy(() =>
+  import('../widgets/WidgetSettingsModal').then((m) => ({ default: m.WidgetSettingsModal }))
+);
+const PhotoSourcesModal = React.lazy(() =>
+  import('../photos/PhotoSourcesModal').then((m) => ({ default: m.PhotoSourcesModal }))
+);
 
 interface CorkboardProps {
   notes: StickyNoteItem[];
@@ -2206,27 +2211,29 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
       {/* Tile Settings & Configuration Modal */}
       {editingWidget && (
-        <WidgetSettingsModal
-          isOpen={editingWidget !== null}
-          onClose={() => setEditingWidget(null)}
-          widget={editingWidget}
-          onSave={(widgetId, updates) => {
-            if (onUpdateWidget) {
-              onUpdateWidget(widgetId, updates);
-            }
-          }}
-          onOpenPhotoSources={(asCommonSource) => {
-            if (editingWidget) {
-              setPhotoSourcesTarget({
-                widget: editingWidget,
-                isCommon:
-                  asCommonSource !== undefined
-                    ? asCommonSource
-                    : editingWidget.config?.useCommonSource !== false,
-              });
-            }
-          }}
-        />
+        <React.Suspense fallback={null}>
+          <WidgetSettingsModal
+            isOpen={editingWidget !== null}
+            onClose={() => setEditingWidget(null)}
+            widget={editingWidget}
+            onSave={(widgetId, updates) => {
+              if (onUpdateWidget) {
+                onUpdateWidget(widgetId, updates);
+              }
+            }}
+            onOpenPhotoSources={(asCommonSource) => {
+              if (editingWidget) {
+                setPhotoSourcesTarget({
+                  widget: editingWidget,
+                  isCommon:
+                    asCommonSource !== undefined
+                      ? asCommonSource
+                      : editingWidget.config?.useCommonSource !== false,
+                });
+              }
+            }}
+          />
+        </React.Suspense>
       )}
 
       {/* Per-Widget Photo Sources Hub opened from Tile Settings */}
@@ -2236,48 +2243,50 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         const isUsingCommon = photoSourcesTarget.isCommon;
 
         return (
-          <PhotoSourcesModal
-            isOpen={true}
-            onClose={() => setPhotoSourcesTarget(null)}
-            isCommonSource={isUsingCommon}
-            initialWebUrls={
-              (isUsingCommon
-                ? settings.commonPhotoSourceUrl || activePhotoWidget.config?.sourceUrl
-                : activePhotoWidget.config?.sourceUrl || settings.commonPhotoSourceUrl) || ''
-            }
-            currentSourceLabel={
-              isUsingCommon
-                ? settings.commonPhotoSourceLabel ||
-                  (settings.commonPhotos?.length ? 'Shared Library' : activePhotoWidget.config?.sourceLabel)
-                : activePhotoWidget.config?.sourceLabel
-            }
-            currentSourceType={
-              isUsingCommon
-                ? settings.commonPhotoSourceType || activePhotoWidget.config?.sourceType
-                : activePhotoWidget.config?.sourceType || settings.commonPhotoSourceType
-            }
-            currentPhotoCount={
-              isUsingCommon
-                ? (settings.commonPhotos?.length ?? activePhotoWidget.config?.customPhotos?.length)
-                : (activePhotoWidget.config?.customPhotos?.length ?? settings.commonPhotos?.length)
-            }
-            onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType, applyToAll) => {
-              if (applyToAll || isUsingCommon) {
-                applyCommonPhotosToAllWidgets(newPhotos, sourceName, sourceUrl, sourceType);
-              } else if (onUpdateWidget && newPhotos.length > 0) {
-                onUpdateWidget(activePhotoWidget.id, {
-                  config: {
-                    ...activePhotoWidget.config,
-                    useCommonSource: false,
-                    customPhotos: newPhotos,
-                    sourceLabel: sourceName,
-                    sourceUrl: sourceUrl !== undefined ? sourceUrl : activePhotoWidget.config?.sourceUrl,
-                    sourceType: sourceType !== undefined ? sourceType : activePhotoWidget.config?.sourceType,
-                  },
-                });
+          <React.Suspense fallback={null}>
+            <PhotoSourcesModal
+              isOpen={true}
+              onClose={() => setPhotoSourcesTarget(null)}
+              isCommonSource={isUsingCommon}
+              initialWebUrls={
+                (isUsingCommon
+                  ? settings.commonPhotoSourceUrl || activePhotoWidget.config?.sourceUrl
+                  : activePhotoWidget.config?.sourceUrl || settings.commonPhotoSourceUrl) || ''
               }
-            }}
-          />
+              currentSourceLabel={
+                isUsingCommon
+                  ? settings.commonPhotoSourceLabel ||
+                    (settings.commonPhotos?.length ? 'Shared Library' : activePhotoWidget.config?.sourceLabel)
+                  : activePhotoWidget.config?.sourceLabel
+              }
+              currentSourceType={
+                isUsingCommon
+                  ? settings.commonPhotoSourceType || activePhotoWidget.config?.sourceType
+                  : activePhotoWidget.config?.sourceType || settings.commonPhotoSourceType
+              }
+              currentPhotoCount={
+                isUsingCommon
+                  ? (settings.commonPhotos?.length ?? activePhotoWidget.config?.customPhotos?.length)
+                  : (activePhotoWidget.config?.customPhotos?.length ?? settings.commonPhotos?.length)
+              }
+              onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType, applyToAll) => {
+                if (applyToAll || isUsingCommon) {
+                  applyCommonPhotosToAllWidgets(newPhotos, sourceName, sourceUrl, sourceType);
+                } else if (onUpdateWidget && newPhotos.length > 0) {
+                  onUpdateWidget(activePhotoWidget.id, {
+                    config: {
+                      ...activePhotoWidget.config,
+                      useCommonSource: false,
+                      customPhotos: newPhotos,
+                      sourceLabel: sourceName,
+                      sourceUrl: sourceUrl !== undefined ? sourceUrl : activePhotoWidget.config?.sourceUrl,
+                      sourceType: sourceType !== undefined ? sourceType : activePhotoWidget.config?.sourceType,
+                    },
+                  });
+                }
+              }}
+            />
+          </React.Suspense>
         );
       })()}
 
