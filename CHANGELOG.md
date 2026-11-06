@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.8] - 2026-11-06
+
+### Improved
+* **Standard 4-Character TV PIN Pairing (`src/services/plex.ts`):**
+  * Removed `strong=true` parameter when requesting PINs from `https://plex.tv/api/v2/pins`, ensuring Plex generates a genuine 4-character TV link code (`[P][X][X][J]`) matching `plex.tv/link`.
+  * Eliminated 25-character hash overflow that previously pushed the QR code and PIN container across card boundaries.
+* **One-Tap QR Code Auto-Link (`src/components/photos/PhotoSourcesModal.tsx`, `src/services/plex.ts`):**
+  * Upgraded QR code generator to encode `https://plex.tv/link?pin=CODE`, enabling phone cameras to scan and automatically pre-fill the PIN on Plex's pairing page without manual typing.
+* **Refined Character Tile Layout & Actions (`src/components/photos/PhotoSourcesModal.tsx`):**
+  * Rendered the PIN as four distinct, illuminated square monospace character tiles.
+  * Added 1-click "Copy" button with checkmark feedback.
+  * Added direct "Open plex.tv/link" action button and "New Code" refresh trigger with graceful waiting indicator.
+
+---
+
 ## [0.2.7] - 2026-11-06
 
 ### Fixed

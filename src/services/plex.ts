@@ -13,6 +13,9 @@ export interface PlexPinResponse {
   expiresAt: string;
   authToken?: string | null;
   authUrl: string;
+  directLinkUrl?: string;
+  hostedAuthUrl?: string;
+  qrUrl?: string;
 }
 
 export interface PlexServerResource {
@@ -76,10 +79,12 @@ function getPlexHeaders(extraHeaders: Record<string, string> = {}) {
   };
 }
 
-// 1. Request new PIN for OAuth flow
+// 1. Request new PIN for OAuth flow (standard 4-character TV linking PIN for plex.tv/link)
 export async function requestPlexPin(): Promise<PlexPinResponse> {
   const clientId = getPlexClientId();
-  const url = `${PLEX_API_URL}/pins?strong=true`;
+  // Notice: Do NOT pass ?strong=true. Without strong=true, Plex returns a 4-character TV link code
+  // suitable for display on smart TVs/kiosks and pre-populating on plex.tv/link/?pin=CODE
+  const url = `${PLEX_API_URL}/pins`;
 
   const res = await fetch(url, {
     method: 'POST',
@@ -91,7 +96,8 @@ export async function requestPlexPin(): Promise<PlexPinResponse> {
   }
 
   const data = await res.json();
-  const authUrl = `https://app.plex.tv/auth#?clientID=${encodeURIComponent(
+  const directLinkUrl = `https://plex.tv/link?pin=${encodeURIComponent(data.code)}`;
+  const hostedAuthUrl = `https://app.plex.tv/auth#?clientID=${encodeURIComponent(
     clientId
   )}&code=${encodeURIComponent(data.code)}&context[device][product]=Ambiently`;
 
@@ -102,7 +108,10 @@ export async function requestPlexPin(): Promise<PlexPinResponse> {
     createdAt: data.createdAt,
     expiresAt: data.expiresAt,
     authToken: data.authToken,
-    authUrl,
+    authUrl: directLinkUrl,
+    directLinkUrl,
+    hostedAuthUrl,
+    qrUrl: data.qr,
   };
 }
 
