@@ -52,7 +52,15 @@ export async function sendMagicLink(email: string): Promise<{ success: boolean; 
     },
   });
 
-  if (error) return { success: false, error: error.message };
+  if (error) {
+    if (error.message?.toLowerCase().includes('error sending confirmation email')) {
+      return {
+        success: false,
+        error: 'Supabase failed to send confirmation email. Check Supabase Dashboard > Logs > Auth Logs (common causes: email template syntax error, SMTP credential error for custom domains, or the 4 emails/hr rate limit).',
+      };
+    }
+    return { success: false, error: error.message };
+  }
   return { success: true };
 }
 

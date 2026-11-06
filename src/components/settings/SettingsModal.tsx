@@ -1379,7 +1379,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                 </div>
               )}
               {authMessage && (
-                <span className="text-[11px] text-cyan-300 mt-2 block">{authMessage}</span>
+                <div
+                  className={`p-2.5 rounded-lg text-xs flex items-start gap-2 mt-2 ${
+                    authMessage.toLowerCase().includes('fail') ||
+                    authMessage.toLowerCase().includes('error') ||
+                    authMessage.toLowerCase().includes('invalid')
+                      ? 'bg-rose-500/10 border border-rose-500/20 text-rose-300'
+                      : authMessage.toLowerCase().includes('success') ||
+                        authMessage.toLowerCase().includes('sent')
+                      ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300'
+                      : 'bg-cyan-500/10 border border-cyan-500/20 text-cyan-300'
+                  }`}
+                >
+                  {authMessage.toLowerCase().includes('fail') ||
+                  authMessage.toLowerCase().includes('error') ||
+                  authMessage.toLowerCase().includes('invalid') ? (
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+                  ) : authMessage.toLowerCase().includes('success') ? (
+                    <Check className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
+                  ) : null}
+                  <span className="leading-relaxed">{authMessage}</span>
+                </div>
               )}
             </div>
 
