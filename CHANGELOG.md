@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.2] - 2026-11-06
+
+### Added
+* **Local Folder Subdirectory Multi-Select & Year Presets (`src/services/photos.ts`, `src/components/photos/PhotoSourcesModal.tsx`):**
+  * **Interactive Subfolder Multi-Selection:** When picking a parent folder containing decades of archived photos (e.g. `media\personal\2011`, `media\personal\2012` ... `media\personal\2020`), Ambiently now immediately detects all subdirectories and opens an interactive subfolder selection checklist.
+  * **1-Click "Last 5 Years" & "Last 3 Years" Presets:** Automatically detects year-formatted folders (e.g. `2020`–`2024`) and selects the 5 or 3 most recent years with a single click, allowing users with 20+ years of photos to effortlessly isolate recent years.
+  * **Search & Subdirectory Filtering:** Added instant search filtering to quickly locate specific years or events within large photo collections.
+  * **Selective Folder Scanning:** Scans only the checked subdirectories (`scanSelectedSubfolders`), creating clean labeled folder entries in the selection list and avoiding unwanted historical archives.
+
+### Security
+* **Strict Realtime Isolation & Private Calendar Protection (`src/App.tsx`, `src/services/supabase.ts`, `src/components/settings/ShareBoardModal.tsx`):**
+  * **Eliminated Unauthenticated Realtime Broadcast Leak:** Prevented unauthenticated visitors on the root domain (`https://dashboard.trinhism.com/`) from subscribing to global Supabase Realtime `postgres_changes` events. Previously, `subscribeToRealtimeBoard('default', ...)` subscribed to unfiltered `widgets`, `notes`, and `tabs` changes on boot, allowing live dashboard pushes to leak across open anonymous sessions.
+  * **Dashboard-Scoped Realtime Filters:** Enforced explicit `filter: dashboard_id=eq.${boardId}` and payload `dashboard_id` verification on all Realtime channels, and disabled Realtime completely unless the user is authenticated or has explicitly joined a board via invite code.
+  * **Owner-Only Private Calendar Feeds:** Added `sanitizeWidgetForGuest` to strip private Google/Apple/Outlook `.ics` calendar feed URLs whenever syncing widgets to unauthenticated guest devices joined via code.
+  * **Clipboard Session Token Guard & Invite Code Reset:** Prevented the Share Board modal from copying raw Supabase `access_token` / `refresh_token` hashes to the clipboard, and added a 1-click **Reset Code** button (`rotateInviteCode`) to revoke old invite codes immediately.
+
+### Fixed
+* **Plex High-Resolution & Direct Play Photo Streaming (`src/services/plex.ts`, `src/services/photos.ts`):**
+  * **Eliminated Blurry Plex Photos:** Diagnosed the root cause of blurry Plex photos—Plex folder listings omit the `Media[0].Part[0].key` in directory responses, causing image URLs to fall back to Plex's tiny pre-rendered thumbnails (`item.thumb`, ~256x256), which were then upscaled (`upscale=1`) to 1080p, resulting in heavily pixelated and blurry images.
+  * **Direct Play Full Camera Resolution:** For all standard web image formats (JPEG, PNG, WebP), `PhotoItem.url` now directly streams the original uncompressed image file via `${cleanUri}${partKey}?X-Plex-Token=...`. Photos display with 100% native camera sensor fidelity with zero compression artifacts and zero CPU transcoding load on the Plex server.
+  * **4K Transcoding & Upscaling Guard:** Upgraded transcode bounds from 1080p to full 4K UHD (`3840x2160`), enabled near-lossless JPEG quality (`quality=95`), and disabled upscaling (`upscale=0`) so images are never artificially stretched beyond their native pixels.
+  * **Batch Metadata Enrichment (`enrichPlexPhotoItemsWithParts`):** When traversing folders or section listings where Plex omits `Media` parts, Ambiently now automatically batch-resolves full item metadata (`/library/metadata/{ids}?includeDetails=1&checkFiles=1`) to ensure every photo is paired with its original media part key.
+  * **RAW & HEIC Seamless Fallback:** For non-browser-native formats (e.g. iPhone HEIC/HEIF, DSLR RAW .CR2, .NEF, .ARW, .DNG), transcode converts them to pristine 4K JPEGs with direct stream as fallback.
+  * **Transcoder URL Optimization (`src/services/photos.ts`):** `getOptimizedPhotoUrl` now dynamically tunes Plex `/photo/:/transcode` requests when loading tiny modal/picker previews (`<= 600px`), saving bandwidth while preserving full 4K resolution on smart-display widgets.
+
+---
+
 ## [0.3.1] - 2026-11-06
 
 ### Fixed
