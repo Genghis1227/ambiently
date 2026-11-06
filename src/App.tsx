@@ -7,9 +7,11 @@ import { PinOverlay } from './components/kiosk/PinOverlay';
 import { NightMode } from './components/kiosk/NightMode';
 import { MobileCompanion } from './components/mobile/MobileCompanion';
 import { openLocalFileBinding, useFileSync, checkFileBindingStatus } from './services/fileSync';
-import { subscribeToRealtimeBoard, joinBoardByCode } from './services/supabase';
+import { subscribeToRealtimeBoard, joinBoardByCode, onAuthStateChange } from './services/supabase';
 import { useIdleCursor } from './hooks/useIdleCursor';
 import { isCanvasThemeLight } from './data/canvasThemes';
+import { initUpdateChecker } from './services/updateChecker';
+import { UpdateNotificationBanner } from './components/common/UpdateNotificationBanner';
 
 const SettingsModal = lazy(() =>
   import('./components/settings/SettingsModal').then((m) => ({ default: m.SettingsModal }))
@@ -75,6 +77,22 @@ export function App() {
   // Initialize and check persistent PC Auto-Sync file binding
   useEffect(() => {
     checkFileBindingStatus();
+  }, []);
+
+  // Periodic version update polling & service worker refresh listener
+  useEffect(() => {
+    const cleanup = initUpdateChecker();
+    return () => cleanup?.();
+  }, []);
+
+  // Listen for Supabase Auth state changes (cleans up URL hash/code after magic link login)
+  useEffect(() => {
+    const unsubscribe = onAuthStateChange((user) => {
+      if (user) {
+        console.log('Ambiently authenticated as:', user.email);
+      }
+    });
+    return () => unsubscribe();
   }, []);
 
   // Auto-join shared board if ?join=CODE is in URL
@@ -499,6 +517,9 @@ export function App() {
         dimOpacity={settings.nightDimOpacity}
         onWake={toggleNightModeManual}
       />
+
+      {/* Realtime Version Update Prompt & Refresh Banner */}
+      <UpdateNotificationBanner />
 
       {/* Kiosk Fullscreen Warning Banner when kiosk lock is enabled but not in fullscreen */}
       {isFullscreenKioskLocked && !isFullscreen && !pinChallenge && (

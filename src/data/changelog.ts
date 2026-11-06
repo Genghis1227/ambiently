@@ -11,6 +11,20 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.2.4",
+    date: "November 6, 2026",
+    title: "Calendar Timeline vs Cards Option, Mosaic Ken Burns, Panel Refresh & Update Alerts",
+    highlights: [
+      "Multi-Day Calendar Layout Choice: Added option to display 3-day and week views in either 24-Hour Timeline Grid (with hour lines, time gutter, and red current-time marker) or Cards in Order of Time (chronological cards without empty night scrolling).",
+      "Direct Calendar Header Switcher: Integrated 1-click [ Cards | Timeline ] layout toggle directly into the calendar widget header and persistent preferences in widget settings.",
+      "Mosaic Focused Picture Ken Burns: Added option for Mosaic Collage photo frames allowing the active focused quadrant to smoothly zoom and pan with an active focus indicator and click-to-focus interactivity.",
+      "Background Version Update Detection: Built automatic updateChecker polling service that checks /version.json and Service Worker status every 5 minutes and on screen wake.",
+      "Interactive Update Notification Banner: Floating update toast informs users when a new version is available with a 1-click 'Refresh Now' button.",
+      "1-Tap Dashboard Panel Refresh Button: Added dedicated refresh button in the navigation dock and settings system tab with glowing notification badge when updates are ready.",
+      "6-Digit Monospace OTP Verification: Added support for 6-digit numeric login codes via email alongside magic links, plus idempotent Supabase realtime publications schema.",
+    ],
+  },
+  {
     version: "v0.2.3",
     date: "November 5, 2026",
     title: "Card-Based Day Columns for Calendar 3-Day & Week Views",

@@ -342,6 +342,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
           <CalendarWidget
             sources={widget.config?.sources}
             defaultView={widget.config?.defaultView}
+            multiDayLayout={widget.config?.multiDayLayout}
             isLight={isLight}
           />
         );
@@ -359,6 +360,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
               initialPolaroidSizeMode={widget.config?.polaroidSizeMode || 'mixed'}
               photoOrder={widget.config?.photoOrder || 'random'}
               showCaptions={widget.config?.showCaptions ?? true}
+              mosaicKenBurns={widget.config?.mosaicKenBurns ?? false}
             />
           </div>
         );

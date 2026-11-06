@@ -31,7 +31,14 @@ import {
   Sliders,
   Settings,
   MousePointer,
+  KeyRound,
+  Mail,
+  ArrowLeft,
+  Check,
+  RotateCw,
+  Sparkles,
 } from 'lucide-react';
+import { useUpdateChecker } from '../../services/updateChecker';
 import { db } from '../../services/db';
 import { useDashboardStore } from '../../store/dashboardStore';
 import {
@@ -45,7 +52,9 @@ import {
 } from '../../services/fileSync';
 import {
   getCurrentUser,
+  onAuthStateChange,
   sendMagicLink,
+  verifyOtpCode,
   signOutSupabase,
   pushToCloud,
   pullFromCloud,
@@ -108,10 +117,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
   const [isChangelogOpen, setIsChangelogOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isCommonPhotoModalOpen, setIsCommonPhotoModalOpen] = useState(false);
+  const { isUpdateAvailable, latestVersion, isChecking, lastChecked, checkForUpdates, applyUpdate } = useUpdateChecker();
+  const [checkFeedback, setCheckFeedback] = useState<string>('');
 
   // Supabase cloud state
   const [user, setUser] = useState<User | null>(null);
   const [emailInput, setEmailInput] = useState('');
+  const [otpInput, setOtpInput] = useState('');
+  const [authStep, setAuthStep] = useState<'email' | 'otp'>('email');
+  const [isSendingCode, setIsSendingCode] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [authMessage, setAuthMessage] = useState('');
   const [syncLoading, setSyncLoading] = useState(false);
   const [isConfirmingReset, setIsConfirmingReset] = useState(false);
@@ -158,6 +173,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
     if (isOpen) {
       getCurrentUser().then(setUser);
     }
+    const unsubscribe = onAuthStateChange((currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        setAuthMessage('');
+      }
+    });
+    return () => unsubscribe();
   }, [isOpen]);
 
   useEffect(() => {
@@ -244,18 +266,45 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
 
   const handleSendMagicLink = async () => {
     if (!emailInput.trim()) return;
-    setAuthMessage('Sending sign-in link...');
+    setIsSendingCode(true);
+    setAuthMessage('Sending login code and link...');
     const res = await sendMagicLink(emailInput.trim());
+    setIsSendingCode(false);
     if (res.success) {
-      setAuthMessage('Sign-in link sent! Check your email inbox to log in.');
+      setAuthStep('otp');
+      setOtpInput('');
+      setAuthMessage('Login code sent! Enter the 6-digit code from your email below, or click the email link.');
     } else {
-      setAuthMessage(res.error || 'Failed to send magic link');
+      setAuthMessage(res.error || 'Failed to send login code');
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    const cleanToken = otpInput.replace(/\D/g, '').trim();
+    if (!cleanToken || cleanToken.length !== 6) {
+      setAuthMessage('Please enter the complete 6-digit verification code.');
+      return;
+    }
+    setIsVerifyingOtp(true);
+    setAuthMessage('Verifying code...');
+    const res = await verifyOtpCode(emailInput.trim(), cleanToken);
+    setIsVerifyingOtp(false);
+    if (res.success) {
+      const u = await getCurrentUser();
+      setUser(u);
+      setAuthStep('email');
+      setOtpInput('');
+      setAuthMessage('Successfully signed in! Your dashboard is now connected to Cloud Sync.');
+    } else {
+      setAuthMessage(res.error || 'Invalid or expired code. Please check your email or request a new code.');
     }
   };
 
   const handleSignOut = async () => {
     await signOutSupabase();
     setUser(null);
+    setAuthStep('email');
+    setOtpInput('');
     setAuthMessage('Signed out');
   };
 
@@ -313,6 +362,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                   >
                     <span>v{APP_VERSION}</span>
                   </button>
+                  {isUpdateAvailable && (
+                    <button
+                      onClick={applyUpdate}
+                      className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-400/50 hover:bg-cyan-500/30 flex items-center gap-1 transition-all cursor-pointer animate-pulse"
+                      title="New version available! Click to refresh and apply update"
+                    >
+                      <Sparkles className="w-3 h-3 text-cyan-300" />
+                      <span>Update v{latestVersion} Ready • Refresh</span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1217,7 +1276,77 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                     </button>
                   </div>
                 </div>
+              ) : authStep === 'otp' ? (
+                /* Step 2: 6-Digit OTP Code Verification */
+                <div className="space-y-3 pt-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-1.5 text-gray-300">
+                      <Mail className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                      <span>Code sent to <strong className="text-white font-mono">{emailInput}</strong></span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthStep('email');
+                        setAuthMessage('');
+                      }}
+                      className="text-[11px] text-cyan-400 hover:text-cyan-300 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <ArrowLeft className="w-3 h-3" />
+                      <span>Change</span>
+                    </button>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        autoComplete="one-time-code"
+                        maxLength={6}
+                        autoFocus
+                        placeholder="••••••"
+                        value={otpInput}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+                          setOtpInput(val);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleVerifyOtp();
+                        }}
+                        className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-center text-lg font-mono font-bold tracking-[0.35em] text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500 shadow-inner"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleVerifyOtp}
+                        disabled={isVerifyingOtp || otpInput.trim().length !== 6}
+                        className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold text-white rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shadow-sm shrink-0"
+                      >
+                        {isVerifyingOtp ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <KeyRound className="w-3.5 h-3.5" />
+                        )}
+                        <span>Verify & Sign In</span>
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-gray-400 pt-1">
+                      <span>Setting up another display? Enter the 6 digits from your email.</span>
+                      <button
+                        type="button"
+                        onClick={handleSendMagicLink}
+                        disabled={isSendingCode}
+                        className="text-cyan-400 hover:text-cyan-300 hover:underline cursor-pointer font-medium"
+                      >
+                        {isSendingCode ? 'Sending...' : 'Resend Code'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               ) : (
+                /* Step 1: Email Input */
                 <div className="space-y-2">
                   <p className="text-xs text-gray-400">
                     Sign in with your email to automatically sync your dashboard across your phone, tablet, and smart displays.
@@ -1228,14 +1357,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                       placeholder="name@example.com"
                       value={emailInput}
                       onChange={(e) => setEmailInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSendMagicLink();
+                      }}
                       className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500"
                     />
                     <button
+                      type="button"
                       onClick={handleSendMagicLink}
-                      className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-xs font-semibold text-white rounded-lg flex items-center gap-1 transition-all cursor-pointer"
+                      disabled={isSendingCode || !emailInput.trim()}
+                      className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-semibold text-white rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
                     >
-                      <LogIn className="w-3.5 h-3.5" />
-                      Send Login Link
+                      {isSendingCode ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <LogIn className="w-3.5 h-3.5" />
+                      )}
+                      <span>{isSendingCode ? 'Sending...' : 'Send Login Code'}</span>
                     </button>
                   </div>
                 </div>
@@ -1519,6 +1657,83 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                       }`}
                     />
                   </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Software Version, Updates & Panel Refresh */}
+            <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                    <RotateCw className="w-4 h-4 text-cyan-400" />
+                    <span>App Version & Updates</span>
+                  </div>
+                  <span className="text-[11px] text-gray-400 block mt-0.5">
+                    Ambiently automatically checks for newer releases and updates in the background.
+                  </span>
+                </div>
+                <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                  Installed: v{APP_VERSION}
+                </span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-gray-900/60 border border-gray-800">
+                <div className="space-y-0.5">
+                  <div className="text-xs font-semibold text-white flex items-center gap-1.5">
+                    {isUpdateAvailable ? (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+                        <span className="text-cyan-300 font-bold">New Version Available: v{latestVersion}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="text-gray-300">Ambiently is up to date (v{APP_VERSION})</span>
+                      </>
+                    )}
+                  </div>
+                  <div className="text-[10.5px] text-gray-500 font-mono">
+                    {checkFeedback || (lastChecked ? `Last checked: ${new Date(lastChecked).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Auto-checking every 5 minutes')}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setCheckFeedback('Checking for updates...');
+                      const hasUp = await checkForUpdates();
+                      setCheckFeedback(hasUp ? `Update found: v${useUpdateChecker.getState().latestVersion}!` : 'You are on the newest version!');
+                      setTimeout(() => setCheckFeedback(''), 4000);
+                    }}
+                    disabled={isChecking}
+                    className="py-1.5 px-3 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 border border-gray-700"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isChecking ? 'animate-spin' : ''}`} />
+                    <span>{isChecking ? 'Checking...' : 'Check Now'}</span>
+                  </button>
+
+                  {isUpdateAvailable ? (
+                    <button
+                      type="button"
+                      onClick={applyUpdate}
+                      className="py-1.5 px-3 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white text-xs font-bold transition-all cursor-pointer shadow-md shadow-blue-600/30 flex items-center gap-1.5"
+                    >
+                      <RotateCw className="w-3.5 h-3.5" />
+                      <span>Refresh & Update</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => window.location.reload()}
+                      className="py-1.5 px-3 rounded-lg bg-gray-800/80 hover:bg-gray-700 text-gray-300 text-xs font-medium transition-all cursor-pointer flex items-center gap-1.5 border border-gray-700/80"
+                      title="Reload all dashboard panels and web assets"
+                    >
+                      <RotateCw className="w-3.5 h-3.5" />
+                      <span>Refresh Panel</span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

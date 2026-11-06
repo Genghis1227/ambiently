@@ -117,6 +117,14 @@ async function generateAssets() {
       `"softwareVersion": "${pkg.version}"`
     );
     fs.writeFileSync(indexHtmlPath, updatedHtml, 'utf8');
+
+    // 7. Write public/version.json for client update detection & polling
+    const versionPath = path.join(publicDir, 'version.json');
+    const versionData = {
+      version: pkg.version,
+      buildTime: new Date().toISOString(),
+    };
+    fs.writeFileSync(versionPath, JSON.stringify(versionData, null, 2), 'utf8');
   }
 
   console.log('✅ PWA Icon suite, Brand assets & SEO metadata successfully generated!');

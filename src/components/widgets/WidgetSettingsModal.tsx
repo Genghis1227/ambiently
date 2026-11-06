@@ -25,6 +25,8 @@ import {
   ChevronUp,
   ChevronDown,
   ArrowUpDown,
+  Columns,
+  Clock,
 } from 'lucide-react';
 import { useDashboardStore } from '../../store/dashboardStore';
 import type { DashboardWidget, WidgetThemeMode } from '../../types/dashboard';
@@ -100,6 +102,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const [polaroidSizeMode, setPolaroidSizeMode] = useState<'mixed' | 'uniform' | 'small' | 'large'>(widget?.config?.polaroidSizeMode || 'mixed');
   const [photoOrder, setPhotoOrder] = useState<'random' | 'sequential'>('random');
   const [showCaptions, setShowCaptions] = useState<boolean>(widget?.config?.showCaptions ?? true);
+  const [mosaicKenBurns, setMosaicKenBurns] = useState<boolean>(widget?.config?.mosaicKenBurns ?? false);
 
   // Weather & Clock states
   const [locationName, setLocationName] = useState('Austin, TX');
@@ -126,6 +129,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
 
   // Calendar states
   const [calendarDefaultView, setCalendarDefaultView] = useState<'agenda' | '3day' | 'week' | 'month'>('agenda');
+  const [multiDayLayout, setMultiDayLayout] = useState<'cards' | 'timeline'>(widget?.config?.multiDayLayout || 'cards');
   const [calendarSources, setCalendarSources] = useState<CalendarSource[]>(DEFAULT_CALENDAR_SOURCES);
   const [newCalName, setNewCalName] = useState('');
   const [newCalUrl, setNewCalUrl] = useState('');
@@ -203,6 +207,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setPolaroidSizeMode(widget.config?.polaroidSizeMode || 'mixed');
       setPhotoOrder(widget.config?.photoOrder || 'random');
       setShowCaptions(widget.config?.showCaptions ?? true);
+      setMosaicKenBurns(widget.config?.mosaicKenBurns ?? false);
     } else if (widget.type === 'weather' || widget.type === 'clock_weather') {
       setLocationName(widget.config?.locationName || 'Austin, TX');
       setTempUnit(widget.config?.unit || 'F');
@@ -232,6 +237,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setRssTextSize(widget.config?.textSize || 'auto');
     } else if (widget.type === 'calendar') {
       setCalendarDefaultView(widget.config?.defaultView || 'agenda');
+      setMultiDayLayout(widget.config?.multiDayLayout || 'cards');
       setCalendarSources(
         Array.isArray(widget.config?.sources) && widget.config.sources.length > 0
           ? widget.config.sources
@@ -415,6 +421,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.polaroidSizeMode = polaroidSizeMode;
       configUpdates.photoOrder = photoOrder;
       configUpdates.showCaptions = showCaptions;
+      configUpdates.mosaicKenBurns = mosaicKenBurns;
     } else if (widget.type === 'weather' || widget.type === 'clock_weather') {
       configUpdates.locationName = locationName.trim();
       configUpdates.unit = tempUnit;
@@ -442,6 +449,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.textSize = rssTextSize;
     } else if (widget.type === 'calendar') {
       configUpdates.defaultView = calendarDefaultView;
+      configUpdates.multiDayLayout = multiDayLayout;
       configUpdates.sources = calendarSources;
     } else if (widget.type === 'embed') {
       configUpdates.preset = embedPreset;
@@ -821,6 +829,35 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                   ))}
                 </div>
               </div>
+
+              {photoStyle === 'mosaic' && (
+                <div className="flex items-center justify-between p-3.5 rounded-xl bg-gray-950 border border-gray-800">
+                  <div className="space-y-0.5 pr-3">
+                    <div className="text-xs font-semibold text-white flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                      <span>Focused Photo Ken Burns Effect</span>
+                    </div>
+                    <div className="text-[11px] text-gray-400">
+                      {mosaicKenBurns
+                        ? 'Active quadrant pans and zooms gently with focus indicator; click any photo to focus'
+                        : 'Static 4-quadrant photo collage grid'}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMosaicKenBurns(!mosaicKenBurns)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      mosaicKenBurns ? 'bg-blue-600' : 'bg-gray-800'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        mosaicKenBurns ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+              )}
 
               {photoStyle === 'polaroid' && (
                 <div className="p-3.5 rounded-xl bg-gray-950 border border-gray-800 space-y-3">
@@ -1712,6 +1749,52 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                         : 'Monthly'}
                     </button>
                   ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5 flex items-center justify-between">
+                  <span>3-Day & Week Display Layout</span>
+                  <span className="text-[10px] font-mono text-cyan-400">
+                    {multiDayLayout === 'timeline' ? '24h Timeline' : 'Cards'}
+                  </span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMultiDayLayout('cards')}
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                      multiDayLayout === 'cards'
+                        ? 'bg-blue-600/20 border-blue-500 text-blue-200'
+                        : 'border-gray-800 bg-gray-950 text-gray-400 hover:text-white hover:bg-gray-800'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-bold text-xs text-white mb-0.5">
+                      <Columns className="w-3.5 h-3.5 text-blue-400" />
+                      <span>Cards in Order of Time</span>
+                    </div>
+                    <div className="text-[10.5px] text-gray-400 leading-snug">
+                      Chronological day cards with start/end badges, color bars, and no empty night scrolling
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMultiDayLayout('timeline')}
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                      multiDayLayout === 'timeline'
+                        ? 'bg-blue-600/20 border-blue-500 text-blue-200'
+                        : 'border-gray-800 bg-gray-950 text-gray-400 hover:text-white hover:bg-gray-800'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-bold text-xs text-white mb-0.5">
+                      <Clock className="w-3.5 h-3.5 text-blue-400" />
+                      <span>24-Hour Timeline Grid</span>
+                    </div>
+                    <div className="text-[10.5px] text-gray-400 leading-snug">
+                      Vertical hourly schedule with time gutter (12 AM–11 PM) and red current-time marker
+                    </div>
+                  </button>
                 </div>
               </div>
 
