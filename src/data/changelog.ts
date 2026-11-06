@@ -11,6 +11,19 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.0",
+    date: "November 6, 2026",
+    title: "One-Tap Mobile Companion QR Pairing, Multi-Tier Household Access & Live Family Sync",
+    highlights: [
+      "One-Tap Mobile Companion QR Pairing: Added automatic session token transfer to the QR code when logged in on desktop, allowing phone cameras to instantly log in with zero email or OTP typing on mobile.",
+      "Multi-Tier Household Roles: Introduced dedicated pairing modes in the Mobile Connect modal ('Pair My Phone / Spouse' with full Admin controls vs 'Kids & Family' with zero-account chore and note access).",
+      "Two-Way Live Sync for Kids & Family: Enabled unauthenticated household members joined via family code to add notes and check off checklist chores from their phones, syncing live to the wall display in real time.",
+      "Automatic Starter Template Pruning: Cleans up initial seeded starter notes ('Welcome to Ambiently', 'Weekly Essentials') and placeholder widgets when connecting to a real board or cloud account.",
+      "Interactive Mobile Pairing & Join Dialog: Added a persistent display connection banner and an interactive 6-digit join code modal in Mobile Companion, plus a Household Member status badge with 1-click disconnect.",
+      "In-Modal Cloud Sync Activation: Replaced empty dead-end boxes with an informative feature card explaining why Cloud Sync powers mobile control, with an embedded 10-second sign-in form.",
+    ],
+  },
+  {
     version: "v0.2.9",
     date: "November 6, 2026",
     title: "Multiple Plex Photo Library Discovery, Subfolder Drill-Down & Contextual Source Scoping",

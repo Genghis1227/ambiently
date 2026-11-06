@@ -1,8 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { QRCodeSVG } from 'qrcode.react';
-import { X, Users, Copy, Check, Smartphone } from 'lucide-react';
-import { getOrCreateInviteCode } from '../../services/supabase';
+import {
+  X,
+  Users,
+  Copy,
+  Check,
+  Smartphone,
+  ShieldCheck,
+  Sparkles,
+  Cloud,
+  Mail,
+  ArrowRight,
+  RefreshCw,
+  KeyRound,
+  HeartHandshake,
+} from 'lucide-react';
+import {
+  getOrCreateInviteCode,
+  type InviteData,
+  getCurrentUser,
+  sendMagicLink,
+  verifyOtpCode,
+} from '../../services/supabase';
 
 interface ShareBoardModalProps {
   isOpen: boolean;
@@ -10,9 +30,19 @@ interface ShareBoardModalProps {
 }
 
 export const ShareBoardModal: React.FC<ShareBoardModalProps> = ({ isOpen, onClose }) => {
-  const [inviteData, setInviteData] = useState<{ code: string; url: string } | null>(null);
+  const [inviteData, setInviteData] = useState<InviteData | null>(null);
+  const [activeTab, setActiveTab] = useState<'admin' | 'family'>('admin');
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Authentication State for unauthenticated users
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [authStep, setAuthStep] = useState<'email' | 'otp'>('email');
+  const [emailInput, setEmailInput] = useState('');
+  const [otpInput, setOtpInput] = useState('');
+  const [isSendingCode, setIsSendingCode] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [authMessage, setAuthMessage] = useState('');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -23,21 +53,68 @@ export const ShareBoardModal: React.FC<ShareBoardModalProps> = ({ isOpen, onClos
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
+  const loadInviteData = async () => {
+    setLoading(true);
+    const user = await getCurrentUser();
+    setUserEmail(user?.email || null);
+    if (user) {
+      const data = await getOrCreateInviteCode();
+      setInviteData(data);
+    } else {
+      setInviteData(null);
+    }
+    setLoading(false);
+  };
+
   useEffect(() => {
     if (isOpen) {
-      setLoading(true);
-      getOrCreateInviteCode().then((data) => {
-        setInviteData(data);
-        setLoading(false);
-      });
+      loadInviteData();
     }
   }, [isOpen]);
 
+  const handleSendMagicLink = async () => {
+    if (!emailInput.trim()) return;
+    setIsSendingCode(true);
+    setAuthMessage('Sending login code to your email...');
+    const res = await sendMagicLink(emailInput.trim());
+    setIsSendingCode(false);
+    if (res.success) {
+      setAuthStep('otp');
+      setOtpInput('');
+      setAuthMessage('Check your email! Enter the 6-digit code below to connect.');
+    } else {
+      setAuthMessage(res.error || 'Failed to send login code.');
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    const cleanToken = otpInput.replace(/\D/g, '').trim();
+    if (!cleanToken || cleanToken.length < 6) {
+      setAuthMessage('Please enter the 6-digit verification code.');
+      return;
+    }
+    setIsVerifyingOtp(true);
+    setAuthMessage('Verifying code...');
+    const res = await verifyOtpCode(emailInput.trim(), cleanToken);
+    setIsVerifyingOtp(false);
+    if (res.success) {
+      setAuthMessage('');
+      await loadInviteData();
+    } else {
+      setAuthMessage(res.error || 'Invalid or expired code. Please try again.');
+    }
+  };
+
   if (!isOpen) return null;
 
+  const currentQrUrl =
+    activeTab === 'admin'
+      ? inviteData?.adminPairUrl || inviteData?.url || ''
+      : inviteData?.url || '';
+
   const handleCopyLink = () => {
-    if (!inviteData) return;
-    navigator.clipboard.writeText(inviteData.url);
+    if (!currentQrUrl) return;
+    navigator.clipboard.writeText(currentQrUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -50,86 +127,262 @@ export const ShareBoardModal: React.FC<ShareBoardModalProps> = ({ isOpen, onClos
       }}
     >
       <div
-        className="w-full max-w-md rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl flex flex-col overflow-hidden text-center"
+        className="w-full max-w-lg rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl flex flex-col overflow-hidden text-center"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-950/40">
+        <div className="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-950/60">
           <div className="flex items-center gap-2">
-            <Users className="w-5 h-5 text-cyan-400" />
-            <h2 className="text-base font-bold text-white">Share Board & Family Access</h2>
+            <Smartphone className="w-5 h-5 text-cyan-400" />
+            <h2 className="text-base font-bold text-white">Connect Mobile Companion</h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-all"
+            className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-all cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Content */}
-        <div className="p-6 flex flex-col items-center space-y-4">
-          <p className="text-xs text-gray-300 leading-relaxed max-w-sm">
-            Scan this QR code with any phone camera to instantly connect to this dashboard in{' '}
-            <strong className="text-cyan-400">Mobile Companion Mode</strong>. Family members can add sticky notes and check off tasks live!
-          </p>
+        {/* Modal Body */}
+        <div className="p-6 flex flex-col items-center">
+          {/* STATE 1: User is NOT signed in - Explain Benefits of Cloud Sync + Inline Sign-in */}
+          {!userEmail && !loading ? (
+            <div className="w-full space-y-4 text-left">
+              <div className="p-4 rounded-xl bg-gradient-to-br from-blue-950/40 via-purple-950/20 to-gray-900 border border-blue-500/30">
+                <div className="flex items-center gap-2.5 mb-2">
+                  <div className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center">
+                    <Cloud className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white">Unlock Mobile Remote with Cloud Sync</h3>
+                    <p className="text-[11px] text-gray-400">Live two-way phone sync requires a free cloud connection.</p>
+                  </div>
+                </div>
 
-          {/* QR Code Container */}
-          <div className="p-4 bg-white rounded-2xl shadow-xl border border-gray-200">
-            {loading ? (
-              <div className="w-44 h-44 flex items-center justify-center text-xs text-gray-500">
-                Generating Code...
-              </div>
-            ) : inviteData ? (
-              <QRCodeSVG
-                value={inviteData.url}
-                size={180}
-                level="M"
-                includeMargin={false}
-              />
-            ) : (
-              <div className="w-44 h-44 flex flex-col items-center justify-center p-3 text-center text-gray-500 text-xs">
-                <span>Sign in to Cloud Sync in Settings (⚙️) to generate a family invite code.</span>
-              </div>
-            )}
-          </div>
-
-          {inviteData && (
-            <>
-              {/* 6-Digit Join Code */}
-              <div className="flex flex-col items-center">
-                <span className="text-[10px] uppercase font-semibold text-gray-500 tracking-wider">
-                  Or Enter Join Code On Mobile:
-                </span>
-                <span className="text-2xl font-mono font-extrabold text-cyan-400 tracking-widest mt-0.5">
-                  {inviteData.code}
-                </span>
+                <div className="grid grid-cols-1 gap-2 pt-2 text-xs text-gray-300">
+                  <div className="flex items-start gap-2">
+                    <Sparkles className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                    <span><strong>Pocket Remote Control:</strong> Add sticky notes, check off grocery items, and manage boards from your phone.</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <span><strong>Instant Live Updates:</strong> Real-time WebSockets sync phone edits to this wall display live.</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <HeartHandshake className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <span><strong>Frictionless Household Access:</strong> Pair your own phone with 1 tap, while kids check off chores with zero account required.</span>
+                  </div>
+                </div>
               </div>
 
-              {/* Direct Copy Link Button */}
-              <button
-                onClick={handleCopyLink}
-                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gray-800 hover:bg-gray-750 border border-gray-700 text-xs font-semibold text-gray-200 transition-all active:scale-98 shadow-sm"
-              >
-                {copied ? (
+              {/* Inline Sign In Form */}
+              <div className="p-4 rounded-xl bg-gray-950/80 border border-gray-800 space-y-3">
+                <div className="text-xs font-semibold text-white flex items-center gap-2">
+                  <KeyRound className="w-4 h-4 text-cyan-400" />
+                  <span>Connect in 10 Seconds (Free, No Password)</span>
+                </div>
+
+                {authStep === 'email' ? (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleSendMagicLink();
+                    }}
+                    className="flex gap-2"
+                  >
+                    <input
+                      type="email"
+                      value={emailInput}
+                      onChange={(e) => setEmailInput(e.target.value)}
+                      placeholder="Enter your email (e.g. you@example.com)"
+                      className="flex-1 px-3 py-2 bg-gray-900 border border-gray-700 rounded-xl text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500"
+                      required
+                    />
+                    <button
+                      type="submit"
+                      disabled={isSendingCode}
+                      className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 active:scale-95 text-xs font-bold text-white rounded-xl shadow transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      {isSendingCode ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <>
+                          <span>Send Code</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </>
+                      )}
+                    </button>
+                  </form>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between text-xs text-gray-300">
+                      <div className="flex items-center gap-1.5">
+                        <Mail className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Code sent to <strong className="text-white font-mono">{emailInput}</strong></span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAuthStep('email');
+                          setAuthMessage('');
+                        }}
+                        className="text-[11px] text-gray-400 hover:text-white underline cursor-pointer"
+                      >
+                        Change
+                      </button>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={8}
+                        value={otpInput}
+                        onChange={(e) => setOtpInput(e.target.value)}
+                        placeholder="Enter 6-digit code"
+                        className="flex-1 px-3 py-2 bg-gray-900 border border-cyan-500/50 rounded-xl text-center text-sm font-mono tracking-widest text-white placeholder-gray-500 focus:outline-none focus:border-cyan-400"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={handleVerifyOtp}
+                        disabled={isVerifyingOtp}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-xs font-bold text-white rounded-xl shadow transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        {isVerifyingOtp ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <span>Verify & Connect</span>}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {authMessage && (
+                  <p className="text-[11px] text-cyan-300/90 leading-relaxed bg-cyan-950/40 p-2 rounded-lg border border-cyan-800/40">
+                    {authMessage}
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : (
+            /* STATE 2: User IS signed in - Multi-Tier Pairing */
+            <div className="w-full flex flex-col items-center space-y-4">
+              {/* Role Switcher Tabs */}
+              <div className="w-full grid grid-cols-2 gap-1.5 bg-gray-950 p-1 rounded-xl border border-gray-800">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('admin')}
+                  className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    activeTab === 'admin'
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'text-gray-400 hover:text-gray-200'
+                  }`}
+                >
+                  <Smartphone className="w-4 h-4" />
+                  <span>Pair My Phone / Spouse</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('family')}
+                  className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    activeTab === 'family'
+                      ? 'bg-cyan-600 text-white shadow-md'
+                      : 'text-gray-400 hover:text-gray-200'
+                  }`}
+                >
+                  <Users className="w-4 h-4" />
+                  <span>Kids & Family (No Account)</span>
+                </button>
+              </div>
+
+              {/* Tab Description & Badge */}
+              <div className="text-center space-y-1">
+                {activeTab === 'admin' ? (
                   <>
-                    <Check className="w-4 h-4 text-emerald-400" />
-                    <span className="text-emerald-400">Invite Link Copied!</span>
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[11px] font-medium">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <span>One-Tap Login as <strong className="font-mono">{userEmail}</strong></span>
+                    </div>
+                    <p className="text-xs text-gray-300 leading-relaxed max-w-sm pt-1">
+                      Scan with your phone camera to <strong>automatically sign in</strong> on mobile. No passwords, emails, or codes to type on your phone!
+                    </p>
                   </>
                 ) : (
                   <>
-                    <Copy className="w-4 h-4 text-gray-400" />
-                    <span>Copy Mobile Join Link</span>
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-[11px] font-medium">
+                      <HeartHandshake className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Household Member Mode (Zero Account Needed)</span>
+                    </div>
+                    <p className="text-xs text-gray-300 leading-relaxed max-w-sm pt-1">
+                      Kids and household guests can check off chores and add notes to this board <strong>without needing an email or account</strong>.
+                    </p>
                   </>
                 )}
-              </button>
-            </>
-          )}
+              </div>
 
-          <div className="pt-2 text-[11px] text-gray-500 flex items-center gap-1">
-            <Smartphone className="w-3.5 h-3.5 text-cyan-400/80" />
-            <span>Zero app store downloads required • Instant PWA</span>
-          </div>
+              {/* QR Code Container */}
+              <div className="p-4 bg-white rounded-2xl shadow-2xl border-2 border-gray-200">
+                {loading ? (
+                  <div className="w-44 h-44 flex items-center justify-center text-xs text-gray-500">
+                    <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+                  </div>
+                ) : currentQrUrl ? (
+                  <QRCodeSVG
+                    value={currentQrUrl}
+                    size={180}
+                    level="M"
+                    includeMargin={false}
+                  />
+                ) : (
+                  <div className="w-44 h-44 flex items-center justify-center text-xs text-gray-500">
+                    Generating Code...
+                  </div>
+                )}
+              </div>
+
+              {inviteData && (
+                <div className="w-full space-y-3">
+                  {/* Prominent 6-Digit Code for Kids Mode */}
+                  {activeTab === 'family' && (
+                    <div className="flex flex-col items-center bg-gray-950/70 p-2.5 rounded-xl border border-gray-800">
+                      <span className="text-[10px] uppercase font-semibold text-gray-400 tracking-wider">
+                        Or Enter Code On Kids' Phone / Tablet:
+                      </span>
+                      <span className="text-2xl font-mono font-extrabold text-cyan-400 tracking-widest mt-0.5">
+                        {inviteData.code}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Direct Copy Link Button */}
+                  <button
+                    onClick={handleCopyLink}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gray-800 hover:bg-gray-750 border border-gray-700 text-xs font-semibold text-gray-200 transition-all active:scale-98 shadow-sm cursor-pointer"
+                  >
+                    {copied ? (
+                      <>
+                        <Check className="w-4 h-4 text-emerald-400" />
+                        <span className="text-emerald-400">
+                          {activeTab === 'admin' ? 'One-Tap Pairing Link Copied!' : 'Family Invite Link Copied!'}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4 text-gray-400" />
+                        <span>
+                          {activeTab === 'admin' ? 'Copy One-Tap Pairing Link' : 'Copy Mobile Join Link'}
+                        </span>
+                      </>
+                    )}
+                  </button>
+
+                  <div className="text-[11px] text-gray-500 flex items-center justify-center gap-1.5 pt-1">
+                    <Smartphone className="w-3.5 h-3.5 text-cyan-400/80" />
+                    <span>Zero app store downloads • Instant Web App on iPhone & Android</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>,

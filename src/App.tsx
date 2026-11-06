@@ -117,10 +117,15 @@ export function App() {
     const params = new URLSearchParams(window.location.search);
     const joinCode = params.get('join');
     if (joinCode) {
+      const hasAuthHash = window.location.hash.includes('access_token');
       joinBoardByCode(joinCode).then((res) => {
         if (res.success) {
           console.log('Connected to shared board:', res.boardTitle);
           initStore();
+        }
+        if (!hasAuthHash) {
+          const cleanUrl = window.location.origin + window.location.pathname;
+          window.history.replaceState({}, document.title, cleanUrl);
         }
       });
     }
@@ -143,10 +148,21 @@ export function App() {
     const pullFreshCloudData = async () => {
       try {
         const user = await getCurrentUser();
-        if (!user || isCancelled) return;
-        const res = await pullFromCloud();
-        if (res.success && !isCancelled) {
-          await initStore();
+        if (user && !isCancelled) {
+          const res = await pullFromCloud();
+          if (res.success && !isCancelled) {
+            await initStore();
+          }
+          return;
+        }
+
+        // If connected as a family member via invite code, re-sync board on wake
+        const joinedCode = localStorage.getItem('joined_invite_code');
+        if (joinedCode && !isCancelled) {
+          const res = await joinBoardByCode(joinedCode);
+          if (res.success && !isCancelled) {
+            await initStore();
+          }
         }
       } catch (err) {
         console.warn('Background cloud pull failed:', err);
