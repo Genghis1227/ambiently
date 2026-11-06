@@ -1077,6 +1077,45 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                   />
                 </div>
               )}
+
+              {/* Wake Inactivity Timeout */}
+              <div className="pt-2 border-t border-gray-800/60">
+                <div className="flex items-center justify-between mb-1.5">
+                  <div>
+                    <span className="text-xs text-gray-300 block font-medium">Wake Inactivity Timeout</span>
+                    <span className="text-[11px] text-gray-500">
+                      When awakened during the night, auto-return to Night Mode after idle:
+                    </span>
+                  </div>
+                  <span className="text-xs font-mono text-indigo-400">
+                    {(settings.nightModeWakeTimeoutMin ?? 2) === 0
+                      ? 'Until morning'
+                      : `${settings.nightModeWakeTimeoutMin ?? 2} min${(settings.nightModeWakeTimeoutMin ?? 2) > 1 ? 's' : ''}`}
+                  </span>
+                </div>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {[
+                    { label: '1 min', value: 1 },
+                    { label: '2 mins (Default)', value: 2 },
+                    { label: '5 mins', value: 5 },
+                    { label: '10 mins', value: 10 },
+                    { label: 'Until Morning', value: 0 },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => updateSettings({ nightModeWakeTimeoutMin: opt.value })}
+                      className={`py-1.5 px-1.5 rounded-lg text-[11px] font-medium border text-center transition-all cursor-pointer ${
+                        (settings.nightModeWakeTimeoutMin ?? 2) === opt.value
+                          ? 'bg-indigo-600/30 border-indigo-500 text-indigo-300 font-semibold shadow-sm'
+                          : 'bg-gray-900 border-gray-800 text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             {/* Dock Position */}
