@@ -32,6 +32,7 @@ import {
   ChevronRight,
   ChevronUp,
   ChevronDown,
+  Newspaper,
 } from 'lucide-react';
 import type {
   AutoOrganizeMode,
@@ -86,6 +87,7 @@ const iconMap: Record<string, React.ReactNode> = {
   Tv: <Tv className="w-5 h-5" />,
   Folder: <Folder className="w-5 h-5" />,
   Clock: <Clock className="w-5 h-5" />,
+  Newspaper: <Newspaper className="w-5 h-5" />,
 };
 
 export const NavigationDock: React.FC<NavigationDockProps> = ({
