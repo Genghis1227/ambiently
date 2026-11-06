@@ -303,6 +303,13 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
             clockFace={widget.config?.clockFace || 'digital'}
             showSeconds={widget.config?.showSeconds ?? true}
             isLight={isLight}
+            onUpdateConfig={(updates) => {
+              if (onUpdateWidget) {
+                onUpdateWidget(widget.id, {
+                  config: { ...widget.config, ...updates },
+                });
+              }
+            }}
           />
         );
       case 'weather':

@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   * Added **Card Appearance** 3-button selector directly into the right-click tile context menu and Tile Settings modal.
 * **Widget Light Palette Refinements:**
   * Adapted Clock, Weather, Clock-Weather, World Clock, Calendar, Quotes, RSS, Countdown, TextBox, and Sticky Notes widgets with high-contrast slate typography, light card containers, and daylight forecast/calendar accents.
+* **World Timezone Clock Grab-and-Sort Sorter (`WorldClockWidget.tsx`, `WidgetSettingsModal.tsx`, `Corkboard.tsx`, `MobileCompanion.tsx`):**
+  * Added interactive drag-and-drop grab handles to reorder active timezone cities directly on the multi-city clock widget.
+  * Added grab handles, drag-and-drop reordering, and precision move up/down controls (`▲`/`▼`) in Tile Settings.
+  * Added 1-click Quick Sort presets: sort by GMT time offset (West to East), alphabetical (A-Z), and reverse order.
 * **Mobile Companion Light Mode (`MobileCompanion.tsx`):**
   * Fully synchronized light styling for widget cards and inner renderers in the mobile companion stream.
 

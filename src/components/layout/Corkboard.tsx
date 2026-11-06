@@ -1398,6 +1398,13 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   clockFace={widget.config?.clockFace || 'digital'}
                   showSeconds={widget.config?.showSeconds ?? true}
                   isLight={isWidgetLight}
+                  onUpdateConfig={(updates) => {
+                    if (onUpdateWidget) {
+                      onUpdateWidget(widget.id, {
+                        config: { ...widget.config, ...updates },
+                      });
+                    }
+                  }}
                 />
               ) : widget.type === 'clock_weather' ? (
                 <ClockWeatherWidget

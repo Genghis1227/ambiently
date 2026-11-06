@@ -20,6 +20,7 @@ export const RELEASES: ReleaseEntry[] = [
       "Per-Widget Appearance Modes: Each widget tile can be set to 'Auto (Inherit)', 'Light', or 'Dark' independently, enabling daylight paper cards on dark/photo canvases or dark slate tiles on bright boards.",
       "Quick Appearance Context Menu: Right-click or tap layer controls on any widget to toggle between Auto, Light, and Dark modes instantly.",
       "Widget Dark/Light Optimization: Clock, Weather, Clock-Weather, World Clock, Calendar, Quotes, RSS, Countdown, TextBox, and Sticky Notes adapted with high-contrast slate typography and refined light palette.",
+      "World Timezone Clock Grab-and-Sort Sorter: Added interactive drag-and-drop grab handles to reorder active cities directly on the multi-city world clock widget and in Tile Settings, plus 1-click Quick Sort buttons (by GMT time offset, alphabetical A-Z, or reverse).",
       "Mobile Companion Light Mode: Synchronized widget card theming on mobile devices based on canvas and widget appearance settings.",
     ],
   },

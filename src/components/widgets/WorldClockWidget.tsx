@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Globe, Sun, Moon } from 'lucide-react';
+import { Globe, Sun, Moon, GripVertical } from 'lucide-react';
 
 export interface WorldClockCity {
   id: string;
@@ -16,6 +16,35 @@ export const DEFAULT_WORLD_CITIES: WorldClockCity[] = [
     timezone: 'Asia/Tokyo',
   },
 ];
+
+export function getZoneOffsetMinutes(now: Date, timezone?: string): number {
+  if (!timezone) return 0;
+  try {
+    const partsFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      hour12: false,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+    const parts = partsFormatter.formatToParts(now);
+    const getPart = (type: string) => parseInt(parts.find((p) => p.type === type)?.value || '0', 10);
+    const y = getPart('year');
+    const m = getPart('month') - 1;
+    const d = getPart('day');
+    const h = getPart('hour') % 24;
+    const min = getPart('minute');
+    const s = getPart('second');
+    const targetUtc = Date.UTC(y, m, d, h, min, s);
+    const actualUtc = now.getTime();
+    return Math.round((targetUtc - actualUtc) / 60000);
+  } catch {
+    return 0;
+  }
+}
 
 export interface FormattedZoneTime {
   hoursMinutes: string;
@@ -127,6 +156,8 @@ interface WorldClockWidgetProps {
   clockFace?: 'digital' | 'minimal' | 'analog';
   showSeconds?: boolean;
   isLight?: boolean;
+  onUpdateCities?: (cities: WorldClockCity[]) => void;
+  onUpdateConfig?: (updates: Record<string, any>) => void;
 }
 
 export const WorldClockWidget: React.FC<WorldClockWidgetProps> = ({
@@ -135,8 +166,12 @@ export const WorldClockWidget: React.FC<WorldClockWidgetProps> = ({
   clockFace = 'digital',
   showSeconds = true,
   isLight = false,
+  onUpdateCities,
+  onUpdateConfig,
 }) => {
   const [now, setNow] = useState(new Date());
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
@@ -145,6 +180,41 @@ export const WorldClockWidget: React.FC<WorldClockWidgetProps> = ({
 
   const activeCities =
     Array.isArray(cities) && cities.length > 0 ? cities : DEFAULT_WORLD_CITIES;
+
+  const handleReorder = (fromIdx: number, toIdx: number) => {
+    if (
+      fromIdx === toIdx ||
+      fromIdx < 0 ||
+      toIdx < 0 ||
+      fromIdx >= activeCities.length ||
+      toIdx >= activeCities.length
+    )
+      return;
+    const reordered = [...activeCities];
+    const [moved] = reordered.splice(fromIdx, 1);
+    reordered.splice(toIdx, 0, moved);
+    if (onUpdateCities) {
+      onUpdateCities(reordered);
+    } else if (onUpdateConfig) {
+      onUpdateConfig({ cities: reordered });
+    }
+  };
+
+  const handleSortByTime = () => {
+    const sorted = [...activeCities].sort((a, b) => {
+      const offA = getZoneOffsetMinutes(now, a.timezone);
+      const offB = getZoneOffsetMinutes(now, b.timezone);
+      return offA - offB;
+    });
+    if (onUpdateCities) onUpdateCities(sorted);
+    else if (onUpdateConfig) onUpdateConfig({ cities: sorted });
+  };
+
+  const handleSortByName = () => {
+    const sorted = [...activeCities].sort((a, b) => a.cityName.localeCompare(b.cityName));
+    if (onUpdateCities) onUpdateCities(sorted);
+    else if (onUpdateConfig) onUpdateConfig({ cities: sorted });
+  };
 
   // Single-City Focus Mode
   if (activeCities.length === 1) {
@@ -261,52 +331,138 @@ export const WorldClockWidget: React.FC<WorldClockWidgetProps> = ({
   }
 
   // Multi-City World Timezone List Mode
+  const canReorder = Boolean(onUpdateCities || onUpdateConfig) && activeCities.length > 1;
+
   return (
     <div className="w-full h-full flex flex-col justify-between select-none p-1 overflow-hidden">
       <div className={`flex items-center justify-between border-b pb-2 mb-2 shrink-0 ${isLight ? 'border-slate-200' : 'border-gray-800/80'}`}>
-        <div className="flex items-center gap-1.5">
-          <Globe className="w-3.5 h-3.5 text-cyan-400" />
-          <span className={`text-xs font-bold uppercase tracking-wider ${isLight ? 'text-slate-700' : 'text-gray-300'}`}>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+          <span className={`text-xs font-bold uppercase tracking-wider truncate ${isLight ? 'text-slate-700' : 'text-gray-300'}`}>
             {title || 'World Timezones'}
           </span>
         </div>
-        <span className={`text-[10px] font-mono ${isLight ? 'text-slate-500' : 'text-gray-500'}`}>
-          {activeCities.length} {activeCities.length === 1 ? 'City' : 'Cities'}
-        </span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {canReorder && (
+            <div className="flex items-center gap-1" data-no-drag="true">
+              <button
+                type="button"
+                onClick={handleSortByTime}
+                title="Sort cities by timezone offset (West to East)"
+                className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors cursor-pointer flex items-center gap-0.5 ${
+                  isLight
+                    ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900 bg-slate-100'
+                    : 'hover:bg-gray-800 text-gray-400 hover:text-white bg-gray-900'
+                }`}
+              >
+                <span>Time</span>
+                <span className="text-[9px]">⇥</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleSortByName}
+                title="Sort cities alphabetically (A to Z)"
+                className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors cursor-pointer ${
+                  isLight
+                    ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900 bg-slate-100'
+                    : 'hover:bg-gray-800 text-gray-400 hover:text-white bg-gray-900'
+                }`}
+              >
+                A-Z
+              </button>
+            </div>
+          )}
+          <span className={`text-[10px] font-mono ${isLight ? 'text-slate-500' : 'text-gray-500'}`}>
+            {activeCities.length} {activeCities.length === 1 ? 'City' : 'Cities'}
+          </span>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-2 pr-0.5 min-h-0">
-        {activeCities.map((city) => {
+        {activeCities.map((city, idx) => {
           const zt = getFormattedTimeForZone(now, city.timezone);
+          const isDraggingThis = draggedIndex === idx;
+          const isDragOverThis = dragOverIndex === idx && draggedIndex !== idx;
+
           return (
             <div
               key={city.id}
-              className={`flex items-center justify-between p-2.5 rounded-xl border ${
-                isLight
-                  ? 'bg-slate-100/90 border-slate-200/90'
-                  : 'bg-gray-950/60 border-gray-800/80'
+              data-no-drag="true"
+              draggable={canReorder}
+              onDragStart={(e) => {
+                if (!canReorder) return;
+                e.dataTransfer.setData('text/plain', String(idx));
+                e.dataTransfer.effectAllowed = 'move';
+                setDraggedIndex(idx);
+              }}
+              onDragOver={(e) => {
+                if (!canReorder) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                if (dragOverIndex !== idx) setDragOverIndex(idx);
+              }}
+              onDragLeave={() => {
+                if (dragOverIndex === idx) setDragOverIndex(null);
+              }}
+              onDrop={(e) => {
+                if (!canReorder) return;
+                e.preventDefault();
+                if (draggedIndex !== null) {
+                  handleReorder(draggedIndex, idx);
+                }
+                setDraggedIndex(null);
+                setDragOverIndex(null);
+              }}
+              onDragEnd={() => {
+                setDraggedIndex(null);
+                setDragOverIndex(null);
+              }}
+              className={`flex items-center justify-between p-2.5 rounded-xl border transition-all ${
+                isDraggingThis ? 'opacity-35 scale-[0.98]' : ''
+              } ${
+                isDragOverThis
+                  ? isLight
+                    ? 'border-cyan-500 ring-2 ring-cyan-400/50 bg-cyan-50/80'
+                    : 'border-cyan-400 ring-2 ring-cyan-500/50 bg-cyan-950/50'
+                  : isLight
+                  ? 'bg-slate-100/90 border-slate-200/90 hover:border-slate-300'
+                  : 'bg-gray-950/60 border-gray-800/80 hover:border-gray-700'
               }`}
             >
-              <div className="min-w-0 flex-1 pr-2">
-                <div className="flex items-center gap-1.5">
-                  {zt.isDaytime ? (
-                    <Sun className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  ) : (
-                    <Moon className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                  )}
-                  <span className={`text-xs md:text-sm font-bold truncate ${isLight ? 'text-slate-900' : 'text-white'}`}>
-                    {city.cityName}
-                  </span>
-                  <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${
-                    isLight
-                      ? 'text-cyan-800 bg-cyan-100'
-                      : 'text-cyan-400 bg-cyan-500/10'
-                  }`}>
-                    {zt.tzShort}
-                  </span>
-                </div>
-                <div className={`text-[10px] mt-0.5 truncate ${isLight ? 'text-slate-600' : 'text-gray-400'}`}>
-                  {zt.dateStr} • <span className={isLight ? 'text-slate-500' : 'text-gray-500'}>{zt.diffLabel}</span>
+              <div className="min-w-0 flex-1 pr-2 flex items-center gap-1.5">
+                {canReorder && (
+                  <div
+                    className={`cursor-grab active:cursor-grabbing p-0.5 rounded touch-none shrink-0 ${
+                      isLight
+                        ? 'text-slate-400 hover:text-slate-700 hover:bg-slate-200'
+                        : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800'
+                    }`}
+                    title="Grab and drag to sort city position"
+                  >
+                    <GripVertical className="w-3.5 h-3.5" />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    {zt.isDaytime ? (
+                      <Sun className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    ) : (
+                      <Moon className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                    )}
+                    <span className={`text-xs md:text-sm font-bold truncate ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                      {city.cityName}
+                    </span>
+                    <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded shrink-0 ${
+                      isLight
+                        ? 'text-cyan-800 bg-cyan-100'
+                        : 'text-cyan-400 bg-cyan-500/10'
+                    }`}>
+                      {zt.tzShort}
+                    </span>
+                  </div>
+                  <div className={`text-[10px] mt-0.5 truncate ${isLight ? 'text-slate-600' : 'text-gray-400'}`}>
+                    {zt.dateStr} • <span className={isLight ? 'text-slate-500' : 'text-gray-500'}>{zt.diffLabel}</span>
+                  </div>
                 </div>
               </div>
 
