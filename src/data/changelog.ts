@@ -11,6 +11,17 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.2.6",
+    date: "November 6, 2026",
+    title: "Supabase RLS Policy Fix for Widgets & Canvases, Cloud Upsert Validation & Full Mirror Restore",
+    highlights: [
+      "Supabase Table RLS Permissions: Upgraded tabs and widgets Row Level Security policies from SELECT-only to full read/write (for all using (...) with check (...)), allowing client dashboards to insert, update, and persist new widgets and custom canvases to Supabase Cloud.",
+      "Loose Foreign Key Coupling: Removed strict widgets_tab_id_fkey constraint on public.widgets, preventing foreign key constraint rejections during distributed multi-machine synchronization.",
+      "Explicit Error Checking on Cloud Push: Wrapped all Supabase upsert calls with explicit error validation to prevent silent swallow of RLS or database rejections, surfacing clear actionable feedback to users.",
+      "Full Mirror Cloud Restore: Enhanced pullFromCloud to cleanly mirror remote cloud widgets and tabs into local Dexie storage, eliminating leftover unreferenced default widgets on second machines.",
+    ],
+  },
+  {
     version: "v0.2.5",
     date: "November 6, 2026",
     title: "Smart Night Schedule Window, 2-Min Wake Inactivity Re-Engage, Real-Time Cloud Sync & 12 Canvas Icons",
