@@ -22,6 +22,8 @@ import {
   Building2,
   Coffee,
   Leaf,
+  QrCode,
+  Copy,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -120,6 +122,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   const [plexToken, setPlexToken] = useState<string | null>(null);
   const [pinData, setPinData] = useState<PlexPinResponse | null>(null);
   const [isPinLoading, setIsPinLoading] = useState(false);
+  const [copiedPin, setCopiedPin] = useState(false);
   const [servers, setServers] = useState<PlexServerResource[]>([]);
   const [selectedServer, setSelectedServer] = useState<PlexServerResource | null>(null);
   const [photoSections, setPhotoSections] = useState<PlexLibrarySection[]>([]);
@@ -568,52 +571,105 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                       )}
                     </button>
                   ) : (
-                    <div className="bg-gray-950 p-4 rounded-xl border border-gray-800 space-y-4 max-w-md mx-auto">
-                      <div className="text-xs text-gray-300">
-                        Scan the QR code or enter code at{' '}
+                    <div className="bg-gray-950 p-5 rounded-2xl border border-gray-800 space-y-4 max-w-md w-full mx-auto shadow-2xl overflow-hidden">
+                      <div className="text-xs text-gray-300 text-center">
+                        Scan the QR code with your phone camera or enter code at{' '}
                         <a
-                          href="https://plex.tv/link"
+                          href={pinData.directLinkUrl || `https://plex.tv/link?pin=${pinData.code}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-amber-400 underline font-mono"
+                          className="text-amber-400 font-bold underline font-mono hover:text-amber-300"
                         >
                           plex.tv/link
                         </a>
                       </div>
 
-                      {/* QR Code and 4-Letter Code */}
-                      <div className="flex flex-col sm:flex-row items-center justify-center gap-4 py-2">
-                        <div className="p-2 bg-white rounded-xl shadow-md">
-                          <QRCodeSVG
-                            value="https://plex.tv/link"
-                            size={110}
-                            bgColor="#ffffff"
-                            fgColor="#000000"
-                            level="M"
-                          />
+                      {/* QR Code and 4-Character PIN Code */}
+                      <div className="flex flex-col sm:flex-row items-center justify-center gap-6 py-1">
+                        {/* QR Code Container */}
+                        <div className="flex flex-col items-center gap-1.5 shrink-0">
+                          <div className="p-2.5 bg-white rounded-2xl shadow-lg ring-1 ring-black/10">
+                            <QRCodeSVG
+                              value={pinData.directLinkUrl || `https://plex.tv/link?pin=${pinData.code}`}
+                              size={120}
+                              bgColor="#ffffff"
+                              fgColor="#000000"
+                              level="M"
+                            />
+                          </div>
+                          <span className="text-[10px] text-gray-400 font-medium flex items-center gap-1">
+                            <QrCode className="w-3 h-3 text-amber-400" />
+                            Scan with camera
+                          </span>
                         </div>
-                        <div className="text-center">
-                          <div className="text-[10px] text-gray-500 uppercase font-semibold">
+
+                        {/* 4-Character PIN Code Tiles & Action Buttons */}
+                        <div className="flex flex-col items-center sm:items-start text-center sm:text-left space-y-2">
+                          <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">
                             4-Character PIN Code
+                          </span>
+
+                          {/* 4 Distinct Character Tiles */}
+                          <div className="flex items-center gap-1.5 justify-center sm:justify-start">
+                            {pinData.code.split('').map((char, idx) => (
+                              <div
+                                key={idx}
+                                className="w-10 h-12 rounded-xl bg-amber-500/10 border-2 border-amber-500/40 text-amber-400 font-mono font-black text-2xl flex items-center justify-center shadow-inner select-all"
+                              >
+                                {char}
+                              </div>
+                            ))}
                           </div>
-                          <div className="text-3xl font-mono font-black text-amber-400 tracking-widest my-1 bg-amber-500/10 px-4 py-1.5 rounded-lg border border-amber-500/30">
-                            {pinData.code}
+
+                          {/* Direct Action Buttons */}
+                          <div className="flex items-center gap-2 pt-1 justify-center sm:justify-start">
+                            <a
+                              href={pinData.directLinkUrl || `https://plex.tv/link?pin=${pinData.code}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-xs font-semibold transition-all hover:scale-105"
+                            >
+                              <span>Open plex.tv/link</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(pinData.code);
+                                setCopiedPin(true);
+                                setTimeout(() => setCopiedPin(false), 2000);
+                              }}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs transition-colors cursor-pointer"
+                              title="Copy PIN Code"
+                            >
+                              {copiedPin ? (
+                                <>
+                                  <Check className="w-3 h-3 text-emerald-400" />
+                                  <span className="text-emerald-400 text-[11px]">Copied!</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3 h-3" />
+                                  <span className="text-[11px]">Copy</span>
+                                </>
+                              )}
+                            </button>
                           </div>
-                          <a
-                            href={pinData.authUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-[11px] text-blue-400 hover:underline mt-1"
-                          >
-                            <span>Open Plex Login</span>
-                            <ExternalLink className="w-3 h-3" />
-                          </a>
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-center gap-2 text-xs text-gray-400">
-                        <RefreshCw className="w-3 h-3 animate-spin text-amber-400" />
-                        <span>Waiting for authorization on plex.tv...</span>
+                      {/* Footer: Waiting status & refresh button */}
+                      <div className="pt-2 border-t border-gray-800/80 flex items-center justify-between text-xs text-gray-400">
+                        <div className="flex items-center gap-2">
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                          <span>Waiting for authorization on Plex...</span>
+                        </div>
+                        <button
+                          onClick={handleStartPlexAuth}
+                          disabled={isPinLoading}
+                          className="text-[11px] text-gray-400 hover:text-amber-300 underline cursor-pointer"
+                        >
+                          New Code
+                        </button>
                       </div>
                     </div>
                   )}

@@ -11,6 +11,16 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.2.8",
+    date: "November 6, 2026",
+    title: "Plex Media Server TV Linking Refinements, 4-Digit Character Tiles & One-Tap QR Pairing",
+    highlights: [
+      "Standard 4-Character TV PIN: Removed strong=true parameter from Plex PIN endpoint, ensuring Plex generates clean, human-friendly 4-character TV link codes matching plex.tv/link instead of 25-character hashes that stretched and overflowed the dialog.",
+      "One-Tap QR Code Auto-Link: Upgraded QR code generation to encode direct pre-filled URLs (https://plex.tv/link?pin=CODE), allowing users to scan with their phone camera and pair their Plex Media Server instantly without manually typing the code.",
+      "Refined Character Tiles & Copy Action: Replaced the plain input container with four distinct, illuminated monospace character tiles, added 1-click clipboard copy with checkmark feedback, direct link button, and a new code refresh action.",
+    ],
+  },
+  {
     version: "v0.2.7",
     date: "November 6, 2026",
     title: "Multi-Device Concurrency Protection, Last-Write-Wins Timestamps & Active Canvas Preservation",
