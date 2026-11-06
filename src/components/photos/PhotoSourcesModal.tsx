@@ -330,7 +330,11 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
       );
       if (photos.length > 0) {
         const sectionTitle = currentSection?.title || 'Photos';
-        const folderTitle = currentFolder ? ` / ${currentFolder.title}` : '';
+        const folderTitle = currentFolder
+          ? currentFolder.parentTitle
+            ? ` / ${currentFolder.parentTitle} / ${currentFolder.title}`
+            : ` / ${currentFolder.title}`
+          : '';
         const sourceLabel = `Plex (${selectedServer.name} - ${sectionTitle}${folderTitle})`;
 
         onPhotosLoaded(photos, sourceLabel, undefined, 'plex', applyToAll);
@@ -824,10 +828,12 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                             disabled={isFoldersLoading}
                             className="w-full bg-gray-950 border border-gray-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-blue-500 disabled:opacity-50"
                           >
-                            <option value="">🌟 Entire Library (All Photos)</option>
+                            <option value="">🌟 Entire Library (All Photos &amp; Subfolders)</option>
                             {sectionFolders.map((f) => (
                               <option key={f.key} value={f.key}>
-                                📁 {f.title}
+                                {f.depth && f.depth > 0
+                                  ? `${'　'.repeat(f.depth)}↳ 📁 ${f.title}`
+                                  : `📁 ${f.title} (All subfolders)`}
                               </option>
                             ))}
                           </select>

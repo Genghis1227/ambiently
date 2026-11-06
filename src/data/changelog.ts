@@ -11,6 +11,19 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.1",
+    date: "November 6, 2026",
+    title: "Plex Recursive Deep Folder Traversal, Subfolder Discovery & Transcode URL Fix",
+    highlights: [
+      "Recursive Deep Folder Traversal: Added automatic breadth-first folder traversal in Plex photo libraries up to 6 levels deep (e.g. Photos > Personal > 2018 > pictures.jpg), gathering all nested leaf photos when selecting parent folders or entire libraries.",
+      "Fixed Plex Photo Transcode URLs: Corrected photo transcode URL generation to use the actual image part resource key (item.Media[0].Part[0].key) or thumb rather than item.key (which is a JSON/XML metadata endpoint).",
+      "Eliminated Photo Skipping & Cycling Loops: Resolved the rapid cycle/skip loop in Photo Frame widgets caused by HTTP 400/500 errors on invalid transcode URLs.",
+      "Direct Raw Photo Fallback: Equipped PhotoItem with fallbackUrl pointing directly to the raw media part on Plex Media Server, ensuring images display even if transcode fails or is throttled.",
+      "Subfolder Dropdown Discovery: Enhanced Plex folder scanning to discover immediate subdirectories (depth: 1) with clean indentation (↳ 📁 2018), allowing direct selection of nested photo folders.",
+      "Self-Healing Widget Fallback: PhotoFrameWidget (Ken Burns, Mosaic, Polaroid, Filmstrip) now automatically retries failed photos using their raw fallback URL before skipping, with safety guards to prevent infinite cycling.",
+    ],
+  },
+  {
     version: "v0.3.0",
     date: "November 6, 2026",
     title: "One-Tap Mobile Companion QR Pairing, Multi-Tier Household Access & Live Family Sync",

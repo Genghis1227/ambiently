@@ -7,6 +7,7 @@ export interface PhotoItem {
   author?: string;
   date?: string;
   source: 'curated' | 'local' | 'plex' | 'gdrive' | 'web';
+  fallbackUrl?: string;
 }
 
 export type PhotoDisplayStyle = 'ken_burns' | 'mosaic' | 'polaroid' | 'filmstrip';

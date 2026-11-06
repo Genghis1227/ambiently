@@ -387,9 +387,26 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
 
   // Self-healing photo failure tracking: auto-replaces failed/throttled photos with fresh candidates
   const failedPhotoIdsRef = useRef<Set<string>>(new Set());
+  const [urlOverrides, setUrlOverrides] = useState<Record<string, string>>({});
+
+  const getPhotoDisplayUrl = useCallback(
+    (photo: PhotoItem, targetWidth = 1920) => {
+      const activeUrl = urlOverrides[photo.id] || photo.url;
+      return getOptimizedPhotoUrl(activeUrl, targetWidth);
+    },
+    [urlOverrides]
+  );
 
   const handlePolaroidError = useCallback((slotIdx: number, photoId: string) => {
+    const current = photos.find((p) => p.id === photoId);
+    if (current?.fallbackUrl && !urlOverrides[photoId] && current.fallbackUrl !== current.url) {
+      setUrlOverrides((prev) => ({ ...prev, [photoId]: current.fallbackUrl! }));
+      return;
+    }
+
     failedPhotoIdsRef.current.add(photoId);
+    if (failedPhotoIdsRef.current.size >= photos.length) return;
+
     setScatteredPolaroids((prev) => {
       const currentSlotItem = prev[slotIdx];
       if (!currentSlotItem) return prev;
@@ -420,7 +437,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
         };
       });
     });
-  }, [photos, polaroidSlots]);
+  }, [photos, polaroidSlots, urlOverrides]);
 
   // Mosaic active quadrant photos & auto-rotation
   const [mosaicPhotos, setMosaicPhotos] = useState<PhotoItem[]>(() => {
@@ -553,31 +570,61 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     setResetTrigger((prev) => prev + 1);
   }, [photos]);
 
-  const handleMosaicError = useCallback((slotIdx: number, photoId: string) => {
-    failedPhotoIdsRef.current.add(photoId);
-    handleShuffleMosaicSlot(slotIdx);
-  }, [handleShuffleMosaicSlot]);
+  const handleMosaicError = useCallback(
+    (slotIdx: number, photoId: string) => {
+      const current = photos.find((p) => p.id === photoId);
+      if (current?.fallbackUrl && !urlOverrides[photoId] && current.fallbackUrl !== current.url) {
+        setUrlOverrides((prev) => ({ ...prev, [photoId]: current.fallbackUrl! }));
+        return;
+      }
 
-  const handleKenBurnsError = useCallback((photoId: string) => {
-    failedPhotoIdsRef.current.add(photoId);
-    if (photos.length <= 1) return;
-    if (photoOrder === 'random') {
-      setCurrentIndex((prev) => {
-        let next = Math.floor(Math.random() * photos.length);
-        if (photos.length > 1 && next === prev) {
-          next = (next + 1) % photos.length;
-        }
-        return next;
-      });
-    } else {
-      setCurrentIndex((prev) => (prev + 1) % photos.length);
-    }
-  }, [photos, photoOrder]);
+      failedPhotoIdsRef.current.add(photoId);
+      if (failedPhotoIdsRef.current.size >= photos.length) return;
+      handleShuffleMosaicSlot(slotIdx);
+    },
+    [handleShuffleMosaicSlot, photos, urlOverrides]
+  );
 
-  const handleFilmstripError = useCallback((photoId: string) => {
-    failedPhotoIdsRef.current.add(photoId);
-    setFilmstripIndex((prev) => prev + 1);
-  }, []);
+  const handleKenBurnsError = useCallback(
+    (photoId: string) => {
+      const current = photos.find((p) => p.id === photoId);
+      if (current?.fallbackUrl && !urlOverrides[photoId] && current.fallbackUrl !== current.url) {
+        setUrlOverrides((prev) => ({ ...prev, [photoId]: current.fallbackUrl! }));
+        return;
+      }
+
+      failedPhotoIdsRef.current.add(photoId);
+      if (failedPhotoIdsRef.current.size >= photos.length) return;
+      if (photos.length <= 1) return;
+      if (photoOrder === 'random') {
+        setCurrentIndex((prev) => {
+          let next = Math.floor(Math.random() * photos.length);
+          if (photos.length > 1 && next === prev) {
+            next = (next + 1) % photos.length;
+          }
+          return next;
+        });
+      } else {
+        setCurrentIndex((prev) => (prev + 1) % photos.length);
+      }
+    },
+    [photos, photoOrder, urlOverrides]
+  );
+
+  const handleFilmstripError = useCallback(
+    (photoId: string) => {
+      const current = photos.find((p) => p.id === photoId);
+      if (current?.fallbackUrl && !urlOverrides[photoId] && current.fallbackUrl !== current.url) {
+        setUrlOverrides((prev) => ({ ...prev, [photoId]: current.fallbackUrl! }));
+        return;
+      }
+
+      failedPhotoIdsRef.current.add(photoId);
+      if (failedPhotoIdsRef.current.size >= photos.length) return;
+      setFilmstripIndex((prev) => prev + 1);
+    },
+    [photos, urlOverrides]
+  );
 
   // Detect photo aspect ratio and face location to intelligently center where faces and people are
   const handleImageLoad = useCallback((photoId: string, img: HTMLImageElement) => {
@@ -948,14 +995,14 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                 opacity: { duration: 1.2 },
               }}
               style={{
-                backgroundImage: `url(${getOptimizedPhotoUrl(currentPhoto.url, 1920)})`,
+                backgroundImage: `url(${getPhotoDisplayUrl(currentPhoto, 1920)})`,
                 backgroundSize: 'cover',
                 backgroundPosition: photoFocals[currentPhoto.id] || photoFocalCache.get(currentPhoto.id) || 'center',
               }}
               className="absolute inset-0 w-full h-full"
             >
               <img
-                src={getOptimizedPhotoUrl(currentPhoto.url, 1920)}
+                src={getPhotoDisplayUrl(currentPhoto, 1920)}
                 alt=""
                 referrerPolicy="no-referrer"
                 className="hidden"
@@ -1043,7 +1090,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                     className="absolute inset-0 w-full h-full"
                   >
                     <img
-                      src={getOptimizedPhotoUrl(p.url, 800)}
+                      src={getPhotoDisplayUrl(p, 800)}
                       alt={p.caption || 'Photo'}
                       referrerPolicy="no-referrer"
                       className={`w-full h-full object-cover transition-transform duration-500 ${
@@ -1163,7 +1210,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                 >
                   <div className="w-full flex-1 min-h-0 overflow-hidden rounded-xs bg-gray-900 relative">
                     <img
-                      src={getOptimizedPhotoUrl(item.photo.url, isHero ? 800 : 600)}
+                      src={getPhotoDisplayUrl(item.photo, isHero ? 800 : 600)}
                       alt={item.photo.caption || 'Polaroid moment'}
                       referrerPolicy="no-referrer"
                       className="w-full h-full object-cover select-none pointer-events-none"
@@ -1285,7 +1332,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                 title={isCenter ? p.caption : 'Click to center this photo'}
               >
                 <img
-                  src={getOptimizedPhotoUrl(p.url, 800)}
+                  src={getPhotoDisplayUrl(p, 800)}
                   alt={p.caption || 'Film frame'}
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-cover select-none pointer-events-none"
