@@ -61,6 +61,8 @@ export interface PlexFolderItem {
   title: string;
   type?: string;
   thumb?: string;
+  parentTitle?: string;
+  depth?: number;
 }
 
 // Ensure unique persistent client identifier for this Ambiently kiosk
@@ -256,7 +258,83 @@ export async function getPlexPhotoLibraries(
   return directories.filter((d) => d.isPhoto);
 }
 
-// Discover subfolders or albums within a library section
+function buildPlexItemUrl(
+  cleanUri: string,
+  key: string,
+  tokenParam: string,
+  fallbackSectionKey?: string
+): string {
+  if (key.startsWith('http://') || key.startsWith('https://')) {
+    return `${key}${key.includes('?') ? '&' : '?'}${tokenParam}`;
+  }
+  if (key.startsWith('/')) {
+    return `${cleanUri}${key}${key.includes('?') ? '&' : '?'}${tokenParam}`;
+  }
+  if (/^\d+$/.test(key) && fallbackSectionKey) {
+    return `${cleanUri}/library/sections/${fallbackSectionKey}/folder?parent=${key}&${tokenParam}`;
+  }
+  return `${cleanUri}/${key}${key.includes('?') ? '&' : '?'}${tokenParam}`;
+}
+
+function extractPlexPhotoItem(
+  item: any,
+  cleanUri: string,
+  tokenParam: string
+): PhotoItem | null {
+  // Never treat directories/albums/folders as photos
+  if (
+    item.type === 'folder' ||
+    item.type === 'photoalbum' ||
+    item.type === 'directory' ||
+    item.type === 'album'
+  ) {
+    return null;
+  }
+
+  // Must be a photo type, or have Media parts / photo metadata
+  const isPhoto =
+    item.type === 'photo' ||
+    item.type === 'picture' ||
+    item.type === 'image' ||
+    (!item.type &&
+      (item.Media?.[0]?.Part?.[0]?.key ||
+        (item.thumb && !item.key?.includes('children') && !item.key?.includes('folder'))));
+
+  if (!isPhoto) return null;
+
+  const partKey: string | undefined = item.Media?.[0]?.Part?.[0]?.key;
+  const thumbKey: string | undefined = item.thumb;
+  const ratingKey: string | undefined = item.ratingKey;
+
+  // The resource path to transcode: MUST be partKey or thumb, NEVER item.key (/library/metadata/{id})
+  const imageResourcePath =
+    partKey || thumbKey || (ratingKey ? `/library/metadata/${ratingKey}/thumb` : undefined);
+  if (!imageResourcePath) return null;
+
+  // Transcode URL (1920x1080) for sharp smart-display rendering
+  const transcodeUrl = `${cleanUri}/photo/:/transcode?width=1920&height=1080&minSize=1&upscale=1&url=${encodeURIComponent(
+    imageResourcePath
+  )}&${tokenParam}`;
+
+  // Direct raw photo URL fallback in case transcode fails or is throttled on Plex server
+  const directUrl = partKey
+    ? `${cleanUri}${partKey}${partKey.includes('?') ? '&' : '?'}${tokenParam}`
+    : `${cleanUri}${imageResourcePath}${imageResourcePath.includes('?') ? '&' : '?'}${tokenParam}`;
+
+  return {
+    id: `plex-${item.ratingKey || partKey || item.key || Math.random().toString(36).slice(2)}`,
+    url: transcodeUrl,
+    fallbackUrl: directUrl,
+    caption: item.title || item.summary || 'Plex Photo',
+    author: item.year ? String(item.year) : undefined,
+    date:
+      item.originallyAvailableAt ||
+      (item.addedAt ? new Date(item.addedAt * 1000).toLocaleDateString() : undefined),
+    source: 'plex',
+  };
+}
+
+// Discover subfolders or albums within a library section (including child subfolders)
 export async function getPlexSectionFolders(
   serverUri: string,
   serverAccessToken: string,
@@ -274,14 +352,50 @@ export async function getPlexSectionFolders(
     if (folderRes.ok) {
       const folderData = await folderRes.json();
       const dirs = folderData.MediaContainer?.Directory || [];
-      for (const d of dirs) {
-        if (d.title && d.key) {
-          folders.push({
-            key: d.key,
-            title: d.title,
-            type: d.type || 'folder',
-            thumb: d.thumb,
-          });
+
+      // For each root folder, fetch immediate child folders (depth: 1)
+      const childPromises = dirs.map(async (d: any) => {
+        if (!d.title || !d.key) return null;
+        const rootItem: PlexFolderItem = {
+          key: d.key,
+          title: d.title,
+          type: d.type || 'folder',
+          thumb: d.thumb,
+          depth: 0,
+        };
+
+        const subItems: PlexFolderItem[] = [];
+        try {
+          const childUrl = buildPlexItemUrl(cleanUri, d.key, tokenParam, sectionKey);
+          const childRes = await fetch(childUrl, { headers: { Accept: 'application/json' } });
+          if (childRes.ok) {
+            const childData = await childRes.json();
+            const childDirs = childData.MediaContainer?.Directory || [];
+            for (const c of childDirs) {
+              if (c.title && c.key) {
+                subItems.push({
+                  key: c.key,
+                  title: c.title,
+                  parentTitle: d.title,
+                  type: c.type || 'folder',
+                  thumb: c.thumb,
+                  depth: 1,
+                });
+              }
+            }
+          }
+        } catch {
+          // ignore failure fetching child directory
+        }
+
+        return { rootItem, subItems };
+      });
+
+      const results = await Promise.allSettled(childPromises);
+      for (const r of results) {
+        if (r.status === 'fulfilled' && r.value) {
+          folders.push(r.value.rootItem);
+          folders.push(...r.value.subItems);
         }
       }
     }
@@ -305,6 +419,7 @@ export async function getPlexSectionFolders(
               title: d.title,
               type: 'photoalbum',
               thumb: d.thumb,
+              depth: 0,
             });
           }
         }
@@ -317,89 +432,121 @@ export async function getPlexSectionFolders(
   return folders;
 }
 
-// 6. Fetch photos from a section (or specific subfolder/album) and generate transcode URLs
+// Fetch photos from a section (or specific subfolder/album), recursively traversing subfolders
 export async function getPlexPhotosFromSection(
   serverUri: string,
   serverAccessToken: string,
   sectionKey: string,
-  folderOrAlbumKey?: string
+  folderOrAlbumKey?: string,
+  maxPhotos: number = Infinity,
+  onProgress?: (count: number) => void
 ): Promise<PhotoItem[]> {
   const cleanUri = serverUri.replace(/\/$/, '');
   const tokenParam = `X-Plex-Token=${encodeURIComponent(serverAccessToken)}`;
 
-  let url: string;
-  const isSpecificFolder = Boolean(folderOrAlbumKey && folderOrAlbumKey.trim() !== '' && folderOrAlbumKey !== 'all');
+  const isSpecificFolder = Boolean(
+    folderOrAlbumKey && folderOrAlbumKey.trim() !== '' && folderOrAlbumKey !== 'all'
+  );
 
-  if (isSpecificFolder && folderOrAlbumKey) {
-    const cleanFolderKey = folderOrAlbumKey.startsWith('/') ? folderOrAlbumKey : `/${folderOrAlbumKey}`;
-    url = `${cleanUri}${cleanFolderKey}${cleanFolderKey.includes('?') ? '&' : '?'}${tokenParam}`;
-  } else {
-    // When requesting entire section, try type=13 (photo) to flatten hierarchy
-    url = `${cleanUri}/library/sections/${sectionKey}/all?type=13&${tokenParam}`;
-  }
-
-  let res = await fetch(url, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
-    },
-  });
-
-  let data: any = null;
-  if (res.ok) {
-    data = await res.json();
-  }
-
-  // Fallback if type=13 was empty or returned nothing (e.g. for Home Video or custom sections)
-  if (!isSpecificFolder && (!data?.MediaContainer?.Metadata?.length && !data?.MediaContainer?.Directory?.length)) {
-    const fallbackUrl = `${cleanUri}/library/sections/${sectionKey}/all?${tokenParam}`;
-    try {
-      const fallbackRes = await fetch(fallbackUrl, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-      });
-      if (fallbackRes.ok) {
-        data = await fallbackRes.json();
-      }
-    } catch (e) {
-      console.warn('Plex section fallback fetch failed:', e);
-    }
-  }
-
-  if (!data) {
-    throw new Error(`Failed to fetch photos: ${res.statusText}`);
-  }
-
-  const items = [
-    ...(data.MediaContainer?.Metadata || []),
-    ...(data.MediaContainer?.Directory || []),
-  ];
+  const isUnlimited = !maxPhotos || maxPhotos <= 0 || !isFinite(maxPhotos);
 
   const photos: PhotoItem[] = [];
-  for (const item of items) {
-    const isPhotoItem =
-      item.type === 'photo' ||
-      item.type === 'picture' ||
-      item.type === 'image' ||
-      (!item.type && (item.thumb || item.key));
+  const seenPhotoIds = new Set<string>();
+  const visitedDirectoryKeys = new Set<string>();
+  const directoryQueue: { key: string; depth: number }[] = [];
 
-    const itemPath = item.key || item.thumb;
-    if (isPhotoItem && itemPath) {
-      // Build Plex transcode URL for crisp smart-display presentation
-      const transcodeUrl = `${cleanUri}/photo/:/transcode?width=1920&height=1080&minSize=1&upscale=1&url=${encodeURIComponent(
-        itemPath
-      )}&${tokenParam}`;
+  const addPhoto = (photo: PhotoItem) => {
+    if (!seenPhotoIds.has(photo.id) && (isUnlimited || photos.length < maxPhotos)) {
+      seenPhotoIds.add(photo.id);
+      photos.push(photo);
+      if (onProgress && photos.length % 25 === 0) {
+        onProgress(photos.length);
+      }
+    }
+  };
 
-      photos.push({
-        id: `plex-${item.ratingKey || item.key || Math.random().toString(36).slice(2)}`,
-        url: transcodeUrl,
-        caption: item.title || item.summary || 'Plex Photo',
-        author: item.year ? String(item.year) : undefined,
-        date: item.originallyAvailableAt || (item.addedAt ? new Date(item.addedAt * 1000).toLocaleDateString() : undefined),
-        source: 'plex',
+  if (isSpecificFolder && folderOrAlbumKey) {
+    directoryQueue.push({ key: folderOrAlbumKey, depth: 0 });
+  } else {
+    // 1. When requesting entire section, try type=13 (photos) to flatten hierarchy
+    const allPhotosUrl = `${cleanUri}/library/sections/${sectionKey}/all?type=13&${tokenParam}`;
+    try {
+      const res = await fetch(allPhotosUrl, {
+        headers: { Accept: 'application/json' },
       });
+      if (res.ok) {
+        const data = await res.json();
+        const metadataItems = data.MediaContainer?.Metadata || [];
+        for (const item of metadataItems) {
+          const photo = extractPlexPhotoItem(item, cleanUri, tokenParam);
+          if (photo) addPhoto(photo);
+        }
+      }
+    } catch (e) {
+      console.warn('Plex /all?type=13 query failed, falling back to folder traversal:', e);
+    }
+
+    // If type=13 returned photos across the library, report progress & return them
+    if (photos.length > 0) {
+      if (onProgress) onProgress(photos.length);
+      return photos;
+    }
+
+    // Fallback: start traversing from the section folder root
+    directoryQueue.push({ key: `/library/sections/${sectionKey}/folder`, depth: 0 });
+  }
+
+  // Breadth-first recursive directory traversal (up to depth 12, unlimited photos)
+  const MAX_DEPTH = 12;
+  const BATCH_SIZE = 6;
+
+  while (directoryQueue.length > 0 && (isUnlimited || photos.length < maxPhotos)) {
+    const currentBatch = directoryQueue.splice(0, BATCH_SIZE);
+
+    const batchPromises = currentBatch.map(async ({ key, depth }) => {
+      if (visitedDirectoryKeys.has(key)) return null;
+      visitedDirectoryKeys.add(key);
+
+      const targetUrl = buildPlexItemUrl(cleanUri, key, tokenParam, sectionKey);
+      try {
+        const res = await fetch(targetUrl, { headers: { Accept: 'application/json' } });
+        if (!res.ok) return null;
+        const data = await res.json();
+        return { data, depth };
+      } catch (err) {
+        console.warn(`Failed to fetch Plex directory ${key}:`, err);
+        return null;
+      }
+    });
+
+    const results = await Promise.allSettled(batchPromises);
+
+    for (const res of results) {
+      if (res.status !== 'fulfilled' || !res.value) continue;
+      const { data, depth } = res.value;
+
+      // 1. Extract leaf photo items from Metadata
+      const metadata = data.MediaContainer?.Metadata || [];
+      for (const item of metadata) {
+        const photo = extractPlexPhotoItem(item, cleanUri, tokenParam);
+        if (photo) {
+          addPhoto(photo);
+          if (!isUnlimited && photos.length >= maxPhotos) break;
+        }
+      }
+
+      // 2. Discover subdirectories to traverse recursively
+      if (depth < MAX_DEPTH && (isUnlimited || photos.length < maxPhotos)) {
+        const directories = data.MediaContainer?.Directory || [];
+        for (const dir of directories) {
+          if (dir.key && !visitedDirectoryKeys.has(dir.key)) {
+            directoryQueue.push({ key: dir.key, depth: depth + 1 });
+          }
+        }
+      }
     }
   }
 
+  if (onProgress) onProgress(photos.length);
   return photos;
 }

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.1] - 2026-11-06
+
+### Fixed
+* **Plex Recursive Photo Discovery & Deep Folder Traversal (`src/services/plex.ts`):**
+  * Fixed Plex photo loading when parent directories are selected (e.g., `Photos > Personal > 2018 > pictures.jpg`). Previously, parent directories returned only child directory cards (`Old`, `Wallace Falls`, etc.) rather than the pictures inside them.
+  * Implemented breadth-first recursive directory traversal (`getPlexPhotosFromSection`) that automatically explores child folders and sub-subfolders (up to 12 levels deep) to gather all leaf photo items.
+  * Removed arbitrary photo limits: Plex photo scanning now supports **unlimited** photos (`maxPhotos = Infinity`) with live progress reporting, allowing users with 10,000+ photo libraries to load every picture.
+  * Enhanced `getPlexSectionFolders` to discover immediate subdirectories (`depth: 1`) so users can optionally select specific subfolders (e.g. `Personal ❯ 2018`) directly from the dropdown.
+* **Plex Image Transcode URL Resolution & Fallback (`src/services/plex.ts`, `src/components/widgets/PhotoFrameWidget.tsx`):**
+  * Fixed Plex `/photo/:/transcode` target URLs: previously used `item.key` (`/library/metadata/{ratingKey}` which is an API endpoint), causing HTTP 400/500 transcode errors and triggering continuous photo cycling in `PhotoFrameWidget`.
+  * Now properly resolves `item.Media[0].Part[0].key || item.thumb` as the transcode image resource.
+  * Added `fallbackUrl` support pointing directly to the raw Part key on Plex Media Server (`${cleanUri}${partKey}?X-Plex-Token=...`).
+  * Updated `PhotoFrameWidget` (Ken Burns, Mosaic, Polaroid, Filmstrip) to automatically fallback to `photo.fallbackUrl` on error before advancing, and added a guard to prevent runaway cycling if a remote server is unreachable.
+* **Photo Sources Modal & Display (`src/components/photos/PhotoSourcesModal.tsx`):**
+  * Added indented subfolder rendering in the folder dropdown (`↳ 📁 2018`) and updated source labels to reflect the full path (e.g. `Plex (Server - Photos / Personal / 2018)`).
+
+---
+
 ## [0.3.0] - 2026-11-06
 
 ### Added
