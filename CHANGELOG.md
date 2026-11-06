@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.0] - 2026-11-06
+
+### Added
+* **One-Tap Mobile Companion QR Pairing (`src/services/supabase.ts`, `src/components/settings/ShareBoardModal.tsx`):**
+  * Added session token pairing to the QR code when logged in on desktop: encodes a secure auth transfer fragment (`#access_token=...&refresh_token=...`) so phone cameras instantly log in with zero typing required on mobile.
+  * Prunes initial seeded starter template notes (*"Welcome to Ambiently"*, *"Weekly Essentials"*) and default placeholder widgets on first login so the phone cleanly mirrors the user's actual cloud dashboard.
+* **Multi-Tier Household Roles: Admin vs Family/Kids Mode (`src/components/settings/ShareBoardModal.tsx`):**
+  * Added dedicated pairing tabs in the Mobile Connect modal:
+    * **Pair My Phone / Spouse (Admin)**: Full admin companion controls for managing boards, calendar feeds, Plex tokens, and cloud backups.
+    * **Kids & Family (Safe Member Mode)**: Zero account or email required! Kids scan or enter a 6-character code on their phone or tablet to check off chores and add notes without admin access.
+* **Two-Way Live Sync for Unauthenticated Family Members (`src/store/dashboardStore.ts`, `src/services/supabase.ts`):**
+  * Allowed unauthenticated devices joined via invite code to push note updates (`pushNotesToJoinedBoard`), enabling kids to toggle checklist chores and add notes from their phones with instant live updates on the wall display.
+  * Added wake-up re-sync for joined family members on mobile screen unlock.
+* **Interactive Mobile Connection & Inline Cloud Activation (`src/components/mobile/MobileCompanion.tsx`, `src/components/settings/ShareBoardModal.tsx`):**
+  * Replaced the dead-end unauthenticated QR box with an informative feature card explaining why Cloud Sync enables mobile control, including an embedded 1-step sign-in form directly in the modal.
+  * Added an unconnected phone banner and interactive "Enter 6-Digit Join Code" modal in Mobile Companion, plus a live Household Member badge with 1-click disconnect.
+
+---
+
 ## [0.2.9] - 2026-11-06
 
 ### Added

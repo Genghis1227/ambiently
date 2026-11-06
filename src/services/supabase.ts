@@ -217,8 +217,15 @@ export function subscribeToRealtimeBoard(
   };
 }
 
-// Generate or fetch shareable 6-character Invite Code for family
-export async function getOrCreateInviteCode(_boardId = 'default'): Promise<{ code: string; url: string } | null> {
+export interface InviteData {
+  code: string;
+  url: string;           // Family / Kids URL (no account required)
+  adminPairUrl?: string; // One-tap session pairing URL (for admin / spouse)
+  userEmail?: string;
+}
+
+// Generate or fetch shareable 6-character Invite Code for family & admin pairing
+export async function getOrCreateInviteCode(_boardId = 'default'): Promise<InviteData | null> {
   const sb = getSupabase();
   const user = await getCurrentUser();
   if (!sb || !user) return null;
@@ -245,14 +252,22 @@ export async function getOrCreateInviteCode(_boardId = 'default'): Promise<{ cod
     }
 
     const shareUrl = `${window.location.origin}/?join=${code}`;
-    return { code, url: shareUrl };
+    let adminPairUrl: string | undefined = undefined;
+
+    const { data: sessionData } = await sb.auth.getSession();
+    if (sessionData?.session) {
+      const { access_token, refresh_token } = sessionData.session;
+      adminPairUrl = `${window.location.origin}/?join=${code}#access_token=${encodeURIComponent(access_token)}&refresh_token=${encodeURIComponent(refresh_token)}&token_type=bearer&type=recovery`;
+    }
+
+    return { code, url: shareUrl, adminPairUrl, userEmail: user.email };
   } catch (err) {
     console.warn('Failed to get invite code:', err);
     return null;
   }
 }
 
-// Join a shared board via Invite Code (e.g. when family scans QR)
+// Join a shared board via Invite Code (e.g. when family scans QR or enters 6-digit code)
 export async function joinBoardByCode(code: string): Promise<{ success: boolean; boardTitle?: string; error?: string }> {
   const sb = getSupabase();
   if (!sb) return { success: false, error: 'Cloud service not connected.' };
@@ -260,7 +275,7 @@ export async function joinBoardByCode(code: string): Promise<{ success: boolean;
   try {
     const { data, error } = await sb
       .from('dashboards')
-      .select('id, title, user_id')
+      .select('id, title, user_id, settings, updated_at')
       .eq('invite_code', code.trim().toUpperCase())
       .single();
 
@@ -268,14 +283,39 @@ export async function joinBoardByCode(code: string): Promise<{ success: boolean;
       return { success: false, error: 'Invalid or expired invite code.' };
     }
 
-    // Pull shared notes & tabs from that board
+    // Persist joined dashboard info in localStorage for offline persistence & unauthenticated syncing
+    localStorage.setItem('joined_dashboard_id', data.id);
+    localStorage.setItem('joined_owner_id', data.user_id);
+    localStorage.setItem('joined_board_title', data.title || 'Family Board');
+    localStorage.setItem('joined_invite_code', code.trim().toUpperCase());
+
+    // Pull shared notes, tabs, and widgets from that board
     const [tabsRes, notesRes, widgetsRes] = await Promise.all([
       sb.from('tabs').select('*').eq('dashboard_id', data.id),
       sb.from('notes').select('*').eq('dashboard_id', data.id),
       sb.from('widgets').select('*').eq('dashboard_id', data.id),
     ]);
 
-    if (tabsRes.data) {
+    // Apply dashboard settings (wallpapers, clock format, themes, common photos)
+    if (data.settings) {
+      await db.settings.put({
+        ...data.settings,
+        id: 'global',
+        updated_at: data.updated_at || new Date().toISOString(),
+      });
+    }
+
+    // Clean up local seeded default notes and default widgets so they don't mix with the real board
+    const defaultNoteIds = ['note-welcome', 'note-groceries'];
+    await db.notes.bulkDelete(defaultNoteIds);
+
+    const defaultWidgetIds = ['widget-clock', 'widget-notes-tile', 'widget-photo-tile', 'widget-countdown-tile'];
+    if (widgetsRes.data && widgetsRes.data.length > 0) {
+      await db.widgets.bulkDelete(defaultWidgetIds);
+    }
+
+    if (tabsRes.data && tabsRes.data.length > 0) {
+      await db.tabs.bulkDelete(['tab-corkboard']);
       await db.tabs.bulkPut(
         tabsRes.data.map((t: any) => ({
           id: t.id,
@@ -331,6 +371,60 @@ export async function joinBoardByCode(code: string): Promise<{ success: boolean;
   } catch (err: any) {
     return { success: false, error: err.message };
   }
+}
+
+// Push notes to joined board for family members / kids without an account
+export async function pushNotesToJoinedBoard(notes: StickyNoteItem[]): Promise<void> {
+  const sb = getSupabase();
+  const dashboardId = localStorage.getItem('joined_dashboard_id');
+  const ownerId = localStorage.getItem('joined_owner_id');
+  if (!sb || !dashboardId || !ownerId) return;
+
+  try {
+    const notesToUpsert = notes.map((n) => ({
+      id: n.id,
+      dashboard_id: dashboardId,
+      user_id: ownerId,
+      tab_id: n.tabId,
+      widget_id: n.widgetId,
+      title: n.title,
+      content: n.content || '',
+      is_checklist: Boolean(n.isChecklist),
+      checklist_items: n.checklistItems || [],
+      bg_color: n.bgColor || '#fef08a',
+      font_size: n.fontSize || 'base',
+      expires_at: n.expiresAt,
+      archived_at: n.archivedAt,
+      freeform_pos: n.freeformPos || {},
+      updated_at: n.updated_at || new Date().toISOString(),
+      deleted_at: n.deleted_at,
+    }));
+
+    if (notesToUpsert.length > 0) {
+      await sb.from('notes').upsert(notesToUpsert);
+    }
+  } catch (err) {
+    console.warn('Failed to push notes to joined board:', err);
+  }
+}
+
+// Disconnect from a joined board (resets member mode on mobile)
+export function leaveJoinedBoard(): void {
+  localStorage.removeItem('joined_dashboard_id');
+  localStorage.removeItem('joined_owner_id');
+  localStorage.removeItem('joined_board_title');
+  localStorage.removeItem('joined_invite_code');
+}
+
+// Check if currently operating as a joined family member
+export function getJoinedBoardInfo(): { dashboardId: string; title: string; code: string } | null {
+  const dashboardId = localStorage.getItem('joined_dashboard_id');
+  if (!dashboardId) return null;
+  return {
+    dashboardId,
+    title: localStorage.getItem('joined_board_title') || 'Family Board',
+    code: localStorage.getItem('joined_invite_code') || '',
+  };
 }
 
 // Push local Dexie snapshot to Supabase Cloud
@@ -555,10 +649,10 @@ export async function pullFromCloud(): Promise<{ success: boolean; error?: strin
         }
       }
 
-      // Clean up default placeholder tab if cloud already has tabs and default tab was never edited
+      // Clean up default placeholder tab if cloud already has tabs
       const toDeleteTabIds: string[] = [];
       for (const lt of localTabs) {
-        if (!cloudTabIds.has(lt.id) && lt.id === 'tab-corkboard' && lt.updated_at === '1970-01-01T00:00:00.000Z') {
+        if (!cloudTabIds.has(lt.id) && lt.id === 'tab-corkboard') {
           toDeleteTabIds.push(lt.id);
         }
       }
@@ -602,11 +696,11 @@ export async function pullFromCloud(): Promise<{ success: boolean; error?: strin
         }
       }
 
-      // Clean up seeded default widgets that do not exist in cloud and were never edited
+      // Clean up seeded default widgets that do not exist in cloud
       const defaultWidgetIds = new Set(['widget-clock', 'widget-notes-tile', 'widget-photo-tile', 'widget-countdown-tile']);
       const toDeleteWidgetIds: string[] = [];
       for (const lw of localWidgets) {
-        if (!cloudWidgetIds.has(lw.id) && defaultWidgetIds.has(lw.id) && lw.updated_at === '1970-01-01T00:00:00.000Z') {
+        if (!cloudWidgetIds.has(lw.id) && defaultWidgetIds.has(lw.id)) {
           toDeleteWidgetIds.push(lw.id);
         }
       }
@@ -658,7 +752,7 @@ export async function pullFromCloud(): Promise<{ success: boolean; error?: strin
       const defaultNoteIds = new Set(['note-welcome', 'note-groceries']);
       const toDeleteNoteIds: string[] = [];
       for (const ln of localNotes) {
-        if (!cloudNoteIds.has(ln.id) && defaultNoteIds.has(ln.id) && ln.updated_at === '1970-01-01T00:00:00.000Z') {
+        if (!cloudNoteIds.has(ln.id) && defaultNoteIds.has(ln.id)) {
           toDeleteNoteIds.push(ln.id);
         }
       }
