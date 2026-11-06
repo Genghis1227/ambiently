@@ -221,11 +221,17 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       tabsToUse[0];
     const initialTabId = initialTab?.id || 'tab-corkboard';
 
+    const currentActiveTabId = get().activeTabId;
+    const isCurrentActiveTabValid = tabsToUse.some(
+      (t) => t.id === currentActiveTabId && !t.deleted_at && (t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false)
+    );
+    const resolvedActiveTabId = get().isInitialized && isCurrentActiveTabValid ? currentActiveTabId : initialTabId;
+
     set({
       isInitialized: true,
       settings: loadedSettings,
       tabs: tabsToUse,
-      activeTabId: initialTabId,
+      activeTabId: resolvedActiveTabId,
       widgets: loadedWidgets.length > 0 ? loadedWidgets : DEFAULT_WIDGETS,
       notes: loadedNotes.length > 0 ? loadedNotes : DEFAULT_NOTES,
       isUnlocked: !loadedSettings.pinLockEnabled,
@@ -401,11 +407,11 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
             sourceUrl: sourceUrl || w.config?.sourceUrl,
             sourceType: sourceType || w.config?.sourceType,
           },
+          updated_at: new Date().toISOString(),
         };
       }
       return w;
     });
-    await db.widgets.clear();
     await db.widgets.bulkPut(updatedWidgets);
     set({ widgets: updatedWidgets });
     get().saveLocalBackup();
@@ -713,6 +719,15 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   syncRemoteNoteChange: (remoteNote, eventType) => {
+    const existing = get().notes.find((n) => n.id === remoteNote.id);
+    if (existing) {
+      const localTime = new Date(existing.updated_at || 0).getTime();
+      const remoteTime = new Date(remoteNote.updated_at || 0).getTime();
+      if (remoteTime < localTime) {
+        return;
+      }
+    }
+
     if (eventType === 'DELETE' || remoteNote.deleted_at) {
       set({ notes: get().notes.filter((n) => n.id !== remoteNote.id) });
       db.notes.delete(remoteNote.id).catch(() => {});
@@ -720,8 +735,12 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       const exists = get().notes.some((n) => n.id === remoteNote.id);
       if (!exists) {
         set({ notes: [remoteNote, ...get().notes] });
-        db.notes.put(remoteNote).catch(() => {});
+      } else {
+        set({
+          notes: get().notes.map((n) => (n.id === remoteNote.id ? remoteNote : n)),
+        });
       }
+      db.notes.put(remoteNote).catch(() => {});
     } else if (eventType === 'UPDATE') {
       const exists = get().notes.some((n) => n.id === remoteNote.id);
       if (exists) {
@@ -736,6 +755,15 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   syncRemoteWidgetChange: (remoteWidget, eventType) => {
+    const existing = get().widgets.find((w) => w.id === remoteWidget.id);
+    if (existing) {
+      const localTime = new Date(existing.updated_at || 0).getTime();
+      const remoteTime = new Date(remoteWidget.updated_at || 0).getTime();
+      if (remoteTime < localTime) {
+        return;
+      }
+    }
+
     if (eventType === 'DELETE' || remoteWidget.deleted_at) {
       set({ widgets: get().widgets.filter((w) => w.id !== remoteWidget.id) });
       db.widgets.delete(remoteWidget.id).catch(() => {});
@@ -743,8 +771,12 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       const exists = get().widgets.some((w) => w.id === remoteWidget.id);
       if (!exists) {
         set({ widgets: [...get().widgets, remoteWidget] });
-        db.widgets.put(remoteWidget).catch(() => {});
+      } else {
+        set({
+          widgets: get().widgets.map((w) => (w.id === remoteWidget.id ? remoteWidget : w)),
+        });
       }
+      db.widgets.put(remoteWidget).catch(() => {});
     } else if (eventType === 'UPDATE') {
       const exists = get().widgets.some((w) => w.id === remoteWidget.id);
       if (exists) {
@@ -759,16 +791,29 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   syncRemoteTabChange: (remoteTab, eventType) => {
+    const existing = get().tabs.find((t) => t.id === remoteTab.id);
+    if (existing) {
+      const localTime = new Date(existing.updated_at || 0).getTime();
+      const remoteTime = new Date(remoteTab.updated_at || 0).getTime();
+      if (remoteTime < localTime) {
+        return;
+      }
+    }
+
     if (eventType === 'DELETE' || remoteTab.deleted_at) {
       set({ tabs: get().tabs.filter((t) => t.id !== remoteTab.id) });
       db.tabs.delete(remoteTab.id).catch(() => {});
     } else if (eventType === 'INSERT') {
       const exists = get().tabs.some((t) => t.id === remoteTab.id);
+      let nextTabs: DashboardTab[];
       if (!exists) {
-        const nextTabs = [...get().tabs, remoteTab].sort((a, b) => a.order - b.order);
-        set({ tabs: nextTabs });
-        db.tabs.put(remoteTab).catch(() => {});
+        nextTabs = [...get().tabs, remoteTab];
+      } else {
+        nextTabs = get().tabs.map((t) => (t.id === remoteTab.id ? remoteTab : t));
       }
+      nextTabs.sort((a, b) => a.order - b.order);
+      set({ tabs: nextTabs });
+      db.tabs.put(remoteTab).catch(() => {});
     } else if (eventType === 'UPDATE') {
       const exists = get().tabs.some((t) => t.id === remoteTab.id);
       let nextTabs: DashboardTab[];

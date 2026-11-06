@@ -11,6 +11,17 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.2.7",
+    date: "November 6, 2026",
+    title: "Multi-Device Concurrency Protection, Last-Write-Wins Timestamps & Active Canvas Preservation",
+    highlights: [
+      "Last-Write-Wins Timestamp Protection: Added strict timestamp guards on incoming Realtime WebSocket events for widgets, tabs, and notes. Stale remote events with older timestamps are automatically discarded, preventing repositioned tiles on one screen from being reverted by older events.",
+      "Non-Stomping Cloud Push: In pushToCloud, existing remote timestamps are queried prior to upserting. Only records that are newly created locally or possess a newer/equal timestamp are sent, preventing offline or lagging devices from overwriting fresher cloud data.",
+      "Timestamp-Aware Dexie Pull: Upgraded pullFromCloud to perform non-destructive, timestamp-aware merges with local IndexedDB storage, preserving local edits made prior to sync while cleanly purging unedited template defaults on second screens.",
+      "Active Canvas Preservation: Enhanced initStore to preserve the user's currently active canvas tab across background cloud pulls and screen wake-ups, eliminating abrupt tab switching while editing.",
+    ],
+  },
+  {
     version: "v0.2.6",
     date: "November 6, 2026",
     title: "Supabase RLS Policy Fix for Widgets & Canvases, Cloud Upsert Validation & Full Mirror Restore",
