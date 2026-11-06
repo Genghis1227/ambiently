@@ -121,8 +121,13 @@ Every widget features a top-right **Tile Settings (`⚙️`)** button to customi
 * **Family QR Code Invite (`ShareBoardModal.tsx`):**
   * Generate a scannable QR code and 6-digit join code in Settings so family members can connect their phones without typing passwords.
 * **3-Tier Persistence & Backup:**
-  1. **Tier 1 (Default):** 100% local IndexedDB storage (`Dexie.js`).
-  2. **Tier 2 (Local File Backup):** 1-click JSON export/restore plus automatic PC file mirroring (`ambiently-data.json`) via the File System Access API.
+  1. **Tier 1 (Default - Primary Storage):** 100% local IndexedDB storage (`Dexie.js`). All widgets, notes, checklists, canvas configurations, themes, and layouts persist in browser storage. Zero network or server dependencies; the app boots in 0ms offline even if external files are unlinked.
+  2. **Tier 2 (Local PC Auto-Sync & File Mirroring):**
+     * **Chromium File System Access API:** Connects directly to a local JSON file (`ambiently-data.json`) on your computer's hard drive or mapped network share.
+     * **Persistent Handle in IndexedDB:** Stores the `FileSystemFileHandle` across browser reloads. On reload, Ambiently automatically re-checks permissions silently via `queryPermission()`, and offers a 1-click **Reconnect Auto-Sync** button if browser security requires re-authorization—eliminating the need to re-browse folders.
+     * **Reactive Event-Driven Snapshots:** Automatically writes state snapshots whenever widgets, notes, or canvases are updated (debounced and queued safely to avoid write stream collisions or unnecessary disk I/O when idle).
+     * **Cloud Folder Synergy:** Saving `ambiently-data.json` inside a local **Dropbox, Google Drive, OneDrive, Nextcloud, or Synology Drive** folder automatically mirrors and versions your dashboard across all your computers without routing through third-party dashboard servers.
+     * **Universal Cross-Platform Fallback:** 1-click **Download .json** and **Upload & Restore** works across all modern browsers and operating systems (macOS, Windows, Linux, iOS, Android, Safari, Firefox).
   3. **Tier 3 (Cloud Sync):** Optional email magic-link login and multi-device real-time sync powered by Supabase Auth & Postgres.
 
 ---

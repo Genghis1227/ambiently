@@ -10,7 +10,7 @@ import { LocalBackupModal } from './components/kiosk/LocalBackupModal';
 import { MobileCompanion } from './components/mobile/MobileCompanion';
 import { AddWidgetModal } from './components/widgets/AddWidgetModal';
 import { CreateCanvasModal } from './components/dock/CreateCanvasModal';
-import { openLocalFileBinding } from './services/fileSync';
+import { openLocalFileBinding, useFileSync, checkFileBindingStatus } from './services/fileSync';
 import { subscribeToRealtimeBoard, joinBoardByCode } from './services/supabase';
 import { useIdleCursor } from './hooks/useIdleCursor';
 import { isCanvasThemeLight } from './data/canvasThemes';
@@ -59,8 +59,14 @@ export function App() {
   const [isCreateCanvasOpen, setIsCreateCanvasOpen] = useState(false);
   const [isNoteCreatorOpen, setIsNoteCreatorOpen] = useState(false);
   const [isTrashOpen, setIsTrashOpen] = useState(false);
-  const [hasFileBound, setHasFileBound] = useState(false);
+  const fileSync = useFileSync();
+  const hasFileBound = fileSync.status === 'connected';
   const syncRemoteNoteChange = useDashboardStore((s) => s.syncRemoteNoteChange);
+
+  // Initialize and check persistent PC Auto-Sync file binding
+  useEffect(() => {
+    checkFileBindingStatus();
+  }, []);
 
   // Auto-join shared board if ?join=CODE is in URL
   useEffect(() => {
@@ -259,10 +265,7 @@ export function App() {
   };
 
   const handleConnectFile = async () => {
-    const res = await openLocalFileBinding();
-    if (res.success) {
-      setHasFileBound(true);
-    }
+    await openLocalFileBinding();
   };
 
   // Screen Wake Lock API for always-on ambient smart display

@@ -21,6 +21,8 @@ import { saveSnapshotToFile, hasActiveLocalFile } from '../services/fileSync';
 import { computeNonOverlappingLayout, findOpenCanvasSpot } from '../utils/autoLayout';
 import type { PhotoItem } from '../services/photos';
 
+let backupDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
 interface LayoutSnapshot {
   tabId: string;
   widgetPositions: Record<string, FreeformPosition>;
@@ -84,6 +86,7 @@ interface DashboardState {
   unlockKiosk: (enteredPin: string) => Promise<boolean>;
   lockKiosk: () => void;
   saveLocalBackup: () => Promise<void>;
+  saveLocalBackupImmediate: () => Promise<void>;
   syncRemoteNoteChange: (note: StickyNoteItem, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void;
 
   // Auto-Organize / Auto-Tile Actions
@@ -497,6 +500,28 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
 
   saveLocalBackup: async () => {
     if (!hasActiveLocalFile()) return;
+    if (backupDebounceTimer) {
+      clearTimeout(backupDebounceTimer);
+    }
+    backupDebounceTimer = setTimeout(async () => {
+      const state = get();
+      await saveSnapshotToFile({
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        settings: state.settings,
+        tabs: state.tabs,
+        widgets: state.widgets,
+        notes: state.notes,
+      });
+    }, 400);
+  },
+
+  saveLocalBackupImmediate: async () => {
+    if (!hasActiveLocalFile()) return;
+    if (backupDebounceTimer) {
+      clearTimeout(backupDebounceTimer);
+      backupDebounceTimer = null;
+    }
     const state = get();
     await saveSnapshotToFile({
       version: 1,

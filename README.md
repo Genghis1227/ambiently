@@ -83,6 +83,19 @@ Visit `http://localhost:5173` to view Ambiently in your browser.
 
 ---
 
+## 💾 Local File PC Auto-Sync & Backup Architecture
+
+Ambiently is built on an **offline-first local architecture**:
+
+1. **Primary Browser Database (IndexedDB):** All widgets, canvases, sticky notes, checklists, and configuration are always saved instantly to IndexedDB (`AmbientlyDB`). The app never requires an internet connection or an external file to run and will never lose data across tab closures.
+2. **Real-Time PC Auto-Sync (Chromium):** In Settings or the Backup modal, click **PC Auto-Sync** to bind an `ambiently-data.json` file directly on your local computer's drive using the File System Access API.
+   * **Reactive Event-Driven Snapshots:** Whenever you move widgets, check off to-do items, or edit canvases, Ambiently automatically streams snapshots to disk (with debounced safe-write queues preventing write lock collisions).
+   * **Session Persistence & 1-Click Reconnect:** Ambiently stores the file handle securely inside IndexedDB. When reopening or reloading the app, Ambiently attempts silent permission verification (`queryPermission()`), or displays a 1-click **Reconnect Auto-Sync** button so you never have to re-browse your folder tree.
+   * **Cloud Sync via Local Folders:** If you place `ambiently-data.json` inside a local **Dropbox, Google Drive, OneDrive, Nextcloud, or Synology Drive** folder, desktop sync clients will automatically detect updates and replicate your dashboard state across all your devices without routing data through third-party servers.
+3. **Universal 1-Click Export & Restore:** For non-Chromium browsers (Safari, Firefox, iOS, Android), 1-click **Download .json** and **Upload & Restore** provide complete standalone backup files that can be imported onto any device in seconds.
+
+---
+
 ## ☁️ Cloud Sync Setup (Optional)
 
 To enable multi-device sync across phones and displays:
