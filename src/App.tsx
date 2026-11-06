@@ -1,4 +1,4 @@
-import { useEffect, useState, lazy, Suspense } from 'react';
+import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { Lock } from 'lucide-react';
 import { useDashboardStore } from './store/dashboardStore';
 import { NavigationDock } from './components/dock/NavigationDock';
@@ -16,6 +16,7 @@ import {
 } from './services/supabase';
 import { useIdleCursor } from './hooks/useIdleCursor';
 import { isCanvasThemeLight } from './data/canvasThemes';
+import { isTimeInNightWindow } from './utils/nightMode';
 import { initUpdateChecker } from './services/updateChecker';
 import { UpdateNotificationBanner } from './components/common/UpdateNotificationBanner';
 
@@ -382,23 +383,114 @@ export function App() {
     };
   }, [settings.wakeLockEnabled]);
 
-  // Scheduled Night Mode Checker (checks every 60s for exact start/end transitions)
+  // Track temporary night-mode wake snooze until timestamp (in milliseconds)
+  const [nightWakeSnoozeUntil, setNightWakeSnoozeUntil] = useState<number | null>(() => {
+    try {
+      const stored = sessionStorage.getItem('ambiently_night_snooze');
+      if (stored) {
+        const val = parseInt(stored, 10);
+        return val > Date.now() ? val : null;
+      }
+    } catch {
+      // sessionStorage unavailable in some sandboxes
+    }
+    return null;
+  });
+
+  const [dismissedUntilMorning, setDismissedUntilMorning] = useState(false);
+  const wakeTimeoutMin = settings.nightModeWakeTimeoutMin ?? 2;
+
+  // Called when user taps to wake from Night Mode
+  const handleWakeFromNightMode = useCallback(() => {
+    if (wakeTimeoutMin === 0) {
+      setDismissedUntilMorning(true);
+      setNightWakeSnoozeUntil(null);
+      try {
+        sessionStorage.removeItem('ambiently_night_snooze');
+      } catch {}
+    } else {
+      const snoozeUntil = Date.now() + wakeTimeoutMin * 60 * 1000;
+      setNightWakeSnoozeUntil(snoozeUntil);
+      try {
+        sessionStorage.setItem('ambiently_night_snooze', String(snoozeUntil));
+      } catch {}
+    }
+    updateSettings({ nightModeEnabled: false });
+  }, [wakeTimeoutMin, updateSettings]);
+
+  // Extend snooze on user touch/keyboard/pointer activity if currently in a night-wake snooze
+  useEffect(() => {
+    if (!nightWakeSnoozeUntil || wakeTimeoutMin === 0) return;
+
+    const extendSnooze = () => {
+      const newSnooze = Date.now() + wakeTimeoutMin * 60 * 1000;
+      setNightWakeSnoozeUntil(newSnooze);
+      try {
+        sessionStorage.setItem('ambiently_night_snooze', String(newSnooze));
+      } catch {}
+    };
+
+    const events = ['mousedown', 'pointerdown', 'touchstart', 'keydown'];
+    events.forEach((evt) => window.addEventListener(evt, extendSnooze, { passive: true }));
+    return () => {
+      events.forEach((evt) => window.removeEventListener(evt, extendSnooze));
+    };
+  }, [nightWakeSnoozeUntil, wakeTimeoutMin]);
+
+  // Smart Scheduled Night Mode Evaluator (runs on mount and every 5 seconds)
   useEffect(() => {
     if (!settings.nightModeStart || !settings.nightModeEnd) return;
 
     const checkSchedule = () => {
       const now = new Date();
-      const currentHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-      if (currentHHMM === settings.nightModeStart && !settings.nightModeEnabled) {
-        updateSettings({ nightModeEnabled: true });
-      } else if (currentHHMM === settings.nightModeEnd && settings.nightModeEnabled) {
-        updateSettings({ nightModeEnabled: false });
+      const inWindow = isTimeInNightWindow(now, settings.nightModeStart, settings.nightModeEnd);
+
+      if (inWindow) {
+        const isSnoozed = Boolean(nightWakeSnoozeUntil && Date.now() < nightWakeSnoozeUntil);
+
+        if (isSnoozed || dismissedUntilMorning) {
+          // User is actively awake or snoozed during night
+          return;
+        }
+
+        // Auto-engage Night Mode if not already active
+        if (!settings.nightModeEnabled) {
+          if (nightWakeSnoozeUntil && Date.now() >= nightWakeSnoozeUntil) {
+            setNightWakeSnoozeUntil(null);
+            try {
+              sessionStorage.removeItem('ambiently_night_snooze');
+            } catch {}
+          }
+          updateSettings({ nightModeEnabled: true });
+        }
+      } else {
+        // Daytime: reset snooze and dismissed state, turn off night mode if it was on
+        if (dismissedUntilMorning) {
+          setDismissedUntilMorning(false);
+        }
+        if (nightWakeSnoozeUntil) {
+          setNightWakeSnoozeUntil(null);
+          try {
+            sessionStorage.removeItem('ambiently_night_snooze');
+          } catch {}
+        }
+        if (settings.nightModeEnabled) {
+          updateSettings({ nightModeEnabled: false });
+        }
       }
     };
 
-    const timer = setInterval(checkSchedule, 60000);
+    checkSchedule();
+    const timer = setInterval(checkSchedule, 5000);
     return () => clearInterval(timer);
-  }, [settings.nightModeStart, settings.nightModeEnd, settings.nightModeEnabled, updateSettings]);
+  }, [
+    settings.nightModeStart,
+    settings.nightModeEnd,
+    settings.nightModeEnabled,
+    nightWakeSnoozeUntil,
+    dismissedUntilMorning,
+    updateSettings,
+  ]);
 
   const visibleTabs = tabs.filter((t) =>
     t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false
@@ -573,7 +665,7 @@ export function App() {
         enabled={settings.nightModeEnabled}
         style={settings.nightModeStyle}
         dimOpacity={settings.nightDimOpacity}
-        onWake={toggleNightModeManual}
+        onWake={handleWakeFromNightMode}
       />
 
       {/* Realtime Version Update Prompt & Refresh Banner */}
