@@ -497,7 +497,8 @@ export default defineConfig({
       manifest: {
         name: 'Ambiently Smart Display',
         short_name: 'Ambiently',
-        description: 'Ambient smart-display & dashboard command center (dashboard.trinhism.com)',
+        description:
+          'Self-hosted ambient smart display for a wall or tablet. Calendars, weather, photo frames, notes, and news on one offline-first dashboard.',
         theme_color: '#090d16',
         background_color: '#090d16',
         display: 'fullscreen',
