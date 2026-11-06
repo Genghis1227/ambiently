@@ -344,7 +344,11 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
       case 'rss':
         return (
           <div className="max-h-48 overflow-y-auto">
-            <RssWidget feedUrl={widget.config?.feedUrl} />
+            <RssWidget
+              feedUrl={widget.config?.feedUrl}
+              textSize={widget.config?.textSize}
+              showSnippet={widget.config?.showSnippet !== false}
+            />
           </div>
         );
       case 'quotes':

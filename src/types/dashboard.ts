@@ -29,6 +29,13 @@ export type WidgetType =
   | 'textbox'
   | 'image';
 
+export interface RssWidgetConfig {
+  feedUrl?: string;
+  displayMode?: 'ticker' | 'list';
+  textSize?: 'auto' | 'sm' | 'base' | 'lg' | 'xl';
+  showSnippet?: boolean;
+}
+
 export interface ImageWidgetConfig {
   url?: string;
   title?: string;
