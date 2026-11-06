@@ -286,7 +286,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
     if (res.success) {
       setAuthStep('otp');
       setOtpInput('');
-      setAuthMessage('Login code sent! Enter the 6-digit code from your email below, or click the email link.');
+      setAuthMessage('Login code sent! Enter the verification code (6 to 8 digits) from your email below, or click the email link.');
     } else {
       setAuthMessage(res.error || 'Failed to send login code');
     }
@@ -294,8 +294,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
 
   const handleVerifyOtp = async () => {
     const cleanToken = otpInput.replace(/\D/g, '').trim();
-    if (!cleanToken || cleanToken.length !== 6) {
-      setAuthMessage('Please enter the complete 6-digit verification code.');
+    if (!cleanToken || cleanToken.length < 6 || cleanToken.length > 10) {
+      setAuthMessage('Please enter the complete verification code from your email (6 to 8 digits).');
       return;
     }
     setIsVerifyingOtp(true);
@@ -1317,23 +1317,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                         inputMode="numeric"
                         pattern="[0-9]*"
                         autoComplete="one-time-code"
-                        maxLength={6}
+                        maxLength={10}
                         autoFocus
-                        placeholder="••••••"
+                        placeholder="••••••••"
                         value={otpInput}
                         onChange={(e) => {
-                          const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+                          const val = e.target.value.replace(/\D/g, '').slice(0, 10);
                           setOtpInput(val);
                         }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') handleVerifyOtp();
                         }}
-                        className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-center text-lg font-mono font-bold tracking-[0.35em] text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500 shadow-inner"
+                        className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-center text-lg font-mono font-bold tracking-[0.25em] text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500 shadow-inner"
                       />
                       <button
                         type="button"
                         onClick={handleVerifyOtp}
-                        disabled={isVerifyingOtp || otpInput.trim().length !== 6}
+                        disabled={isVerifyingOtp || otpInput.trim().length < 6}
                         className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold text-white rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shadow-sm shrink-0"
                       >
                         {isVerifyingOtp ? (
@@ -1346,7 +1346,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                     </div>
 
                     <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-gray-400 pt-1">
-                      <span>Setting up another display? Enter the 6 digits from your email.</span>
+                      <span>Setting up another display? Enter the 6 or 8 digits from your email.</span>
                       <button
                         type="button"
                         onClick={handleSendMagicLink}
