@@ -48,7 +48,7 @@ export const SupportPanel: React.FC = () => {
                 Venmo
               </span>
               <div className="w-16 h-16 rounded-lg overflow-hidden bg-white p-1 border border-gray-700 shadow-inner">
-                <img src="/assets/venmo.png" alt="Venmo QR" className="w-full h-full object-contain" />
+                <img src="/assets/venmo.png" alt="Venmo QR Code" width={64} height={64} loading="lazy" className="w-full h-full object-contain" />
               </div>
               <span className="text-[11px] font-medium text-gray-300 group-hover:text-blue-400 mt-2 truncate max-w-full">
                 @TonyLTrinh &rarr;
@@ -66,7 +66,7 @@ export const SupportPanel: React.FC = () => {
                 PayPal
               </span>
               <div className="w-16 h-16 rounded-lg overflow-hidden bg-white p-1 border border-gray-700 shadow-inner">
-                <img src="/assets/paypal.jpg" alt="PayPal QR" className="w-full h-full object-contain" />
+                <img src="/assets/paypal.jpg" alt="PayPal QR Code" width={64} height={64} loading="lazy" className="w-full h-full object-contain" />
               </div>
               <span className="text-[11px] font-medium text-gray-300 group-hover:text-sky-400 mt-2 truncate max-w-full">
                 @Genghis1227 &rarr;
@@ -79,7 +79,7 @@ export const SupportPanel: React.FC = () => {
                 Zelle
               </span>
               <div className="w-16 h-16 rounded-lg overflow-hidden bg-white p-1 border border-gray-700 shadow-inner">
-                <img src="/assets/zelle.jpg" alt="Zelle QR" className="w-full h-full object-contain" />
+                <img src="/assets/zelle.jpg" alt="Zelle QR Code" width={64} height={64} loading="lazy" className="w-full h-full object-contain" />
               </div>
               <span className="text-[11px] font-medium text-gray-400 mt-2">Scan in Bank App</span>
             </div>
