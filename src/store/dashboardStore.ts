@@ -468,14 +468,24 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       pinHash = await hashPin(pin);
       pinLockEnabled = true;
     }
+    const current = get().settings;
     const updated = {
-      ...get().settings,
+      ...current,
       pinLockEnabled,
       pinHash,
+      // If PIN is disabled, reset all kiosk locks so no lingering locks remain
+      ...(pinLockEnabled
+        ? {}
+        : {
+            lockCanvasEditing: false,
+            lockFullscreenKiosk: false,
+            lockSettingsAccess: false,
+          }),
       updated_at: new Date().toISOString(),
     };
     await db.settings.put(updated);
-    set({ settings: updated, isUnlocked: !pinLockEnabled });
+    set({ settings: updated, isUnlocked: true });
+    get().saveLocalBackup();
   },
 
   unlockKiosk: async (enteredPin) => {

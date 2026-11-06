@@ -143,10 +143,10 @@ export function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Granular kiosk & protection controls
+  // Granular kiosk & protection controls (active only when PIN protection is configured)
   const isFullscreenKioskLocked = Boolean(settings.pinLockEnabled && settings.lockFullscreenKiosk !== false);
   const isSettingsLocked = Boolean(settings.pinLockEnabled && settings.lockSettingsAccess !== false);
-  const isCanvasLocked = Boolean(settings.lockCanvasEditing);
+  const isCanvasLocked = Boolean(settings.pinLockEnabled && settings.lockCanvasEditing);
 
   // Keyboard shortcuts:
   // '\' (backslash) to toggle toolbar visibility

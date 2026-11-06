@@ -114,6 +114,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
 
   const [pinInput, setPinInput] = useState('');
   const [pinSuccess, setPinSuccess] = useState(false);
+  const [pinDisabledMessage, setPinDisabledMessage] = useState('');
+  const [resetPinOnRestore, setResetPinOnRestore] = useState(true);
   const [isChangelogOpen, setIsChangelogOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isCommonPhotoModalOpen, setIsCommonPhotoModalOpen] = useState(false);
@@ -211,7 +213,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
   };
 
   const handleExportBackup = () => {
-    downloadBackupFile(settings, tabs, widgets, notes);
+    // If PIN protection is not active, guarantee no lingering hash or locks in export
+    const sanitizedSettings = {
+      ...settings,
+      pinHash: settings.pinLockEnabled ? settings.pinHash : null,
+      lockCanvasEditing: settings.pinLockEnabled ? settings.lockCanvasEditing : false,
+      lockFullscreenKiosk: settings.pinLockEnabled ? settings.lockFullscreenKiosk : false,
+      lockSettingsAccess: settings.pinLockEnabled ? settings.lockSettingsAccess : false,
+    };
+    downloadBackupFile(sanitizedSettings, tabs, widgets, notes);
     setBackupStatus('Backup file downloaded.');
     setTimeout(() => setBackupStatus(''), 3000);
   };
@@ -225,7 +235,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
       setBackupStatus(validation.error || 'Invalid backup file.');
       return;
     }
-    const res = await restoreBackupToDatabase(validation.data);
+    const res = await restoreBackupToDatabase(validation.data, { clearPinLock: resetPinOnRestore });
     if (res.success) {
       setBackupStatus('Restored! Reloading...');
       setTimeout(() => window.location.reload(), 1000);
@@ -238,6 +248,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
     if (pinInput.length === 4) {
       await setPinLock(pinInput);
       setPinSuccess(true);
+      setPinDisabledMessage('');
       setTimeout(() => setPinSuccess(false), 2000);
       setPinInput('');
       if (!document.fullscreenElement) {
@@ -248,6 +259,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
 
   const handleDisablePin = async () => {
     await setPinLock(null);
+    setPinDisabledMessage('Parent PIN and all kiosk restrictions disabled.');
+    setTimeout(() => setPinDisabledMessage(''), 3500);
   };
 
   const handleBindLocalFile = async () => {
@@ -1431,6 +1444,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                 className="hidden"
               />
 
+              <div className="pt-0.5 pb-1">
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-300 select-none">
+                  <input
+                    type="checkbox"
+                    checked={resetPinOnRestore}
+                    onChange={(e) => setResetPinOnRestore(e.target.checked)}
+                    className="rounded border-gray-700 bg-gray-900 text-blue-500 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                  />
+                  <span className="text-gray-400">
+                    Clear PIN & kiosk locks on restored dashboard (prevents lockouts across devices)
+                  </span>
+                </label>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
                 <button
                   type="button"
@@ -1578,7 +1605,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                     <button
                       onClick={() => {
                         setPinInput('');
-                        updateSettings({ pinLockEnabled: false });
+                        updateSettings({
+                          pinLockEnabled: false,
+                          pinHash: null,
+                          lockCanvasEditing: false,
+                          lockFullscreenKiosk: false,
+                          lockSettingsAccess: false,
+                        });
+                        setPinDisabledMessage('Previous PIN removed. Enter 4 digits to set a new PIN.');
+                        setTimeout(() => setPinDisabledMessage(''), 3500);
                       }}
                       className="text-xs text-blue-400 hover:text-blue-300 underline cursor-pointer"
                     >
@@ -1588,6 +1623,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                 )}
                 {pinSuccess && (
                   <span className="text-xs text-emerald-400 mt-2 block">PIN successfully saved!</span>
+                )}
+                {pinDisabledMessage && (
+                  <span className="text-xs text-amber-300 mt-2 block">{pinDisabledMessage}</span>
                 )}
               </div>
 

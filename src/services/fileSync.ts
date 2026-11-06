@@ -180,12 +180,22 @@ export async function parseAndValidateBackup(
 
 // 3. Destructively restore backup payload into local IndexedDB
 export async function restoreBackupToDatabase(
-  payload: LocalExportPayload
+  payload: LocalExportPayload,
+  options?: { clearPinLock?: boolean }
 ): Promise<{ success: boolean; error?: string }> {
   try {
     // 1. Restore Settings
     if (payload.settings) {
-      await db.settings.put(payload.settings);
+      const settingsToSave: AppSettings = { ...payload.settings };
+      // If clearPinLock is enabled or if PIN was not active in backup, purge all PIN lock residue
+      if (options?.clearPinLock || !settingsToSave.pinLockEnabled) {
+        settingsToSave.pinLockEnabled = false;
+        settingsToSave.pinHash = null;
+        settingsToSave.lockCanvasEditing = false;
+        settingsToSave.lockFullscreenKiosk = false;
+        settingsToSave.lockSettingsAccess = false;
+      }
+      await db.settings.put(settingsToSave);
     }
 
     // 2. Replace Tabs
