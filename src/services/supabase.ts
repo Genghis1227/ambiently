@@ -357,13 +357,14 @@ export async function pushToCloud(
       return acc;
     }, {} as Record<string, any>);
 
-    await sb.from('dashboards').upsert({
+    const { error: dashErr } = await sb.from('dashboards').upsert({
       id: user.id,
       user_id: user.id,
       title: settings.dashboardTitle,
       settings: { ...settings, canvasThemes: tabThemeMeta },
       updated_at: new Date().toISOString(),
     });
+    if (dashErr) throw dashErr;
 
     // 2. Query Dexie to include all active and soft-deleted records so remote devices sync additions and deletions
     const [dbTabs, dbWidgets, dbNotes] = await Promise.all([
@@ -390,7 +391,8 @@ export async function pushToCloud(
         updated_at: t.updated_at,
         deleted_at: t.deleted_at || null,
       }));
-      await sb.from('tabs').upsert(formattedTabs);
+      const { error: tabErr } = await sb.from('tabs').upsert(formattedTabs);
+      if (tabErr) throw tabErr;
     }
 
     // Upsert Widgets
@@ -408,7 +410,8 @@ export async function pushToCloud(
         updated_at: w.updated_at,
         deleted_at: w.deleted_at || null,
       }));
-      await sb.from('widgets').upsert(formattedWidgets);
+      const { error: widgetErr } = await sb.from('widgets').upsert(formattedWidgets);
+      if (widgetErr) throw widgetErr;
     }
 
     // Upsert Notes
@@ -431,13 +434,14 @@ export async function pushToCloud(
         updated_at: n.updated_at,
         deleted_at: n.deleted_at || null,
       }));
-      await sb.from('notes').upsert(formattedNotes);
+      const { error: noteErr } = await sb.from('notes').upsert(formattedNotes);
+      if (noteErr) throw noteErr;
     }
 
     return { success: true };
   } catch (err: any) {
     console.error('Cloud push failed:', err);
-    return { success: false, error: err.message };
+    return { success: false, error: err.message || 'Cloud backup failed' };
   }
 }
 
@@ -454,6 +458,15 @@ export async function pullFromCloud(): Promise<{ success: boolean; error?: strin
       sb.from('widgets').select('*').eq('user_id', user.id),
       sb.from('notes').select('*').eq('user_id', user.id),
     ]);
+
+    if (dashRes.error) throw dashRes.error;
+    if (tabsRes.error) throw tabsRes.error;
+    if (widgetsRes.error) throw widgetsRes.error;
+    if (notesRes.error) throw notesRes.error;
+
+    if (!dashRes.data && (!tabsRes.data || tabsRes.data.length === 0) && (!widgetsRes.data || widgetsRes.data.length === 0)) {
+      return { success: false, error: 'No cloud backup found for this account.' };
+    }
 
     if (dashRes.data?.settings) {
       await db.settings.put({
@@ -480,7 +493,8 @@ export async function pullFromCloud(): Promise<{ success: boolean; error?: strin
         updated_at: t.updated_at,
         deleted_at: t.deleted_at,
       }));
-      await db.tabs.bulkPut(mappedTabs);
+      await db.tabs.clear();
+      await db.tabs.bulkAdd(mappedTabs);
     }
 
     if (widgetsRes.data && widgetsRes.data.length > 0) {
@@ -495,7 +509,8 @@ export async function pullFromCloud(): Promise<{ success: boolean; error?: strin
         updated_at: w.updated_at,
         deleted_at: w.deleted_at,
       }));
-      await db.widgets.bulkPut(mappedWidgets);
+      await db.widgets.clear();
+      await db.widgets.bulkAdd(mappedWidgets);
     }
 
     if (notesRes.data && notesRes.data.length > 0) {
@@ -515,12 +530,13 @@ export async function pullFromCloud(): Promise<{ success: boolean; error?: strin
         updated_at: n.updated_at,
         deleted_at: n.deleted_at,
       }));
-      await db.notes.bulkPut(mappedNotes);
+      await db.notes.clear();
+      await db.notes.bulkAdd(mappedNotes);
     }
 
     return { success: true };
   } catch (err: any) {
     console.error('Cloud pull failed:', err);
-    return { success: false, error: err.message };
+    return { success: false, error: err.message || 'Cloud pull failed' };
   }
 }

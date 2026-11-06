@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.6] - 2026-11-06
+
+### Fixed
+* **Supabase Table RLS Write Permissions for Widgets & Tabs (`supabase/schema.sql`):**
+  * Fixed Row Level Security (RLS) policies on `public.tabs` and `public.widgets` which were previously defined as `FOR SELECT` only, blocking all client `INSERT`, `UPDATE`, and `UPSERT` operations with PostgreSQL 42501 RLS violations.
+  * Added `FOR ALL USING (...) WITH CHECK (...)` policies to both `tabs` and `widgets` allowing authenticated users and dashboard editors to write, update, and persist new widgets (including Quotes, Countdowns, Calendars, and Custom Canvases).
+* **Decoupled Foreign Key Constraint on Widgets (`supabase/schema.sql`):**
+  * Removed strict `widgets_tab_id_fkey` constraint on `public.widgets.tab_id` to prevent foreign key rejections when synchronizing decoupled tabs and widgets across machines.
+* **Strict Error Handling in Cloud Push & Pull (`src/services/supabase.ts`):**
+  * Added explicit error checking on every Supabase upsert and query call, throwing on error instead of silently returning `{ success: true }`, ensuring any database or network issues are clearly surfaced to the user.
+* **Full Mirror Cloud Restore (`src/services/supabase.ts`):**
+  * Enhanced `pullFromCloud` to cleanly replace local Dexie store with cloud widgets and tabs upon restore, guaranteeing second machines accurately reflect the latest remote board without retaining unreferenced default widgets.
+
+---
+
 ## [0.2.5] - 2026-11-06
 
 ### Added

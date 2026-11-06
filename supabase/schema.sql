@@ -46,7 +46,7 @@ alter table public.tabs add column if not exists dashboard_id text references pu
 create table if not exists public.widgets (
   id text primary key,
   dashboard_id text references public.dashboards(id) on delete cascade,
-  tab_id text references public.tabs(id) on delete cascade,
+  tab_id text,
   user_id uuid references auth.users(id) on delete cascade not null,
   type text not null,
   title text not null,
@@ -58,6 +58,7 @@ create table if not exists public.widgets (
 );
 
 alter table public.widgets add column if not exists dashboard_id text references public.dashboards(id) on delete cascade;
+alter table public.widgets drop constraint if exists widgets_tab_id_fkey;
 
 -- 5. Sticky Notes Table
 create table if not exists public.notes (
@@ -97,8 +98,10 @@ drop policy if exists "Users manage own notes" on public.notes;
 drop policy if exists "Users and members manage notes" on public.notes;
 drop policy if exists "Users manage own tabs" on public.tabs;
 drop policy if exists "Users and members view tabs" on public.tabs;
+drop policy if exists "Users and members manage tabs" on public.tabs;
 drop policy if exists "Users manage own widgets" on public.widgets;
 drop policy if exists "Users and members view widgets" on public.widgets;
+drop policy if exists "Users and members manage widgets" on public.widgets;
 
 -- 7. Multi-User RLS Policies
 create policy "Owners manage dashboards" on public.dashboards
@@ -129,10 +132,23 @@ create policy "Users and members manage notes" on public.notes
       where dashboards.id = notes.dashboard_id
       and dashboards.invite_code is not null
     )
+  ) with check (
+    auth.uid() = user_id or
+    exists (
+      select 1 from public.dashboard_members
+      where dashboard_members.dashboard_id = notes.dashboard_id
+      and dashboard_members.user_id = auth.uid()
+      and dashboard_members.role in ('owner', 'editor')
+    ) or
+    exists (
+      select 1 from public.dashboards
+      where dashboards.id = notes.dashboard_id
+      and dashboards.invite_code is not null
+    )
   );
 
-create policy "Users and members view tabs" on public.tabs
-  for select using (
+create policy "Users and members manage tabs" on public.tabs
+  for all using (
     auth.uid() = user_id or
     exists (
       select 1 from public.dashboard_members
@@ -144,15 +160,41 @@ create policy "Users and members view tabs" on public.tabs
       where dashboards.id = tabs.dashboard_id
       and dashboards.invite_code is not null
     )
+  ) with check (
+    auth.uid() = user_id or
+    exists (
+      select 1 from public.dashboard_members
+      where dashboard_members.dashboard_id = tabs.dashboard_id
+      and dashboard_members.user_id = auth.uid()
+      and dashboard_members.role in ('owner', 'editor')
+    ) or
+    exists (
+      select 1 from public.dashboards
+      where dashboards.id = tabs.dashboard_id
+      and dashboards.invite_code is not null
+    )
   );
 
-create policy "Users and members view widgets" on public.widgets
-  for select using (
+create policy "Users and members manage widgets" on public.widgets
+  for all using (
     auth.uid() = user_id or
     exists (
       select 1 from public.dashboard_members
       where dashboard_members.dashboard_id = widgets.dashboard_id
       and dashboard_members.user_id = auth.uid()
+    ) or
+    exists (
+      select 1 from public.dashboards
+      where dashboards.id = widgets.dashboard_id
+      and dashboards.invite_code is not null
+    )
+  ) with check (
+    auth.uid() = user_id or
+    exists (
+      select 1 from public.dashboard_members
+      where dashboard_members.dashboard_id = widgets.dashboard_id
+      and dashboard_members.user_id = auth.uid()
+      and dashboard_members.role in ('owner', 'editor')
     ) or
     exists (
       select 1 from public.dashboards
