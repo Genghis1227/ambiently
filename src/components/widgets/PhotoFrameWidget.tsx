@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Image as ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Image as ImageIcon, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import {
   CURATED_AMBIENT_PHOTOS,
   cachePhotosLocally,
@@ -206,6 +206,7 @@ interface PhotoFrameWidgetProps {
   initialPolaroidSizeMode?: PolaroidSizeMode;
   photoOrder?: 'random' | 'sequential';
   showCaptions?: boolean;
+  mosaicKenBurns?: boolean;
   onUpdateConfig?: (updates: Record<string, any>) => void;
 }
 
@@ -220,6 +221,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   initialPolaroidSizeMode = 'mixed',
   photoOrder = 'random',
   showCaptions = true,
+  mosaicKenBurns = false,
   onUpdateConfig: _onUpdateConfig,
 }) => {
   const commonPhotos = useDashboardStore((s) => s.settings.commonPhotos);
@@ -429,6 +431,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   });
   const mosaicSlotRef = useRef(savedState?.mosaicSlot ?? 0);
   const mosaicIndexRef = useRef(savedState?.mosaicIndex ?? 4);
+  const [focusedMosaicSlot, setFocusedMosaicSlot] = useState<number>(() => savedState?.mosaicSlot ?? 0);
 
   useEffect(() => {
     if (!photos || photos.length === 0) return;
@@ -463,6 +466,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
 
         const slotToReplace = mosaicSlotRef.current % 4;
         mosaicSlotRef.current = (mosaicSlotRef.current + 1) % 4;
+        setFocusedMosaicSlot(slotToReplace);
 
         const updated = [...currentSlots];
         updated[slotToReplace] = nextPhoto;
@@ -475,6 +479,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
 
   const handleShuffleMosaicSlot = useCallback((slotIdx: number) => {
     if (photos.length <= 1) return;
+    setFocusedMosaicSlot(slotIdx);
     setMosaicPhotos((prev) => {
       const currentSlots = prev.length >= 4 ? prev : photos.slice(0, 4);
       let nextPhoto: PhotoItem;
@@ -496,6 +501,14 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     });
   }, [photos, photoOrder]);
 
+  const handleMosaicSlotClick = useCallback((slotIdx: number) => {
+    if (mosaicKenBurns && focusedMosaicSlot !== slotIdx) {
+      setFocusedMosaicSlot(slotIdx);
+    } else {
+      handleShuffleMosaicSlot(slotIdx);
+    }
+  }, [mosaicKenBurns, focusedMosaicSlot, handleShuffleMosaicSlot]);
+
   const handleMosaicNext = useCallback(() => {
     if (photos.length <= 1) return;
     setMosaicPhotos((prev) => {
@@ -513,6 +526,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
       return nextBatch;
     });
     mosaicSlotRef.current = 0;
+    setFocusedMosaicSlot(0);
     setResetTrigger((prev) => prev + 1);
   }, [photos]);
 
@@ -535,6 +549,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
       return prevBatch;
     });
     mosaicSlotRef.current = 0;
+    setFocusedMosaicSlot(0);
     setResetTrigger((prev) => prev + 1);
   }, [photos]);
 
@@ -989,43 +1004,76 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
       {/* 2. Mosaic / Collage Grid Style (4-quadrant auto-rotating collection) */}
       {style === 'mosaic' && (
         <div className="absolute inset-0 p-2 grid grid-cols-2 grid-rows-2 gap-2 bg-gray-950">
-          {(mosaicPhotos.length >= 4 ? mosaicPhotos : photos.slice(0, 4)).map((p, idx) => (
-            <div
-              key={`mosaic-slot-${idx}`}
-              onClick={() => handleShuffleMosaicSlot(idx)}
-              className="relative rounded-xl overflow-hidden shadow-md bg-gray-900 group cursor-pointer"
-              title="Click to advance this photo"
-            >
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={p.id}
-                  initial={{ opacity: 0, scale: 1.04 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.8, ease: 'easeInOut' }}
-                  className="absolute inset-0 w-full h-full"
-                >
-                  <img
-                    src={getOptimizedPhotoUrl(p.url, 800)}
-                    alt={p.caption || 'Photo'}
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    style={{
-                      objectPosition: photoFocals[p.id] || photoFocalCache.get(p.id) || undefined,
+          {(mosaicPhotos.length >= 4 ? mosaicPhotos : photos.slice(0, 4)).map((p, idx) => {
+            const isFocused = mosaicKenBurns && idx === focusedMosaicSlot;
+            return (
+              <div
+                key={`mosaic-slot-${idx}`}
+                onClick={() => handleMosaicSlotClick(idx)}
+                className={`relative rounded-xl overflow-hidden shadow-md bg-gray-900 group cursor-pointer transition-all duration-500 ${
+                  isFocused
+                    ? 'ring-2 ring-blue-400/80 shadow-2xl shadow-blue-500/20 z-10 scale-[1.01]'
+                    : 'hover:ring-1 hover:ring-white/20'
+                }`}
+                title={
+                  mosaicKenBurns
+                    ? isFocused
+                      ? 'Currently in focus (Click to advance photo)'
+                      : 'Click to focus this photo with Ken Burns'
+                    : 'Click to advance this photo'
+                }
+              >
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={p.id + (isFocused ? '-focused' : '-static')}
+                    initial={{ opacity: 0, scale: isFocused ? 1.0 : 1.04 }}
+                    animate={{
+                      opacity: 1,
+                      scale: isFocused ? 1.15 : 1.0,
                     }}
-                    loading="lazy"
-                    onLoad={(e) => handleImageLoad(p.id, e.currentTarget)}
-                    onError={() => handleMosaicError(idx, p.id)}
-                  />
-                  {showCaptions && (
-                    <div className="absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black/85 via-black/40 to-transparent text-[11px] text-white truncate font-medium">
-                      {p.caption || p.author || 'Captured Moment'}
-                    </div>
-                  )}
-                </motion.div>
-              </AnimatePresence>
-            </div>
-          ))}
+                    exit={{ opacity: 0 }}
+                    transition={
+                      isFocused
+                        ? {
+                            opacity: { duration: 0.8, ease: 'easeInOut' },
+                            scale: { duration: intervalSec + 2, ease: 'linear' },
+                          }
+                        : { duration: 0.8, ease: 'easeInOut' }
+                    }
+                    className="absolute inset-0 w-full h-full"
+                  >
+                    <img
+                      src={getOptimizedPhotoUrl(p.url, 800)}
+                      alt={p.caption || 'Photo'}
+                      referrerPolicy="no-referrer"
+                      className={`w-full h-full object-cover transition-transform duration-500 ${
+                        !isFocused ? 'group-hover:scale-105' : ''
+                      }`}
+                      style={{
+                        objectPosition: photoFocals[p.id] || photoFocalCache.get(p.id) || undefined,
+                      }}
+                      loading="lazy"
+                      onLoad={(e) => handleImageLoad(p.id, e.currentTarget)}
+                      onError={() => handleMosaicError(idx, p.id)}
+                    />
+                    {showCaptions && (
+                      <div className="absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black/85 via-black/40 to-transparent text-[11px] text-white truncate font-medium">
+                        {p.caption || p.author || 'Captured Moment'}
+                      </div>
+                    )}
+                  </motion.div>
+                </AnimatePresence>
+
+                {/* Focused Ken Burns Badge Indicator */}
+                {isFocused && (
+                  <div className="absolute top-2 right-2 z-20 flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-600/80 backdrop-blur-md text-[10px] font-semibold text-white tracking-wide shadow-md border border-blue-400/30 animate-pulse">
+                    <Sparkles className="w-3 h-3 text-blue-200" />
+                    <span>Focus</span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
 
           {/* Interactive Navigation Chevrons on Hover for Mosaic */}
           {photos.length > 1 && (

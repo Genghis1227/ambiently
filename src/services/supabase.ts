@@ -24,6 +24,23 @@ export async function getCurrentUser(): Promise<User | null> {
   return data.user;
 }
 
+export function onAuthStateChange(callback: (user: User | null) => void): () => void {
+  const sb = getSupabase();
+  if (!sb) return () => {};
+
+  const { data: { subscription } } = sb.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_IN') {
+      if (window.location.hash.includes('access_token') || window.location.search.includes('code=')) {
+        const cleanUrl = window.location.origin + window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+      }
+    }
+    callback(session?.user ?? null);
+  });
+
+  return () => subscription.unsubscribe();
+}
+
 export async function sendMagicLink(email: string): Promise<{ success: boolean; error?: string }> {
   const sb = getSupabase();
   if (!sb) return { success: false, error: 'Supabase credentials not configured in environment.' };
@@ -33,6 +50,20 @@ export async function sendMagicLink(email: string): Promise<{ success: boolean; 
     options: {
       emailRedirectTo: window.location.origin,
     },
+  });
+
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
+export async function verifyOtpCode(email: string, token: string): Promise<{ success: boolean; error?: string }> {
+  const sb = getSupabase();
+  if (!sb) return { success: false, error: 'Supabase credentials not configured in environment.' };
+
+  const { error } = await sb.auth.verifyOtp({
+    email: email.trim(),
+    token: token.trim(),
+    type: 'email',
   });
 
   if (error) return { success: false, error: error.message };
@@ -119,7 +150,18 @@ export async function getOrCreateInviteCode(_boardId = 'default'): Promise<{ cod
     if (!code) {
       // Generate clean 6-character uppercase code (e.g. TRINH7)
       code = Math.random().toString(36).substring(2, 8).toUpperCase();
-      await sb.from('dashboards').update({ invite_code: code }).eq('user_id', user.id);
+      if (data) {
+        await sb.from('dashboards').update({ invite_code: code }).eq('user_id', user.id);
+      } else {
+        await sb.from('dashboards').upsert({
+          id: user.id,
+          user_id: user.id,
+          title: 'Ambiently Command Center',
+          settings: {},
+          invite_code: code,
+          updated_at: new Date().toISOString(),
+        });
+      }
     }
 
     const shareUrl = `${window.location.origin}/?join=${code}`;
@@ -225,7 +267,7 @@ export async function pushToCloud(
   try {
     // 1. Upsert Dashboard
     await sb.from('dashboards').upsert({
-      id: 'default',
+      id: user.id,
       user_id: user.id,
       title: settings.dashboardTitle,
       settings: settings,
@@ -236,7 +278,7 @@ export async function pushToCloud(
     if (tabs.length > 0) {
       const formattedTabs = tabs.map((t) => ({
         id: t.id,
-        dashboard_id: 'default',
+        dashboard_id: user.id,
         user_id: user.id,
         name: t.name,
         icon: t.icon,
@@ -253,7 +295,7 @@ export async function pushToCloud(
     if (widgets.length > 0) {
       const formattedWidgets = widgets.map((w) => ({
         id: w.id,
-        dashboard_id: 'default',
+        dashboard_id: user.id,
         tab_id: w.tabId,
         user_id: user.id,
         type: w.type,
@@ -271,7 +313,7 @@ export async function pushToCloud(
     if (notes.length > 0) {
       const formattedNotes = notes.map((n) => ({
         id: n.id,
-        dashboard_id: 'default',
+        dashboard_id: user.id,
         user_id: user.id,
         tab_id: n.tabId,
         widget_id: n.widgetId,
@@ -304,11 +346,20 @@ export async function pullFromCloud(): Promise<{ success: boolean; error?: strin
   if (!sb || !user) return { success: false, error: 'Not authenticated' };
 
   try {
-    const [tabsRes, widgetsRes, notesRes] = await Promise.all([
+    const [dashRes, tabsRes, widgetsRes, notesRes] = await Promise.all([
+      sb.from('dashboards').select('*').eq('user_id', user.id).maybeSingle(),
       sb.from('tabs').select('*').eq('user_id', user.id),
       sb.from('widgets').select('*').eq('user_id', user.id),
       sb.from('notes').select('*').eq('user_id', user.id),
     ]);
+
+    if (dashRes.data?.settings) {
+      await db.settings.put({
+        ...dashRes.data.settings,
+        id: 'global',
+        updated_at: dashRes.data.updated_at || new Date().toISOString(),
+      });
+    }
 
     if (tabsRes.data && tabsRes.data.length > 0) {
       const mappedTabs: DashboardTab[] = tabsRes.data.map((t: any) => ({

@@ -26,6 +26,7 @@ import {
   Archive,
   Wand2,
   RotateCcw,
+  RotateCw,
   Eye,
   EyeOff,
   ChevronLeft,
@@ -41,6 +42,7 @@ import type {
 } from '../../types/dashboard';
 import { MAX_CANVASES } from '../../types/dashboard';
 import { AmbientQuickMenu } from './AmbientQuickMenu';
+import { useUpdateChecker } from '../../services/updateChecker';
 
 interface NavigationDockProps {
   tabs: DashboardTab[];
@@ -120,6 +122,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
   const [activeMode, setActiveMode] = useState<AutoOrganizeMode>('bento');
   const [isPeekOpen, setIsPeekOpen] = useState(false);
   const navRef = useRef<HTMLElement>(null);
+  const { isUpdateAvailable, latestVersion, applyUpdate } = useUpdateChecker();
 
   useEffect(() => {
     if (!showOrganizeMenu) return;
@@ -477,6 +480,35 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
             className="flex items-center justify-center w-10 h-10 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-gray-800/70 transition-all cursor-pointer"
           >
             {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+          </button>
+
+          {/* Quick Dashboard Refresh / Update Pull */}
+          <button
+            onClick={() => {
+              if (isUpdateAvailable) {
+                applyUpdate();
+              } else {
+                window.location.reload();
+              }
+            }}
+            title={
+              isUpdateAvailable
+                ? `✨ New version v${latestVersion} available! Click to refresh and apply update`
+                : 'Refresh Dashboard (Reload panel)'
+            }
+            className={`relative flex items-center justify-center w-10 h-10 rounded-xl transition-all cursor-pointer ${
+              isUpdateAvailable
+                ? 'text-cyan-300 bg-cyan-500/20 hover:bg-cyan-500/35 border border-cyan-400/50 shadow-lg shadow-cyan-950/60'
+                : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/70'
+            }`}
+          >
+            <RotateCw className={`w-4 h-4 ${isUpdateAvailable ? 'animate-spin [animation-duration:3s]' : ''}`} />
+            {isUpdateAvailable && (
+              <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500 ring-2 ring-gray-950" />
+              </span>
+            )}
           </button>
 
           <button

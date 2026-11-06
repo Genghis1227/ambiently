@@ -1440,6 +1440,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 <CalendarWidget
                   sources={widget.config?.sources}
                   defaultView={widget.config?.defaultView}
+                  multiDayLayout={widget.config?.multiDayLayout}
                   isLight={isWidgetLight}
                   onUpdateConfig={(updates) => {
                     if (onUpdateWidget) {
@@ -1475,6 +1476,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   initialPolaroidSizeMode={widget.config?.polaroidSizeMode || 'mixed'}
                   photoOrder={widget.config?.photoOrder || 'random'}
                   showCaptions={widget.config?.showCaptions ?? true}
+                  mosaicKenBurns={widget.config?.mosaicKenBurns ?? false}
                   onUpdateConfig={(updates) => {
                     if (onUpdateWidget) {
                       onUpdateWidget(widget.id, {

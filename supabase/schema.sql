@@ -161,9 +161,27 @@ create policy "Users and members view widgets" on public.widgets
     )
   );
 
--- 8. Enable Realtime Publications
-alter publication supabase_realtime add table public.dashboards;
-alter publication supabase_realtime add table public.tabs;
-alter publication supabase_realtime add table public.widgets;
-alter publication supabase_realtime add table public.notes;
-alter publication supabase_realtime add table public.dashboard_members;
+-- 8. Enable Realtime Publications (Idempotent)
+do $$
+begin
+  begin
+    alter publication supabase_realtime add table public.dashboards;
+  exception when duplicate_object then null;
+  end;
+  begin
+    alter publication supabase_realtime add table public.tabs;
+  exception when duplicate_object then null;
+  end;
+  begin
+    alter publication supabase_realtime add table public.widgets;
+  exception when duplicate_object then null;
+  end;
+  begin
+    alter publication supabase_realtime add table public.notes;
+  exception when duplicate_object then null;
+  end;
+  begin
+    alter publication supabase_realtime add table public.dashboard_members;
+  exception when duplicate_object then null;
+  end;
+end $$;

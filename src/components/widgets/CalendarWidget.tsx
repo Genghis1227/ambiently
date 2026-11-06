@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Calendar as CalendarIcon,
   Clock,
+  Columns,
   MapPin,
   RefreshCw,
   ChevronLeft,
@@ -13,12 +14,86 @@ import { fetchCalendarEvents, getCachedCalendarEvents, type CalendarEvent, type 
 import { CalendarUrlGuideModal } from '../calendar/CalendarUrlGuideModal';
 
 export type CalendarViewMode = 'agenda' | '3day' | 'week' | 'month';
+export type MultiDayLayout = 'cards' | 'timeline';
 
 interface CalendarWidgetProps {
   sources?: CalendarSource[];
   defaultView?: CalendarViewMode;
+  multiDayLayout?: MultiDayLayout;
   onUpdateConfig?: (updates: Record<string, any>) => void;
   isLight?: boolean;
+}
+
+const HOUR_HEIGHT = 58; // pixels per hour for vertical timeline grid
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
+
+function formatHourGutter(hour: number): string {
+  if (hour === 0) return '12 AM';
+  if (hour < 12) return `${hour} AM`;
+  if (hour === 12) return '12 PM';
+  return `${hour - 12} PM`;
+}
+
+interface TimedEventLayout {
+  event: CalendarEvent;
+  top: number;
+  height: number;
+  lane: number;
+  totalLanes: number;
+  startMs: number;
+  endMs: number;
+}
+
+function layoutTimedEvents(dayEvents: CalendarEvent[], dayDate: Date): TimedEventLayout[] {
+  const dayStart = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), 0, 0, 0, 0).getTime();
+  const dayEnd = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), 23, 59, 59, 999).getTime();
+
+  const timed = dayEvents
+    .filter((e) => !e.isAllDay)
+    .map((e) => {
+      const rawStart = new Date(e.start).getTime();
+      const rawEnd = e.end ? new Date(e.end).getTime() : rawStart + 30 * 60 * 1000;
+      const startMs = Math.max(dayStart, rawStart);
+      const endMs = Math.min(dayEnd, Math.max(startMs + 20 * 60 * 1000, rawEnd));
+      const startMin = (startMs - dayStart) / (60 * 1000);
+      const durationMin = Math.max(25, (endMs - startMs) / (60 * 1000));
+      const top = (startMin / 60) * HOUR_HEIGHT;
+      const height = Math.max(24, Math.round((durationMin / 60) * HOUR_HEIGHT - 2));
+
+      return {
+        event: e,
+        top,
+        height,
+        lane: 0,
+        totalLanes: 1,
+        startMs,
+        endMs,
+      };
+    })
+    .sort((a, b) => a.startMs - b.startMs || (b.endMs - b.startMs) - (a.endMs - a.startMs));
+
+  // Greedy lane assignment for concurrent events
+  for (let i = 0; i < timed.length; i++) {
+    const item = timed[i];
+    const overlaps = timed.filter(
+      (other) => other !== item && other.startMs < item.endMs && other.endMs > item.startMs
+    );
+    if (overlaps.length > 0) {
+      const usedLanes = new Set(overlaps.map((o) => o.lane));
+      let lane = 0;
+      while (usedLanes.has(lane)) {
+        lane++;
+      }
+      item.lane = lane;
+      const maxLane = Math.max(lane + 1, ...overlaps.map((o) => o.lane + 1));
+      item.totalLanes = Math.max(item.totalLanes, maxLane);
+      overlaps.forEach((o) => {
+        o.totalLanes = Math.max(o.totalLanes, maxLane);
+      });
+    }
+  }
+
+  return timed;
 }
 
 const DEFAULT_SOURCES: CalendarSource[] = [
@@ -87,13 +162,259 @@ function sortDayEvents(dayEvents: CalendarEvent[]): CalendarEvent[] {
   });
 }
 
+const TimelineGridView: React.FC<{
+  days: { date: Date; isToday: boolean; events: CalendarEvent[] }[];
+  colCount: 3 | 7;
+  hasAllDay: boolean;
+  timeGridRef: React.RefObject<HTMLDivElement | null>;
+  isLight: boolean;
+  now: Date;
+  onSelectDay: (detail: { date: Date; events: CalendarEvent[] }) => void;
+}> = ({ days, colCount, hasAllDay, timeGridRef, isLight, now, onSelectDay }) => {
+  return (
+    <div
+      className={`flex-1 flex flex-col justify-between overflow-hidden border rounded-2xl ${
+        colCount === 7 ? 'min-w-[560px] md:min-w-0' : ''
+      } ${
+        isLight ? 'border-slate-200 bg-slate-50/50' : 'border-gray-800/80 bg-gray-950/40'
+      }`}
+    >
+      {/* Day Columns Header */}
+      <div
+        className={`flex border-b shrink-0 ${
+          isLight ? 'bg-slate-100/90 border-slate-200' : 'bg-gray-950/80 border-gray-800'
+        }`}
+      >
+        <div className={`w-12 md:w-14 shrink-0 border-r ${isLight ? 'border-slate-200' : 'border-gray-800/80'}`} />
+        <div className={`flex-1 grid ${colCount === 3 ? 'grid-cols-3' : 'grid-cols-7'}`}>
+          {days.map((col, idx) => (
+            <div
+              key={idx}
+              onClick={() => {
+                if (col.events.length > 0) {
+                  onSelectDay({ date: col.date, events: col.events });
+                }
+              }}
+              className={`flex items-center justify-between p-2 md:p-2.5 border-r last:border-r-0 cursor-pointer ${
+                isLight ? 'border-slate-200' : 'border-gray-800/80'
+              } ${col.isToday ? (isLight ? 'bg-blue-100/60' : 'bg-blue-950/30') : ''}`}
+            >
+              <div className="flex items-center gap-1.5 md:gap-2 min-w-0">
+                <span
+                  className={`w-6 h-6 md:w-8 md:h-8 rounded-full flex items-center justify-center text-xs md:text-sm font-black font-mono shadow-xs shrink-0 ${
+                    col.isToday
+                      ? 'bg-blue-600 text-white'
+                      : isLight
+                      ? 'bg-slate-200 text-slate-800'
+                      : 'bg-gray-800/80 text-white'
+                  }`}
+                >
+                  {col.date.getDate()}
+                </span>
+                <div className="flex flex-col leading-tight min-w-0">
+                  <span
+                    className={`text-[11px] md:text-xs font-bold uppercase tracking-wide truncate ${
+                      col.isToday
+                        ? isLight ? 'text-blue-900 font-black' : 'text-blue-300 font-black'
+                        : isLight ? 'text-slate-800' : 'text-gray-200'
+                    }`}
+                  >
+                    {col.date.toLocaleDateString([], { weekday: 'short' })}
+                  </span>
+                  <span
+                    className={`text-[9.5px] md:text-[10px] font-semibold truncate ${
+                      isLight ? 'text-slate-500' : 'text-gray-400'
+                    }`}
+                  >
+                    {col.date.toLocaleDateString([], { month: 'short' })}
+                  </span>
+                </div>
+              </div>
+              {col.isToday && colCount === 3 && (
+                <span className="text-[9px] md:text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-blue-500/25 text-blue-400 border border-blue-500/40 shadow-xs uppercase tracking-wider hidden sm:inline">
+                  Today
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* All-Day Events Row */}
+      {hasAllDay && (
+        <div
+          className={`flex border-b shrink-0 ${
+            isLight ? 'bg-slate-100 border-slate-200' : 'bg-gray-950/90 border-gray-800'
+          }`}
+        >
+          <div
+            className={`w-12 md:w-14 shrink-0 border-r text-[10px] font-bold uppercase tracking-wider p-1.5 text-right flex items-center justify-end ${
+              isLight ? 'border-slate-200 text-slate-500' : 'border-gray-800/80 text-gray-500'
+            }`}
+          >
+            All-Day
+          </div>
+          <div className={`flex-1 grid ${colCount === 3 ? 'grid-cols-3' : 'grid-cols-7'} gap-1 p-1`}>
+            {days.map((col, idx) => (
+              <div
+                key={idx}
+                className={`space-y-1 min-h-[22px] border-r last:border-r-0 px-1 ${
+                  isLight ? 'border-slate-200/80' : 'border-gray-800/60'
+                }`}
+              >
+                {col.events
+                  .filter((e) => e.isAllDay)
+                  .map((evt) => (
+                    <div
+                      key={evt.uid}
+                      onClick={() => onSelectDay({ date: col.date, events: col.events })}
+                      style={{ backgroundColor: evt.color || '#3b82f6' }}
+                      className="text-[9.5px] md:text-[11px] font-bold text-white px-1.5 py-0.5 rounded truncate cursor-pointer shadow-xs hover:brightness-110"
+                      title={evt.summary}
+                    >
+                      {evt.summary}
+                    </div>
+                  ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 24-Hour Timed Grid */}
+      <div ref={timeGridRef} className="flex-1 overflow-y-auto relative select-none">
+        <div className="flex relative" style={{ height: `${HOURS.length * HOUR_HEIGHT}px` }}>
+          {/* Left Time Gutter */}
+          <div
+            className={`w-12 md:w-14 shrink-0 relative border-r select-none ${
+              isLight ? 'border-slate-200' : 'border-gray-800/80'
+            }`}
+          >
+            {HOURS.map((hour) => (
+              <div
+                key={hour}
+                style={{ top: hour === 0 ? '4px' : `${hour * HOUR_HEIGHT}px` }}
+                className={`absolute right-2 text-[10px] md:text-xs font-mono font-medium ${
+                  isLight ? 'text-slate-500' : 'text-gray-500'
+                } ${hour === 0 ? '' : '-translate-y-1/2'}`}
+              >
+                {formatHourGutter(hour)}
+              </div>
+            ))}
+          </div>
+
+          {/* Grid Body */}
+          <div className="flex-1 relative">
+            {/* Horizontal Hour Lines */}
+            {HOURS.map((hour) => (
+              <div
+                key={hour}
+                style={{ top: `${hour * HOUR_HEIGHT}px` }}
+                className={`absolute left-0 right-0 border-b pointer-events-none ${
+                  isLight ? 'border-slate-200/70' : 'border-gray-800/40'
+                }`}
+              />
+            ))}
+
+            {/* Columns */}
+            <div className={`grid ${colCount === 3 ? 'grid-cols-3' : 'grid-cols-7'} h-full`}>
+              {days.map((col, idx) => {
+                const timedLayout = layoutTimedEvents(col.events, col.date);
+                const nowMinutes = now.getHours() * 60 + now.getMinutes();
+                const nowTop = (nowMinutes / 60) * HOUR_HEIGHT;
+
+                return (
+                  <div
+                    key={idx}
+                    className={`relative h-full border-r last:border-r-0 ${
+                      isLight ? 'border-slate-200/80' : 'border-gray-800/60'
+                    } ${col.isToday ? (isLight ? 'bg-blue-50/50' : 'bg-blue-950/10') : ''}`}
+                  >
+                    {/* Current Time Red Indicator Line */}
+                    {col.isToday && (
+                      <div
+                        style={{ top: `${nowTop}px` }}
+                        className="absolute left-0 right-0 border-t-2 border-red-500 z-20 pointer-events-none flex items-center"
+                      >
+                        <div className="w-2.5 h-2.5 -left-1.5 -top-1 absolute rounded-full bg-red-500 ring-2 ring-red-400/50 shadow-sm" />
+                      </div>
+                    )}
+
+                    {/* Timed Event Blocks */}
+                    {timedLayout.map((item) => {
+                      const isCompact = item.height < 44;
+                      return (
+                        <div
+                          key={item.event.uid}
+                          onClick={() => onSelectDay({ date: col.date, events: col.events })}
+                          title={`${item.event.summary} (${formatTimeShort(new Date(item.event.start))}${
+                            item.event.end ? ` - ${formatTimeShort(new Date(item.event.end))}` : ''
+                          })${item.event.location ? ` • ${item.event.location}` : ''}`}
+                          style={{
+                            top: `${item.top}px`,
+                            height: `${item.height}px`,
+                            left: `calc(${(item.lane / item.totalLanes) * 100}% + 2px)`,
+                            width: `calc(${(1 / item.totalLanes) * 100}% - 4px)`,
+                            backgroundColor: isLight
+                              ? `${item.event.color || '#3b82f6'}22`
+                              : `${item.event.color || '#3b82f6'}26`,
+                            borderLeftColor: item.event.color || '#3b82f6',
+                          }}
+                          className={`absolute rounded-lg border-l-4 border-t border-r border-b ${
+                            isLight
+                              ? 'border-slate-300/80 shadow-xs hover:bg-white'
+                              : 'border-gray-700/50 shadow-sm hover:brightness-125'
+                          } ${
+                            isCompact ? 'px-1.5 py-0 justify-center' : 'p-1.5 md:p-2 justify-start'
+                          } text-left overflow-hidden transition-all hover:z-30 cursor-pointer backdrop-blur-xs flex flex-col`}
+                        >
+                          <div className="flex items-center justify-between gap-1 leading-none">
+                            <span className="text-[9.5px] md:text-[10px] font-mono font-bold text-blue-500 truncate">
+                              {formatTimeShort(new Date(item.event.start))}
+                              {item.event.end && ` - ${formatTimeShort(new Date(item.event.end))}`}
+                            </span>
+                          </div>
+                          <div
+                            className={`text-[11px] md:text-xs font-bold leading-tight truncate mt-0.5 ${
+                              isLight ? 'text-slate-900' : 'text-white'
+                            }`}
+                          >
+                            {item.event.summary}
+                          </div>
+                          {!isCompact && item.event.location && (
+                            <div
+                              className={`flex items-center gap-0.5 text-[9.5px] truncate mt-0.5 ${
+                                isLight ? 'text-slate-500' : 'text-gray-400'
+                              }`}
+                            >
+                              <MapPin className="w-2.5 h-2.5 shrink-0" />
+                              <span className="truncate">{item.event.location}</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
   sources = DEFAULT_SOURCES,
   defaultView = 'agenda',
+  multiDayLayout: multiDayLayoutProp = 'cards',
   onUpdateConfig,
   isLight = false,
 }) => {
   const [view, setView] = useState<CalendarViewMode>(defaultView);
+  const [multiDayLayout, setMultiDayLayout] = useState<MultiDayLayout>(multiDayLayoutProp);
+  const timeGridRef = useRef<HTMLDivElement>(null);
   // Initialize immediately from cache so canvas carousel/tab switching renders instantly with 0 blank wait
   const [events, setEvents] = useState<CalendarEvent[]>(() => getCachedCalendarEvents(sources)?.events || []);
   const [loading, setLoading] = useState(false);
@@ -107,6 +428,26 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
   useEffect(() => {
     setView(defaultView);
   }, [defaultView]);
+
+  useEffect(() => {
+    if (multiDayLayoutProp) {
+      setMultiDayLayout(multiDayLayoutProp);
+    }
+  }, [multiDayLayoutProp]);
+
+  // Auto-scroll timeline grid to current hour
+  useEffect(() => {
+    if ((view === '3day' || view === 'week') && multiDayLayout === 'timeline' && timeGridRef.current) {
+      const curHour = new Date().getHours();
+      const scrollTarget = Math.max(0, (curHour - 1) * HOUR_HEIGHT);
+      timeGridRef.current.scrollTop = scrollTarget;
+    }
+  }, [view, multiDayLayout]);
+
+  const handleToggleMultiDayLayout = (newLayout: MultiDayLayout) => {
+    setMultiDayLayout(newLayout);
+    onUpdateConfig?.({ multiDayLayout: newLayout });
+  };
 
   const loadEvents = async (force: boolean = false, background: boolean = false) => {
     if (!background && events.length === 0) {
@@ -220,6 +561,9 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
   });
   const weekEnd = weekDays[6].date;
 
+  const hasThreeDaysAllDay = threeDays.some((col) => col.events.some((e) => e.isAllDay));
+  const hasWeekAllDay = weekDays.some((col) => col.events.some((e) => e.isAllDay));
+
   // Header Title
   const getHeaderTitle = () => {
     switch (view) {
@@ -301,8 +645,48 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
           </div>
         </div>
 
-        {/* Right: Segmented View Switcher + Guide + Refresh */}
+        {/* Right: Segmented View Switcher + MultiDay Layout Switcher + Guide + Refresh */}
         <div className="flex items-center gap-1.5 shrink-0">
+          {/* Sub-view Layout Toggle (Cards vs Timeline) for 3-Day and Week views */}
+          {(view === '3day' || view === 'week') && (
+            <div className={`flex items-center p-0.5 rounded-xl border ${
+              isLight
+                ? 'bg-slate-100 border-slate-300'
+                : 'bg-gray-950/90 border-gray-800'
+            }`}>
+              <button
+                type="button"
+                onClick={() => handleToggleMultiDayLayout('cards')}
+                className={`flex items-center gap-1 px-2 py-1 text-[11px] md:text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  multiDayLayout === 'cards'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : isLight
+                    ? 'text-slate-600 hover:text-slate-900'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+                title="Cards in order of time"
+              >
+                <Columns className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Cards</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleToggleMultiDayLayout('timeline')}
+                className={`flex items-center gap-1 px-2 py-1 text-[11px] md:text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  multiDayLayout === 'timeline'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : isLight
+                    ? 'text-slate-600 hover:text-slate-900'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+                title="24-Hour Timeline Grid schedule"
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Timeline</span>
+              </button>
+            </div>
+          )}
+
           <div className={`flex items-center p-0.5 rounded-xl border ${
             isLight
               ? 'bg-slate-100 border-slate-300'
@@ -466,271 +850,295 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
           )}
         </div>
       ) : view === '3day' ? (
-        /* 3-Day View (Card-based Day Columns) */
-        <div className="grid grid-cols-3 gap-2 md:gap-3 flex-1 min-h-0 overflow-hidden">
-          {threeDays.map((col, idx) => {
-            const sortedEvents = sortDayEvents(col.events);
-            return (
-              <div
-                key={idx}
-                className={`flex flex-col rounded-2xl border transition-all overflow-hidden ${
-                  col.isToday
-                    ? isLight
-                      ? 'bg-blue-50/70 border-blue-400/80 shadow-xs ring-1 ring-blue-400/30'
-                      : 'bg-blue-950/20 border-blue-500/60 shadow-md ring-1 ring-blue-500/20'
-                    : isLight
-                    ? 'bg-slate-100/80 border-slate-200/90'
-                    : 'bg-gray-950/50 border-gray-800/80'
-                }`}
-              >
-                {/* Day Column Header */}
+        multiDayLayout === 'timeline' ? (
+          <TimelineGridView
+            days={threeDays}
+            colCount={3}
+            hasAllDay={hasThreeDaysAllDay}
+            timeGridRef={timeGridRef}
+            isLight={isLight}
+            now={now}
+            onSelectDay={setSelectedDayDetail}
+          />
+        ) : (
+          /* 3-Day View (Card-based Day Columns) */
+          <div className="grid grid-cols-3 gap-2 md:gap-3 flex-1 min-h-0 overflow-hidden">
+            {threeDays.map((col, idx) => {
+              const sortedEvents = sortDayEvents(col.events);
+              return (
                 <div
-                  onClick={() => {
-                    if (sortedEvents.length > 0) {
-                      setSelectedDayDetail({ date: col.date, events: sortedEvents });
-                    }
-                  }}
-                  className={`p-2.5 md:p-3 border-b flex items-center justify-between shrink-0 cursor-pointer ${
+                  key={idx}
+                  className={`flex flex-col rounded-2xl border transition-all overflow-hidden ${
                     col.isToday
                       ? isLight
-                        ? 'bg-blue-100/50 border-blue-200'
-                        : 'bg-blue-950/40 border-blue-900/50'
+                        ? 'bg-blue-50/70 border-blue-400/80 shadow-xs ring-1 ring-blue-400/30'
+                        : 'bg-blue-950/20 border-blue-500/60 shadow-md ring-1 ring-blue-500/20'
                       : isLight
-                      ? 'bg-slate-200/40 border-slate-200 hover:bg-slate-200/60'
-                      : 'bg-gray-900/40 border-gray-800/80 hover:bg-gray-900/60'
+                      ? 'bg-slate-100/80 border-slate-200/90'
+                      : 'bg-gray-950/50 border-gray-800/80'
                   }`}
                 >
-                  <div className="flex items-center gap-2 min-w-0">
+                  {/* Day Column Header */}
+                  <div
+                    onClick={() => {
+                      if (sortedEvents.length > 0) {
+                        setSelectedDayDetail({ date: col.date, events: sortedEvents });
+                      }
+                    }}
+                    className={`p-2.5 md:p-3 border-b flex items-center justify-between shrink-0 cursor-pointer ${
+                      col.isToday
+                        ? isLight
+                          ? 'bg-blue-100/50 border-blue-200'
+                          : 'bg-blue-950/40 border-blue-900/50'
+                        : isLight
+                        ? 'bg-slate-200/40 border-slate-200 hover:bg-slate-200/60'
+                        : 'bg-gray-900/40 border-gray-800/80 hover:bg-gray-900/60'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className={`w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center text-xs md:text-sm font-black font-mono shrink-0 shadow-xs ${
+                          col.isToday
+                            ? 'bg-blue-600 text-white'
+                            : isLight
+                            ? 'bg-slate-300/80 text-slate-800'
+                            : 'bg-gray-800 text-gray-200'
+                        }`}
+                      >
+                        {col.date.getDate()}
+                      </span>
+                      <div className="flex flex-col leading-tight min-w-0">
+                        <span className={`text-xs md:text-sm font-black uppercase tracking-wider truncate ${
+                          col.isToday
+                            ? isLight ? 'text-blue-900' : 'text-blue-300'
+                            : isLight ? 'text-slate-800' : 'text-gray-200'
+                        }`}>
+                          {col.date.toLocaleDateString([], { weekday: 'short' })}
+                        </span>
+                        <span className={`text-[10px] md:text-xs font-semibold ${
+                          isLight ? 'text-slate-500' : 'text-gray-400'
+                        }`}>
+                          {col.date.toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {col.isToday && (
+                        <span className="text-[9px] md:text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30 uppercase tracking-wider hidden sm:inline">
+                          Today
+                        </span>
+                      )}
+                      <span
+                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                          sortedEvents.length > 0
+                            ? isLight
+                              ? 'bg-slate-200 text-slate-700 font-mono'
+                              : 'bg-gray-800 text-gray-300 font-mono'
+                            : isLight
+                            ? 'text-slate-400'
+                            : 'text-gray-500'
+                        }`}
+                      >
+                        {sortedEvents.length}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Scrollable Events List */}
+                  <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-0">
+                    {sortedEvents.length === 0 ? (
+                      <div className={`h-full flex items-center justify-center text-xs italic ${
+                        isLight ? 'text-slate-400' : 'text-gray-500'
+                      }`}>
+                        No events
+                      </div>
+                    ) : (
+                      sortedEvents.map((evt) => {
+                        const startDate = parseEventLocalDate(evt.start, evt.isAllDay);
+                        return (
+                          <div
+                            key={evt.uid}
+                            onClick={() => setSelectedDayDetail({ date: col.date, events: sortedEvents })}
+                            style={{
+                              backgroundColor: `${evt.color || '#3b82f6'}15`,
+                              borderLeftColor: evt.color || '#3b82f6',
+                            }}
+                            className={`p-2 md:p-2.5 rounded-xl border-l-4 border-t border-r border-b text-left cursor-pointer transition-all hover:scale-[1.01] hover:brightness-105 shadow-xs ${
+                              isLight
+                                ? 'border-slate-200/90 bg-white/80 hover:bg-white'
+                                : 'border-gray-800/80 bg-gray-900/50 hover:bg-gray-900/80'
+                            }`}
+                            title={evt.summary}
+                          >
+                            {/* Time + Calendar Badge */}
+                            <div className="flex items-center justify-between gap-1 text-[10px] md:text-[11px] font-mono leading-none mb-1">
+                              <span className="flex items-center gap-1 font-semibold text-blue-400 truncate">
+                                <Clock className="w-3 h-3 shrink-0" />
+                                {evt.isAllDay
+                                  ? 'All Day'
+                                  : startDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                                {evt.end && !evt.isAllDay && ` – ${new Date(evt.end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
+                              </span>
+                              {evt.calendarName && (
+                                <span className={`text-[9px] px-1 py-0.5 rounded truncate max-w-[80px] hidden md:inline ${
+                                  isLight ? 'bg-slate-200 text-slate-600' : 'bg-black/40 text-gray-400'
+                                }`}>
+                                  {evt.calendarName}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Title */}
+                            <div className={`text-xs md:text-sm font-bold line-clamp-2 leading-tight ${
+                              isLight ? 'text-slate-900' : 'text-white'
+                            }`}>
+                              {evt.summary}
+                            </div>
+
+                            {/* Location */}
+                            {evt.location && (
+                              <div className={`flex items-center gap-1 text-[10px] md:text-[11px] truncate mt-1 ${
+                                isLight ? 'text-slate-500' : 'text-gray-400'
+                              }`}>
+                                <MapPin className="w-2.5 h-2.5 shrink-0" />
+                                <span className="truncate">{evt.location}</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )
+      ) : view === 'week' ? (
+        multiDayLayout === 'timeline' ? (
+          <TimelineGridView
+            days={weekDays}
+            colCount={7}
+            hasAllDay={hasWeekAllDay}
+            timeGridRef={timeGridRef}
+            isLight={isLight}
+            now={now}
+            onSelectDay={setSelectedDayDetail}
+          />
+        ) : (
+          /* Weekly View (Card-based Day Columns) */
+          <div className="grid grid-cols-7 gap-1.5 flex-1 min-h-0 overflow-x-auto min-w-[560px] md:min-w-0">
+            {weekDays.map((col, idx) => {
+              const sortedEvents = sortDayEvents(col.events);
+              return (
+                <div
+                  key={idx}
+                  className={`flex flex-col rounded-xl border transition-all overflow-hidden ${
+                    col.isToday
+                      ? isLight
+                        ? 'bg-blue-50/70 border-blue-400/80 shadow-xs ring-1 ring-blue-400/30'
+                        : 'bg-blue-950/20 border-blue-500/60 shadow-md ring-1 ring-blue-500/20'
+                      : isLight
+                      ? 'bg-slate-100/80 border-slate-200/90'
+                      : 'bg-gray-950/50 border-gray-800/80'
+                  }`}
+                >
+                  {/* Week Day Column Header */}
+                  <div
+                    onClick={() => {
+                      if (sortedEvents.length > 0) {
+                        setSelectedDayDetail({ date: col.date, events: sortedEvents });
+                      }
+                    }}
+                    className={`p-1.5 border-b flex flex-col items-center justify-center shrink-0 cursor-pointer ${
+                      col.isToday
+                        ? isLight
+                          ? 'bg-blue-100/50 border-blue-200'
+                          : 'bg-blue-950/40 border-blue-900/50'
+                        : isLight
+                        ? 'bg-slate-200/40 border-slate-200 hover:bg-slate-200/60'
+                        : 'bg-gray-900/40 border-gray-800/80 hover:bg-gray-900/60'
+                    }`}
+                  >
+                    <span className={`text-[10px] uppercase font-black tracking-wider ${
+                      col.isToday
+                        ? isLight ? 'text-blue-900' : 'text-blue-300'
+                        : isLight ? 'text-slate-600' : 'text-gray-400'
+                    }`}>
+                      {col.date.toLocaleDateString([], { weekday: 'short' })}
+                    </span>
                     <span
-                      className={`w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center text-xs md:text-sm font-black font-mono shrink-0 shadow-xs ${
+                      className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-mono font-bold mt-0.5 ${
                         col.isToday
-                          ? 'bg-blue-600 text-white'
+                          ? 'bg-blue-600 text-white shadow-xs'
                           : isLight
-                          ? 'bg-slate-300/80 text-slate-800'
-                          : 'bg-gray-800 text-gray-200'
+                          ? 'text-slate-800'
+                          : 'text-gray-200'
                       }`}
                     >
                       {col.date.getDate()}
                     </span>
-                    <div className="flex flex-col leading-tight min-w-0">
-                      <span className={`text-xs md:text-sm font-black uppercase tracking-wider truncate ${
-                        col.isToday
-                          ? isLight ? 'text-blue-900' : 'text-blue-300'
-                          : isLight ? 'text-slate-800' : 'text-gray-200'
+                    {sortedEvents.length > 0 && (
+                      <span className={`text-[9px] font-mono px-1 rounded-full mt-0.5 ${
+                        isLight ? 'bg-slate-200 text-slate-700' : 'bg-gray-800 text-gray-300'
                       }`}>
-                        {col.date.toLocaleDateString([], { weekday: 'short' })}
-                      </span>
-                      <span className={`text-[10px] md:text-xs font-semibold ${
-                        isLight ? 'text-slate-500' : 'text-gray-400'
-                      }`}>
-                        {col.date.toLocaleDateString([], { month: 'short', day: 'numeric' })}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {col.isToday && (
-                      <span className="text-[9px] md:text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30 uppercase tracking-wider hidden sm:inline">
-                        Today
+                        {sortedEvents.length}
                       </span>
                     )}
-                    <span
-                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                        sortedEvents.length > 0
-                          ? isLight
-                            ? 'bg-slate-200 text-slate-700 font-mono'
-                            : 'bg-gray-800 text-gray-300 font-mono'
-                          : isLight
-                          ? 'text-slate-400'
-                          : 'text-gray-500'
-                      }`}
-                    >
-                      {sortedEvents.length}
-                    </span>
                   </div>
-                </div>
 
-                {/* Scrollable Events List */}
-                <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-0">
-                  {sortedEvents.length === 0 ? (
-                    <div className={`h-full flex items-center justify-center text-xs italic ${
-                      isLight ? 'text-slate-400' : 'text-gray-500'
-                    }`}>
-                      No events
-                    </div>
-                  ) : (
-                    sortedEvents.map((evt) => {
-                      const startDate = parseEventLocalDate(evt.start, evt.isAllDay);
-                      return (
-                        <div
-                          key={evt.uid}
-                          onClick={() => setSelectedDayDetail({ date: col.date, events: sortedEvents })}
-                          style={{
-                            backgroundColor: `${evt.color || '#3b82f6'}15`,
-                            borderLeftColor: evt.color || '#3b82f6',
-                          }}
-                          className={`p-2 md:p-2.5 rounded-xl border-l-4 border-t border-r border-b text-left cursor-pointer transition-all hover:scale-[1.01] hover:brightness-105 shadow-xs ${
-                            isLight
-                              ? 'border-slate-200/90 bg-white/80 hover:bg-white'
-                              : 'border-gray-800/80 bg-gray-900/50 hover:bg-gray-900/80'
-                          }`}
-                          title={evt.summary}
-                        >
-                          {/* Time + Calendar Badge */}
-                          <div className="flex items-center justify-between gap-1 text-[10px] md:text-[11px] font-mono leading-none mb-1">
-                            <span className="flex items-center gap-1 font-semibold text-blue-400 truncate">
-                              <Clock className="w-3 h-3 shrink-0" />
-                              {evt.isAllDay
-                                ? 'All Day'
-                                : startDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                              {evt.end && !evt.isAllDay && ` – ${new Date(evt.end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
-                            </span>
-                            {evt.calendarName && (
-                              <span className={`text-[9px] px-1 py-0.5 rounded truncate max-w-[80px] hidden md:inline ${
-                                isLight ? 'bg-slate-200 text-slate-600' : 'bg-black/40 text-gray-400'
+                  {/* Scrollable Events List */}
+                  <div className="flex-1 overflow-y-auto p-1 space-y-1.5 min-h-0">
+                    {sortedEvents.length === 0 ? (
+                      <div className={`h-full flex items-center justify-center text-[10px] ${
+                        isLight ? 'text-slate-300' : 'text-gray-600'
+                      }`}>
+                        —
+                      </div>
+                    ) : (
+                      sortedEvents.map((evt) => {
+                        const startDate = parseEventLocalDate(evt.start, evt.isAllDay);
+                        return (
+                          <div
+                            key={evt.uid}
+                            onClick={() => setSelectedDayDetail({ date: col.date, events: sortedEvents })}
+                            style={{
+                              backgroundColor: `${evt.color || '#3b82f6'}18`,
+                              borderLeftColor: evt.color || '#3b82f6',
+                            }}
+                            className={`p-1.5 rounded-lg border-l-3 border-t border-r border-b text-left cursor-pointer transition-all hover:brightness-110 shadow-2xs ${
+                              isLight
+                                ? 'border-slate-200/90 bg-white/90 hover:bg-white'
+                                : 'border-gray-800/80 bg-gray-900/60 hover:bg-gray-900/90'
+                            }`}
+                            title={`${evt.summary} (${evt.isAllDay ? 'All Day' : formatTimeShort(startDate)})${evt.location ? ` • ${evt.location}` : ''}`}
+                          >
+                            <div className="text-[9.5px] font-mono font-bold text-blue-400 truncate leading-none mb-0.5">
+                              {evt.isAllDay ? 'All Day' : formatTimeShort(startDate)}
+                            </div>
+                            <div className={`text-[11px] font-bold truncate leading-tight ${
+                              isLight ? 'text-slate-900' : 'text-white'
+                            }`}>
+                              {evt.summary}
+                            </div>
+                            {evt.location && (
+                              <div className={`text-[9px] truncate flex items-center gap-0.5 mt-0.5 ${
+                                isLight ? 'text-slate-500' : 'text-gray-400'
                               }`}>
-                                {evt.calendarName}
-                              </span>
+                                <MapPin className="w-2 h-2 shrink-0" />
+                                <span className="truncate">{evt.location}</span>
+                              </div>
                             )}
                           </div>
-
-                          {/* Title */}
-                          <div className={`text-xs md:text-sm font-bold line-clamp-2 leading-tight ${
-                            isLight ? 'text-slate-900' : 'text-white'
-                          }`}>
-                            {evt.summary}
-                          </div>
-
-                          {/* Location */}
-                          {evt.location && (
-                            <div className={`flex items-center gap-1 text-[10px] md:text-[11px] truncate mt-1 ${
-                              isLight ? 'text-slate-500' : 'text-gray-400'
-                            }`}>
-                              <MapPin className="w-2.5 h-2.5 shrink-0" />
-                              <span className="truncate">{evt.location}</span>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })
-                  )}
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : view === 'week' ? (
-        /* Weekly View (Card-based Day Columns) */
-        <div className="grid grid-cols-7 gap-1.5 flex-1 min-h-0 overflow-x-auto min-w-[560px] md:min-w-0">
-          {weekDays.map((col, idx) => {
-            const sortedEvents = sortDayEvents(col.events);
-            return (
-              <div
-                key={idx}
-                className={`flex flex-col rounded-xl border transition-all overflow-hidden ${
-                  col.isToday
-                    ? isLight
-                      ? 'bg-blue-50/70 border-blue-400/80 shadow-xs ring-1 ring-blue-400/30'
-                      : 'bg-blue-950/20 border-blue-500/60 shadow-md ring-1 ring-blue-500/20'
-                    : isLight
-                    ? 'bg-slate-100/80 border-slate-200/90'
-                    : 'bg-gray-950/50 border-gray-800/80'
-                }`}
-              >
-                {/* Week Day Column Header */}
-                <div
-                  onClick={() => {
-                    if (sortedEvents.length > 0) {
-                      setSelectedDayDetail({ date: col.date, events: sortedEvents });
-                    }
-                  }}
-                  className={`p-1.5 border-b flex flex-col items-center justify-center shrink-0 cursor-pointer ${
-                    col.isToday
-                      ? isLight
-                        ? 'bg-blue-100/50 border-blue-200'
-                        : 'bg-blue-950/40 border-blue-900/50'
-                      : isLight
-                      ? 'bg-slate-200/40 border-slate-200 hover:bg-slate-200/60'
-                      : 'bg-gray-900/40 border-gray-800/80 hover:bg-gray-900/60'
-                  }`}
-                >
-                  <span className={`text-[10px] uppercase font-black tracking-wider ${
-                    col.isToday
-                      ? isLight ? 'text-blue-900' : 'text-blue-300'
-                      : isLight ? 'text-slate-600' : 'text-gray-400'
-                  }`}>
-                    {col.date.toLocaleDateString([], { weekday: 'short' })}
-                  </span>
-                  <span
-                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-mono font-bold mt-0.5 ${
-                      col.isToday
-                        ? 'bg-blue-600 text-white shadow-xs'
-                        : isLight
-                        ? 'text-slate-800'
-                        : 'text-gray-200'
-                    }`}
-                  >
-                    {col.date.getDate()}
-                  </span>
-                  {sortedEvents.length > 0 && (
-                    <span className={`text-[9px] font-mono px-1 rounded-full mt-0.5 ${
-                      isLight ? 'bg-slate-200 text-slate-700' : 'bg-gray-800 text-gray-300'
-                    }`}>
-                      {sortedEvents.length}
-                    </span>
-                  )}
-                </div>
-
-                {/* Scrollable Events List */}
-                <div className="flex-1 overflow-y-auto p-1 space-y-1.5 min-h-0">
-                  {sortedEvents.length === 0 ? (
-                    <div className={`h-full flex items-center justify-center text-[10px] ${
-                      isLight ? 'text-slate-300' : 'text-gray-600'
-                    }`}>
-                      —
-                    </div>
-                  ) : (
-                    sortedEvents.map((evt) => {
-                      const startDate = parseEventLocalDate(evt.start, evt.isAllDay);
-                      return (
-                        <div
-                          key={evt.uid}
-                          onClick={() => setSelectedDayDetail({ date: col.date, events: sortedEvents })}
-                          style={{
-                            backgroundColor: `${evt.color || '#3b82f6'}18`,
-                            borderLeftColor: evt.color || '#3b82f6',
-                          }}
-                          className={`p-1.5 rounded-lg border-l-3 border-t border-r border-b text-left cursor-pointer transition-all hover:brightness-110 shadow-2xs ${
-                            isLight
-                              ? 'border-slate-200/90 bg-white/90 hover:bg-white'
-                              : 'border-gray-800/80 bg-gray-900/60 hover:bg-gray-900/90'
-                          }`}
-                          title={`${evt.summary} (${evt.isAllDay ? 'All Day' : formatTimeShort(startDate)})${evt.location ? ` • ${evt.location}` : ''}`}
-                        >
-                          <div className="text-[9.5px] font-mono font-bold text-blue-400 truncate leading-none mb-0.5">
-                            {evt.isAllDay ? 'All Day' : formatTimeShort(startDate)}
-                          </div>
-                          <div className={`text-[11px] font-bold truncate leading-tight ${
-                            isLight ? 'text-slate-900' : 'text-white'
-                          }`}>
-                            {evt.summary}
-                          </div>
-                          {evt.location && (
-                            <div className={`text-[9px] truncate flex items-center gap-0.5 mt-0.5 ${
-                              isLight ? 'text-slate-500' : 'text-gray-400'
-                            }`}>
-                              <MapPin className="w-2 h-2 shrink-0" />
-                              <span className="truncate">{evt.location}</span>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )
       ) : (
         /* Monthly Grid View (Enlarged events and spacious cells) */
         <div className="flex-1 flex flex-col justify-between overflow-hidden">
