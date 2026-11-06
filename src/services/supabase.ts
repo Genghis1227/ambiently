@@ -274,12 +274,23 @@ export async function pushToCloud(
   if (!sb || !user) return { success: false, error: 'Not authenticated' };
 
   try {
-    // 1. Upsert Dashboard
+    // 1. Upsert Dashboard (includes tab metadata such as backgroundTheme and custom wallpapers)
+    const tabThemeMeta = tabs.reduce((acc, t) => {
+      acc[t.id] = {
+        backgroundTheme: t.backgroundTheme,
+        customWallpaperUrl: t.customWallpaperUrl,
+        backgroundDimLevel: t.backgroundDimLevel,
+        hideNotes: t.hideNotes,
+        isHome: t.isHome,
+      };
+      return acc;
+    }, {} as Record<string, any>);
+
     await sb.from('dashboards').upsert({
       id: user.id,
       user_id: user.id,
       title: settings.dashboardTitle,
-      settings: settings,
+      settings: { ...settings, canvasThemes: tabThemeMeta },
       updated_at: new Date().toISOString(),
     });
 
@@ -370,6 +381,7 @@ export async function pullFromCloud(): Promise<{ success: boolean; error?: strin
       });
     }
 
+    const canvasThemes = dashRes.data?.settings?.canvasThemes || {};
     if (tabsRes.data && tabsRes.data.length > 0) {
       const mappedTabs: DashboardTab[] = tabsRes.data.map((t: any) => ({
         id: t.id,
@@ -378,6 +390,11 @@ export async function pullFromCloud(): Promise<{ success: boolean; error?: strin
         order: t.order_index,
         layoutMode: t.layout_mode,
         autoRotateDurationSec: t.auto_rotate_duration_sec,
+        backgroundTheme: canvasThemes[t.id]?.backgroundTheme || t.background_theme || 'midnight_dots',
+        customWallpaperUrl: canvasThemes[t.id]?.customWallpaperUrl || t.custom_wallpaper_url,
+        backgroundDimLevel: canvasThemes[t.id]?.backgroundDimLevel ?? t.background_dim_level ?? 45,
+        hideNotes: canvasThemes[t.id]?.hideNotes ?? t.hide_notes ?? false,
+        isHome: canvasThemes[t.id]?.isHome ?? t.is_home ?? false,
         updated_at: t.updated_at,
         deleted_at: t.deleted_at,
       }));
