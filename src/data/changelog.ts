@@ -11,6 +11,19 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.2",
+    date: "November 6, 2026",
+    title: "Plex Direct Play Full Camera Resolution & 4K Image Transcode Quality",
+    highlights: [
+      "Eliminated Blurry Plex Photos: Diagnosed that Plex folder listings omit Part keys in summary responses, which previously caused photos to fall back to low-resolution thumbnails (~256x256) upscaled to 1080p.",
+      "Direct Play Native Resolution: Standard image formats (JPEG, PNG, WebP) now direct play full uncompressed original files from Plex Media Server, achieving 100% native camera sensor clarity with zero compression artifacts and zero server transcoding load.",
+      "4K Transcoding Bounds & Upscaling Guard: Upgraded photo transcode bounds to full 4K UHD (3840x2160), set high-fidelity quality (quality=95), and disabled upscaling (upscale=0) to prevent artificial pixel stretching.",
+      "Batch Metadata Part Enrichment: Automatically enriches leaf items with full Media part keys via batch metadata endpoints (/library/metadata/{ids}?includeDetails=1&checkFiles=1) during folder and section traversals.",
+      "RAW & HEIC Auto-Transcode Fallback: Non-browser-native formats (iPhone HEIC/HEIF and camera RAW .CR2, .NEF, .ARW, .DNG) transcode cleanly into crisp 4K JPEGs with direct stream fallback.",
+      "Transcode Preview Tuning: Dynamically adjusts Plex transcode dimensions when rendering small thumbnails in selection modals (<= 600px) while maintaining full 4K/native resolution on ambient display frames.",
+    ],
+  },
+  {
     version: "v0.3.1",
     date: "November 6, 2026",
     title: "Plex Recursive Deep Folder Traversal, Subfolder Discovery & Transcode URL Fix",

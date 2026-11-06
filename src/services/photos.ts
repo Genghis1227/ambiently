@@ -214,7 +214,7 @@ export function isGooglePhotosUrl(url: string): boolean {
 }
 
 /**
- * Tailors image resolution for Google Photos and usercontent CDN URLs.
+ * Tailors image resolution for Google Photos and Plex transcode URLs.
  * Dynamically adjusts requested dimensions to prevent 429 rate limits and eliminate heavy bandwidth spikes.
  */
 export function getOptimizedPhotoUrl(url: string, targetWidth: number = 800): string {
@@ -224,6 +224,15 @@ export function getOptimizedPhotoUrl(url: string, targetWidth: number = 800): st
       return url.replace(/=(w\d+.*|s\d+.*)$/, `=w${targetWidth}`);
     }
     return `${url}=w${targetWidth}`;
+  }
+  if (url.includes('/photo/:/transcode')) {
+    // If requesting a small thumbnail (e.g. 120-600px in picker modal or small card), optimize dimensions
+    if (targetWidth <= 600) {
+      const height = Math.round(targetWidth * 0.75);
+      let updated = url.replace(/([?&])width=\d+/, `$1width=${targetWidth}`);
+      updated = updated.replace(/([?&])height=\d+/, `$1height=${height}`);
+      return updated;
+    }
   }
   return url;
 }

@@ -258,22 +258,124 @@ export async function getPlexPhotoLibraries(
   return directories.filter((d) => d.isPhoto);
 }
 
+function isBrowserCompatibleImage(filePathOrKey: string): boolean {
+  if (!filePathOrKey) return false;
+  const clean = filePathOrKey.split('?')[0].toLowerCase();
+  return /\.(jpe?g|png|webp|gif|bmp|svg)$/i.test(clean);
+}
+
 function buildPlexItemUrl(
   cleanUri: string,
   key: string,
   tokenParam: string,
   fallbackSectionKey?: string
 ): string {
+  const detailParam = 'includeDetails=1&includeAdvanced=1&checkFiles=1';
+  const combinedParam = `${detailParam}&${tokenParam}`;
+
   if (key.startsWith('http://') || key.startsWith('https://')) {
-    return `${key}${key.includes('?') ? '&' : '?'}${tokenParam}`;
+    return `${key}${key.includes('?') ? '&' : '?'}${combinedParam}`;
   }
   if (key.startsWith('/')) {
-    return `${cleanUri}${key}${key.includes('?') ? '&' : '?'}${tokenParam}`;
+    return `${cleanUri}${key}${key.includes('?') ? '&' : '?'}${combinedParam}`;
   }
   if (/^\d+$/.test(key) && fallbackSectionKey) {
-    return `${cleanUri}/library/sections/${fallbackSectionKey}/folder?parent=${key}&${tokenParam}`;
+    return `${cleanUri}/library/sections/${fallbackSectionKey}/folder?parent=${key}&${combinedParam}`;
   }
-  return `${cleanUri}/${key}${key.includes('?') ? '&' : '?'}${tokenParam}`;
+  return `${cleanUri}/${key}${key.includes('?') ? '&' : '?'}${combinedParam}`;
+}
+
+// Enriches Plex photo items by resolving full Media parts when missing from folder/summary responses
+async function enrichPlexPhotoItemsWithParts(
+  items: any[],
+  cleanUri: string,
+  tokenParam: string
+): Promise<any[]> {
+  const needsEnrichment = items.filter(
+    (item) =>
+      item &&
+      item.type !== 'folder' &&
+      item.type !== 'photoalbum' &&
+      item.type !== 'directory' &&
+      item.type !== 'album' &&
+      !item.Media?.[0]?.Part?.[0]?.key &&
+      Boolean(item.ratingKey)
+  );
+
+  if (needsEnrichment.length === 0) {
+    return items;
+  }
+
+  const resolvedMap = new Map<string, any>();
+  const BATCH_SIZE = 25;
+
+  for (let i = 0; i < needsEnrichment.length; i += BATCH_SIZE) {
+    const batch = needsEnrichment.slice(i, i + BATCH_SIZE);
+    const ids = batch.map((item) => item.ratingKey).join(',');
+
+    try {
+      const batchUrl = `${cleanUri}/library/metadata/${ids}?includeDetails=1&checkFiles=1&${tokenParam}`;
+      const res = await fetch(batchUrl, { headers: { Accept: 'application/json' } });
+      if (res.ok) {
+        const data = await res.json();
+        const metadata = data.MediaContainer?.Metadata || [];
+        for (const meta of metadata) {
+          if (meta.ratingKey) {
+            resolvedMap.set(String(meta.ratingKey), meta);
+          }
+        }
+      } else {
+        // Fallback: parallel individual requests for this batch
+        await Promise.allSettled(
+          batch.map(async (item) => {
+            try {
+              const singleUrl = `${cleanUri}/library/metadata/${item.ratingKey}?includeDetails=1&checkFiles=1&${tokenParam}`;
+              const sRes = await fetch(singleUrl, { headers: { Accept: 'application/json' } });
+              if (sRes.ok) {
+                const sData = await sRes.json();
+                const meta = sData.MediaContainer?.Metadata?.[0];
+                if (meta?.ratingKey) {
+                  resolvedMap.set(String(meta.ratingKey), meta);
+                }
+              }
+            } catch {
+              // ignore individual failure
+            }
+          })
+        );
+      }
+    } catch {
+      await Promise.allSettled(
+        batch.map(async (item) => {
+          try {
+            const singleUrl = `${cleanUri}/library/metadata/${item.ratingKey}?includeDetails=1&checkFiles=1&${tokenParam}`;
+            const sRes = await fetch(singleUrl, { headers: { Accept: 'application/json' } });
+            if (sRes.ok) {
+              const sData = await sRes.json();
+              const meta = sData.MediaContainer?.Metadata?.[0];
+              if (meta?.ratingKey) {
+                resolvedMap.set(String(meta.ratingKey), meta);
+              }
+            }
+          } catch {
+            // ignore
+          }
+        })
+      );
+    }
+  }
+
+  return items.map((item) => {
+    if (item?.ratingKey && resolvedMap.has(String(item.ratingKey))) {
+      const enriched = resolvedMap.get(String(item.ratingKey));
+      return {
+        ...item,
+        ...enriched,
+        Media: enriched.Media || item.Media,
+      };
+    }
+    return item;
+  });
 }
 
 function extractPlexPhotoItem(
@@ -302,7 +404,9 @@ function extractPlexPhotoItem(
 
   if (!isPhoto) return null;
 
-  const partKey: string | undefined = item.Media?.[0]?.Part?.[0]?.key;
+  const part = item.Media?.[0]?.Part?.[0];
+  const partKey: string | undefined = part?.key;
+  const filePath: string = part?.file || partKey || '';
   const thumbKey: string | undefined = item.thumb;
   const ratingKey: string | undefined = item.ratingKey;
 
@@ -311,20 +415,30 @@ function extractPlexPhotoItem(
     partKey || thumbKey || (ratingKey ? `/library/metadata/${ratingKey}/thumb` : undefined);
   if (!imageResourcePath) return null;
 
-  // Transcode URL (1920x1080) for sharp smart-display rendering
-  const transcodeUrl = `${cleanUri}/photo/:/transcode?width=1920&height=1080&minSize=1&upscale=1&url=${encodeURIComponent(
-    imageResourcePath
-  )}&${tokenParam}`;
-
-  // Direct raw photo URL fallback in case transcode fails or is throttled on Plex server
+  // Direct raw photo URL (Full original camera resolution, zero transcoding, zero compression artifacts)
   const directUrl = partKey
     ? `${cleanUri}${partKey}${partKey.includes('?') ? '&' : '?'}${tokenParam}`
     : `${cleanUri}${imageResourcePath}${imageResourcePath.includes('?') ? '&' : '?'}${tokenParam}`;
 
+  // High-fidelity 4K transcode URL (3840x2160, quality=95, upscale=0)
+  // - width/height 3840x2160 ensures full 4K UHD resolution on high-DPI/Retina/TV screens
+  // - quality=95 ensures near-lossless clarity
+  // - upscale=0 prevents Plex from artificially stretching small images/thumbnails into blurry pixelated messes
+  const transcodeUrl = `${cleanUri}/photo/:/transcode?width=3840&height=2160&quality=95&upscale=0&url=${encodeURIComponent(
+    imageResourcePath
+  )}&${tokenParam}`;
+
+  // If partKey is present and points to a web-compatible image (JPEG, PNG, WebP), directUrl serves
+  // native uncompressed resolution with instant local streaming and zero Plex transcode overhead.
+  // For RAW / HEIC files, default to transcodeUrl so Plex converts them to high-res JPEG, with directUrl as fallback.
+  const isWebNative = Boolean(partKey && (!filePath || isBrowserCompatibleImage(filePath)));
+  const primaryUrl = isWebNative ? directUrl : transcodeUrl;
+  const fallbackUrl = isWebNative ? transcodeUrl : directUrl;
+
   return {
     id: `plex-${item.ratingKey || partKey || item.key || Math.random().toString(36).slice(2)}`,
-    url: transcodeUrl,
-    fallbackUrl: directUrl,
+    url: primaryUrl,
+    fallbackUrl,
     caption: item.title || item.summary || 'Plex Photo',
     author: item.year ? String(item.year) : undefined,
     date:
@@ -469,14 +583,15 @@ export async function getPlexPhotosFromSection(
     directoryQueue.push({ key: folderOrAlbumKey, depth: 0 });
   } else {
     // 1. When requesting entire section, try type=13 (photos) to flatten hierarchy
-    const allPhotosUrl = `${cleanUri}/library/sections/${sectionKey}/all?type=13&${tokenParam}`;
+    const allPhotosUrl = `${cleanUri}/library/sections/${sectionKey}/all?type=13&includeDetails=1&includeAdvanced=1&checkFiles=1&${tokenParam}`;
     try {
       const res = await fetch(allPhotosUrl, {
         headers: { Accept: 'application/json' },
       });
       if (res.ok) {
         const data = await res.json();
-        const metadataItems = data.MediaContainer?.Metadata || [];
+        const rawMetadata = data.MediaContainer?.Metadata || [];
+        const metadataItems = await enrichPlexPhotoItemsWithParts(rawMetadata, cleanUri, tokenParam);
         for (const item of metadataItems) {
           const photo = extractPlexPhotoItem(item, cleanUri, tokenParam);
           if (photo) addPhoto(photo);
@@ -525,8 +640,9 @@ export async function getPlexPhotosFromSection(
       if (res.status !== 'fulfilled' || !res.value) continue;
       const { data, depth } = res.value;
 
-      // 1. Extract leaf photo items from Metadata
-      const metadata = data.MediaContainer?.Metadata || [];
+      // 1. Extract leaf photo items from Metadata (enriched with full Part keys for sharp high-res rendering)
+      const rawMetadata = data.MediaContainer?.Metadata || [];
+      const metadata = await enrichPlexPhotoItemsWithParts(rawMetadata, cleanUri, tokenParam);
       for (const item of metadata) {
         const photo = extractPlexPhotoItem(item, cleanUri, tokenParam);
         if (photo) {

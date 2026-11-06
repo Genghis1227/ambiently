@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.2] - 2026-11-06
+
+### Fixed
+* **Plex High-Resolution & Direct Play Photo Streaming (`src/services/plex.ts`, `src/services/photos.ts`):**
+  * **Eliminated Blurry Plex Photos:** Diagnosed the root cause of blurry Plex photos—Plex folder listings omit the `Media[0].Part[0].key` in directory responses, causing image URLs to fall back to Plex's tiny pre-rendered thumbnails (`item.thumb`, ~256x256), which were then upscaled (`upscale=1`) to 1080p, resulting in heavily pixelated and blurry images.
+  * **Direct Play Full Camera Resolution:** For all standard web image formats (JPEG, PNG, WebP), `PhotoItem.url` now directly streams the original uncompressed image file via `${cleanUri}${partKey}?X-Plex-Token=...`. Photos display with 100% native camera sensor fidelity with zero compression artifacts and zero CPU transcoding load on the Plex server.
+  * **4K Transcoding & Upscaling Guard:** Upgraded transcode bounds from 1080p to full 4K UHD (`3840x2160`), enabled near-lossless JPEG quality (`quality=95`), and disabled upscaling (`upscale=0`) so images are never artificially stretched beyond their native pixels.
+  * **Batch Metadata Enrichment (`enrichPlexPhotoItemsWithParts`):** When traversing folders or section listings where Plex omits `Media` parts, Ambiently now automatically batch-resolves full item metadata (`/library/metadata/{ids}?includeDetails=1&checkFiles=1`) to ensure every photo is paired with its original media part key.
+  * **RAW & HEIC Seamless Fallback:** For non-browser-native formats (e.g. iPhone HEIC/HEIF, DSLR RAW .CR2, .NEF, .ARW, .DNG), transcode converts them to pristine 4K JPEGs with direct stream as fallback.
+  * **Transcoder URL Optimization (`src/services/photos.ts`):** `getOptimizedPhotoUrl` now dynamically tunes Plex `/photo/:/transcode` requests when loading tiny modal/picker previews (`<= 600px`), saving bandwidth while preserving full 4K resolution on smart-display widgets.
+
+---
+
 ## [0.3.1] - 2026-11-06
 
 ### Fixed
