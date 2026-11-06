@@ -34,11 +34,13 @@ import {
   clearPlexToken,
   getPlexServers,
   getPlexPhotoLibraries,
+  getPlexSectionFolders,
   getPlexPhotosFromSection,
   getBestPlexConnectionUri,
   type PlexPinResponse,
   type PlexServerResource,
   type PlexLibrarySection,
+  type PlexFolderItem,
 } from '../../services/plex';
 import {
   CURATED_CATEGORIES,
@@ -127,6 +129,9 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   const [selectedServer, setSelectedServer] = useState<PlexServerResource | null>(null);
   const [photoSections, setPhotoSections] = useState<PlexLibrarySection[]>([]);
   const [selectedSectionKey, setSelectedSectionKey] = useState<string>('');
+  const [sectionFolders, setSectionFolders] = useState<PlexFolderItem[]>([]);
+  const [selectedFolderKey, setSelectedFolderKey] = useState<string>('');
+  const [isFoldersLoading, setIsFoldersLoading] = useState(false);
   const [plexLoading, setPlexLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
 
@@ -190,6 +195,22 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   };
   const [isWebLoading, setIsWebLoading] = useState(false);
 
+  const loadSectionFolders = async (server: PlexServerResource, token: string, secKey: string) => {
+    const uri = getBestPlexConnectionUri(server);
+    if (!uri || !secKey) return;
+    setIsFoldersLoading(true);
+    setSelectedFolderKey('');
+    try {
+      const folders = await getPlexSectionFolders(uri, server.accessToken || token, secKey);
+      setSectionFolders(folders);
+    } catch (err: any) {
+      console.warn('Could not load section folders:', err);
+      setSectionFolders([]);
+    } finally {
+      setIsFoldersLoading(false);
+    }
+  };
+
   const loadPhotoSections = async (server: PlexServerResource, token: string) => {
     const uri = getBestPlexConnectionUri(server);
     if (!uri) {
@@ -198,15 +219,16 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
     }
     setPlexLoading(true);
     try {
-      const sections = await getPlexPhotoLibraries(uri, server.accessToken || token);
+      const sections = await getPlexPhotoLibraries(uri, server.accessToken || token, true);
       setPhotoSections(sections);
       if (sections.length > 0) {
         setSelectedSectionKey(sections[0].key);
+        loadSectionFolders(server, token, sections[0].key);
       } else {
-        setStatusMessage("No Photo libraries found on this Plex server.");
+        setStatusMessage("No libraries found on this Plex server.");
       }
     } catch (err: any) {
-      setStatusMessage(`Error fetching photo sections: ${err.message}`);
+      setStatusMessage(`Error fetching library sections: ${err.message}`);
     } finally {
       setPlexLoading(false);
     }
@@ -286,28 +308,37 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
     setServers([]);
     setSelectedServer(null);
     setPhotoSections([]);
+    setSectionFolders([]);
+    setSelectedSectionKey('');
+    setSelectedFolderKey('');
     setStatusMessage('Plex disconnected.');
   };
-
-
 
   const handleLoadPlexPhotos = async () => {
     if (!selectedServer || !selectedSectionKey || !plexToken) return;
     const uri = getBestPlexConnectionUri(selectedServer);
     setPlexLoading(true);
     try {
+      const currentSection = photoSections.find((s) => s.key === selectedSectionKey);
+      const currentFolder = sectionFolders.find((f) => f.key === selectedFolderKey);
+
       const photos = await getPlexPhotosFromSection(
         uri,
         selectedServer.accessToken || plexToken,
-        selectedSectionKey
+        selectedSectionKey,
+        selectedFolderKey
       );
       if (photos.length > 0) {
-        onPhotosLoaded(photos, `Plex (${selectedServer.name})`, undefined, 'plex', applyToAll);
+        const sectionTitle = currentSection?.title || 'Photos';
+        const folderTitle = currentFolder ? ` / ${currentFolder.title}` : '';
+        const sourceLabel = `Plex (${selectedServer.name} - ${sectionTitle}${folderTitle})`;
+
+        onPhotosLoaded(photos, sourceLabel, undefined, 'plex', applyToAll);
         cachePhotosLocally(photos);
         setStatusMessage(`Successfully loaded ${photos.length} photos from Plex!`);
         setTimeout(() => onClose(), 1200);
       } else {
-        setStatusMessage('No photos found in this library section.');
+        setStatusMessage('No photos found in this library section or folder.');
       }
     } catch (err: any) {
       setStatusMessage(`Error streaming photos: ${err.message}`);
@@ -715,25 +746,110 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
 
                   {/* Photo Library Picker */}
                   {photoSections.length > 0 ? (
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-gray-300">Photo Library</label>
-                      <select
-                        value={selectedSectionKey}
-                        onChange={(e) => setSelectedSectionKey(e.target.value)}
-                        className="w-full bg-gray-950 border border-gray-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-blue-500"
-                      >
-                        {photoSections.map((sec) => (
-                          <option key={sec.key} value={sec.key}>
-                            📷 {sec.title}
-                          </option>
-                        ))}
-                      </select>
+                    <div className="space-y-3">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-semibold text-gray-300">Photo Library</label>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-gray-400">
+                              {photoSections.length} {photoSections.length === 1 ? 'library' : 'libraries'} found
+                            </span>
+                            {selectedServer && plexToken && (
+                              <button
+                                type="button"
+                                onClick={() => loadPhotoSections(selectedServer, plexToken)}
+                                disabled={plexLoading}
+                                className="p-0.5 text-gray-400 hover:text-white transition-colors cursor-pointer"
+                                title="Refresh library list"
+                              >
+                                <RefreshCw className={`w-3 h-3 ${plexLoading ? 'animate-spin text-blue-400' : ''}`} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <select
+                          value={selectedSectionKey}
+                          onChange={(e) => {
+                            setSelectedSectionKey(e.target.value);
+                            if (selectedServer && plexToken) {
+                              loadSectionFolders(selectedServer, plexToken, e.target.value);
+                            }
+                          }}
+                          className="w-full bg-gray-950 border border-gray-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                        >
+                          {photoSections.some((s) => s.isPhoto) && (
+                            <optgroup label="Photo & Personal Media Libraries">
+                              {photoSections
+                                .filter((s) => s.isPhoto)
+                                .map((sec) => (
+                                  <option key={sec.key} value={sec.key}>
+                                    📷 {sec.title}
+                                  </option>
+                                ))}
+                            </optgroup>
+                          )}
+                          {photoSections.some((s) => !s.isPhoto) && (
+                            <optgroup label="Other Server Libraries">
+                              {photoSections
+                                .filter((s) => !s.isPhoto)
+                                .map((sec) => (
+                                  <option key={sec.key} value={sec.key}>
+                                    📁 {sec.title} ({sec.type || 'media'})
+                                  </option>
+                                ))}
+                            </optgroup>
+                          )}
+                        </select>
+                      </div>
+
+                      {/* Optional Subfolder / Album Picker */}
+                      {(sectionFolders.length > 0 || isFoldersLoading) && (
+                        <div className="space-y-1.5 animate-fadeIn">
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs font-semibold text-gray-300">Folder / Album (Optional)</label>
+                            <span className="text-[10px] text-gray-400 flex items-center gap-1">
+                              {isFoldersLoading ? (
+                                <>
+                                  <RefreshCw className="w-2.5 h-2.5 animate-spin text-blue-400" />
+                                  <span>Scanning folders...</span>
+                                </>
+                              ) : (
+                                `${sectionFolders.length} subfolder${sectionFolders.length !== 1 ? 's' : ''} available`
+                              )}
+                            </span>
+                          </div>
+                          <select
+                            value={selectedFolderKey}
+                            onChange={(e) => setSelectedFolderKey(e.target.value)}
+                            disabled={isFoldersLoading}
+                            className="w-full bg-gray-950 border border-gray-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                          >
+                            <option value="">🌟 Entire Library (All Photos)</option>
+                            {sectionFolders.map((f) => (
+                              <option key={f.key} value={f.key}>
+                                📁 {f.title}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                     </div>
                   ) : (
-                    <div className="text-xs text-gray-500 italic p-2 bg-gray-950 rounded-lg">
-                      {plexLoading
-                        ? 'Scanning for photo libraries...'
-                        : 'No Photo libraries detected on this server.'}
+                    <div className="text-xs text-gray-500 italic p-2 bg-gray-950 rounded-lg flex items-center justify-between">
+                      <span>
+                        {plexLoading
+                          ? 'Scanning for libraries...'
+                          : 'No libraries detected on this server.'}
+                      </span>
+                      {selectedServer && plexToken && !plexLoading && (
+                        <button
+                          type="button"
+                          onClick={() => loadPhotoSections(selectedServer, plexToken)}
+                          className="text-[11px] text-blue-400 hover:text-blue-300 underline cursor-pointer"
+                        >
+                          Retry Scan
+                        </button>
+                      )}
                     </div>
                   )}
 

@@ -53,6 +53,14 @@ export interface PlexLibrarySection {
   uuid?: string;
   updatedAt?: number;
   createdAt?: number;
+  isPhoto?: boolean;
+}
+
+export interface PlexFolderItem {
+  key: string;
+  title: string;
+  type?: string;
+  thumb?: string;
 }
 
 // Ensure unique persistent client identifier for this Ambiently kiosk
@@ -184,10 +192,36 @@ export function getBestPlexConnectionUri(server: PlexServerResource): string {
   return server.connections[0].uri;
 }
 
-// 5. Fetch Photo Libraries on selected server
+// Detect photo/image and personal media libraries flexibly (supporting 'photo', 'photos', 'picture', 'pictures', 'image', 'photoalbum', 'homevideo', scanner/agent names, or title keywords)
+export function isLikelyPhotoLibrary(section: Partial<PlexLibrarySection>): boolean {
+  const t = (section.type || '').toLowerCase();
+  const title = (section.title || '').toLowerCase();
+  const scanner = (section.scanner || '').toLowerCase();
+  const agent = (section.agent || '').toLowerCase();
+
+  const photoTypes = new Set(['photo', 'photos', 'picture', 'pictures', 'image', 'images', 'photoalbum']);
+  if (photoTypes.has(t)) return true;
+  if (scanner.includes('photo') || agent.includes('photo')) return true;
+  if (t === 'homevideo') return true;
+  if (
+    title.includes('photo') ||
+    title.includes('picture') ||
+    title.includes('album') ||
+    title.includes('camera') ||
+    title.includes('pic') ||
+    title.includes('family') ||
+    title.includes('wallpaper')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+// 5. Fetch Photo & Media Libraries on selected server
 export async function getPlexPhotoLibraries(
   serverUri: string,
-  serverAccessToken: string
+  serverAccessToken: string,
+  includeAll = true
 ): Promise<PlexLibrarySection[]> {
   const cleanUri = serverUri.replace(/\/$/, '');
   const url = `${cleanUri}/library/sections?X-Plex-Token=${encodeURIComponent(serverAccessToken)}`;
@@ -204,50 +238,164 @@ export async function getPlexPhotoLibraries(
   }
 
   const data = await res.json();
-  const directories: PlexLibrarySection[] = data.MediaContainer?.Directory || [];
-  return directories.filter((d) => d.type === 'photo');
+  const rawDirectories: PlexLibrarySection[] = data.MediaContainer?.Directory || [];
+  const directories: PlexLibrarySection[] = rawDirectories.map((d) => ({
+    ...d,
+    isPhoto: isLikelyPhotoLibrary(d),
+  }));
+
+  if (includeAll) {
+    // Sort photo libraries first, then alphabetically
+    return directories.sort((a, b) => {
+      if (a.isPhoto && !b.isPhoto) return -1;
+      if (!a.isPhoto && b.isPhoto) return 1;
+      return a.title.localeCompare(b.title);
+    });
+  }
+
+  return directories.filter((d) => d.isPhoto);
 }
 
-// 6. Fetch photos from a section and generate transcode URLs
-export async function getPlexPhotosFromSection(
+// Discover subfolders or albums within a library section
+export async function getPlexSectionFolders(
   serverUri: string,
   serverAccessToken: string,
   sectionKey: string
+): Promise<PlexFolderItem[]> {
+  const cleanUri = serverUri.replace(/\/$/, '');
+  const tokenParam = `X-Plex-Token=${encodeURIComponent(serverAccessToken)}`;
+  const folders: PlexFolderItem[] = [];
+
+  // 1. Try folder hierarchy endpoint: /library/sections/{id}/folder
+  try {
+    const folderRes = await fetch(`${cleanUri}/library/sections/${sectionKey}/folder?${tokenParam}`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (folderRes.ok) {
+      const folderData = await folderRes.json();
+      const dirs = folderData.MediaContainer?.Directory || [];
+      for (const d of dirs) {
+        if (d.title && d.key) {
+          folders.push({
+            key: d.key,
+            title: d.title,
+            type: d.type || 'folder',
+            thumb: d.thumb,
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Could not fetch section folders:', err);
+  }
+
+  // 2. Also try albums endpoint if no folders found or to complement: /library/sections/{id}/all?type=14
+  if (folders.length === 0) {
+    try {
+      const albumRes = await fetch(`${cleanUri}/library/sections/${sectionKey}/all?type=14&${tokenParam}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (albumRes.ok) {
+        const albumData = await albumRes.json();
+        const dirs = albumData.MediaContainer?.Metadata || albumData.MediaContainer?.Directory || [];
+        for (const d of dirs) {
+          if (d.title && (d.key || d.ratingKey)) {
+            folders.push({
+              key: d.key || `/library/metadata/${d.ratingKey}/children`,
+              title: d.title,
+              type: 'photoalbum',
+              thumb: d.thumb,
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Could not fetch section albums:', err);
+    }
+  }
+
+  return folders;
+}
+
+// 6. Fetch photos from a section (or specific subfolder/album) and generate transcode URLs
+export async function getPlexPhotosFromSection(
+  serverUri: string,
+  serverAccessToken: string,
+  sectionKey: string,
+  folderOrAlbumKey?: string
 ): Promise<PhotoItem[]> {
   const cleanUri = serverUri.replace(/\/$/, '');
-  const url = `${cleanUri}/library/sections/${sectionKey}/all?X-Plex-Token=${encodeURIComponent(
-    serverAccessToken
-  )}`;
+  const tokenParam = `X-Plex-Token=${encodeURIComponent(serverAccessToken)}`;
 
-  const res = await fetch(url, {
+  let url: string;
+  const isSpecificFolder = Boolean(folderOrAlbumKey && folderOrAlbumKey.trim() !== '' && folderOrAlbumKey !== 'all');
+
+  if (isSpecificFolder && folderOrAlbumKey) {
+    const cleanFolderKey = folderOrAlbumKey.startsWith('/') ? folderOrAlbumKey : `/${folderOrAlbumKey}`;
+    url = `${cleanUri}${cleanFolderKey}${cleanFolderKey.includes('?') ? '&' : '?'}${tokenParam}`;
+  } else {
+    // When requesting entire section, try type=13 (photo) to flatten hierarchy
+    url = `${cleanUri}/library/sections/${sectionKey}/all?type=13&${tokenParam}`;
+  }
+
+  let res = await fetch(url, {
     method: 'GET',
     headers: {
       Accept: 'application/json',
     },
   });
 
-  if (!res.ok) {
-    throw new Error(`Failed to fetch section photos: ${res.statusText}`);
+  let data: any = null;
+  if (res.ok) {
+    data = await res.json();
   }
 
-  const data = await res.json();
-  const metadata = data.MediaContainer?.Metadata || [];
+  // Fallback if type=13 was empty or returned nothing (e.g. for Home Video or custom sections)
+  if (!isSpecificFolder && (!data?.MediaContainer?.Metadata?.length && !data?.MediaContainer?.Directory?.length)) {
+    const fallbackUrl = `${cleanUri}/library/sections/${sectionKey}/all?${tokenParam}`;
+    try {
+      const fallbackRes = await fetch(fallbackUrl, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+      });
+      if (fallbackRes.ok) {
+        data = await fallbackRes.json();
+      }
+    } catch (e) {
+      console.warn('Plex section fallback fetch failed:', e);
+    }
+  }
+
+  if (!data) {
+    throw new Error(`Failed to fetch photos: ${res.statusText}`);
+  }
+
+  const items = [
+    ...(data.MediaContainer?.Metadata || []),
+    ...(data.MediaContainer?.Directory || []),
+  ];
 
   const photos: PhotoItem[] = [];
-  for (const item of metadata) {
-    // Only process photo items with a key
-    if (item.type === 'photo' && item.key) {
+  for (const item of items) {
+    const isPhotoItem =
+      item.type === 'photo' ||
+      item.type === 'picture' ||
+      item.type === 'image' ||
+      (!item.type && (item.thumb || item.key));
+
+    const itemPath = item.key || item.thumb;
+    if (isPhotoItem && itemPath) {
       // Build Plex transcode URL for crisp smart-display presentation
       const transcodeUrl = `${cleanUri}/photo/:/transcode?width=1920&height=1080&minSize=1&upscale=1&url=${encodeURIComponent(
-        item.key
-      )}&X-Plex-Token=${encodeURIComponent(serverAccessToken)}`;
+        itemPath
+      )}&${tokenParam}`;
 
       photos.push({
-        id: `plex-${item.ratingKey || item.key}`,
+        id: `plex-${item.ratingKey || item.key || Math.random().toString(36).slice(2)}`,
         url: transcodeUrl,
         caption: item.title || item.summary || 'Plex Photo',
         author: item.year ? String(item.year) : undefined,
-        date: item.originallyAvailableAt,
+        date: item.originallyAvailableAt || (item.addedAt ? new Date(item.addedAt * 1000).toLocaleDateString() : undefined),
         source: 'plex',
       });
     }
