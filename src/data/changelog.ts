@@ -11,6 +11,18 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.1.24",
+    date: "November 5, 2026",
+    title: "Adaptive RSS Text Sizing & Multi-Column Layout, Plus Dynamic Release Badge",
+    highlights: [
+      "Adaptive Container-Aware Typography: Article titles and descriptions adaptively scale across 4 sizing tiers (Compact, Normal, Large, Jumbo) based on measured tile width and height.",
+      "Multi-Column Magazine Grid: Wide tiles (>= 580px) automatically flow into 2 columns, and fullscreen/widescreen displays (>= 1050px) flow into 3 columns for balanced reading.",
+      "Article Publication Timestamps: Added relative time formatting (e.g. '2h ago', 'Yesterday', or short date) to article cards.",
+      "Tile Readability Selector: Added manual Text Size & Readability override in Tile Settings (Adaptive, Compact, Normal, Large, Jumbo).",
+      "Dynamic GitHub Release Badge: Switched README badge to Shields.io's dynamic package.json reader so the repository badge always matches package.json automatically.",
+    ],
+  },
+  {
     version: "v0.1.23",
     date: "November 5, 2026",
     title: "Sticky Note Toolbar Plus Badge Indicator",

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.24] - 2026-11-05
+
+### Added
+* **Adaptive RSS Typography & Multi-Column Layout (`RssWidget.tsx`, `WidgetSettingsModal.tsx`, `Corkboard.tsx`, `MobileCompanion.tsx`):**
+  * Implemented responsive `ResizeObserver` container measurement that adaptively scales article typography across 4 sizing tiers (`sm`, `base`, `lg`, `xl`) to ensure high readability from small tiles to large wall displays and fullscreen kiosk mode.
+  * Added responsive multi-column magazine grid: wide tiles (>= 580px) automatically flow into 2 columns, and fullscreen/widescreen displays (>= 1050px) flow into 3 columns.
+  * Added article timestamps (`2h ago`, `Yesterday`, or formatted date).
+  * Added a **Text Size & Readability** selector in Tile Settings (`Adaptive`, `Compact`, `Normal`, `Large`, `Jumbo`).
+* **Dynamic README Release Badge (`README.md`):**
+  * Switched static release badge to Shields.io's dynamic GitHub package.json badge integration so the README badge updates automatically on every release without manual intervention (#38).
+
+---
+
 ## [0.1.23] - 2026-11-05
 
 ### Added
