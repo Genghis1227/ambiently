@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.5] - 2026-11-06
+
+### Added
+* **Continuous Night Schedule Window Evaluation (`src/utils/nightMode.ts`, `src/App.tsx`):**
+  * Replaced exact-minute check with continuous `isTimeInNightWindow()` evaluation, correctly handling schedules that cross midnight (e.g. `22:00` -> `07:00`).
+  * Booting, reloading, or interacting with the kiosk at 23:30 or 03:00 reliably recognizes that it is within the active night schedule.
+* **2-Minute Inactivity Wake Re-Engage (`src/App.tsx`):**
+  * Waking the display during night mode temporarily disengages the overlay and begins an inactivity timer (defaulting to 2 minutes).
+  * Active screen interactions (touches, clicks, keypresses) continuously reset and extend the 2-minute timer while in use.
+  * Once idle for 2 minutes, if the current time is still within the night window, Night Mode seamlessly re-engages without requiring manual toggling.
+  * At morning wake time (`07:00`), Night Mode automatically disengages for the day.
+* **Configurable Wake Timeout Options in Settings (`src/components/settings/SettingsModal.tsx`, `src/types/dashboard.ts`):**
+  * Added selectable wake timeout under **Settings → Kiosk & Ambient Display**: `1 min`, `2 mins (Default)`, `5 mins`, `10 mins`, or `Until Morning`.
+* **Real-Time Cross-Device Auto-Sync (`src/services/supabase.ts`, `src/store/dashboardStore.ts`, `src/App.tsx`):**
+  * Added 1.2-second debounced background auto-push to Supabase Cloud on any tile, note, canvas, or setting mutation.
+  * Extended Supabase Realtime WebSocket subscription to listen for postgres changes on `widgets`, `tabs`, and `notes`, broadcasting changes to other devices in real time (< 1.5s).
+  * Added initial cloud pull on startup, on-wake (`visibilitychange`) sync, and 60-second fallback polling for always-on wall displays.
+* **12 New Canvas Icons (`src/data/canvasIcons.ts`, `src/components/dock/NavigationDock.tsx`, `src/components/dock/CreateCanvasModal.tsx`):**
+  * Added `Utensils` (Kitchen), `ChefHat` (Cooking), `Briefcase` (Work), `GraduationCap` (School), `Dumbbell` (Fitness), `ShoppingCart` (Shopping), `Compass` (Travel), `Baby` (Family), `Gamepad2` (Gaming), `CloudSun` (Weather), `Lightbulb` (Ideas), and `Bell` (Alerts).
+
+---
+
+## [0.2.4] - 2026-11-06
+
+### Added
+* **Multi-Day Calendar Layout Choice — Timeline Grid vs. Chronological Cards (`src/components/widgets/CalendarWidget.tsx`):**
+  * Added user-selectable layout toggle for 3-day and week calendar views: choose between a 24-Hour Timeline Grid (with hour lines, time gutter, and red current-time marker) or Chronological Cards (cards stacked in order of time).
+  * Added 1-click `[ Cards | Timeline ]` toggle button directly in the calendar widget header and persistent preference in widget settings.
+* **Mosaic Photo Widget with Ken Burns Zoom & Focus Interactivity (`src/components/widgets/PhotoWidget.tsx`):**
+  * Added optional Ken Burns cinematic zoom and slow pan for Mosaic collage photo frames.
+  * Added interactive click-to-focus on quadrants with smooth transition indicators.
+* **Realtime App Version Update Detection & 1-Click Refresh Banner (`src/services/updateChecker.ts`, `src/components/common/UpdateNotificationBanner.tsx`):**
+  * Built automatic version polling against `/version.json` and Service Worker status every 5 minutes and on screen wake.
+  * Floating notification banner alerts users when a new version is published with a 1-click "Refresh Now" action.
+  * Added dedicated refresh button in the navigation dock and settings system tab with notification badge when updates are ready.
+* **Expanded OTP Verification (`src/services/supabase.ts`, `src/components/settings/SettingsModal.tsx`):**
+  * Expanded OTP verification input to support 6 to 10 digit Supabase authentication codes alongside magic links.
+* **Canvas Theme & Wallpaper Cloud Sync (`src/services/supabase.ts`, `src/store/dashboardStore.ts`):**
+  * Preserved per-canvas themes, custom wallpaper URLs, and dim levels across Supabase Cloud sync.
+* **PIN Lock Cleanup (`src/services/fileSync.ts`, `src/store/dashboardStore.ts`):**
+  * Purged lingering PIN lock states during backup export, restore, and PIN disable.
+
+---
+
 ## [0.2.3] - 2026-11-05
 
 ### Added

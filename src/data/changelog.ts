@@ -11,6 +11,19 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.2.5",
+    date: "November 6, 2026",
+    title: "Smart Night Schedule Window, 2-Min Wake Inactivity Re-Engage, Real-Time Cloud Sync & 12 Canvas Icons",
+    highlights: [
+      "Continuous Night Schedule Window: Replaced minute-exact trigger with continuous isTimeInNightWindow() evaluation, reliably detecting night schedules crossing midnight (e.g. 22:00 -> 07:00) on boot, refresh, or late-night interactions at 23:30.",
+      "2-Minute Wake Inactivity Re-Engage: Tapping the screen during Night Mode wakes the display and begins an inactivity timer (default 2 minutes). Active screen interactions (touches, clicks, keypresses) reset the timer, and once left idle during the night window, Night Mode seamlessly re-engages.",
+      "Configurable Wake Timeout: Added user-selectable wake timeout options in Settings > Kiosk & Ambient Display (1 min, 2 mins [Default], 5 mins, 10 mins, or Keep Awake Until Morning).",
+      "Morning Auto-Disengage: Night Mode automatically turns off for the day as soon as the scheduled morning wake time arrives (07:00).",
+      "Real-Time Multi-Machine Auto-Sync: Added background auto-push with 1.2s debouncing and live Supabase Realtime WebSocket listeners for widgets, tabs, and notes so changes on one device broadcast immediately to other kiosks.",
+      "12 New Canvas Icons: Added Utensils (Kitchen), ChefHat (Cooking), Briefcase (Work), GraduationCap (School), Dumbbell (Fitness), ShoppingCart (Shopping), Compass (Travel), Baby (Family), Gamepad2 (Gaming), CloudSun (Weather), Lightbulb (Ideas), and Bell (Alerts).",
+    ],
+  },
+  {
     version: "v0.2.4",
     date: "November 6, 2026",
     title: "Calendar Timeline vs Cards Option, Mosaic Ken Burns, Panel Refresh & Update Alerts",
