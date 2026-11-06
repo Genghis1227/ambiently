@@ -15,6 +15,7 @@ import {
   Folder,
   Clock,
   LayoutGrid,
+  Newspaper,
 } from 'lucide-react';
 
 export interface CanvasIconOption {
@@ -25,6 +26,7 @@ export interface CanvasIconOption {
 
 export const CANVAS_ICONS: CanvasIconOption[] = [
   { id: 'Pin', label: 'Pin', icon: Pin },
+  { id: 'Newspaper', label: 'Newsstand', icon: Newspaper },
   { id: 'Image', label: 'Photos', icon: Image },
   { id: 'Home', label: 'Home', icon: Home },
   { id: 'Calendar', label: 'Calendar', icon: Calendar },
