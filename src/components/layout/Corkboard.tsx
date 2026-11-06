@@ -2252,8 +2252,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               isCommonSource={isUsingCommon}
               initialWebUrls={
                 (isUsingCommon
-                  ? settings.commonPhotoSourceUrl || activePhotoWidget.config?.sourceUrl
-                  : activePhotoWidget.config?.sourceUrl || settings.commonPhotoSourceUrl) || ''
+                  ? (settings.commonPhotoSourceType === 'web' ? settings.commonPhotoSourceUrl : '')
+                  : (activePhotoWidget.config?.sourceType === 'web' ? activePhotoWidget.config?.sourceUrl : '')) || ''
               }
               currentSourceLabel={
                 isUsingCommon
@@ -2272,7 +2272,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   : (activePhotoWidget.config?.customPhotos?.length ?? settings.commonPhotos?.length)
               }
               onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType, applyToAll) => {
-                if (applyToAll || isUsingCommon) {
+                if (applyToAll) {
                   applyCommonPhotosToAllWidgets(newPhotos, sourceName, sourceUrl, sourceType);
                 } else if (onUpdateWidget && newPhotos.length > 0) {
                   onUpdateWidget(activePhotoWidget.id, {
@@ -2281,8 +2281,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                       useCommonSource: false,
                       customPhotos: newPhotos,
                       sourceLabel: sourceName,
-                      sourceUrl: sourceUrl !== undefined ? sourceUrl : activePhotoWidget.config?.sourceUrl,
-                      sourceType: sourceType !== undefined ? sourceType : activePhotoWidget.config?.sourceType,
+                      sourceUrl: sourceType === 'web' ? (sourceUrl || '') : undefined,
+                      sourceType: sourceType || activePhotoWidget.config?.sourceType,
                     },
                   });
                 }

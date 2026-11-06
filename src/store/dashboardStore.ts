@@ -385,7 +385,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       ...get().settings,
       commonPhotos: photos,
       commonPhotoSourceLabel: sourceLabel,
-      commonPhotoSourceUrl: sourceUrl,
+      commonPhotoSourceUrl: sourceType === 'web' ? (sourceUrl || '') : undefined,
       commonPhotoSourceType: sourceType,
       updated_at: new Date().toISOString(),
     };
@@ -404,7 +404,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
             ...w.config,
             useCommonSource: true,
             sourceLabel: sourceLabel || w.config?.sourceLabel,
-            sourceUrl: sourceUrl || w.config?.sourceUrl,
+            sourceUrl: sourceType === 'web' ? (sourceUrl || '') : undefined,
             sourceType: sourceType || w.config?.sourceType,
           },
           updated_at: new Date().toISOString(),

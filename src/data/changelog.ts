@@ -13,11 +13,13 @@ export const RELEASES: ReleaseEntry[] = [
   {
     version: "v0.2.9",
     date: "November 6, 2026",
-    title: "Multiple Plex Photo Library Discovery, Subfolder/Album Navigation & Flexible Classification",
+    title: "Multiple Plex Photo Library Discovery, Subfolder Drill-Down & Contextual Source Scoping",
     highlights: [
       "Multiple Photo Library Discovery: Removed overly restrictive library type filtering, allowing Ambiently to discover and surface all photo, picture, and personal media libraries configured on the connected Plex Media Server.",
       "Categorized Library Selection: Organized Plex libraries into distinct groups in the selector ('Photo & Personal Media Libraries' vs 'Other Server Libraries'), ensuring no personal photo collections or home video dumps are hidden.",
       "Subfolder & Album Drill-Down: Added automatic subfolder and album scanning for the selected library section, allowing users to stream photos from specific folders/albums (e.g., Vacation, Family) or the entire library.",
+      "Contextual Photo Source Display: Replaced confusing stale Google Drive links with type-aware source badges (📺 Plex Media Server or 📁 Local Storage), guaranteeing web URLs only show for Web/Google Drive sources.",
+      "Per-Widget vs Shared Source Scoping: Allowed users to apply selected albums to all photo frames or only the active widget, enabling each tile to stream from different Plex libraries or folders independently.",
       "Live Scan & 1-Click Library Refresh: Added a quick-refresh button and scanning indicators so users can update their server library list immediately without having to disconnect and re-pair.",
     ],
   },

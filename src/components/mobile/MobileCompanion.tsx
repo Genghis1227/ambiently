@@ -930,8 +930,8 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
               isCommonSource={isUsingCommon}
               initialWebUrls={
                 (isUsingCommon
-                  ? settings.commonPhotoSourceUrl || activePhotoWidget.config?.sourceUrl
-                  : activePhotoWidget.config?.sourceUrl || settings.commonPhotoSourceUrl) || ''
+                  ? (settings.commonPhotoSourceType === 'web' ? settings.commonPhotoSourceUrl : '')
+                  : (activePhotoWidget.config?.sourceType === 'web' ? activePhotoWidget.config?.sourceUrl : '')) || ''
               }
               currentSourceLabel={
                 isUsingCommon
@@ -950,7 +950,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
                   : (activePhotoWidget.config?.customPhotos?.length ?? settings.commonPhotos?.length)
               }
               onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType, applyToAll) => {
-                if (applyToAll || isUsingCommon) {
+                if (applyToAll) {
                   applyCommonPhotosToAllWidgets(newPhotos, sourceName, sourceUrl, sourceType);
                 } else if (onUpdateWidget && newPhotos.length > 0) {
                   onUpdateWidget(activePhotoWidget.id, {
@@ -959,8 +959,8 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
                       useCommonSource: false,
                       customPhotos: newPhotos,
                       sourceLabel: sourceName,
-                      sourceUrl: sourceUrl !== undefined ? sourceUrl : activePhotoWidget.config?.sourceUrl,
-                      sourceType: sourceType !== undefined ? sourceType : activePhotoWidget.config?.sourceType,
+                      sourceUrl: sourceType === 'web' ? (sourceUrl || '') : undefined,
+                      sourceType: sourceType || activePhotoWidget.config?.sourceType,
                     },
                   });
                 }

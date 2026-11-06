@@ -1922,7 +1922,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
             isOpen={isCommonPhotoModalOpen}
             onClose={() => setIsCommonPhotoModalOpen(false)}
             isCommonSource={true}
-            initialWebUrls={settings.commonPhotoSourceUrl || ''}
+            initialWebUrls={settings.commonPhotoSourceType === 'web' ? (settings.commonPhotoSourceUrl || '') : ''}
             currentSourceLabel={settings.commonPhotoSourceLabel}
             currentSourceType={settings.commonPhotoSourceType}
             currentPhotoCount={settings.commonPhotos?.length}

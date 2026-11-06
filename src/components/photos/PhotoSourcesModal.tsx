@@ -1362,24 +1362,22 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
 
         {/* Modal Footer with Common Library Toggle */}
         <div className="px-5 py-3 border-t border-gray-800 bg-gray-950/70 flex items-center justify-between text-xs">
-          {isCommonSource ? (
-            <div className="flex items-center gap-2 text-blue-400">
-              <span className="inline-block w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-              <span>Updating Shared Board Library (applies to all shared photo frames)</span>
-            </div>
-          ) : (
-            <label className="flex items-center gap-2.5 cursor-pointer select-none text-gray-300 hover:text-white">
-              <input
-                type="checkbox"
-                checked={applyToAll}
-                onChange={(e) => setApplyToAll(e.target.checked)}
-                className="w-4 h-4 rounded border-gray-700 bg-gray-900 text-blue-600 focus:ring-blue-500 cursor-pointer"
-              />
-              <span className="font-medium">
-                Set as Common Library (apply this album to all photo widgets on your boards)
-              </span>
-            </label>
-          )}
+          <label className="flex items-center gap-2.5 cursor-pointer select-none text-gray-300 hover:text-white">
+            <input
+              type="checkbox"
+              checked={applyToAll}
+              onChange={(e) => setApplyToAll(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-700 bg-gray-900 text-blue-600 focus:ring-blue-500 cursor-pointer"
+            />
+            <span className="font-medium">
+              {applyToAll
+                ? 'Apply to all photo frames (Shared Board Library)'
+                : 'Apply to this widget only (Tile-Specific Album)'}
+            </span>
+          </label>
+          <span className="text-[10px] text-gray-500">
+            {applyToAll ? 'Syncs across all frames' : 'Independent album'}
+          </span>
         </div>
       </div>
     </div>
