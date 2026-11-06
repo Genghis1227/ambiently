@@ -36,9 +36,12 @@ import { db } from '../../services/db';
 import { useDashboardStore } from '../../store/dashboardStore';
 import {
   openLocalFileBinding,
+  reconnectStoredFile,
+  disconnectLocalFile,
   downloadBackupFile,
   parseAndValidateBackup,
   restoreBackupToDatabase,
+  useFileSync,
 } from '../../services/fileSync';
 import {
   getCurrentUser,
@@ -86,7 +89,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
     applyCommonPhotosToAllWidgets,
     updateSettings,
     setPinLock,
-    saveLocalBackup,
+    saveLocalBackupImmediate,
     addTab,
     updateTab,
     setHomeTab,
@@ -95,6 +98,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
   } = useDashboardStore();
 
   const [activeTab, setActiveTab] = useState<SettingsTabId>(initialTab);
+  const fileSync = useFileSync();
 
   const [pinInput, setPinInput] = useState('');
   const [pinSuccess, setPinSuccess] = useState(false);
@@ -222,9 +226,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
   };
 
   const handleBindLocalFile = async () => {
-    const res = await openLocalFileBinding();
-    if (res.success) {
-      await saveLocalBackup();
+    if (fileSync.status === 'needs_permission') {
+      const res = await reconnectStoredFile();
+      if (res.success) {
+        await saveLocalBackupImmediate();
+      }
+    } else {
+      const res = await openLocalFileBinding();
+      if (res.success) {
+        await saveLocalBackupImmediate();
+      }
     }
   };
 
@@ -1281,12 +1292,63 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                 <button
                   type="button"
                   onClick={handleBindLocalFile}
-                  className="py-2 px-3 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                  title={
+                    fileSync.status === 'connected'
+                      ? `Auto-syncing to ${fileSync.fileName}. Click to change file.`
+                      : fileSync.status === 'needs_permission'
+                      ? `Click to reconnect auto-sync to ${fileSync.fileName}`
+                      : 'Mirror dashboard to a local file on your computer'
+                  }
+                  className={`py-2 px-3 rounded-lg border text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    fileSync.status === 'connected'
+                      ? 'bg-emerald-600/25 hover:bg-emerald-600/35 text-emerald-300 border-emerald-500/40'
+                      : fileSync.status === 'needs_permission'
+                      ? 'bg-amber-500/25 hover:bg-amber-500/35 text-amber-300 border-amber-500/40 animate-pulse'
+                      : 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border-emerald-500/30'
+                  }`}
                 >
                   <FolderSync className="w-3.5 h-3.5" />
-                  <span>PC Auto-Sync</span>
+                  <span>
+                    {fileSync.status === 'connected'
+                      ? 'PC Sync Active'
+                      : fileSync.status === 'needs_permission'
+                      ? 'Reconnect Sync'
+                      : 'PC Auto-Sync'}
+                  </span>
                 </button>
               </div>
+
+              {/* Live PC Auto-Sync Status Details */}
+              {fileSync.status === 'connected' && (
+                <div className="flex items-center justify-between text-[11px] text-emerald-400/90 pt-1">
+                  <span>
+                    Live mirroring to <strong className="font-mono text-white">{fileSync.fileName}</strong>
+                    {fileSync.lastSyncedAt && ` (${new Date(fileSync.lastSyncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={disconnectLocalFile}
+                    className="text-gray-400 hover:text-red-400 text-[10px] underline cursor-pointer"
+                  >
+                    Disconnect
+                  </button>
+                </div>
+              )}
+
+              {fileSync.status === 'needs_permission' && (
+                <div className="flex items-center justify-between text-[11px] text-amber-300/90 pt-1">
+                  <span>
+                    Previous file: <strong className="font-mono text-white">{fileSync.fileName}</strong> (paused after reload)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleBindLocalFile}
+                    className="text-amber-400 hover:text-amber-300 font-bold underline text-[10px] cursor-pointer"
+                  >
+                    Reconnect Now
+                  </button>
+                </div>
+              )}
             </div>
             </>
             )}

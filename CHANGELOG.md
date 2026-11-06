@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.1] - 2026-11-05
+
+### Added
+* **Persistent PC Auto-Sync Across Sessions (`fileSync.ts`, `LocalBackupModal.tsx`, `SettingsModal.tsx`, `App.tsx`):**
+  * Stored `FileSystemFileHandle` inside IndexedDB so Ambiently automatically remembers your bound `ambiently-data.json` file across browser reloads without requiring folder browsing.
+  * Added silent permission checks on startup via `queryPermission()`.
+  * Added 1-click **Reconnect Auto-Sync** action when browser security policies require user re-authorization after reload.
+  * Added real-time reactive `useFileSync()` hook with color-coded status badges (`Connected`, `Paused (Reloaded)`, `Unsupported`, `Optional`).
+  * Added manual **Sync Now** button to force immediate snapshot writes to disk on demand.
+  * Added clean **Disconnect** / **Unlink** buttons to release the file handle cleanly without altering the file on disk.
+* **Queued Safe Writes & Debounced Snapshots (`fileSync.ts`, `dashboardStore.ts`):**
+  * Implemented an in-memory queue for concurrent write requests, preventing `DOMException` file stream collisions when multiple widgets or notes are updated rapidly.
+  * Debounced reactive store backup calls (400ms) to eliminate disk thrashing during rapid user interactions while guaranteeing the latest snapshot is always written.
+* **Newsstand Canvas Icon (`canvasIcons.ts`, `NavigationDock.tsx`):**
+  * Added a dedicated `Newspaper` / `Newsstand` icon option for news, briefing, and media canvas boards in canvas creation and settings modals.
+* **SEO & Social Share Metadata (`index.html`, `public/robots.txt`, `public/sitemap.xml`, `vite.config.ts`):**
+  * Added comprehensive Open Graph (`og:*`) and Twitter (`twitter:*`) cards pointing to 1200×630 `og-banner.png` for rich previews on Slack, Discord, and Twitter/X.
+  * Added Schema.org `WebApplication` structured data (JSON-LD) and a semantic `<noscript>` crawler fallback.
+  * Added static `robots.txt` and `sitemap.xml` files.
+  * Dropped restrictive `maximum-scale=1.0` and `user-scalable=no` viewport flags to improve mobile accessibility (WCAG 1.4.4).
+* **Comprehensive Documentation (`README.md`, `FEATURES.md`):**
+  * Added dedicated **Local File PC Auto-Sync & Backup Architecture** guide detailing the 3-tier persistence model, offline guarantees, session persistence, and Dropbox/Google Drive/Synology sync folder synergy.
+
+---
+
 ## [0.2.0] - 2026-11-05
 
 ### Added

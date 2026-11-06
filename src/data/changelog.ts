@@ -11,6 +11,20 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.2.1",
+    date: "November 5, 2026",
+    title: "Persistent PC Auto-Sync, 1-Click Session Reconnect, and Newsstand Canvas Icon",
+    highlights: [
+      "Persistent PC Auto-Sync Across Sessions: Stored FileSystemFileHandle inside IndexedDB so Ambiently remembers your linked ambiently-data.json file across browser reloads without requiring folder browsing.",
+      "Silent Permission Query & 1-Click Reconnect: Automatically checks browser permission on startup via queryPermission(); displays a 1-click Reconnect Auto-Sync button if browser security requires re-authorization.",
+      "Queued Safe Writes & Debounced Snapshots: Prevents file lock collisions and disk thrashing by batching rapid updates (typing, checklist clicks, dragging) through a safe sequential write queue.",
+      "Manual Sync Now & Live Status Badges: Added real-time status indicators (Connected, Paused, Unbound), last synced timestamp, manual snapshot save, and clean disconnect options in both the Backup Modal and Settings.",
+      "Newsstand Canvas Icon: Added a dedicated Newspaper icon option for newsstand and media canvas boards in canvas creation and settings.",
+      "SEO & Social Share Metadata: Integrated full Open Graph, Twitter cards, JSON-LD WebApplication schema, robots.txt, and sitemap for rich share previews.",
+      "Comprehensive Documentation: Detailed 3-tier persistence and PC Auto-sync architecture documentation in README.md and FEATURES.md.",
+    ],
+  },
+  {
     version: "v0.2.0",
     date: "November 5, 2026",
     title: "Light Mode, Canvas Daylight Themes, and Per-Widget Appearance Controls",
