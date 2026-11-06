@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import {
   getOrCreateInviteCode,
+  rotateInviteCode,
   type InviteData,
   getCurrentUser,
   sendMagicLink,
@@ -31,9 +32,10 @@ interface ShareBoardModalProps {
 
 export const ShareBoardModal: React.FC<ShareBoardModalProps> = ({ isOpen, onClose }) => {
   const [inviteData, setInviteData] = useState<InviteData | null>(null);
-  const [activeTab, setActiveTab] = useState<'admin' | 'family'>('admin');
+  const [activeTab, setActiveTab] = useState<'admin' | 'family'>('family');
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [rotatingCode, setRotatingCode] = useState(false);
 
   // Authentication State for unauthenticated users
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -105,6 +107,15 @@ export const ShareBoardModal: React.FC<ShareBoardModalProps> = ({ isOpen, onClos
     }
   };
 
+  const handleRotateCode = async () => {
+    setRotatingCode(true);
+    const updated = await rotateInviteCode();
+    if (updated) {
+      setInviteData(updated);
+    }
+    setRotatingCode(false);
+  };
+
   if (!isOpen) return null;
 
   const currentQrUrl =
@@ -113,8 +124,10 @@ export const ShareBoardModal: React.FC<ShareBoardModalProps> = ({ isOpen, onClos
       : inviteData?.url || '';
 
   const handleCopyLink = () => {
-    if (!currentQrUrl) return;
-    navigator.clipboard.writeText(currentQrUrl);
+    // Security: Never copy raw session tokens (adminPairUrl) to clipboard.
+    const safeCopyUrl = inviteData?.url || '';
+    if (!safeCopyUrl) return;
+    navigator.clipboard.writeText(safeCopyUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -341,19 +354,29 @@ export const ShareBoardModal: React.FC<ShareBoardModalProps> = ({ isOpen, onClos
 
               {inviteData && (
                 <div className="w-full space-y-3">
-                  {/* Prominent 6-Digit Code for Kids Mode */}
-                  {activeTab === 'family' && (
-                    <div className="flex flex-col items-center bg-gray-950/70 p-2.5 rounded-xl border border-gray-800">
+                  {/* Prominent 6-Digit Code for Kids Mode + Rotate Button */}
+                  <div className="flex items-center justify-between bg-gray-950/70 px-3.5 py-2.5 rounded-xl border border-gray-800">
+                    <div className="flex flex-col text-left">
                       <span className="text-[10px] uppercase font-semibold text-gray-400 tracking-wider">
-                        Or Enter Code On Kids' Phone / Tablet:
+                        Household Join Code:
                       </span>
-                      <span className="text-2xl font-mono font-extrabold text-cyan-400 tracking-widest mt-0.5">
+                      <span className="text-xl font-mono font-extrabold text-cyan-400 tracking-widest mt-0.5">
                         {inviteData.code}
                       </span>
                     </div>
-                  )}
+                    <button
+                      type="button"
+                      onClick={handleRotateCode}
+                      disabled={rotatingCode}
+                      title="Generate a new invite code and revoke the old one"
+                      className="px-2.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-[11px] font-medium text-gray-300 flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${rotatingCode ? 'animate-spin text-cyan-400' : 'text-gray-400'}`} />
+                      <span>Reset Code</span>
+                    </button>
+                  </div>
 
-                  {/* Direct Copy Link Button */}
+                  {/* Direct Copy Link Button (Strictly copies guest join URL without session tokens) */}
                   <button
                     onClick={handleCopyLink}
                     className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gray-800 hover:bg-gray-750 border border-gray-700 text-xs font-semibold text-gray-200 transition-all active:scale-98 shadow-sm cursor-pointer"
@@ -362,22 +385,20 @@ export const ShareBoardModal: React.FC<ShareBoardModalProps> = ({ isOpen, onClos
                       <>
                         <Check className="w-4 h-4 text-emerald-400" />
                         <span className="text-emerald-400">
-                          {activeTab === 'admin' ? 'One-Tap Pairing Link Copied!' : 'Family Invite Link Copied!'}
+                          Household Join Link Copied! (Private calendars excluded)
                         </span>
                       </>
                     ) : (
                       <>
                         <Copy className="w-4 h-4 text-gray-400" />
-                        <span>
-                          {activeTab === 'admin' ? 'Copy One-Tap Pairing Link' : 'Copy Mobile Join Link'}
-                        </span>
+                        <span>Copy Household Join Link (?join={inviteData.code})</span>
                       </>
                     )}
                   </button>
 
                   <div className="text-[11px] text-gray-500 flex items-center justify-center gap-1.5 pt-1">
                     <Smartphone className="w-3.5 h-3.5 text-cyan-400/80" />
-                    <span>Zero app store downloads • Instant Web App on iPhone & Android</span>
+                    <span>Private calendars stay owner-only • Guests only see shared board items</span>
                   </div>
                 </div>
               )}

@@ -96,15 +96,41 @@ export interface RealtimeBoardHandlers {
   onRemoteTabChange?: (tab: DashboardTab, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void;
 }
 
-// Subscribe to Realtime WebSocket updates for live multi-user syncing (Notes, Widgets, Canvases)
+// Sanitize sensitive widget configs (such as private Google Calendar .ics URLs or Plex tokens)
+// when syncing to unauthenticated guest devices joined via code.
+function sanitizeWidgetForGuest(widget: DashboardWidget): DashboardWidget {
+  if (widget.type === 'calendar' && widget.config?.sources) {
+    // Strip private secret iCal URLs for unauthenticated guests unless explicitly public holiday feed
+    const safeSources = (widget.config.sources as any[]).filter(
+      (s) => typeof s?.url === 'string' && s.url.includes('holiday%40group.v.calendar.google.com')
+    );
+    return {
+      ...widget,
+      config: {
+        ...widget.config,
+        sources: safeSources,
+      },
+    };
+  }
+  return widget;
+}
+
+// Subscribe to Realtime WebSocket updates ONLY when authenticated or explicitly joined to a specific boardId
 export function subscribeToRealtimeBoard(
-  boardId: string,
+  boardId: string | null | undefined,
   handlers:
     | RealtimeBoardHandlers
-    | ((note: StickyNoteItem, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void)
+    | ((note: StickyNoteItem, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void),
+  isGuestSession = false
 ): () => void {
   const sb = getSupabase();
-  if (!sb) return () => {};
+  if (!sb || !boardId || boardId === 'default') {
+    if (realtimeChannel && sb) {
+      sb.removeChannel(realtimeChannel);
+      realtimeChannel = null;
+    }
+    return () => {};
+  }
 
   const noteHandler = typeof handlers === 'function' ? handlers : handlers.onRemoteNoteChange;
   const widgetHandler = typeof handlers === 'object' ? handlers.onRemoteWidgetChange : undefined;
@@ -112,6 +138,7 @@ export function subscribeToRealtimeBoard(
 
   if (realtimeChannel) {
     sb.removeChannel(realtimeChannel);
+    realtimeChannel = null;
   }
 
   realtimeChannel = sb
@@ -122,12 +149,14 @@ export function subscribeToRealtimeBoard(
         event: '*',
         schema: 'public',
         table: 'notes',
+        filter: `dashboard_id=eq.${boardId}`,
       },
       (payload) => {
         if (!noteHandler) return;
         const eventType = payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE';
         const raw = (payload.new || payload.old) as any;
         if (!raw) return;
+        if (raw.dashboard_id && raw.dashboard_id !== boardId) return;
 
         const note: StickyNoteItem = {
           id: raw.id,
@@ -155,14 +184,16 @@ export function subscribeToRealtimeBoard(
         event: '*',
         schema: 'public',
         table: 'widgets',
+        filter: `dashboard_id=eq.${boardId}`,
       },
       (payload) => {
         if (!widgetHandler) return;
         const eventType = payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE';
         const raw = (payload.new || payload.old) as any;
         if (!raw) return;
+        if (raw.dashboard_id && raw.dashboard_id !== boardId) return;
 
-        const widget: DashboardWidget = {
+        const rawWidget: DashboardWidget = {
           id: raw.id,
           tabId: raw.tab_id,
           type: raw.type,
@@ -174,6 +205,7 @@ export function subscribeToRealtimeBoard(
           deleted_at: raw.deleted_at,
         };
 
+        const widget = isGuestSession ? sanitizeWidgetForGuest(rawWidget) : rawWidget;
         widgetHandler(widget, eventType);
       }
     )
@@ -183,12 +215,14 @@ export function subscribeToRealtimeBoard(
         event: '*',
         schema: 'public',
         table: 'tabs',
+        filter: `dashboard_id=eq.${boardId}`,
       },
       (payload) => {
         if (!tabHandler) return;
         const eventType = payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE';
         const raw = (payload.new || payload.old) as any;
         if (!raw) return;
+        if (raw.dashboard_id && raw.dashboard_id !== boardId) return;
 
         const tab: DashboardTab = {
           id: raw.id,
@@ -220,7 +254,7 @@ export function subscribeToRealtimeBoard(
 export interface InviteData {
   code: string;
   url: string;           // Family / Kids URL (no account required)
-  adminPairUrl?: string; // One-tap session pairing URL (for admin / spouse)
+  adminPairUrl?: string; // One-tap session pairing URL (for admin / spouse QR only)
   userEmail?: string;
 }
 
@@ -267,27 +301,56 @@ export async function getOrCreateInviteCode(_boardId = 'default'): Promise<Invit
   }
 }
 
+// Rotate (regenerate) the 6-character Invite Code to immediately revoke old invite links
+export async function rotateInviteCode(): Promise<InviteData | null> {
+  const sb = getSupabase();
+  const user = await getCurrentUser();
+  if (!sb || !user) return null;
+
+  try {
+    const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    await sb
+      .from('dashboards')
+      .update({ invite_code: newCode, updated_at: new Date().toISOString() })
+      .eq('user_id', user.id);
+
+    return getOrCreateInviteCode();
+  } catch (err) {
+    console.warn('Failed to rotate invite code:', err);
+    return null;
+  }
+}
+
 // Join a shared board via Invite Code (e.g. when family scans QR or enters 6-digit code)
 export async function joinBoardByCode(code: string): Promise<{ success: boolean; boardTitle?: string; error?: string }> {
   const sb = getSupabase();
   if (!sb) return { success: false, error: 'Cloud service not connected.' };
 
   try {
+    const cleanCode = code.trim().toUpperCase();
+    if (!cleanCode) {
+      return { success: false, error: 'Invite code is required.' };
+    }
+
+    const user = await getCurrentUser();
+
     const { data, error } = await sb
       .from('dashboards')
       .select('id, title, user_id, settings, updated_at')
-      .eq('invite_code', code.trim().toUpperCase())
+      .eq('invite_code', cleanCode)
       .single();
 
     if (error || !data) {
       return { success: false, error: 'Invalid or expired invite code.' };
     }
 
+    const isOwner = Boolean(user && user.id === data.user_id);
+
     // Persist joined dashboard info in localStorage for offline persistence & unauthenticated syncing
     localStorage.setItem('joined_dashboard_id', data.id);
     localStorage.setItem('joined_owner_id', data.user_id);
     localStorage.setItem('joined_board_title', data.title || 'Family Board');
-    localStorage.setItem('joined_invite_code', code.trim().toUpperCase());
+    localStorage.setItem('joined_invite_code', cleanCode);
 
     // Pull shared notes, tabs, and widgets from that board
     const [tabsRes, notesRes, widgetsRes] = await Promise.all([
@@ -353,17 +416,20 @@ export async function joinBoardByCode(code: string): Promise<{ success: boolean;
 
     if (widgetsRes.data) {
       await db.widgets.bulkPut(
-        widgetsRes.data.map((w: any) => ({
-          id: w.id,
-          tabId: w.tab_id,
-          type: w.type,
-          title: w.title,
-          gridPos: w.grid_pos,
-          freeformPos: w.freeform_pos,
-          config: w.config,
-          updated_at: w.updated_at,
-          deleted_at: w.deleted_at,
-        }))
+        widgetsRes.data.map((w: any) => {
+          const mapped: DashboardWidget = {
+            id: w.id,
+            tabId: w.tab_id,
+            type: w.type,
+            title: w.title,
+            gridPos: w.grid_pos,
+            freeformPos: w.freeform_pos,
+            config: w.config,
+            updated_at: w.updated_at,
+            deleted_at: w.deleted_at,
+          };
+          return isOwner ? mapped : sanitizeWidgetForGuest(mapped);
+        })
       );
     }
 

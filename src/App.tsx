@@ -94,11 +94,29 @@ export function App() {
     return () => cleanup?.();
   }, []);
 
+  const [realtimeBoardState, setRealtimeBoardState] = useState<{
+    boardId: string | null;
+    isGuest: boolean;
+  }>(() => {
+    const joinedId = typeof window !== 'undefined' ? localStorage.getItem('joined_dashboard_id') : null;
+    return { boardId: joinedId, isGuest: Boolean(joinedId) };
+  });
+
   // Listen for Supabase Auth state changes (cleans up URL hash/code after magic link login)
   useEffect(() => {
+    getCurrentUser().then((user) => {
+      if (user) {
+        setRealtimeBoardState({ boardId: user.id, isGuest: false });
+      } else {
+        const joinedId = localStorage.getItem('joined_dashboard_id');
+        setRealtimeBoardState({ boardId: joinedId, isGuest: Boolean(joinedId) });
+      }
+    });
+
     const unsubscribe = onAuthStateChange(async (user) => {
       if (user) {
         console.log('Ambiently authenticated as:', user.email);
+        setRealtimeBoardState({ boardId: user.id, isGuest: false });
         try {
           const res = await pullFromCloud();
           if (res.success) {
@@ -107,6 +125,9 @@ export function App() {
         } catch (err) {
           console.warn('Initial cloud pull on auth change failed:', err);
         }
+      } else {
+        const joinedId = localStorage.getItem('joined_dashboard_id');
+        setRealtimeBoardState({ boardId: joinedId, isGuest: Boolean(joinedId) });
       }
     });
     return () => unsubscribe();
@@ -118,9 +139,15 @@ export function App() {
     const joinCode = params.get('join');
     if (joinCode) {
       const hasAuthHash = window.location.hash.includes('access_token');
-      joinBoardByCode(joinCode).then((res) => {
+      joinBoardByCode(joinCode).then(async (res) => {
         if (res.success) {
           console.log('Connected to shared board:', res.boardTitle);
+          const user = await getCurrentUser();
+          const joinedId = localStorage.getItem('joined_dashboard_id');
+          setRealtimeBoardState({
+            boardId: user?.id || joinedId,
+            isGuest: !user && Boolean(joinedId),
+          });
           initStore();
         }
         if (!hasAuthHash) {
@@ -131,15 +158,20 @@ export function App() {
     }
   }, [initStore]);
 
-  // Live Supabase Realtime WebSocket subscription for live cross-device sync (Notes, Widgets, Canvases)
+  // Live Supabase Realtime WebSocket subscription ONLY when authenticated or explicitly joined
   useEffect(() => {
-    const unsubscribe = subscribeToRealtimeBoard('default', {
-      onRemoteNoteChange: (note, eventType) => syncRemoteNoteChange(note, eventType),
-      onRemoteWidgetChange: (widget, eventType) => syncRemoteWidgetChange(widget, eventType),
-      onRemoteTabChange: (tab, eventType) => syncRemoteTabChange(tab, eventType),
-    });
+    if (!realtimeBoardState.boardId) return;
+    const unsubscribe = subscribeToRealtimeBoard(
+      realtimeBoardState.boardId,
+      {
+        onRemoteNoteChange: (note, eventType) => syncRemoteNoteChange(note, eventType),
+        onRemoteWidgetChange: (widget, eventType) => syncRemoteWidgetChange(widget, eventType),
+        onRemoteTabChange: (tab, eventType) => syncRemoteTabChange(tab, eventType),
+      },
+      realtimeBoardState.isGuest
+    );
     return () => unsubscribe();
-  }, [syncRemoteNoteChange, syncRemoteWidgetChange, syncRemoteTabChange]);
+  }, [realtimeBoardState.boardId, realtimeBoardState.isGuest, syncRemoteNoteChange, syncRemoteWidgetChange, syncRemoteTabChange]);
 
   // Cloud Pull: fetch fresh state on boot if logged in, on screen wake (visibilitychange), and 60s fallback poll
   useEffect(() => {

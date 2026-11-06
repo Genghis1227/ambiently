@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   * **Search & Subdirectory Filtering:** Added instant search filtering to quickly locate specific years or events within large photo collections.
   * **Selective Folder Scanning:** Scans only the checked subdirectories (`scanSelectedSubfolders`), creating clean labeled folder entries in the selection list and avoiding unwanted historical archives.
 
+### Security
+* **Strict Realtime Isolation & Private Calendar Protection (`src/App.tsx`, `src/services/supabase.ts`, `src/components/settings/ShareBoardModal.tsx`):**
+  * **Eliminated Unauthenticated Realtime Broadcast Leak:** Prevented unauthenticated visitors on the root domain (`https://dashboard.trinhism.com/`) from subscribing to global Supabase Realtime `postgres_changes` events. Previously, `subscribeToRealtimeBoard('default', ...)` subscribed to unfiltered `widgets`, `notes`, and `tabs` changes on boot, allowing live dashboard pushes to leak across open anonymous sessions.
+  * **Dashboard-Scoped Realtime Filters:** Enforced explicit `filter: dashboard_id=eq.${boardId}` and payload `dashboard_id` verification on all Realtime channels, and disabled Realtime completely unless the user is authenticated or has explicitly joined a board via invite code.
+  * **Owner-Only Private Calendar Feeds:** Added `sanitizeWidgetForGuest` to strip private Google/Apple/Outlook `.ics` calendar feed URLs whenever syncing widgets to unauthenticated guest devices joined via code.
+  * **Clipboard Session Token Guard & Invite Code Reset:** Prevented the Share Board modal from copying raw Supabase `access_token` / `refresh_token` hashes to the clipboard, and added a 1-click **Reset Code** button (`rotateInviteCode`) to revoke old invite codes immediately.
+
 ### Fixed
 * **Plex High-Resolution & Direct Play Photo Streaming (`src/services/plex.ts`, `src/services/photos.ts`):**
   * **Eliminated Blurry Plex Photos:** Diagnosed the root cause of blurry Plex photos—Plex folder listings omit the `Media[0].Part[0].key` in directory responses, causing image URLs to fall back to Plex's tiny pre-rendered thumbnails (`item.thumb`, ~256x256), which were then upscaled (`upscale=1`) to 1080p, resulting in heavily pixelated and blurry images.

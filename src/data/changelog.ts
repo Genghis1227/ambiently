@@ -13,8 +13,10 @@ export const RELEASES: ReleaseEntry[] = [
   {
     version: "v0.3.2",
     date: "November 6, 2026",
-    title: "Local Subdirectory Multi-Select, Plex Direct Play Camera Resolution & 4K Streaming",
+    title: "Strict Realtime Isolation & Calendar Privacy, Local Subfolder Multi-Select & Plex Direct Play",
     highlights: [
+      "Strict Realtime Isolation: Prevented unauthenticated visitors on the root domain from subscribing to Supabase Realtime WebSocket broadcasts, ensuring anonymous sessions stay 100% isolated in local storage.",
+      "Owner-Only Private Calendar Protection: Stripped private iCal (.ics) feed URLs from guest board syncs and added 1-click Invite Code Rotation to immediately revoke old join codes.",
       "Local Subfolder Multi-Select & Checklist: Added interactive subfolder inspection when selecting parent folders (e.g. media/personal/2011, media/personal/2012 ... media/personal/2020), allowing users to selectively import specific subdirectories with checkboxes.",
       "1-Click 'Last 5 Years' & 'Last 3 Years' Presets: Automatically identifies year-formatted folders and selects the 5 or 3 most recent years with a single click, instantly isolating recent memories from decades of archives.",
       "Subfolder Search & Live Previews: Added instant search filtering and direct photos support for mixed root/subfolder structures, keeping selection organized.",
@@ -23,7 +25,6 @@ export const RELEASES: ReleaseEntry[] = [
       "4K Transcoding Bounds & Upscaling Guard: Upgraded photo transcode bounds to full 4K UHD (3840x2160), set high-fidelity quality (quality=95), and disabled upscaling (upscale=0) to prevent artificial pixel stretching.",
       "Batch Metadata Part Enrichment: Automatically enriches leaf items with full Media part keys via batch metadata endpoints (/library/metadata/{ids}?includeDetails=1&checkFiles=1) during folder and section traversals.",
       "RAW & HEIC Auto-Transcode Fallback: Non-browser-native formats (iPhone HEIC/HEIF and camera RAW .CR2, .NEF, .ARW, .DNG) transcode cleanly into crisp 4K JPEGs with direct stream fallback.",
-      "Transcode Preview Tuning: Dynamically adjusts Plex transcode dimensions when rendering small thumbnails in selection modals (<= 600px) while maintaining full 4K/native resolution on ambient display frames.",
     ],
   },
   {
