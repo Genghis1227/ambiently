@@ -53,10 +53,11 @@ export async function sendMagicLink(email: string): Promise<{ success: boolean; 
   });
 
   if (error) {
-    if (error.message?.toLowerCase().includes('error sending confirmation email')) {
+    const msgLower = error.message?.toLowerCase() || '';
+    if (msgLower.includes('error sending') || msgLower.includes('confirmation email') || msgLower.includes('magic link email')) {
       return {
         success: false,
-        error: 'Supabase failed to send confirmation email. Check Supabase Dashboard > Logs > Auth Logs (common causes: email template syntax error, SMTP credential error for custom domains, or the 4 emails/hr rate limit).',
+        error: `Supabase mailer error (${error.message}). Check Supabase Dashboard > Logs > Auth Logs (usually caused by custom SMTP credentials, unverified domain, or email template syntax).`,
       };
     }
     return { success: false, error: error.message };
