@@ -715,7 +715,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                       <div className="text-[11px] text-gray-300">
                         This tile has {widget.config.customPhotos.length.toLocaleString()} photos loaded{widget.config.sourceLabel ? ` (${widget.config.sourceLabel})` : ''}. Share across all photo frames?
                       </div>
-                      {widget.config.sourceUrl && (
+                      {((!widget.config.sourceType || widget.config.sourceType === 'web') && widget.config.sourceUrl) && (
                         <div className="text-[10px] font-mono text-blue-300 truncate max-w-[320px] mt-1 bg-black/40 px-2 py-0.5 rounded border border-blue-500/20">
                           🔗 {widget.config.sourceUrl}
                         </div>
@@ -728,8 +728,8 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                       if (!widget.config?.customPhotos) return;
                       await applyCommonPhotosToAllWidgets(
                         widget.config.customPhotos,
-                        widget.config.sourceLabel || 'Google Photos & Web',
-                        widget.config.sourceUrl,
+                        widget.config.sourceLabel || (widget.config.sourceType === 'plex' ? 'Plex Media Server' : 'Google Photos & Web'),
+                        widget.config.sourceType === 'web' ? widget.config.sourceUrl : undefined,
                         widget.config.sourceType || 'web'
                       );
                       setUseCommonSource(true);
@@ -782,17 +782,49 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                         <span className="text-[11px] text-gray-400 block mt-0.5">
                           Google Photos shared albums, Local PC / NAS Folders, Plex Media Server, or Curated Scenery
                         </span>
-                        {/* Display active source link if available */}
+                        {/* Display active source link or provider indicator */}
                         {(() => {
-                          const activeUrl = useCommonSource
-                            ? (settings.commonPhotoSourceUrl || widget.config?.sourceUrl)
-                            : widget.config?.sourceUrl;
-                          if (!activeUrl) return null;
-                          return (
-                            <div className="text-[10px] font-mono text-blue-300/90 truncate max-w-[340px] mt-1 bg-black/40 px-2 py-0.5 rounded border border-blue-500/20">
-                              🔗 {activeUrl}
-                            </div>
-                          );
+                          const activeType = useCommonSource
+                            ? (settings.commonPhotoSourceType || 'curated')
+                            : (widget.config?.sourceType || 'curated');
+
+                          if (activeType === 'web') {
+                            const activeUrl = useCommonSource
+                              ? (settings.commonPhotoSourceUrl || widget.config?.sourceUrl)
+                              : widget.config?.sourceUrl;
+                            if (!activeUrl) return null;
+                            return (
+                              <div className="text-[10px] font-mono text-blue-300/90 truncate max-w-[340px] mt-1 bg-black/40 px-2 py-0.5 rounded border border-blue-500/20">
+                                🔗 {activeUrl}
+                              </div>
+                            );
+                          }
+
+                          if (activeType === 'plex') {
+                            const label = useCommonSource
+                              ? (settings.commonPhotoSourceLabel || 'Plex Library')
+                              : (widget.config?.sourceLabel || 'Plex Library');
+                            return (
+                              <div className="text-[10px] font-mono text-amber-300/90 truncate max-w-[340px] mt-1 bg-amber-950/40 px-2 py-0.5 rounded border border-amber-500/30 flex items-center gap-1.5">
+                                <span>📺</span>
+                                <span>Plex Media Server: <strong className="text-amber-200">{label}</strong></span>
+                              </div>
+                            );
+                          }
+
+                          if (activeType === 'local') {
+                            const label = useCommonSource
+                              ? (settings.commonPhotoSourceLabel || 'Local PC / NAS')
+                              : (widget.config?.sourceLabel || 'Local PC / NAS');
+                            return (
+                              <div className="text-[10px] font-mono text-emerald-300/90 truncate max-w-[340px] mt-1 bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-500/30 flex items-center gap-1.5">
+                                <span>📁</span>
+                                <span>Local Storage: <strong className="text-emerald-200">{label}</strong></span>
+                              </div>
+                            );
+                          }
+
+                          return null;
                         })()}
                       </div>
                     </div>

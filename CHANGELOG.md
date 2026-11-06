@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.9] - 2026-11-06
+
+### Added
+* **Multiple Plex Photo Library Discovery & Flexible Classification (`src/services/plex.ts`):**
+  * Removed strict `d.type === 'photo'` filter from `getPlexPhotoLibraries`, expanding discovery to support all photo and personal media library types (`photo`, `photos`, `picture`, `pictures`, `image`, `photoalbum`, and `homevideo` / Personal Media / Other Videos).
+  * Added `isLikelyPhotoLibrary` helper that inspects section types, scanner names (`Plex Photo Scanner`), agents, and title keywords.
+  * Enhanced library response to include all available server library sections with categorized `optgroup` sections ("Photo & Personal Media Libraries" and "Other Server Libraries"), ensuring users with multiple photo collections or home video libraries can select from all of them.
+* **Plex Subfolder & Album Drill-Down (`src/services/plex.ts`, `src/components/photos/PhotoSourcesModal.tsx`):**
+  * Added `getPlexSectionFolders` to discover folders (`/library/sections/{id}/folder`) and albums (`/library/sections/{id}/all?type=14`) within any selected library section.
+  * Added optional "Folder / Album" dropdown selector in the Plex tab, enabling users whose photos are organized into subfolders/albums within a single section (e.g. Vacation, Family, Holidays) to stream either a specific subfolder or the entire library.
+  * Updated `getPlexPhotosFromSection` to support `folderOrAlbumKey`, with flattened `type=13` photo retrieval and fallback handling.
+  * Added live scan indicator and a 1-click library refresh button to re-scan libraries on the connected server instantly.
+* **Contextual Photo Source Display & Stale URL Prevention (`src/components/widgets/WidgetSettingsModal.tsx`, `src/store/dashboardStore.ts`):**
+  * Resolved confusing UI where a previously configured Google Drive URL persisted and rendered underneath the Plex badge in the Widget Settings Modal and the "Make Shared" promotion card.
+  * Implemented type-aware source rendering: displays `📺 Plex Media Server: [Library Name]` (amber) for Plex, `📁 Local Storage: [Folder Name]` (emerald) for Local, and reserves `🔗 [URL]` strictly for Web / Google Drive sources.
+  * Automatically purges stale web URLs from `commonPhotoSourceUrl` and tile `sourceUrl` whenever switching to Plex, Local, or Curated sources.
+* **Per-Widget vs Shared Board Library Scoping (`src/components/photos/PhotoSourcesModal.tsx`, `src/components/layout/Corkboard.tsx`, `src/components/mobile/MobileCompanion.tsx`):**
+  * Updated the Photo Sources Modal footer toggle so users can explicitly choose between "Apply to all photo frames (Shared Board Library)" and "Apply to this widget only (Tile-Specific Album)".
+  * Allows multiple photo widgets on the same or different boards to independently stream from distinct Plex libraries, albums, or local folders without overwriting other frames.
+
+---
+
 ## [0.2.8] - 2026-11-06
 
 ### Improved
