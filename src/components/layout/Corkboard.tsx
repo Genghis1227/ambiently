@@ -22,6 +22,7 @@ import {
   RotateCcw,
   RotateCw,
   Edit2,
+  Copy,
   Layers,
   BringToFront,
   SendToBack,
@@ -965,6 +966,45 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     onUpdateNote(note.id, { checklistItems: updated });
   };
 
+  const handleDuplicateNote = (noteId: string) => {
+    const original = notes.find((n) => n.id === noteId);
+    if (!original) return;
+
+    const originalPos = original.freeformPos || {
+      xRatio: 0.1,
+      yRatio: 0.1,
+      wRatio: 0.26,
+      hRatio: 0.3,
+      zIndex: 1,
+      rotation: 0,
+    };
+
+    const offsetPos = {
+      ...originalPos,
+      xRatio: Math.min(originalPos.xRatio + 0.03, 0.72),
+      yRatio: Math.min(originalPos.yRatio + 0.03, 0.72),
+      zIndex: getTopZIndex() + 1,
+    };
+
+    onAddNote({
+      tabId: original.tabId || activeTabId,
+      title: original.title ? `${original.title} (Copy)` : undefined,
+      content: original.content,
+      isChecklist: original.isChecklist,
+      checklistItems: original.checklistItems
+        ? original.checklistItems.map((item) => ({
+            ...item,
+            id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          }))
+        : undefined,
+      bgColor: original.bgColor,
+      fontSize: original.fontSize,
+      expiresAt: original.expiresAt,
+      freeformPos: offsetPos,
+      isPinnedToCanvas: true,
+    });
+  };
+
   const now = new Date();
   const activeNotes = notes.filter((n) => {
     if (n.archivedAt) return false;
@@ -1870,34 +1910,19 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   0°
                 </button>
                 {!isCanvasLocked && (
-                  <>
-                    <button
-                      type="button"
-                      data-no-drag="true"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openNoteEditorForExisting(note);
-                      }}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      className="p-1.5 rounded-lg text-gray-700 hover:text-blue-800 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
-                      title="Edit note text, checklist, font size, or canvas board"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      data-no-drag="true"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDeleteNote(note.id);
-                      }}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      className="p-1.5 rounded-lg text-gray-700 hover:text-red-700 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
-                      title="Archive note to Trash"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </>
+                  <button
+                    type="button"
+                    data-no-drag="true"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteNote(note.id);
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className="p-1.5 rounded-lg text-gray-700 hover:text-red-700 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
+                    title="Archive note to Trash"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 )}
               </div>
             </div>
@@ -2447,20 +2472,34 @@ export const Corkboard: React.FC<CorkboardProps> = ({
           )}
 
           {contextMenu.type === 'note' && (
-            <button
-              type="button"
-              onClick={() => {
-                const n = notes.find((x) => x.id === contextMenu.id);
-                if (n) {
-                  openNoteEditorForExisting(n);
-                }
-                setContextMenu(null);
-              }}
-              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-300 hover:text-white transition-colors cursor-pointer text-left"
-            >
-              <Edit2 className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-              <span>Edit Note</span>
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  const n = notes.find((x) => x.id === contextMenu.id);
+                  if (n) {
+                    openNoteEditorForExisting(n);
+                  }
+                  setContextMenu(null);
+                }}
+                className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-300 hover:text-white transition-colors cursor-pointer text-left"
+              >
+                <Edit2 className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                <span>Edit Note</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  handleDuplicateNote(contextMenu.id);
+                  setContextMenu(null);
+                }}
+                className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-300 hover:text-white transition-colors cursor-pointer text-left"
+              >
+                <Copy className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                <span>Duplicate Note</span>
+              </button>
+            </>
           )}
 
           <button

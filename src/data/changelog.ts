@@ -11,6 +11,18 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.15",
+    date: "November 7, 2026",
+    title: "Seamless Mosaic Transitions, Persistent Rotation State & Canvas Duplicate Note",
+    highlights: [
+      "Seamless Mosaic Transitions: Keyed quadrant photos continuously so focus shifts no longer cause pictures to blink to black; unfocusing panels ease movement back to 1.0 while focused panels pan and zoom.",
+      "Persistent Mosaic Across Canvas Cycles: Fixed photo library cache signature mismatch and serialized quadrant photos/indices so tab carousel switches resume seamlessly instead of restarting with the same 4 photos.",
+      "Responsive Playback Order Reset: Enhanced photo order mode switching so toggling from Random to Sequential immediately restarts cleanly from photo 0 and the first 4 album photos in sequence.",
+      "Duplicate Note Action: Added 'Duplicate Note' with clipboard icon to the canvas right-click and layers context menu, cloning content, checklist items, and style with an offset position.",
+      "Note Action Bar Cleanup: Removed the redundant secondary edit button from the sticky note bottom toolbar.",
+    ],
+  },
+  {
     version: "v0.3.14",
     date: "November 7, 2026",
     title: "Shielded Widget Modal State & Mosaic Ken Burns Presentation Polish",

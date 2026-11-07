@@ -2,7 +2,7 @@
   "name": "ambiently",
   "description": "Modern, ambient smart-display and command center PWA (dashboard.trinhism.com)",
   "private": true,
-  "version": "0.3.14",
+  "version": "0.3.15",
   "type": "module",
   "scripts": {
     "dev": "vite",

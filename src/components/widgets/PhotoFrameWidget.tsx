@@ -182,6 +182,8 @@ function saveRuntimeState(key: string, state: PhotoWidgetRuntimeState) {
         filmstripIndex: state.filmstripIndex,
         mosaicIndex: state.mosaicIndex,
         mosaicSlot: state.mosaicSlot,
+        mosaicPhotos: state.mosaicPhotos,
+        scatteredPolaroids: state.scatteredPolaroids,
       })
     );
   } catch {
@@ -276,6 +278,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   const [resetTrigger, setResetTrigger] = useState(0);
   const [photoFocals, setPhotoFocals] = useState<Record<string, string>>({});
   const topZIndexRef = useRef(30);
+  const prevPhotoOrderRef = useRef(photoOrder);
 
   const [hasLocalPlexAuth, setHasLocalPlexAuth] = useState(true);
   const isPlexSource =
@@ -478,7 +481,8 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     if (savedState?.mosaicPhotos && savedState.mosaicPhotos.length >= 4) {
       return savedState.mosaicPhotos;
     }
-    return initialPhotos.slice(0, 4);
+    const initialPool = photoOrder === 'random' ? shuffleArray(initialPhotos) : initialPhotos;
+    return initialPool.slice(0, 4);
   });
   const mosaicSlotRef = useRef(savedState?.mosaicSlot ?? 0);
   const mosaicIndexRef = useRef(savedState?.mosaicIndex ?? 4);
@@ -488,8 +492,8 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     if (!photos || photos.length === 0) return;
     setMosaicPhotos((prev) => {
       if (prev && prev.length >= 4) return prev;
-      mosaicSlotRef.current = 0;
-      mosaicIndexRef.current = 4 % photos.length;
+      mosaicSlotRef.current = savedState?.mosaicSlot ?? 0;
+      mosaicIndexRef.current = savedState?.mosaicIndex ?? (4 % photos.length);
       return photos.slice(0, 4);
     });
   }, [photos]);
@@ -813,23 +817,26 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
 
   useEffect(() => {
     if (resolvedPhotos && resolvedPhotos.length > 0) {
+      const orderChanged = prevPhotoOrderRef.current !== photoOrder;
+      prevPhotoOrderRef.current = photoOrder;
+
       const pool = photoOrder === 'random' ? shuffleArray(resolvedPhotos) : resolvedPhotos;
       const newSig = getPhotosSignature(resolvedPhotos);
-      const existing = loadRuntimeState(stateKey, newSig);
+      const existing = !orderChanged ? loadRuntimeState(stateKey, newSig) : null;
 
       if (existing) {
         setPhotos(pool);
       } else {
         setPhotos((prev) => {
           const currentDisplayedPhoto = prev[currentIndex];
-          if (currentDisplayedPhoto && resolvedPhotos.some((p) => p.id === currentDisplayedPhoto.id)) {
+          if (!orderChanged && currentDisplayedPhoto && resolvedPhotos.some((p) => p.id === currentDisplayedPhoto.id)) {
             // Keep playing currently displayed photo seamlessly without jumping
             const newIndex = pool.findIndex((p) => p.id === currentDisplayedPhoto.id);
             if (newIndex >= 0) {
               setCurrentIndex(newIndex);
             }
           } else {
-            // Brand new photo album loaded -> reset to start or random
+            // Brand new photo album loaded or order mode switched -> reset to start or random
             setCurrentIndex(photoOrder === 'random' ? Math.floor(Math.random() * resolvedPhotos.length) : 0);
             setFilmstripIndex(0);
             setMosaicPhotos(pool.slice(0, 4));
@@ -959,7 +966,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
 
   // Save persistent rotation progress across canvas carousel switches & unmounts
   useEffect(() => {
-    const currentSig = getPhotosSignature(photos);
+    const currentSig = getPhotosSignature(resolvedPhotos);
     saveRuntimeState(stateKey, {
       signature: currentSig,
       currentIndex,
@@ -969,7 +976,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
       mosaicIndex: mosaicIndexRef.current,
       scatteredPolaroids,
     });
-  }, [currentIndex, filmstripIndex, mosaicPhotos, scatteredPolaroids, photos, stateKey]);
+  }, [currentIndex, filmstripIndex, mosaicPhotos, scatteredPolaroids, resolvedPhotos, stateKey]);
 
   const filmstripActiveIndex = ((filmstripIndex % photos.length) + photos.length) % photos.length;
   const currentPhoto =
@@ -1125,22 +1132,25 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                     : 'Click to advance this photo'
                 }
               >
-                <AnimatePresence mode="wait">
+                <AnimatePresence>
                   <motion.div
-                    key={p.id + (isFocused ? '-focused' : '-static')}
-                    initial={{ opacity: 0, scale: isFocused ? 1.0 : 1.04 }}
+                    key={p.id}
+                    initial={{ opacity: 0, scale: 1.0 }}
                     animate={{
                       opacity: 1,
                       scale: isFocused ? 1.15 : 1.0,
                     }}
-                    exit={{ opacity: 0 }}
+                    exit={{ opacity: 0, transition: { duration: 0.6, ease: 'easeInOut' } }}
                     transition={
                       isFocused
                         ? {
                             opacity: { duration: 0.8, ease: 'easeInOut' },
                             scale: { duration: intervalSec + 2, ease: 'linear' },
                           }
-                        : { duration: 0.8, ease: 'easeInOut' }
+                        : {
+                            opacity: { duration: 0.8, ease: 'easeInOut' },
+                            scale: { duration: 1.2, ease: 'easeOut' },
+                          }
                     }
                     className="absolute inset-0 w-full h-full"
                   >
