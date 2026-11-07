@@ -41,6 +41,7 @@ import {
   getPlexServers,
   getPlexPhotoLibraries,
   getPlexSectionFolders,
+  getPlexSectionYears,
   getBestPlexConnectionUri,
   type PlexPinResponse,
   type PlexServerResource,
@@ -145,6 +146,8 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   const [sectionFolders, setSectionFolders] = useState<PlexFolderItem[]>([]);
   const [plexFolderMode, setPlexFolderMode] = useState<'all' | 'specific'>('all');
   const [selectedPlexFolderKeys, setSelectedPlexFolderKeys] = useState<Set<string>>(new Set());
+  const [plexDateFilter, setPlexDateFilter] = useState<'all' | 'last3Years' | 'last5Years' | 'last1Year'>('all');
+  const [plexAvailableYears, setPlexAvailableYears] = useState<number[]>([]);
   const [plexFolderSearchQuery, setPlexFolderSearchQuery] = useState<string>('');
   const [isFoldersLoading, setIsFoldersLoading] = useState(false);
   const [plexLoading, setPlexLoading] = useState(false);
@@ -169,8 +172,14 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   };
 
   const handleSelectRecentPlexYears = (yearCount = 3) => {
-    const yearFolders = sectionFolders.filter((f) => /^(19|20)\d{2}$/.test(f.title.trim()));
-    yearFolders.sort((a, b) => parseInt(b.title.trim(), 10) - parseInt(a.title.trim(), 10));
+    const yearFolders = sectionFolders.filter((f) => /\b(19|20\d{2})\b/.test(f.title.trim()));
+    yearFolders.sort((a, b) => {
+      const matchA = b.title.match(/\b(19|20\d{2})\b/);
+      const matchB = a.title.match(/\b(19|20\d{2})\b/);
+      const valA = matchA ? parseInt(matchA[1], 10) : 0;
+      const valB = matchB ? parseInt(matchB[1], 10) : 0;
+      return valA - valB;
+    });
     const targetPool = yearFolders.length > 0 ? yearFolders : sectionFolders;
     const selected = new Set<string>(targetPool.slice(0, yearCount).map((f) => f.key));
     setSelectedPlexFolderKeys(selected);
@@ -258,8 +267,14 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
     setIsFoldersLoading(true);
     setSelectedPlexFolderKeys(new Set());
     try {
-      const folders = await getPlexSectionFolders(uri, server.accessToken || token, secKey);
+      const [folders, years] = await Promise.all([
+        getPlexSectionFolders(uri, server.accessToken || token, secKey),
+        getPlexSectionYears(uri, server.accessToken || token, secKey).catch(() => []),
+      ]);
       setSectionFolders(folders);
+      if (years && years.length > 0) {
+        setPlexAvailableYears(years);
+      }
     } catch (err: any) {
       console.warn('Could not load section folders:', err);
       setSectionFolders([]);
@@ -369,6 +384,8 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
     setSelectedSectionKey('');
     setSelectedPlexFolderKeys(new Set());
     setPlexFolderMode('all');
+    setPlexDateFilter('all');
+    setPlexAvailableYears([]);
     setStatusMessage('Plex disconnected.');
   };
 
@@ -400,16 +417,36 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
       }
     }
 
-    const sourceLabel = `Plex (${selectedServer.name} - ${sectionTitle}${folderLabelSuffix})`;
+    const currentYear = new Date().getFullYear();
+    let minYear: number | undefined = undefined;
+    let timeLabelSuffix = '';
+
+    if (plexDateFilter === 'last3Years') {
+      minYear = currentYear - 2;
+      timeLabelSuffix = ` [Last 3 Years: ${minYear}–${currentYear}]`;
+    } else if (plexDateFilter === 'last5Years') {
+      minYear = currentYear - 4;
+      timeLabelSuffix = ` [Last 5 Years: ${minYear}–${currentYear}]`;
+    } else if (plexDateFilter === 'last1Year') {
+      minYear = currentYear - 1;
+      timeLabelSuffix = ` [Past Year: ${minYear}–${currentYear}]`;
+    }
+
+    const sourceLabel = `Plex (${selectedServer.name} - ${sectionTitle}${folderLabelSuffix}${timeLabelSuffix})`;
 
     setPlexLoading(true);
-    setStatusMessage('Connecting to Plex and indexing library in background...');
+    setStatusMessage(
+      minYear
+        ? `Connecting to Plex and filtering photos taken since ${minYear}...`
+        : 'Connecting to Plex and indexing library in background...'
+    );
 
     photoSyncService.startPlexBackgroundSync({
       serverUri: uri,
       serverAccessToken: selectedServer.accessToken || plexToken,
       sectionKey: selectedSectionKey,
       folderOrAlbumKeys: targetFolderKeys,
+      minYear,
       sourceLabel,
       targetWidgetId: isCommonSource ? undefined : targetWidgetId,
       applyToAll,
@@ -1034,6 +1071,89 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                         </select>
                       </div>
 
+                      {/* Capture Date Filter (EXIF / Timeline) */}
+                      <div className="space-y-2 pt-1 border-t border-gray-800/80">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5 text-blue-400" />
+                            <span>Capture Date Filter (EXIF)</span>
+                          </label>
+                          <span className="text-[10px] text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full font-mono">
+                            ⚡ Fast Server-Side Query
+                          </span>
+                        </div>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-[10px] text-gray-400">
+                          <p>
+                            Filters photos by when they were actually taken using camera EXIF data, independent of folder names or organization.
+                          </p>
+                          {plexAvailableYears.length > 0 && (
+                            <span className="shrink-0 text-blue-300 font-mono bg-blue-950/40 border border-blue-900/40 px-1.5 py-0.5 rounded text-[9px] self-start sm:self-auto">
+                              Library Range: {plexAvailableYears[plexAvailableYears.length - 1]}–{plexAvailableYears[0]}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setPlexDateFilter('all')}
+                            className={`p-2 rounded-xl border text-xs font-medium transition-all cursor-pointer flex flex-col items-center justify-center text-center ${
+                              plexDateFilter === 'all'
+                                ? 'bg-blue-500/20 border-blue-500/50 text-white font-semibold shadow-sm'
+                                : 'bg-gray-950/60 border-gray-800 text-gray-400 hover:border-gray-700'
+                            }`}
+                          >
+                            <span>🌟 All Time</span>
+                            <span className="text-[9px] text-gray-500 mt-0.5">Entire library</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setPlexDateFilter('last3Years')}
+                            className={`p-2 rounded-xl border text-xs font-medium transition-all cursor-pointer flex flex-col items-center justify-center text-center ${
+                              plexDateFilter === 'last3Years'
+                                ? 'bg-blue-500/20 border-blue-500/50 text-white font-semibold shadow-sm'
+                                : 'bg-gray-950/60 border-gray-800 text-gray-400 hover:border-gray-700'
+                            }`}
+                          >
+                            <span>📅 Last 3 Years</span>
+                            <span className="text-[9px] text-gray-500 mt-0.5">
+                              {new Date().getFullYear() - 2}–{new Date().getFullYear()}
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setPlexDateFilter('last5Years')}
+                            className={`p-2 rounded-xl border text-xs font-medium transition-all cursor-pointer flex flex-col items-center justify-center text-center ${
+                              plexDateFilter === 'last5Years'
+                                ? 'bg-blue-500/20 border-blue-500/50 text-white font-semibold shadow-sm'
+                                : 'bg-gray-950/60 border-gray-800 text-gray-400 hover:border-gray-700'
+                            }`}
+                          >
+                            <span>📅 Last 5 Years</span>
+                            <span className="text-[9px] text-gray-500 mt-0.5">
+                              {new Date().getFullYear() - 4}–{new Date().getFullYear()}
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setPlexDateFilter('last1Year')}
+                            className={`p-2 rounded-xl border text-xs font-medium transition-all cursor-pointer flex flex-col items-center justify-center text-center ${
+                              plexDateFilter === 'last1Year'
+                                ? 'bg-blue-500/20 border-blue-500/50 text-white font-semibold shadow-sm'
+                                : 'bg-gray-950/60 border-gray-800 text-gray-400 hover:border-gray-700'
+                            }`}
+                          >
+                            <span>📅 Past Year</span>
+                            <span className="text-[9px] text-gray-500 mt-0.5">
+                              {new Date().getFullYear() - 1}–{new Date().getFullYear()}
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+
                       {/* Folder Scope Picker: Entire Library vs Specific Folders */}
                       <div className="space-y-2 pt-1 border-t border-gray-800/80">
                         <div className="flex items-center justify-between">
@@ -1257,8 +1377,24 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                           {plexFolderMode === 'specific' && selectedPlexFolderKeys.size > 0
                             ? `Stream from ${selectedPlexFolderKeys.size} Selected Folder${
                                 selectedPlexFolderKeys.size !== 1 ? 's' : ''
+                              }${
+                                plexDateFilter === 'last3Years'
+                                  ? ' (Last 3 Years)'
+                                  : plexDateFilter === 'last5Years'
+                                  ? ' (Last 5 Years)'
+                                  : plexDateFilter === 'last1Year'
+                                  ? ' (Past Year)'
+                                  : ''
                               }`
-                            : 'Stream from Selected Library'}
+                            : `Stream from Selected Library${
+                                plexDateFilter === 'last3Years'
+                                  ? ' (Last 3 Years)'
+                                  : plexDateFilter === 'last5Years'
+                                  ? ' (Last 5 Years)'
+                                  : plexDateFilter === 'last1Year'
+                                  ? ' (Past Year)'
+                                  : ''
+                              }`}
                         </span>
                       </>
                     )}

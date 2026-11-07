@@ -11,6 +11,18 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.10",
+    date: "November 6, 2026",
+    title: "Server-Side Plex Capture Date Filter (EXIF & Timeline Querying)",
+    highlights: [
+      "Folder-Independent Date Filtering: Added a server-side Capture Date Filter directly in the Plex photo source tab (All Time, Last 3 Years, Last 5 Years, and Past Year) that filters photos by their true EXIF capture date (originallyAvailableAt) regardless of how disk folders are named or organized.",
+      "Lightning-Fast Database Queries: Queries Plex Media Server's SQLite database directly using &year>=[minYear] and &sort=originallyAvailableAt:desc, returning only recent photos in milliseconds and completely bypassing the need to download or traverse thousands of older photos.",
+      "Plex Timeline Discovery: Automatically inspects the Plex server's timeline year index to display the available photo date range across your library.",
+      "Smarter Folder Name Matcher: Enhanced the folder checklist year preset to match 4-digit years embedded anywhere inside folder titles (e.g. '2024 - Hawaii', 'Summer 2023').",
+      "Multi-Layer Safeguard: Applies both server-side SQL date filtering and client-side EXIF verification so photos outside the requested year range are never displayed in the frame.",
+    ],
+  },
+  {
     version: "v0.3.9",
     date: "November 6, 2026",
     title: "Plex Multi-Folder & Album Selection with Search and Quick Filter Presets",
