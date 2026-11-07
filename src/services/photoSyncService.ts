@@ -14,6 +14,8 @@ export interface PlexSyncParams {
   sectionKey: string;
   folderOrAlbumKey?: string;
   folderOrAlbumKeys?: string | string[];
+  minYear?: number;
+  maxYear?: number;
   sourceLabel: string;
   targetWidgetId?: string;
   applyToAll?: boolean;
@@ -95,6 +97,8 @@ class PhotoSyncService {
         params.folderOrAlbumKeys || params.folderOrAlbumKey,
         {
           signal,
+          minYear: params.minYear,
+          maxYear: params.maxYear,
           onBatch: async (batchPhotos, isInitial, isDone) => {
             if (signal.aborted) return;
 

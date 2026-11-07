@@ -417,11 +417,42 @@ async function enrichPlexPhotoItemsWithParts(
   });
 }
 
+export function matchesPlexYearFilter(item: any, minYear?: number, maxYear?: number): boolean {
+  if (!minYear && !maxYear) return true;
+  let year: number | undefined = undefined;
+  if (typeof item.year === 'number') {
+    year = item.year;
+  } else if (item.year) {
+    const parsed = parseInt(String(item.year), 10);
+    if (!isNaN(parsed) && parsed > 1900 && parsed < 2100) year = parsed;
+  }
+  if (!year && item.originallyAvailableAt) {
+    const m = String(item.originallyAvailableAt).match(/^(\d{4})/);
+    if (m) year = parseInt(m[1], 10);
+  }
+  if (!year && item.addedAt) {
+    const d = new Date(item.addedAt * 1000);
+    if (!isNaN(d.getFullYear())) year = d.getFullYear();
+  }
+  if (!year) {
+    return false;
+  }
+  if (minYear && year < minYear) return false;
+  if (maxYear && year > maxYear) return false;
+  return true;
+}
+
 function extractPlexPhotoItem(
   item: any,
   cleanUri: string,
-  tokenParam: string
+  tokenParam: string,
+  minYear?: number,
+  maxYear?: number
 ): PhotoItem | null {
+  if ((minYear || maxYear) && !matchesPlexYearFilter(item, minYear, maxYear)) {
+    return null;
+  }
+
   // Never treat directories/albums/folders as photos
   if (isPlexDirectoryItem(item)) {
     return null;
@@ -605,11 +636,44 @@ export async function getPlexSectionFolders(
   return folders;
 }
 
+// Discover capture years available in a Plex library section
+export async function getPlexSectionYears(
+  serverUri: string,
+  serverAccessToken: string,
+  sectionKey: string
+): Promise<number[]> {
+  const cleanUri = serverUri.replace(/\/$/, '');
+  const tokenParam = `X-Plex-Token=${encodeURIComponent(serverAccessToken)}`;
+  try {
+    const res = await fetch(`${cleanUri}/library/sections/${sectionKey}/year?${tokenParam}`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const entries = getContainerEntries(data);
+      const years: number[] = [];
+      for (const entry of entries) {
+        const title = entry.title || entry.key;
+        const parsed = parseInt(String(title).trim(), 10);
+        if (!isNaN(parsed) && parsed > 1900 && parsed < 2100) {
+          years.push(parsed);
+        }
+      }
+      return Array.from(new Set(years)).sort((a, b) => b - a);
+    }
+  } catch (err) {
+    console.warn('Could not fetch section years from Plex:', err);
+  }
+  return [];
+}
+
 export interface PlexScanOptions {
   maxPhotos?: number;
   onProgress?: (count: number) => void;
   onBatch?: (photos: PhotoItem[], isInitial: boolean, isDone: boolean) => void;
   signal?: AbortSignal;
+  minYear?: number;
+  maxYear?: number;
 }
 
 // Fetch photos from a section (or specific subfolder/album), recursively traversing subfolders
@@ -679,7 +743,15 @@ export async function getPlexPhotosFromSection(
     }
   } else {
     // 1. When requesting entire section, try type=13 (photos) to flatten hierarchy
-    const allPhotosUrl = `${cleanUri}/library/sections/${sectionKey}/all?type=13&includeDetails=1&includeAdvanced=1&checkFiles=1&${tokenParam}`;
+    let filterParams = '';
+    if (options.minYear) {
+      filterParams += `&year>=${encodeURIComponent(options.minYear)}`;
+    }
+    if (options.maxYear) {
+      filterParams += `&year<=${encodeURIComponent(options.maxYear)}`;
+    }
+    const sortParam = '&sort=originallyAvailableAt:desc';
+    const allPhotosUrl = `${cleanUri}/library/sections/${sectionKey}/all?type=13&includeDetails=1&includeAdvanced=1&checkFiles=1${filterParams}${sortParam}&${tokenParam}`;
     try {
       const res = await fetch(allPhotosUrl, {
         headers: { Accept: 'application/json' },
@@ -692,7 +764,7 @@ export async function getPlexPhotosFromSection(
 
         // Fast-path: extract photos immediately so initial display has 0 latency
         for (const item of leafCandidates) {
-          const photo = extractPlexPhotoItem(item, cleanUri, tokenParam);
+          const photo = extractPlexPhotoItem(item, cleanUri, tokenParam, options.minYear, options.maxYear);
           if (photo) addPhoto(photo);
           if (!isUnlimited && photos.length >= maxPhotos) break;
         }
@@ -704,7 +776,7 @@ export async function getPlexPhotosFromSection(
           try {
             const enrichedLeaves = await enrichPlexPhotoItemsWithParts(leafCandidates.slice(0, 50), cleanUri, tokenParam);
             for (const item of enrichedLeaves) {
-              const photo = extractPlexPhotoItem(item, cleanUri, tokenParam);
+              const photo = extractPlexPhotoItem(item, cleanUri, tokenParam, options.minYear, options.maxYear);
               if (photo) addPhoto(photo);
             }
           } catch {
@@ -720,9 +792,9 @@ export async function getPlexPhotosFromSection(
 
     if (signal?.aborted) return photos;
 
-    // Always also queue root folder traversal if type=13 returned suspiciously few photos or 0,
-    // because some Plex scanners only return top-level un-nested photos on type=13
-    if (photos.length > 100) {
+    // Fast return: if section query returned photos with date filter or full library has plenty of photos,
+    // we don't need to recursively crawl thousands of folders on disk
+    if (photos.length > 100 || (photos.length > 0 && (options.minYear || options.maxYear))) {
       if (onProgress) onProgress(photos.length);
       if (onBatch) {
         onBatch([...photos], !hasEmittedInitial, true);
@@ -775,7 +847,7 @@ export async function getPlexPhotosFromSection(
       const leafCandidates = allEntries.filter((item) => !isPlexDirectoryItem(item));
       if (leafCandidates.length > 0) {
         for (const item of leafCandidates) {
-          const photo = extractPlexPhotoItem(item, cleanUri, tokenParam);
+          const photo = extractPlexPhotoItem(item, cleanUri, tokenParam, options.minYear, options.maxYear);
           if (photo) {
             addPhoto(photo);
             if (!isUnlimited && photos.length >= maxPhotos) break;
