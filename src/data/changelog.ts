@@ -11,6 +11,18 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.8",
+    date: "November 6, 2026",
+    title: "Non-Blocking Background Photo Library Ingestion (Plex, Local NAS, Google Photos & Drive)",
+    highlights: [
+      "Instant First-Batch Streaming (<1 sec): When selecting Plex libraries, Local/NAS subfolders, or Google Photos albums, Ambiently now instantly extracts and streams the first batch of photos directly onto the canvas in under 1 second, closing the modal immediately so you don't have to wait.",
+      "Asynchronous Background Ingestion: The remaining thousands of photos continue indexing, traversing subdirectories, and paginating in a dedicated background worker without blocking dashboard interaction or frame transitions.",
+      "Progressive Batch Ingestion: Newly discovered photos are appended to the active photo pool in smooth batches and persisted to local IndexedDB storage, with seamless playback preservation so the currently displayed photo never jumps or skips when new photos arrive.",
+      "Live Background Sync Pill & Badges: Added subtle, non-intrusive status badges on the Photo Frame widget and Settings modal showing live indexing progress (e.g. 'Indexing Plex library (1,450 photos)...') with a 1-click cancel option in the modal.",
+      "Multi-Source Fast-Path: Accelerated Google Photos albums with instant initial page fetches and deferred deep batchexecute RPC pagination; accelerated Plex with immediate 4K transcode resolution prior to deep Part key enrichment.",
+    ],
+  },
+  {
     version: "v0.3.7",
     date: "November 6, 2026",
     title: "Plex Deep Subfolder & PhotoAlbum Traversal Fix & Mobile Settings Tab Grid",

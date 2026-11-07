@@ -44,6 +44,16 @@ async function scheduleCloudAutoPush(get: () => DashboardState) {
   }
 }
 
+export interface PhotoSyncState {
+  isActive: boolean;
+  sourceType: 'plex' | 'local' | 'web' | 'curated' | null;
+  sourceLabel: string;
+  loadedCount: number;
+  totalCount?: number;
+  statusMessage: string;
+  targetWidgetId?: string;
+}
+
 interface LayoutSnapshot {
   tabId: string;
   widgetPositions: Record<string, FreeformPosition>;
@@ -64,6 +74,7 @@ interface DashboardState {
   needsFileReconnect: boolean;
   isUnlocked: boolean; // runtime unlock state when pinLockEnabled is on
   lastLayoutSnapshot: LayoutSnapshot | null;
+  photoSyncState: PhotoSyncState | null;
 
   // Actions
   initStore: () => Promise<void>;
@@ -93,6 +104,21 @@ interface DashboardState {
   ) => Promise<void>;
   applyCommonPhotosToAllWidgets: (
     photos: PhotoItem[],
+    sourceLabel?: string,
+    sourceUrl?: string,
+    sourceType?: 'plex' | 'local' | 'web' | 'curated'
+  ) => Promise<void>;
+  setPhotoSyncState: (state: PhotoSyncState | null) => void;
+  appendPhotosToTarget: (
+    targetWidgetId: string | undefined,
+    newPhotos: PhotoItem[],
+    sourceLabel?: string,
+    sourceUrl?: string,
+    sourceType?: 'plex' | 'local' | 'web' | 'curated'
+  ) => Promise<void>;
+  finalizePhotosToTarget: (
+    targetWidgetId: string | undefined,
+    allPhotos: PhotoItem[],
     sourceLabel?: string,
     sourceUrl?: string,
     sourceType?: 'plex' | 'local' | 'web' | 'curated'
@@ -190,6 +216,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   needsFileReconnect: false,
   isUnlocked: true,
   lastLayoutSnapshot: null,
+  photoSyncState: null,
 
   initStore: async () => {
     // Load from Dexie or seed fresh database
@@ -427,6 +454,89 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     await db.widgets.bulkPut(updatedWidgets);
     set({ widgets: updatedWidgets });
     get().saveLocalBackup();
+  },
+
+  setPhotoSyncState: (photoSyncState) => {
+    set({ photoSyncState });
+  },
+
+  appendPhotosToTarget: async (targetWidgetId, incomingPhotos, sourceLabel, sourceUrl, sourceType) => {
+    if (!incomingPhotos || incomingPhotos.length === 0) return;
+
+    if (!targetWidgetId) {
+      // Common / Shared Photos
+      const current = get().settings.commonPhotos || [];
+      const seenIds = new Set(current.map((p) => p.id));
+      const fresh = incomingPhotos.filter((p) => !seenIds.has(p.id));
+      if (fresh.length === 0) return;
+
+      const combined = [...current, ...fresh];
+      const updated = {
+        ...get().settings,
+        commonPhotos: combined,
+        commonPhotoSourceLabel: sourceLabel || get().settings.commonPhotoSourceLabel,
+        commonPhotoSourceUrl: sourceType === 'web' ? (sourceUrl || '') : undefined,
+        commonPhotoSourceType: sourceType || get().settings.commonPhotoSourceType,
+        updated_at: new Date().toISOString(),
+      };
+      await db.settings.put(updated);
+      set({ settings: updated });
+    } else {
+      // Specific Widget
+      const widget = get().widgets.find((w) => w.id === targetWidgetId);
+      if (!widget) return;
+
+      const current = (widget.config?.customPhotos as PhotoItem[]) || [];
+      const seenIds = new Set(current.map((p) => p.id));
+      const fresh = incomingPhotos.filter((p) => !seenIds.has(p.id));
+      if (fresh.length === 0) return;
+
+      const combined = [...current, ...fresh];
+      const updatedWidget: DashboardWidget = {
+        ...widget,
+        config: {
+          ...widget.config,
+          customPhotos: combined,
+          useCommonSource: false,
+          sourceLabel: sourceLabel || widget.config?.sourceLabel,
+          sourceType: sourceType || widget.config?.sourceType,
+          sourceUrl: sourceType === 'web' ? (sourceUrl || '') : undefined,
+        },
+        updated_at: new Date().toISOString(),
+      };
+      await db.widgets.put(updatedWidget);
+      set({
+        widgets: get().widgets.map((w) => (w.id === targetWidgetId ? updatedWidget : w)),
+      });
+    }
+    get().saveLocalBackup();
+  },
+
+  finalizePhotosToTarget: async (targetWidgetId, allPhotos, sourceLabel, sourceUrl, sourceType) => {
+    if (!targetWidgetId) {
+      await get().applyCommonPhotosToAllWidgets(allPhotos, sourceLabel, sourceUrl, sourceType);
+    } else {
+      const widget = get().widgets.find((w) => w.id === targetWidgetId);
+      if (widget) {
+        const updatedWidget: DashboardWidget = {
+          ...widget,
+          config: {
+            ...widget.config,
+            customPhotos: allPhotos,
+            useCommonSource: false,
+            sourceLabel: sourceLabel || widget.config?.sourceLabel,
+            sourceType: sourceType || widget.config?.sourceType,
+            sourceUrl: sourceType === 'web' ? (sourceUrl || '') : undefined,
+          },
+          updated_at: new Date().toISOString(),
+        };
+        await db.widgets.put(updatedWidget);
+        set({
+          widgets: get().widgets.map((w) => (w.id === targetWidgetId ? updatedWidget : w)),
+        });
+        get().saveLocalBackup();
+      }
+    }
   },
 
   toggleTabEnabled: async (tabId, enabled) => {

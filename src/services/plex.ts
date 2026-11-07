@@ -605,17 +605,34 @@ export async function getPlexSectionFolders(
   return folders;
 }
 
+export interface PlexScanOptions {
+  maxPhotos?: number;
+  onProgress?: (count: number) => void;
+  onBatch?: (photos: PhotoItem[], isInitial: boolean, isDone: boolean) => void;
+  signal?: AbortSignal;
+}
+
 // Fetch photos from a section (or specific subfolder/album), recursively traversing subfolders
 export async function getPlexPhotosFromSection(
   serverUri: string,
   serverAccessToken: string,
   sectionKey: string,
   folderOrAlbumKey?: string,
-  maxPhotos: number = Infinity,
-  onProgress?: (count: number) => void
+  maxPhotosOrOptions: number | PlexScanOptions = Infinity,
+  legacyOnProgress?: (count: number) => void
 ): Promise<PhotoItem[]> {
   const cleanUri = serverUri.replace(/\/$/, '');
   const tokenParam = `X-Plex-Token=${encodeURIComponent(serverAccessToken)}`;
+
+  const options: PlexScanOptions =
+    typeof maxPhotosOrOptions === 'number'
+      ? { maxPhotos: maxPhotosOrOptions, onProgress: legacyOnProgress }
+      : maxPhotosOrOptions || {};
+
+  const maxPhotos = options.maxPhotos ?? Infinity;
+  const onProgress = options.onProgress;
+  const onBatch = options.onBatch;
+  const signal = options.signal;
 
   const isSpecificFolder = Boolean(
     folderOrAlbumKey && folderOrAlbumKey.trim() !== '' && folderOrAlbumKey !== 'all'
@@ -628,6 +645,17 @@ export async function getPlexPhotosFromSection(
   const visitedDirectoryKeys = new Set<string>();
   const directoryQueue: { key: string; depth: number }[] = [];
 
+  let hasEmittedInitial = false;
+  let lastEmittedCount = 0;
+
+  const checkEmitInitial = () => {
+    if (!hasEmittedInitial && photos.length >= 25 && onBatch) {
+      hasEmittedInitial = true;
+      lastEmittedCount = photos.length;
+      onBatch([...photos], true, false);
+    }
+  };
+
   const addPhoto = (photo: PhotoItem) => {
     if (!seenPhotoIds.has(photo.id) && (isUnlimited || photos.length < maxPhotos)) {
       seenPhotoIds.add(photo.id);
@@ -635,8 +663,11 @@ export async function getPlexPhotosFromSection(
       if (onProgress && photos.length % 25 === 0) {
         onProgress(photos.length);
       }
+      checkEmitInitial();
     }
   };
+
+  if (signal?.aborted) return photos;
 
   if (isSpecificFolder && folderOrAlbumKey) {
     directoryQueue.push({ key: folderOrAlbumKey, depth: 0 });
@@ -646,25 +677,50 @@ export async function getPlexPhotosFromSection(
     try {
       const res = await fetch(allPhotosUrl, {
         headers: { Accept: 'application/json' },
+        signal,
       });
       if (res.ok) {
         const data = await res.json();
         const rawEntries = getContainerEntries(data);
         const leafCandidates = rawEntries.filter((item) => !isPlexDirectoryItem(item));
-        const metadataItems = await enrichPlexPhotoItemsWithParts(leafCandidates, cleanUri, tokenParam);
-        for (const item of metadataItems) {
+
+        // Fast-path: extract photos immediately so initial display has 0 latency
+        for (const item of leafCandidates) {
           const photo = extractPlexPhotoItem(item, cleanUri, tokenParam);
           if (photo) addPhoto(photo);
+          if (!isUnlimited && photos.length >= maxPhotos) break;
+        }
+
+        checkEmitInitial();
+
+        // Enrich initial batch if needed for full part paths
+        if (leafCandidates.length > 0 && photos.length < 50) {
+          try {
+            const enrichedLeaves = await enrichPlexPhotoItemsWithParts(leafCandidates.slice(0, 50), cleanUri, tokenParam);
+            for (const item of enrichedLeaves) {
+              const photo = extractPlexPhotoItem(item, cleanUri, tokenParam);
+              if (photo) addPhoto(photo);
+            }
+          } catch {
+            // ignore
+          }
         }
       }
-    } catch (e) {
-      console.warn('Plex /all?type=13 query failed, falling back to folder traversal:', e);
+    } catch (e: any) {
+      if (e?.name !== 'AbortError') {
+        console.warn('Plex /all?type=13 query failed, falling back to folder traversal:', e);
+      }
     }
+
+    if (signal?.aborted) return photos;
 
     // Always also queue root folder traversal if type=13 returned suspiciously few photos or 0,
     // because some Plex scanners only return top-level un-nested photos on type=13
     if (photos.length > 100) {
       if (onProgress) onProgress(photos.length);
+      if (onBatch) {
+        onBatch([...photos], !hasEmittedInitial, true);
+      }
       return photos;
     }
 
@@ -677,20 +733,25 @@ export async function getPlexPhotosFromSection(
   const BATCH_SIZE = 8;
 
   while (directoryQueue.length > 0 && (isUnlimited || photos.length < maxPhotos)) {
+    if (signal?.aborted) break;
+
     const currentBatch = directoryQueue.splice(0, BATCH_SIZE);
 
     const batchPromises = currentBatch.map(async ({ key, depth }) => {
+      if (signal?.aborted) return null;
       if (visitedDirectoryKeys.has(key)) return null;
       visitedDirectoryKeys.add(key);
 
       const targetUrl = buildPlexItemUrl(cleanUri, key, tokenParam, sectionKey);
       try {
-        const res = await fetch(targetUrl, { headers: { Accept: 'application/json' } });
+        const res = await fetch(targetUrl, { headers: { Accept: 'application/json' }, signal });
         if (!res.ok) return null;
         const data = await res.json();
         return { data, depth };
-      } catch (err) {
-        console.warn(`Failed to fetch Plex directory ${key}:`, err);
+      } catch (err: any) {
+        if (err?.name !== 'AbortError') {
+          console.warn(`Failed to fetch Plex directory ${key}:`, err);
+        }
         return null;
       }
     });
@@ -704,11 +765,10 @@ export async function getPlexPhotosFromSection(
       // Plex returns folders/photoalbums and leaf photos across BOTH MediaContainer.Metadata and MediaContainer.Directory!
       const allEntries = getContainerEntries(data);
 
-      // 1. Extract leaf photo items (enriched with full Part keys for sharp high-res rendering)
+      // 1. Extract leaf photo items
       const leafCandidates = allEntries.filter((item) => !isPlexDirectoryItem(item));
       if (leafCandidates.length > 0) {
-        const enrichedLeaves = await enrichPlexPhotoItemsWithParts(leafCandidates, cleanUri, tokenParam);
-        for (const item of enrichedLeaves) {
+        for (const item of leafCandidates) {
           const photo = extractPlexPhotoItem(item, cleanUri, tokenParam);
           if (photo) {
             addPhoto(photo);
@@ -728,8 +788,18 @@ export async function getPlexPhotosFromSection(
         }
       }
     }
+
+    checkEmitInitial();
+
+    if (onBatch && photos.length - lastEmittedCount >= 100) {
+      lastEmittedCount = photos.length;
+      onBatch([...photos], false, false);
+    }
   }
 
   if (onProgress) onProgress(photos.length);
+  if (onBatch) {
+    onBatch([...photos], !hasEmittedInitial, true);
+  }
   return photos;
 }

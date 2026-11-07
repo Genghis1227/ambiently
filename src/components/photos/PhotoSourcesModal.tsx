@@ -41,7 +41,6 @@ import {
   getPlexServers,
   getPlexPhotoLibraries,
   getPlexSectionFolders,
-  getPlexPhotosFromSection,
   getBestPlexConnectionUri,
   type PlexPinResponse,
   type PlexServerResource,
@@ -54,12 +53,10 @@ import {
   promptLocalDirectoryHandle,
   inspectLocalDirectory,
   inspectLocalFileList,
-  scanSelectedSubfolders,
   scanDirectoryHandle,
   type LocalDirectoryInspection,
   parseFileListToPhotos,
   cachePhotosLocally,
-  resolveWebAndCloudPhotoUrls,
   getOptimizedPhotoUrl,
   isGooglePhotosUrl,
   isGoogleDriveFolderUrl,
@@ -67,6 +64,8 @@ import {
   type PhotoItem,
   type PhotoDisplayStyle,
 } from '../../services/photos';
+import { photoSyncService } from '../../services/photoSyncService';
+import { useDashboardStore } from '../../store/dashboardStore';
 
 const CATEGORY_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Sparkles,
@@ -96,6 +95,7 @@ interface PhotoSourcesModalProps {
     sourceType?: 'plex' | 'local' | 'web' | 'curated',
     applyToAll?: boolean
   ) => void;
+  targetWidgetId?: string;
   initialWebUrls?: string;
   currentSourceLabel?: string;
   currentSourceType?: 'plex' | 'local' | 'web' | 'curated';
@@ -116,12 +116,14 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   isOpen,
   onClose,
   onPhotosLoaded,
+  targetWidgetId,
   initialWebUrls = '',
   currentSourceLabel,
   currentSourceType,
   currentPhotoCount,
   isCommonSource,
 }) => {
+  const photoSyncState = useDashboardStore((s) => s.photoSyncState);
   const [activeTab, setActiveTab] = useState<'plex' | 'local' | 'web' | 'curated'>('plex');
   const [applyToAll, setApplyToAll] = useState<boolean>(isCommonSource ?? false);
 
@@ -334,43 +336,41 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   const handleLoadPlexPhotos = async () => {
     if (!selectedServer || !selectedSectionKey || !plexToken) return;
     const uri = getBestPlexConnectionUri(selectedServer);
-    setPlexLoading(true);
-    setStatusMessage('Scanning Plex library & subfolders (unlimited)...');
-    try {
-      const currentSection = photoSections.find((s) => s.key === selectedSectionKey);
-      const currentFolder = sectionFolders.find((f) => f.key === selectedFolderKey);
-
-      const photos = await getPlexPhotosFromSection(
-        uri,
-        selectedServer.accessToken || plexToken,
-        selectedSectionKey,
-        selectedFolderKey,
-        Infinity,
-        (count) => {
-          setStatusMessage(`Scanning Plex photos: ${count.toLocaleString()} loaded so far...`);
-        }
-      );
-      if (photos.length > 0) {
-        const sectionTitle = currentSection?.title || 'Photos';
-        const folderTitle = currentFolder
-          ? currentFolder.parentTitle
-            ? ` / ${currentFolder.parentTitle} / ${currentFolder.title}`
-            : ` / ${currentFolder.title}`
-          : '';
-        const sourceLabel = `Plex (${selectedServer.name} - ${sectionTitle}${folderTitle})`;
-
-        onPhotosLoaded(photos, sourceLabel, undefined, 'plex', applyToAll);
-        cachePhotosLocally(photos);
-        setStatusMessage(`Successfully loaded ${photos.length} photos from Plex!`);
-        setTimeout(() => onClose(), 1200);
-      } else {
-        setStatusMessage('No photos found in this library section or folder.');
-      }
-    } catch (err: any) {
-      setStatusMessage(`Error streaming photos: ${err.message}`);
-    } finally {
-      setPlexLoading(false);
+    if (!uri) {
+      setStatusMessage('No reachable connection URI for this server.');
+      return;
     }
+    setPlexLoading(true);
+    setStatusMessage('Connecting to Plex and indexing library in background...');
+
+    const currentSection = photoSections.find((s) => s.key === selectedSectionKey);
+    const currentFolder = sectionFolders.find((f) => f.key === selectedFolderKey);
+    const sectionTitle = currentSection?.title || 'Photos';
+    const folderTitle = currentFolder
+      ? currentFolder.parentTitle
+        ? ` / ${currentFolder.parentTitle} / ${currentFolder.title}`
+        : ` / ${currentFolder.title}`
+      : '';
+    const sourceLabel = `Plex (${selectedServer.name} - ${sectionTitle}${folderTitle})`;
+
+    photoSyncService.startPlexBackgroundSync({
+      serverUri: uri,
+      serverAccessToken: selectedServer.accessToken || plexToken,
+      sectionKey: selectedSectionKey,
+      folderOrAlbumKey: selectedFolderKey || undefined,
+      sourceLabel,
+      targetWidgetId: isCommonSource ? undefined : targetWidgetId,
+      applyToAll,
+      onInitialBatchReady: (initialBatch) => {
+        onPhotosLoaded(initialBatch, sourceLabel, undefined, 'plex', applyToAll);
+        setStatusMessage(`Streaming ${initialBatch.length} photos! Continuing library indexing in background...`);
+        setTimeout(() => onClose(), 800);
+      },
+      onError: (errMsg) => {
+        setStatusMessage(`Error streaming photos: ${errMsg}`);
+        setPlexLoading(false);
+      },
+    });
   };
 
   // Local Multi-Folder Pickers & Handlers
@@ -422,33 +422,30 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
 
     setIsScanning(true);
     setStatusMessage(
-      `Scanning ${selectedSubfolderNames.size} selected subfolder(s) in "${subfolderInspection.rootName}"...`
+      `Importing ${selectedSubfolderNames.size} subfolder(s) from "${subfolderInspection.rootName}" in background...`
     );
-    try {
-      const { folderEntries, totalPhotos } = await scanSelectedSubfolders(
-        subfolderInspection,
-        selectedSubfolderNames,
-        includeRootPhotos,
-        scanLimit,
-        (count, dirName) => {
-          setStatusMessage(`Scanning "${dirName}": ${count} photos found...`);
-        }
-      );
 
-      if (folderEntries.length > 0) {
-        setSelectedFolders((prev) => [...prev, ...folderEntries]);
-        setStatusMessage(
-          `Successfully added ${totalPhotos.length.toLocaleString()} photos from ${folderEntries.length} subfolder(s)!`
-        );
+    const sourceLabel = `Local (${subfolderInspection.rootName})`;
+
+    photoSyncService.startLocalBackgroundSync({
+      inspection: subfolderInspection,
+      selectedSubfolderNames,
+      includeRootPhotos,
+      scanLimit,
+      sourceLabel,
+      targetWidgetId: isCommonSource ? undefined : targetWidgetId,
+      applyToAll,
+      onInitialBatchReady: (initialBatch) => {
+        onPhotosLoaded(initialBatch, sourceLabel, undefined, 'local', applyToAll);
+        setStatusMessage(`Streaming ${initialBatch.length} photos! Scanning remaining folders in background...`);
         setSubfolderInspection(null);
-      } else {
-        setStatusMessage('No photos found in the selected subfolders.');
-      }
-    } catch (err: any) {
-      setStatusMessage(`Error scanning subfolders: ${err.message}`);
-    } finally {
-      setIsScanning(false);
-    }
+        setTimeout(() => onClose(), 800);
+      },
+      onError: (errMsg) => {
+        setStatusMessage(`Error scanning subfolders: ${errMsg}`);
+        setIsScanning(false);
+      },
+    });
   };
 
   const handlePickFolder = async () => {
@@ -589,24 +586,26 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   // Web / Google Photos & Drive URLs
   const handleApplyWebUrls = async () => {
     setIsWebLoading(true);
-    setStatusMessage('Resolving Google Photos album & web links (retrieving full library)...');
-    try {
-      const res = await resolveWebAndCloudPhotoUrls(webUrlsText);
-      if (res.photos.length > 0) {
-        onPhotosLoaded(res.photos, res.sourceTitle || 'Google Photos & Web', webUrlsText, 'web', applyToAll);
-        cachePhotosLocally(res.photos);
+    setStatusMessage('Connecting to Google Photos / web links in background...');
+
+    photoSyncService.startWebBackgroundSync({
+      webUrlsText,
+      targetWidgetId: isCommonSource ? undefined : targetWidgetId,
+      applyToAll,
+      onInitialBatchReady: (initialBatch, sourceTitle, totalAlbumCount) => {
+        onPhotosLoaded(initialBatch, sourceTitle, webUrlsText, 'web', applyToAll);
         const countText =
-          res.totalAlbumCount && res.totalAlbumCount > res.photos.length
-            ? `Loaded ${res.photos.length} of ${res.totalAlbumCount} photos`
-            : `Loaded ${res.photos.length} photos`;
-        setStatusMessage(`${countText} from ${res.sourceTitle}!`);
-        setTimeout(() => onClose(), 1200);
-      } else {
-        setStatusMessage(res.error || 'Please enter at least one valid Google Photos, Google Drive, or image link.');
-      }
-    } finally {
-      setIsWebLoading(false);
-    }
+          totalAlbumCount && totalAlbumCount > initialBatch.length
+            ? `Streaming ${initialBatch.length} of ${totalAlbumCount.toLocaleString()} photos! Full sync continuing in background...`
+            : `Loaded ${initialBatch.length} photos!`;
+        setStatusMessage(countText);
+        setTimeout(() => onClose(), 800);
+      },
+      onError: (errMsg) => {
+        setStatusMessage(errMsg);
+        setIsWebLoading(false);
+      },
+    });
   };
 
   // Curated Preset
@@ -724,6 +723,25 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
 
         {/* Tab Body */}
         <div className="p-5 overflow-y-auto space-y-4 flex-1">
+          {photoSyncState?.isActive && (
+            <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/25 flex items-center justify-between gap-3 text-xs text-blue-200 shadow-sm animate-pulse">
+              <div className="flex items-center gap-2 min-w-0">
+                <Loader2 className="w-4 h-4 animate-spin text-blue-400 shrink-0" />
+                <div className="truncate">
+                  <span className="font-semibold text-white">Background Sync In Progress: </span>
+                  <span>{photoSyncState.statusMessage}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => photoSyncService.cancelSync()}
+                className="px-2.5 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 font-medium cursor-pointer transition-colors shrink-0"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+
           {statusMessage && (
             <div className="p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 text-xs text-center font-medium">
               {statusMessage}

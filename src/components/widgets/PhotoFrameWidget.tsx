@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Image as ImageIcon, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
+import { Image as ImageIcon, ChevronLeft, ChevronRight, Sparkles, Loader2 } from 'lucide-react';
 import {
   CURATED_AMBIENT_PHOTOS,
   cachePhotosLocally,
@@ -226,6 +226,11 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
 }) => {
   const commonPhotos = useDashboardStore((s) => s.settings.commonPhotos);
   const commonPhotoSourceLabel = useDashboardStore((s) => s.settings.commonPhotoSourceLabel);
+  const photoSyncState = useDashboardStore((s) => s.photoSyncState);
+
+  const isThisWidgetSyncing =
+    Boolean(photoSyncState?.isActive) &&
+    (!photoSyncState?.targetWidgetId || photoSyncState?.targetWidgetId === widgetId);
 
   const isUsingCommonSource =
     useCommonSource !== false && Boolean(commonPhotos && commonPhotos.length > 0);
@@ -780,16 +785,30 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   useEffect(() => {
     if (resolvedPhotos && resolvedPhotos.length > 0) {
       const pool = photoOrder === 'random' ? shuffleArray(resolvedPhotos) : resolvedPhotos;
-      setPhotos(pool);
       const newSig = getPhotosSignature(resolvedPhotos);
       const existing = loadRuntimeState(stateKey, newSig);
-      if (!existing) {
-        // Brand new photo album loaded -> reset to start or random
-        setCurrentIndex(photoOrder === 'random' ? Math.floor(Math.random() * resolvedPhotos.length) : 0);
-        setFilmstripIndex(0);
-        setMosaicPhotos(pool.slice(0, 4));
-        mosaicSlotRef.current = 0;
-        mosaicIndexRef.current = 4 % resolvedPhotos.length;
+
+      if (existing) {
+        setPhotos(pool);
+      } else {
+        setPhotos((prev) => {
+          const currentDisplayedPhoto = prev[currentIndex];
+          if (currentDisplayedPhoto && resolvedPhotos.some((p) => p.id === currentDisplayedPhoto.id)) {
+            // Keep playing currently displayed photo seamlessly without jumping
+            const newIndex = pool.findIndex((p) => p.id === currentDisplayedPhoto.id);
+            if (newIndex >= 0) {
+              setCurrentIndex(newIndex);
+            }
+          } else {
+            // Brand new photo album loaded -> reset to start or random
+            setCurrentIndex(photoOrder === 'random' ? Math.floor(Math.random() * resolvedPhotos.length) : 0);
+            setFilmstripIndex(0);
+            setMosaicPhotos(pool.slice(0, 4));
+            mosaicSlotRef.current = 0;
+            mosaicIndexRef.current = 4 % resolvedPhotos.length;
+          }
+          return pool;
+        });
       }
     }
   }, [resolvedPhotos, stateKey, photoOrder]);
@@ -1390,6 +1409,12 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
             <span className="text-[10px] text-gray-400 font-mono">
               ({activeDisplayIndex + 1}/{photos.length})
             </span>
+            {isThisWidgetSyncing && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-[9px] font-medium border border-blue-400/30">
+                <Loader2 className="w-2.5 h-2.5 animate-spin text-blue-400" />
+                <span>Syncing</span>
+              </span>
+            )}
             {photos.length > 1 && (
               <button
                 type="button"
@@ -1408,6 +1433,16 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Non-intrusive Background Photo Indexing Pill */}
+      {isThisWidgetSyncing && (
+        <div className="absolute bottom-3 left-3 z-20 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/75 backdrop-blur-md border border-blue-500/40 text-xs text-blue-200 shadow-xl pointer-events-none">
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400 shrink-0" />
+          <span className="font-medium text-white truncate max-w-[240px]">
+            {photoSyncState?.statusMessage || `Indexing library in background (${photoSyncState?.loadedCount || 0} photos)...`}
+          </span>
         </div>
       )}
 

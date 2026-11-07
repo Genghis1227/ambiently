@@ -36,6 +36,7 @@ import {
   Check,
   RotateCw,
   Sparkles,
+  Loader2,
 } from 'lucide-react';
 import { useUpdateChecker } from '../../services/updateChecker';
 import { db } from '../../services/db';
@@ -89,6 +90,7 @@ interface SettingsModalProps {
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialTab = 'boards' }) => {
   const {
     settings,
+    photoSyncState,
     tabs,
     widgets,
     notes,
@@ -1275,6 +1277,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                   <span>Configure Common Photos</span>
                 </button>
               </div>
+
+              {photoSyncState?.isActive && (
+                <div className="flex items-center justify-between p-3 rounded-xl bg-blue-500/10 border border-blue-500/25 text-xs text-blue-200">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <Loader2 className="w-4 h-4 animate-spin text-blue-400 shrink-0" />
+                    <div className="truncate">
+                      <span className="font-semibold text-white">Indexing in background: </span>
+                      <span>{photoSyncState.statusMessage}</span>
+                    </div>
+                  </div>
+                  <span className="font-mono text-[11px] text-blue-300 font-semibold shrink-0">
+                    {photoSyncState.loadedCount.toLocaleString()} photos
+                  </span>
+                </div>
+              )}
 
               <div className="flex items-center justify-between text-xs px-3 py-2 rounded-lg bg-gray-900/60 border border-gray-800 text-gray-300">
                 <span className="text-gray-400">Current Shared Source:</span>
