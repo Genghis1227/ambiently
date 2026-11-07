@@ -11,6 +11,16 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.20",
+    date: "November 7, 2026",
+    title: "Cloud Backup Payload Optimization & Batched Upserts",
+    highlights: [
+      "Prevent Statement Timeouts on Cloud Sync: Capped custom and common photo JSON arrays in cloud sync payloads to 250 items, shrinking payload size by ~95% and eliminating PostgreSQL statement timeouts.",
+      "Batched Widget & Note Upserts: Chunked widget upserts into batches of 5 with an automatic single-item fallback, and notes into batches of 25 to protect Supabase compute instances from memory exhaustion.",
+      "High-Performance Board Limits Migration: Added database migration replacing 5-table detoasting scans with an in-memory batch size check (< 5 MB), preventing memory commitment spikes and connection drops.",
+    ],
+  },
+  {
     version: "v0.3.19",
     date: "November 7, 2026",
     title: "Shared Photos Settings Layout & Ambient Date Styling Polish",

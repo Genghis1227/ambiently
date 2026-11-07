@@ -559,19 +559,29 @@ export async function pushToCloud(
     // Upsert Widgets: only send widgets with genuinely newer timestamps or new records
     let widgetsToUpsert: any[] = [];
     if (widgetsToPush.length > 0) {
-      const formattedWidgets = widgetsToPush.map((w) => ({
-        id: w.id,
-        dashboard_id: dashboardId,
-        tab_id: w.tabId,
-        user_id: ownerId,
-        type: w.type,
-        title: w.title,
-        grid_pos: w.gridPos,
-        freeform_pos: w.freeformPos,
-        config: stripPlexTokens(w.config),
-        updated_at: w.updated_at,
-        deleted_at: w.deleted_at || null,
-      }));
+      const formattedWidgets = widgetsToPush.map((w) => {
+        let configToPush = w.config || {};
+        if (Array.isArray(configToPush.customPhotos) && configToPush.customPhotos.length > 250) {
+          // Cap photos in cloud payload to 250 to keep JSON payload small and prevent statement timeouts
+          configToPush = {
+            ...configToPush,
+            customPhotos: configToPush.customPhotos.slice(0, 250),
+          };
+        }
+        return {
+          id: w.id,
+          dashboard_id: dashboardId,
+          tab_id: w.tabId,
+          user_id: ownerId,
+          type: w.type,
+          title: w.title,
+          grid_pos: w.gridPos,
+          freeform_pos: w.freeformPos,
+          config: stripPlexTokens(configToPush),
+          updated_at: w.updated_at,
+          deleted_at: w.deleted_at || null,
+        };
+      });
 
       widgetsToUpsert = formattedWidgets.filter((w) => {
         const remoteTime = remoteWidgetsMap.get(w.id);
@@ -628,8 +638,17 @@ export async function pushToCloud(
         return acc;
       }, {} as Record<string, any>);
 
+      let settingsToPush = { ...settings };
+      if (Array.isArray(settingsToPush.commonPhotos) && settingsToPush.commonPhotos.length > 250) {
+        // Cap commonPhotos in cloud JSON payload to 250 to prevent statement timeouts
+        settingsToPush = {
+          ...settingsToPush,
+          commonPhotos: settingsToPush.commonPhotos.slice(0, 250),
+        };
+      }
+
       const cloudSafeSettings = stripPlexTokens({
-        ...settings,
+        ...settingsToPush,
         pinHash: null,
         canvasThemes: tabThemeMeta,
       });
@@ -654,13 +673,29 @@ export async function pushToCloud(
     }
 
     if (widgetsToUpsert.length > 0) {
-      const { error: widgetErr } = await sb.from('widgets').upsert(widgetsToUpsert);
-      if (widgetErr) throw widgetErr;
+      // Upsert widgets in small batches of 5 to avoid statement timeouts
+      const CHUNK_SIZE = 5;
+      for (let i = 0; i < widgetsToUpsert.length; i += CHUNK_SIZE) {
+        const chunk = widgetsToUpsert.slice(i, i + CHUNK_SIZE);
+        const { error: widgetErr } = await sb.from('widgets').upsert(chunk);
+        if (widgetErr) {
+          // If a chunk fails, try upserting one by one so large widgets don't fail the rest
+          for (const item of chunk) {
+            const { error: singleErr } = await sb.from('widgets').upsert(item);
+            if (singleErr) throw singleErr;
+          }
+        }
+      }
     }
 
     if (notesToUpsert.length > 0) {
-      const { error: noteErr } = await sb.from('notes').upsert(notesToUpsert);
-      if (noteErr) throw noteErr;
+      // Upsert notes in batches of 25
+      const CHUNK_SIZE = 25;
+      for (let i = 0; i < notesToUpsert.length; i += CHUNK_SIZE) {
+        const chunk = notesToUpsert.slice(i, i + CHUNK_SIZE);
+        const { error: noteErr } = await sb.from('notes').upsert(chunk);
+        if (noteErr) throw noteErr;
+      }
     }
 
     lastKnownCloudUpdatedAt = nowIso;
