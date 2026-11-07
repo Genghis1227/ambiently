@@ -763,14 +763,32 @@ export async function getPlexSectionTotalPhotos(
   const cleanUri = serverUri.replace(/\/$/, '');
   const tokenParam = `X-Plex-Token=${encodeURIComponent(serverAccessToken)}`;
   try {
+    // Request container size 1 so Plex computes totalSize for pagination without sending photos
     const res = await fetch(
-      `${cleanUri}/library/sections/${sectionKey}/all?type=13&X-Plex-Container-Start=0&X-Plex-Container-Size=0&${tokenParam}`,
+      `${cleanUri}/library/sections/${sectionKey}/all?type=13&X-Plex-Container-Start=0&X-Plex-Container-Size=1&${tokenParam}`,
       { headers: { Accept: 'application/json' } }
     );
-    if (!res.ok) return null;
-    const data = await res.json();
-    const count = data.MediaContainer?.totalSize ?? data.MediaContainer?.size;
-    return typeof count === 'number' ? count : null;
+    if (res.ok) {
+      const data = await res.json();
+      const total = data.MediaContainer?.totalSize;
+      if (typeof total === 'number' && total > 0) {
+        return total;
+      }
+    }
+
+    // Fallback: check section /all without type filter
+    const fallbackRes = await fetch(
+      `${cleanUri}/library/sections/${sectionKey}/all?X-Plex-Container-Start=0&X-Plex-Container-Size=1&${tokenParam}`,
+      { headers: { Accept: 'application/json' } }
+    );
+    if (fallbackRes.ok) {
+      const fbData = await fallbackRes.json();
+      const fbTotal = fbData.MediaContainer?.totalSize ?? fbData.MediaContainer?.size;
+      if (typeof fbTotal === 'number' && fbTotal > 0) {
+        return fbTotal;
+      }
+    }
+    return null;
   } catch (err) {
     console.warn('Could not fetch section photo count from Plex:', err);
     return null;

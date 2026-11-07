@@ -133,6 +133,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [authMessage, setAuthMessage] = useState('');
   const [syncLoading, setSyncLoading] = useState(false);
+  const [isSignOutConfirmOpen, setIsSignOutConfirmOpen] = useState(false);
   const [isConfirmingReset, setIsConfirmingReset] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [backupStatus, setBackupStatus] = useState<string>('');
@@ -315,12 +316,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
     }
   };
 
-  const handleSignOut = async () => {
+  const handleSignOutKeepLocal = async () => {
     await signOutSupabase();
     setUser(null);
     setAuthStep('email');
     setOtpInput('');
-    setAuthMessage('Signed out');
+    setAuthMessage('Disconnected from Cloud Sync. Your board is running locally.');
+    setIsSignOutConfirmOpen(false);
+  };
+
+  const handleSignOutAndWipe = async () => {
+    setIsResetting(true);
+    try {
+      await signOutSupabase();
+      await db.delete();
+      if ('caches' in window) {
+        const cacheKeys = await caches.keys();
+        await Promise.all(cacheKeys.map((k) => caches.delete(k)));
+      }
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.href = window.location.origin + window.location.pathname;
+    } catch (err) {
+      console.error('Sign out & wipe error:', err);
+      window.location.reload();
+    }
   };
 
   const handlePushCloud = async () => {
@@ -1366,8 +1386,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                   </button>
                   {user && (
                     <button
-                      onClick={handleSignOut}
-                      className="flex items-center gap-1 text-xs text-red-400 hover:underline"
+                      type="button"
+                      onClick={() => setIsSignOutConfirmOpen((prev) => !prev)}
+                      className="flex items-center gap-1 text-xs text-red-400 hover:underline cursor-pointer"
                     >
                       <LogOut className="w-3 h-3" /> Sign Out
                     </button>
@@ -1377,6 +1398,62 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
 
               {user ? (
                 <div className="space-y-3">
+                  {isSignOutConfirmOpen ? (
+                    <div className="p-3.5 rounded-xl bg-red-950/40 border border-red-500/40 space-y-3">
+                      <div className="flex items-start gap-2.5">
+                        <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <div className="text-xs font-bold text-red-200">Sign Out of Cloud Sync</div>
+                          <div className="text-[11px] text-gray-300 leading-relaxed">
+                            Choose what happens to this device's local dashboard:
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={handleSignOutKeepLocal}
+                          disabled={isResetting}
+                          className="p-2.5 rounded-lg bg-gray-900/90 hover:bg-gray-800 border border-gray-700 hover:border-gray-600 text-left transition-all cursor-pointer space-y-1 group"
+                        >
+                          <div className="text-xs font-bold text-gray-200 group-hover:text-white flex items-center justify-between">
+                            <span>Keep Local Board</span>
+                            <span className="text-[10px] text-blue-400 font-mono">Offline</span>
+                          </div>
+                          <div className="text-[10px] text-gray-400 leading-snug">
+                            Disconnect from cloud sync, but keep current widgets, notes, and photos running locally.
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleSignOutAndWipe}
+                          disabled={isResetting}
+                          className="p-2.5 rounded-lg bg-red-600/20 hover:bg-red-600/30 border border-red-500/40 hover:border-red-500 text-left transition-all cursor-pointer space-y-1 group"
+                        >
+                          <div className="text-xs font-bold text-red-300 group-hover:text-red-200 flex items-center justify-between">
+                            <span>Wipe & Clean Slate</span>
+                            <span className="text-[10px] text-red-400 font-mono">Reset</span>
+                          </div>
+                          <div className="text-[10px] text-red-300/80 leading-snug">
+                            Wipe all local widgets, notes, and cache from this machine. Resets to factory defaults.
+                          </div>
+                        </button>
+                      </div>
+
+                      <div className="flex justify-end pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setIsSignOutConfirmOpen(false)}
+                          className="text-[11px] text-gray-400 hover:text-gray-200 px-2 py-0.5 rounded cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+
                   <p className="text-xs text-emerald-400">
                     Signed in as: <span className="font-mono text-gray-200">{user.email}</span>
                   </p>
