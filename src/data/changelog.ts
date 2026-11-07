@@ -11,6 +11,18 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.9",
+    date: "November 6, 2026",
+    title: "Plex Multi-Folder & Album Selection with Search and Quick Filter Presets",
+    highlights: [
+      "Plex Multi-Folder Checklist: Added an interactive multi-folder and album picker in the Plex photo source tab, enabling users to pick and stream from multiple specific folders (e.g. 2023 + 2024 + Vacations) rather than being limited to a single folder.",
+      "Quick Preset Action Buttons: Added 1-click 'Last 3 Years', 'Select All', and 'Clear' buttons to quickly select year-based Plex folders in seconds.",
+      "Real-Time Folder Search: Added an instant filter bar to search through hundreds of subfolders, year albums, and nested Plex directories with 1-click clear.",
+      "Folder Scope Selector: Seamless toggle between 'Entire Library' (recursive full section crawl) and 'Select Folders' (custom multi-folder checklist).",
+      "Dynamic Multi-Folder Streaming: Updated background photo ingestion to crawl and aggregate photos across all chosen Plex folder keys in parallel.",
+    ],
+  },
+  {
     version: "v0.3.8",
     date: "November 6, 2026",
     title: "Non-Blocking Background Photo Library Ingestion (Plex, Local NAS, Google Photos & Drive)",

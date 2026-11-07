@@ -13,6 +13,7 @@ export interface PlexSyncParams {
   serverAccessToken: string;
   sectionKey: string;
   folderOrAlbumKey?: string;
+  folderOrAlbumKeys?: string | string[];
   sourceLabel: string;
   targetWidgetId?: string;
   applyToAll?: boolean;
@@ -91,7 +92,7 @@ class PhotoSyncService {
         params.serverUri,
         params.serverAccessToken,
         params.sectionKey,
-        params.folderOrAlbumKey,
+        params.folderOrAlbumKeys || params.folderOrAlbumKey,
         {
           signal,
           onBatch: async (batchPhotos, isInitial, isDone) => {
