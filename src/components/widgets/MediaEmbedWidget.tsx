@@ -38,8 +38,24 @@ export function normalizeEmbedUrl(rawUrl: string, muted: boolean, savedTime = 0)
     return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=${muted ? 1 : 0}${startParam}&enablejsapi=1&rel=0`;
   }
 
-  return trimmed;
+  // The link is synced to every display on the board, so only show web pages, never data: or other
+  // kinds of address
+  return isEmbeddableUrl(trimmed) ? trimmed : '';
 }
+
+function isEmbeddableUrl(rawUrl: string): boolean {
+  try {
+    return new URL(rawUrl.trim()).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+// An embedded page can run its own scripts, play media and open links in a new tab, but can't
+// navigate the dashboard away, show alert dialogs, start downloads or reach the dashboard's storage.
+// YouTube and Windy work within this.
+const EMBED_SANDBOX =
+  'allow-scripts allow-same-origin allow-presentation allow-popups allow-popups-to-escape-sandbox allow-forms';
 
 export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
   preset: initialPreset = 'lofi',
@@ -85,7 +101,7 @@ export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
 
   const handleSaveCustomUrl = () => {
     const trimmed = urlDraft.trim();
-    if (!trimmed) return;
+    if (!isEmbeddableUrl(trimmed)) return;
     if (onUpdateConfig) {
       onUpdateConfig({ preset: 'custom', customUrl: trimmed });
     }
@@ -273,7 +289,7 @@ export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
                 )}
                 <button
                   type="submit"
-                  disabled={!urlDraft.trim()}
+                  disabled={!isEmbeddableUrl(urlDraft)}
                   className="px-4 py-1.5 rounded-xl bg-pink-600 hover:bg-pink-500 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold text-white shadow-lg shadow-pink-500/25 transition-all cursor-pointer flex items-center gap-1.5"
                 >
                   <Check className="w-3.5 h-3.5" />
@@ -290,11 +306,16 @@ export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
             title="Ambient Stream Embed"
             className="w-full h-full border-0"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+            sandbox={EMBED_SANDBOX}
             referrerPolicy="strict-origin-when-cross-origin"
           />
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center text-gray-500 text-xs">
-            <span>No stream URL configured.</span>
+            <span>
+              {preset === 'custom' && customUrl.trim()
+                ? 'Only https:// links can be shown here.'
+                : 'No stream URL configured.'}
+            </span>
           </div>
         )}
       </div>
