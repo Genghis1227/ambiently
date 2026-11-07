@@ -11,6 +11,18 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.13",
+    date: "November 7, 2026",
+    title: "Unified Plex Stream Scope Switcher & Reactive Display Pairing",
+    highlights: [
+      "Option A Unified Stream Scope: Streamlined Plex library navigation into two clean, mutually exclusive modes—'Capture Date & Timeline' (fast EXIF server-side queries for recent memories across your entire library) vs 'Specific Folders & Albums' (custom folder checklists without date filter collisions).",
+      "Instant Dismissal on Link Display: Clicking 'Link Display' in the top notification banner immediately dismisses the banner so it never covers the pairing screen or dashboard.",
+      "Reactive Auth Event Bus: Added a cross-component 'plex_auth_changed' event that triggers whenever Plex authentication is saved, cleared, or photos are configured.",
+      "Real-Time Banner Auto-Hide: Once Plex photos are configured or the display is linked, the re-auth notification banner automatically hides without needing a manual refresh or reload.",
+      "Live PhotoFrame Widget Sync: Photo frame widgets immediately update their 'Pairing Needed' status badge in real time as soon as credentials are authenticated.",
+    ],
+  },
+  {
     version: "v0.3.12",
     date: "November 6, 2026",
     title: "Device-Local Plex Re-Authentication Notification & Pairing Banner",

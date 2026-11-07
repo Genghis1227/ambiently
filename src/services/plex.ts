@@ -148,6 +148,9 @@ export async function savePlexToken(token: string): Promise<void> {
     value: token,
     updated_at: new Date().toISOString(),
   });
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('plex_auth_changed', { detail: { hasToken: true } }));
+  }
 }
 
 export async function getPlexToken(): Promise<string | null> {
@@ -159,6 +162,9 @@ export async function clearPlexToken(): Promise<void> {
   await db.vault.delete('plex_auth_token');
   await db.vault.delete('plex_selected_server');
   await db.vault.delete('plex_selected_section');
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('plex_auth_changed', { detail: { hasToken: false } }));
+  }
 }
 
 // 4. Discover user Plex Media Servers (including secure plex.direct HTTPS connections)

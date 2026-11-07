@@ -286,11 +286,16 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
       return;
     }
     let isMounted = true;
-    getPlexToken().then((token) => {
-      if (isMounted) setHasLocalPlexAuth(Boolean(token));
-    });
+    const checkAuth = () => {
+      getPlexToken().then((token) => {
+        if (isMounted) setHasLocalPlexAuth(Boolean(token));
+      });
+    };
+    checkAuth();
+    window.addEventListener('plex_auth_changed', checkAuth);
     return () => {
       isMounted = false;
+      window.removeEventListener('plex_auth_changed', checkAuth);
     };
   }, [isPlexSource]);
 
