@@ -1174,19 +1174,19 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                       onError={() => handleMosaicError(idx, p.id)}
                     />
                     {showCaptions ? (
-                      <div className="absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black/85 via-black/40 to-transparent text-[11px] text-white font-medium flex items-center justify-between gap-1.5">
-                        <span className="truncate">{p.caption || p.author || 'Captured Moment'}</span>
+                      <div className="absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black/90 via-black/50 to-transparent text-[11px] text-white">
+                        <div className="font-medium truncate drop-shadow">
+                          {p.caption || 'Captured Moment'}
+                        </div>
                         {showDateTaken && p.date && (
-                          <span className="text-[9px] text-emerald-300 font-mono bg-emerald-950/70 border border-emerald-500/30 px-1.5 py-0.5 rounded shrink-0 flex items-center gap-1">
-                            <Calendar className="w-2.5 h-2.5 text-emerald-400" />
-                            <span>{formatPhotoDate(p.date)}</span>
-                          </span>
+                          <div className="text-[10px] text-white/75 font-normal drop-shadow mt-0.5 truncate">
+                            {formatPhotoDate(p.date)}
+                          </div>
                         )}
                       </div>
                     ) : showDateTaken && p.date ? (
-                      <div className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded bg-black/70 backdrop-blur-sm border border-white/10 text-[9px] text-emerald-300 font-mono flex items-center gap-1 shadow">
-                        <Calendar className="w-2.5 h-2.5 text-emerald-400" />
-                        <span>{formatPhotoDate(p.date)}</span>
+                      <div className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded bg-black/60 backdrop-blur-sm border border-white/10 text-[10px] text-white/85 font-normal shadow">
+                        {formatPhotoDate(p.date)}
                       </div>
                     ) : null}
                   </motion.div>
@@ -1326,7 +1326,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                               {formatPhotoDate(item.photo.date)}
                             </div>
                           )}
-                          {showCaptions && item.photo.author && !isSmall && (
+                          {showCaptions && item.photo.author && !isSmall && !/^(19|20)\d{2}$/.test(item.photo.author.trim()) && (
                             <div className="text-[8px] sm:text-[9px] text-gray-500 font-sans truncate">
                               {item.photo.author}
                             </div>
@@ -1449,12 +1449,12 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                       </div>
                     )}
                     {showDateTaken && p.date && (
-                      <div className="text-[11px] text-emerald-300 font-mono drop-shadow flex items-center justify-center gap-1 mt-0.5">
-                        <Calendar className="w-3 h-3 text-emerald-400" />
+                      <div className="text-[11px] text-white/80 font-normal drop-shadow flex items-center justify-center gap-1 mt-0.5">
+                        <Calendar className="w-3 h-3 text-white/60" />
                         <span>{formatPhotoDate(p.date)}</span>
                       </div>
                     )}
-                    {showCaptions && p.author && (
+                    {showCaptions && p.author && !/^(19|20)\d{2}$/.test(p.author.trim()) && (
                       <div className="text-[10px] text-gray-300 font-sans truncate drop-shadow mt-0.5">
                         {p.author}
                       </div>
@@ -1496,8 +1496,8 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
               ({activeDisplayIndex + 1}/{photos.length})
             </span>
             {showDateTaken && currentPhoto.date && (
-              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-300 font-mono bg-emerald-950/70 border border-emerald-500/30 px-1.5 py-0.5 rounded-full">
-                <Calendar className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+              <span className="inline-flex items-center text-[11px] text-gray-300 font-normal pl-0.5">
+                <span className="text-gray-500 font-bold mr-1">·</span>
                 <span>{formatPhotoDate(currentPhoto.date)}</span>
               </span>
             )}
@@ -1536,10 +1536,10 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
           </div>
         </div>
       ) : showDateTaken && currentPhoto.date ? (
-        <div className="relative z-40 p-3 flex items-center justify-between text-white drop-shadow-md pointer-events-none pr-24">
-          <div className="inline-flex items-center gap-1.5 bg-black/65 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/15 text-xs text-emerald-300 font-mono shadow-lg pointer-events-auto">
-            <Calendar className="w-3 h-3 text-emerald-400 shrink-0" />
-            <span>{formatPhotoDate(currentPhoto.date)}</span>
+        <div className="absolute bottom-3 right-3 z-30 pointer-events-none select-none">
+          <div className="inline-flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-xs text-white/90 shadow-lg font-sans">
+            <Calendar className="w-3 h-3 text-white/60 shrink-0" />
+            <span className="font-medium tracking-wide">{formatPhotoDate(currentPhoto.date)}</span>
           </div>
         </div>
       ) : null}
@@ -1555,7 +1555,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
       )}
 
       {/* Subtle Bottom Photo Attribution (for Ken Burns and Mosaic) */}
-      {showCaptions && style !== 'filmstrip' && currentPhoto.author && (
+      {showCaptions && style !== 'filmstrip' && currentPhoto.author && !/^(19|20)\d{2}$/.test(currentPhoto.author.trim()) && (
         <div className="relative z-10 p-3 flex items-end justify-end text-white pointer-events-none drop-shadow-lg">
           <div className="text-[11px] text-gray-400 text-right bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full border border-white/10">
             Photo: <span className="text-gray-200 font-medium">{currentPhoto.author}</span>
