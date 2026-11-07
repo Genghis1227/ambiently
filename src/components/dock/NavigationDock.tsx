@@ -161,10 +161,14 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
     }
   }, [isDockHidden]);
 
-  // When night mode activates, collapse peeked toolbar immediately
+  // When night mode activates, collapse peeked toolbar and close open menus immediately
   useEffect(() => {
-    if (isNightMode && isDockHidden) {
-      setIsPeekOpen(false);
+    if (isNightMode) {
+      setIsQuickMenuOpen(false);
+      setShowOrganizeMenu(false);
+      if (isDockHidden) {
+        setIsPeekOpen(false);
+      }
     }
   }, [isNightMode, isDockHidden]);
 

@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.6] - 2026-11-06
+
+### Added
+* **Multi-Display Local Folder Notice & Plex Guidance (`src/components/photos/PhotoSourcesModal.tsx`):**
+  * Added a prominent informational notice to the Local Folder photo source settings explaining that browser-sandboxed local PC and mapped NAS folders are restricted to the local device and cannot be read across secondary synchronized displays.
+  * Added 1-click tab switching to Plex Media Server to guide users towards streaming NAS photos to multiple household kiosks and companion screens.
+
+### Fixed
+* **Night Mode Command Center Floating Panel Dismissal (`src/components/dock/AmbientQuickMenu.tsx`, `src/components/dock/NavigationDock.tsx`):**
+  * Fixed an orphaned UI state bug where clicking the Night Mode card in the Ambient Command Hub floating HUD collapsed the navigation toolbar but left the command center panel stranded open over the dimmed night screen.
+  * Added immediate `onClose()` on Night Mode toggle and enforced automatic closure of quick menus and organize popovers whenever Night Mode activates.
+
+---
+
 ## [0.3.5] - 2026-11-06
 
 ### Security

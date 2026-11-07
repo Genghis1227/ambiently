@@ -29,6 +29,7 @@ import {
   Square,
   Search,
   ArrowLeft,
+  Info,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -1069,6 +1070,23 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                       {isFinite(limit) ? (limit >= 1000 ? `${limit / 1000}k` : limit) : '∞ All'}
                     </button>
                   ))}
+                </div>
+              </div>
+
+              {/* Multi-Display Local Storage Notice */}
+              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs flex items-start gap-2.5">
+                <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-1 text-amber-200/90 leading-relaxed">
+                  <div className="font-semibold text-white flex items-center gap-1.5">
+                    <span>Local Device Storage Notice</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono">This Screen Only</span>
+                  </div>
+                  <p className="text-[11px] text-amber-100/80">
+                    Folders from your PC or mapped NAS are stored in this browser&apos;s local storage. Due to browser security sandboxing, secondary wall displays, tablets, or phones syncing this dashboard cannot access this device&apos;s local files.
+                  </p>
+                  <p className="text-[11px] text-amber-300 font-medium pt-0.5">
+                    💡 <button type="button" className="underline cursor-pointer hover:text-white inline font-bold" onClick={() => setActiveTab('plex')}>Connect Plex Media Server</button> (first tab) or Google Photos to seamlessly stream your NAS photos across all household screens.
+                  </p>
                 </div>
               </div>
 

@@ -161,6 +161,7 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
             type="button"
             onClick={() => {
               toggleNightModeManual();
+              onClose();
             }}
             className={`p-2.5 rounded-xl border flex flex-col items-start gap-1 transition-all cursor-pointer text-left ${
               settings.nightModeEnabled

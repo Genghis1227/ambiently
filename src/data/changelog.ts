@@ -11,6 +11,16 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.6",
+    date: "November 6, 2026",
+    title: "Multi-Display Local Photo Guidance & Night Mode Command Center Auto-Dismiss",
+    highlights: [
+      "Multi-Display Local Photo Notice: Added an informative banner in the Local Folder photo source settings explaining that browser-sandboxed local PC & mapped NAS folders are local to the current screen only, guiding multi-display households to Plex or Google Photos with 1-click tab switching.",
+      "Night Mode Command Center Auto-Dismiss: Fixed a UI state bug where clicking the Night Mode card inside the Ambient Command Hub floating HUD caused the navigation toolbar to hide while leaving the command center panel stranded open on top of the dimmed night screen.",
+      "Synchronous Night Mode State Cleanup: Added global night-mode listeners in the navigation dock to immediately dismiss any open quick menus, HUD popovers, or organize menus whenever Night Mode activates.",
+    ],
+  },
+  {
     version: "v0.3.5",
     date: "November 6, 2026",
     title: "Database Access Rules Overhaul, Invitation Consent, and Security Verification Audit",
