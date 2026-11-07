@@ -754,6 +754,29 @@ export async function getPlexSectionYears(
   return [];
 }
 
+// Quick server-side query to get the total number of photos available in a section
+export async function getPlexSectionTotalPhotos(
+  serverUri: string,
+  serverAccessToken: string,
+  sectionKey: string
+): Promise<number | null> {
+  const cleanUri = serverUri.replace(/\/$/, '');
+  const tokenParam = `X-Plex-Token=${encodeURIComponent(serverAccessToken)}`;
+  try {
+    const res = await fetch(
+      `${cleanUri}/library/sections/${sectionKey}/all?type=13&X-Plex-Container-Start=0&X-Plex-Container-Size=0&${tokenParam}`,
+      { headers: { Accept: 'application/json' } }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const count = data.MediaContainer?.totalSize ?? data.MediaContainer?.size;
+    return typeof count === 'number' ? count : null;
+  } catch (err) {
+    console.warn('Could not fetch section photo count from Plex:', err);
+    return null;
+  }
+}
+
 export interface PlexScanOptions {
   maxPhotos?: number;
   onProgress?: (count: number) => void;
@@ -829,7 +852,7 @@ export async function getPlexPhotosFromSection(
       directoryQueue.push({ key, depth: 0 });
     }
   } else {
-    // 1. When requesting entire section, try type=13 (photos) to flatten hierarchy
+    // 1. When requesting entire section, query type=13 (photos) with pagination to get all photos
     let filterParams = '';
     if (options.minYear) {
       filterParams += `&year>=${encodeURIComponent(options.minYear)}`;
@@ -838,16 +861,37 @@ export async function getPlexPhotosFromSection(
       filterParams += `&year<=${encodeURIComponent(options.maxYear)}`;
     }
     const sortParam = '&sort=originallyAvailableAt:desc';
-    const allPhotosUrl = `${cleanUri}/library/sections/${sectionKey}/all?type=13&includeDetails=1&includeAdvanced=1&checkFiles=1${filterParams}${sortParam}&${tokenParam}`;
-    try {
-      const res = await fetch(allPhotosUrl, {
-        headers: { Accept: 'application/json' },
-        signal,
-      });
-      if (res.ok) {
+    const PAGE_SIZE = 250;
+    let offset = 0;
+    let hasMorePages = true;
+    let serverTotalSize: number | null = null;
+
+    while (hasMorePages && (isUnlimited || photos.length < maxPhotos)) {
+      if (signal?.aborted) break;
+
+      const pageUrl = `${cleanUri}/library/sections/${sectionKey}/all?type=13&includeDetails=1&includeAdvanced=1&checkFiles=1${filterParams}${sortParam}&X-Plex-Container-Start=${offset}&X-Plex-Container-Size=${PAGE_SIZE}&${tokenParam}`;
+      try {
+        const res = await fetch(pageUrl, {
+          headers: { Accept: 'application/json' },
+          signal,
+        });
+        if (!res.ok) {
+          hasMorePages = false;
+          break;
+        }
+
         const data = await res.json();
+        if (serverTotalSize === null && typeof data.MediaContainer?.totalSize === 'number') {
+          serverTotalSize = data.MediaContainer.totalSize;
+        }
+
         const rawEntries = getContainerEntries(data);
         const leafCandidates = rawEntries.filter((item) => !isPlexDirectoryItem(item));
+
+        if (leafCandidates.length === 0) {
+          hasMorePages = false;
+          break;
+        }
 
         // Fast-path: extract photos immediately so initial display has 0 latency
         for (const item of leafCandidates) {
@@ -858,8 +902,8 @@ export async function getPlexPhotosFromSection(
 
         checkEmitInitial();
 
-        // Enrich initial batch if needed for full part paths
-        if (leafCandidates.length > 0 && photos.length < 50) {
+        // Enrich first batch if needed for full part paths
+        if (offset === 0 && leafCandidates.length > 0 && photos.length < 50) {
           try {
             const enrichedLeaves = await enrichPlexPhotoItemsWithParts(leafCandidates.slice(0, 50), cleanUri, tokenParam);
             for (const item of enrichedLeaves) {
@@ -870,18 +914,33 @@ export async function getPlexPhotosFromSection(
             // ignore
           }
         }
-      }
-    } catch (e: any) {
-      if (e?.name !== 'AbortError') {
-        console.warn('Plex /all?type=13 query failed, falling back to folder traversal:', e);
+
+        if (onBatch && photos.length - lastEmittedCount >= 100) {
+          lastEmittedCount = photos.length;
+          onBatch([...photos], false, false);
+        }
+
+        offset += leafCandidates.length;
+
+        // If we reached the server's reported totalSize or received fewer items than requested, we're done
+        if (serverTotalSize !== null && offset >= serverTotalSize) {
+          hasMorePages = false;
+        }
+        if (leafCandidates.length < PAGE_SIZE) {
+          hasMorePages = false;
+        }
+      } catch (e: any) {
+        if (e?.name !== 'AbortError') {
+          console.warn('Plex /all?type=13 page query failed:', e);
+        }
+        hasMorePages = false;
+        break;
       }
     }
 
     if (signal?.aborted) return photos;
 
-    // Fast return: if section query returned photos with date filter or full library has plenty of photos,
-    // we don't need to recursively crawl thousands of folders on disk
-    if (photos.length > 100 || (photos.length > 0 && (options.minYear || options.maxYear))) {
+    if (photos.length > 0) {
       if (onProgress) onProgress(photos.length);
       if (onBatch) {
         onBatch([...photos], !hasEmittedInitial, true);
@@ -889,7 +948,7 @@ export async function getPlexPhotosFromSection(
       return photos;
     }
 
-    // Fallback or supplement: traverse from the section folder root
+    // Fallback: If section /all?type=13 query returned 0 photos, traverse from the section folder root
     directoryQueue.push({ key: `/library/sections/${sectionKey}/folder`, depth: 0 });
   }
 

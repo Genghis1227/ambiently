@@ -42,6 +42,7 @@ import {
   getPlexPhotoLibraries,
   getPlexSectionFolders,
   getPlexSectionYears,
+  getPlexSectionTotalPhotos,
   getBestPlexConnectionUri,
   type PlexPinResponse,
   type PlexServerResource,
@@ -163,6 +164,16 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   const [isFoldersLoading, setIsFoldersLoading] = useState(false);
   const [plexLoading, setPlexLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
+  const [sectionTotalPhotos, setSectionTotalPhotos] = useState<number | null>(null);
+
+  // Compute live effective photo count from store and props
+  const storeCommonPhotos = useDashboardStore((s) => s.settings.commonPhotos);
+  const storeCommonLabel = useDashboardStore((s) => s.settings.commonPhotoSourceLabel);
+  const storeCommonType = useDashboardStore((s) => s.settings.commonPhotoSourceType);
+  const effectivePhotoCount = currentPhotoCount ?? (isCommonSource ? storeCommonPhotos?.length : undefined) ?? 0;
+  const effectiveSourceLabel = currentSourceLabel || (isCommonSource ? storeCommonLabel : undefined);
+  const effectiveSourceType = currentSourceType || (isCommonSource ? storeCommonType : undefined);
+  const displayCount = Math.max(effectivePhotoCount, photoSyncState?.loadedCount || 0);
 
   const handleTogglePlexFolder = (key: string) => {
     setSelectedPlexFolderKeys((prev) => {
@@ -279,14 +290,19 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
     if (!uri || !secKey) return;
     setIsFoldersLoading(true);
     setSelectedPlexFolderKeys(new Set());
+    setSectionTotalPhotos(null);
     try {
-      const [folders, years] = await Promise.all([
+      const [folders, years, totalCnt] = await Promise.all([
         getPlexSectionFolders(uri, server.accessToken || token, secKey),
         getPlexSectionYears(uri, server.accessToken || token, secKey).catch(() => []),
+        getPlexSectionTotalPhotos(uri, server.accessToken || token, secKey).catch(() => null),
       ]);
       setSectionFolders(folders);
       if (years && years.length > 0) {
         setPlexAvailableYears(years);
+      }
+      if (typeof totalCnt === 'number') {
+        setSectionTotalPhotos(totalCnt);
       }
     } catch (err: any) {
       console.warn('Could not load section folders:', err);
@@ -399,6 +415,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
     setPlexScopeMode('timeline');
     setPlexDateFilter('all');
     setPlexAvailableYears([]);
+    setSectionTotalPhotos(null);
     setStatusMessage('Plex disconnected.');
   };
 
@@ -469,7 +486,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('plex_auth_changed', { detail: { hasToken: true } }));
         }
-        setTimeout(() => onClose(), 800);
+        setTimeout(() => onClose(), 1500);
       },
       onError: (errMsg) => {
         setStatusMessage(`Error streaming photos: ${errMsg}`);
@@ -544,7 +561,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
         onPhotosLoaded(initialBatch, sourceLabel, undefined, 'local', applyToAll);
         setStatusMessage(`Streaming ${initialBatch.length} photos! Scanning remaining folders in background...`);
         setSubfolderInspection(null);
-        setTimeout(() => onClose(), 800);
+        setTimeout(() => onClose(), 1500);
       },
       onError: (errMsg) => {
         setStatusMessage(`Error scanning subfolders: ${errMsg}`);
@@ -704,7 +721,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
             ? `Streaming ${initialBatch.length} of ${totalAlbumCount.toLocaleString()} photos! Full sync continuing in background...`
             : `Loaded ${initialBatch.length} photos!`;
         setStatusMessage(countText);
-        setTimeout(() => onClose(), 800);
+        setTimeout(() => onClose(), 1500);
       },
       onError: (errMsg) => {
         setStatusMessage(errMsg);
@@ -770,13 +787,19 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
               <ImageIcon className="w-4 h-4" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base font-bold text-white">
                   {isCommonSource ? 'Common Photo Library' : 'Photo Frame & Media Sources'}
                 </h2>
                 {isCommonSource && (
                   <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
                     Shared Board Library
+                  </span>
+                )}
+                {displayCount > 0 && (
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 shrink-0">
+                    <ImageIcon className="w-3 h-3 text-emerald-400" />
+                    <span>{displayCount.toLocaleString()} photos</span>
                   </span>
                 )}
               </div>
@@ -828,22 +851,40 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
 
         {/* Tab Body */}
         <div className="p-5 overflow-y-auto space-y-4 flex-1">
-          {photoSyncState?.isActive && (
-            <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/25 flex items-center justify-between gap-3 text-xs text-blue-200 shadow-sm animate-pulse">
+          {photoSyncState && (
+            <div
+              className={`p-3 rounded-xl border flex items-center justify-between gap-3 text-xs shadow-sm transition-all ${
+                photoSyncState.isActive
+                  ? 'bg-blue-500/10 border-blue-500/25 text-blue-200 animate-pulse'
+                  : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
+              }`}
+            >
               <div className="flex items-center gap-2 min-w-0">
-                <Loader2 className="w-4 h-4 animate-spin text-blue-400 shrink-0" />
+                {photoSyncState.isActive ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-blue-400 shrink-0" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                )}
                 <div className="truncate">
-                  <span className="font-semibold text-white">Background Sync In Progress: </span>
+                  <span className="font-semibold text-white">
+                    {photoSyncState.isActive ? 'Background Sync In Progress: ' : 'Scan Complete: '}
+                  </span>
                   <span>{photoSyncState.statusMessage}</span>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => photoSyncService.cancelSync()}
-                className="px-2.5 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 font-medium cursor-pointer transition-colors shrink-0"
-              >
-                Cancel
-              </button>
+              {photoSyncState.isActive ? (
+                <button
+                  type="button"
+                  onClick={() => photoSyncService.cancelSync()}
+                  className="px-2.5 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 font-medium cursor-pointer transition-colors shrink-0"
+                >
+                  Cancel
+                </button>
+              ) : (
+                <span className="text-[11px] font-mono font-bold text-emerald-300 px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/30 shrink-0">
+                  {photoSyncState.loadedCount.toLocaleString()} photos
+                </span>
+              )}
             </div>
           )}
 
@@ -1018,6 +1059,27 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                     </button>
                   </div>
 
+                  {/* Active Configured Plex Library Banner */}
+                  {displayCount > 0 && (
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-blue-950/40 border border-blue-500/30 text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <div className="truncate">
+                          <span className="text-gray-400">Current Library: </span>
+                          <span className="text-white font-semibold">
+                            {effectiveSourceLabel || 'Plex Photo Library'}
+                          </span>
+                          <span className="text-blue-300 ml-1.5 font-mono font-bold">
+                            ({displayCount.toLocaleString()} photos loaded)
+                          </span>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-mono font-bold text-emerald-300 px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/30 shrink-0">
+                        Active
+                      </span>
+                    </div>
+                  )}
+
                   {/* Server Picker */}
                   {servers.length > 0 && (
                     <div className="space-y-1.5">
@@ -1049,13 +1111,28 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                         <div className="flex items-center justify-between">
                           <label className="text-xs font-semibold text-gray-300">Photo Library</label>
                           <div className="flex items-center gap-2">
+                            {sectionTotalPhotos !== null && (
+                              <span className="text-[10px] text-emerald-400 font-mono font-medium">
+                                {sectionTotalPhotos.toLocaleString()} photos on server
+                              </span>
+                            )}
                             <span className="text-[10px] text-gray-400">
                               {photoSections.length} {photoSections.length === 1 ? 'library' : 'libraries'} found
                             </span>
                             {selectedServer && plexToken && (
                               <button
                                 type="button"
-                                onClick={() => loadPhotoSections(selectedServer, plexToken)}
+                                onClick={() => {
+                                  loadPhotoSections(selectedServer, plexToken);
+                                  if (selectedSectionKey) {
+                                    const uri = getBestPlexConnectionUri(selectedServer);
+                                    if (uri) {
+                                      getPlexSectionTotalPhotos(uri, selectedServer.accessToken || plexToken, selectedSectionKey)
+                                        .then((c) => setSectionTotalPhotos(c))
+                                        .catch(() => {});
+                                    }
+                                  }
+                                }}
                                 disabled={plexLoading}
                                 className="p-0.5 text-gray-400 hover:text-white transition-colors cursor-pointer"
                                 title="Refresh library list"
@@ -1419,6 +1496,8 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                             ? 'Stream Memories (Last 5 Years)'
                             : plexDateFilter === 'last1Year'
                             ? 'Stream Memories (Past Year)'
+                            : sectionTotalPhotos && sectionTotalPhotos > 0
+                            ? `Stream Entire Library (${sectionTotalPhotos.toLocaleString()} Photos)`
                             : 'Stream Entire Library (All Time)'}
                         </span>
                       </>
@@ -1439,6 +1518,27 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                 {...({ webkitdirectory: '', directory: '', multiple: true } as any)}
                 className="hidden"
               />
+
+              {/* Active Configured Local Banner */}
+              {effectiveSourceType === 'local' && displayCount > 0 && (
+                <div className="flex items-center justify-between p-3 rounded-xl bg-blue-950/40 border border-blue-500/30 text-xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <div className="truncate">
+                      <span className="text-gray-400">Current Library: </span>
+                      <span className="text-white font-semibold">
+                        {effectiveSourceLabel || 'Local Folders'}
+                      </span>
+                      <span className="text-blue-300 ml-1.5 font-mono font-bold">
+                        ({displayCount.toLocaleString()} photos loaded)
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-mono font-bold text-emerald-300 px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/30 shrink-0">
+                    Active
+                  </span>
+                </div>
+              )}
 
               {/* Scan Limit / Capacity Selector */}
               <div className="flex items-center justify-between p-2.5 rounded-xl bg-gray-950/80 border border-gray-800 text-xs">
