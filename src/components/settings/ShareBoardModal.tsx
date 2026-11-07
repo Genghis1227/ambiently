@@ -1,11 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { QRCodeSVG } from 'qrcode.react';
 import {
   X,
   Users,
-  Copy,
-  Check,
   Smartphone,
   ShieldCheck,
   Sparkles,
@@ -14,12 +11,15 @@ import {
   ArrowRight,
   RefreshCw,
   KeyRound,
-  HeartHandshake,
+  Trash2,
+  UserPlus,
+  Lock,
 } from 'lucide-react';
 import {
-  getOrCreateInviteCode,
-  rotateInviteCode,
-  type InviteData,
+  getHouseholdMembers,
+  addHouseholdMember,
+  removeHouseholdMember,
+  type HouseholdMember,
   getCurrentUser,
   sendMagicLink,
   verifyOtpCode,
@@ -31,11 +31,11 @@ interface ShareBoardModalProps {
 }
 
 export const ShareBoardModal: React.FC<ShareBoardModalProps> = ({ isOpen, onClose }) => {
-  const [inviteData, setInviteData] = useState<InviteData | null>(null);
-  const [activeTab, setActiveTab] = useState<'admin' | 'family'>('family');
-  const [copied, setCopied] = useState(false);
+  const [members, setMembers] = useState<HouseholdMember[]>([]);
+  const [newMemberEmail, setNewMemberEmail] = useState('');
+  const [memberStatus, setMemberStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isAddingMember, setIsAddingMember] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [rotatingCode, setRotatingCode] = useState(false);
 
   // Authentication State for unauthenticated users
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -55,22 +55,23 @@ export const ShareBoardModal: React.FC<ShareBoardModalProps> = ({ isOpen, onClos
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  const loadInviteData = async () => {
+  const loadHouseholdData = async () => {
     setLoading(true);
     const user = await getCurrentUser();
     setUserEmail(user?.email || null);
     if (user) {
-      const data = await getOrCreateInviteCode();
-      setInviteData(data);
+      const list = await getHouseholdMembers();
+      setMembers(list);
     } else {
-      setInviteData(null);
+      setMembers([]);
     }
     setLoading(false);
   };
 
   useEffect(() => {
     if (isOpen) {
-      loadInviteData();
+      setMemberStatus(null);
+      loadHouseholdData();
     }
   }, [isOpen]);
 
@@ -101,36 +102,46 @@ export const ShareBoardModal: React.FC<ShareBoardModalProps> = ({ isOpen, onClos
     setIsVerifyingOtp(false);
     if (res.success) {
       setAuthMessage('');
-      await loadInviteData();
+      await loadHouseholdData();
     } else {
       setAuthMessage(res.error || 'Invalid or expired code. Please try again.');
     }
   };
 
-  const handleRotateCode = async () => {
-    setRotatingCode(true);
-    const updated = await rotateInviteCode();
-    if (updated) {
-      setInviteData(updated);
+  const handleAddMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMemberEmail.trim()) return;
+    setIsAddingMember(true);
+    setMemberStatus(null);
+    const res = await addHouseholdMember(newMemberEmail.trim(), 'editor');
+    setIsAddingMember(false);
+    if (res.success && res.member) {
+      setMembers((prev) => [...prev, res.member!]);
+      setNewMemberEmail('');
+      setMemberStatus({
+        type: 'success',
+        text: `Authorized ${res.member.email}. They can now sign in with their email on mobile to access this board.`,
+      });
+    } else {
+      setMemberStatus({
+        type: 'error',
+        text: res.error || 'Could not add household member.',
+      });
     }
-    setRotatingCode(false);
+  };
+
+  const handleRemoveMember = async (id: string, email: string) => {
+    const ok = await removeHouseholdMember(id);
+    if (ok) {
+      setMembers((prev) => prev.filter((m) => m.id !== id));
+      setMemberStatus({
+        type: 'success',
+        text: `Removed ${email} from household access.`,
+      });
+    }
   };
 
   if (!isOpen) return null;
-
-  const currentQrUrl =
-    activeTab === 'admin'
-      ? inviteData?.adminPairUrl || inviteData?.url || ''
-      : inviteData?.url || '';
-
-  const handleCopyLink = () => {
-    // Security: Never copy raw session tokens (adminPairUrl) to clipboard.
-    const safeCopyUrl = inviteData?.url || '';
-    if (!safeCopyUrl) return;
-    navigator.clipboard.writeText(safeCopyUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   return createPortal(
     <div
@@ -140,14 +151,14 @@ export const ShareBoardModal: React.FC<ShareBoardModalProps> = ({ isOpen, onClos
       }}
     >
       <div
-        className="w-full max-w-lg rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl flex flex-col overflow-hidden text-center"
+        className="w-full max-w-lg rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl flex flex-col overflow-hidden text-left"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-950/60">
           <div className="flex items-center gap-2">
-            <Smartphone className="w-5 h-5 text-cyan-400" />
-            <h2 className="text-base font-bold text-white">Connect Mobile Companion</h2>
+            <ShieldCheck className="w-5 h-5 text-emerald-400" />
+            <h2 className="text-base font-bold text-white">Verified Mobile & Household Access</h2>
           </div>
           <button
             onClick={onClose}
@@ -158,33 +169,35 @@ export const ShareBoardModal: React.FC<ShareBoardModalProps> = ({ isOpen, onClos
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 flex flex-col items-center">
-          {/* STATE 1: User is NOT signed in - Explain Benefits of Cloud Sync + Inline Sign-in */}
+        <div className="p-6 flex flex-col space-y-4">
           {!userEmail && !loading ? (
-            <div className="w-full space-y-4 text-left">
+            /* STATE 1: User is NOT signed in */
+            <div className="w-full space-y-4">
               <div className="p-4 rounded-xl bg-gradient-to-br from-blue-950/40 via-purple-950/20 to-gray-900 border border-blue-500/30">
                 <div className="flex items-center gap-2.5 mb-2">
                   <div className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center">
                     <Cloud className="w-4 h-4" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-white">Unlock Mobile Remote with Cloud Sync</h3>
-                    <p className="text-[11px] text-gray-400">Live two-way phone sync requires a free cloud connection.</p>
+                    <h3 className="text-sm font-bold text-white">Zero-Trust Cloud Sync</h3>
+                    <p className="text-[11px] text-gray-400">
+                      Protected by verified email authentication — no public links or open join codes.
+                    </p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-2 pt-2 text-xs text-gray-300">
                   <div className="flex items-start gap-2">
+                    <Lock className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>100% Private by Default:</strong> Unauthenticated visitors can never view your calendar, photos, or notes.
+                    </span>
+                  </div>
+                  <div className="flex items-start gap-2">
                     <Sparkles className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
-                    <span><strong>Pocket Remote Control:</strong> Add sticky notes, check off grocery items, and manage boards from your phone.</span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                    <span><strong>Instant Live Updates:</strong> Real-time WebSockets sync phone edits to this wall display live.</span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <HeartHandshake className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                    <span><strong>Frictionless Household Access:</strong> Pair your own phone with 1 tap, while kids check off chores with zero account required.</span>
+                    <span>
+                      <strong>Verified Mobile Remote:</strong> Sign in with your email on your phone to manage sticky notes and checklists.
+                    </span>
                   </div>
                 </div>
               </div>
@@ -193,7 +206,7 @@ export const ShareBoardModal: React.FC<ShareBoardModalProps> = ({ isOpen, onClos
               <div className="p-4 rounded-xl bg-gray-950/80 border border-gray-800 space-y-3">
                 <div className="text-xs font-semibold text-white flex items-center gap-2">
                   <KeyRound className="w-4 h-4 text-cyan-400" />
-                  <span>Connect in 10 Seconds (Free, No Password)</span>
+                  <span>Sign In with Email Verification Code</span>
                 </div>
 
                 {authStep === 'email' ? (
@@ -232,7 +245,9 @@ export const ShareBoardModal: React.FC<ShareBoardModalProps> = ({ isOpen, onClos
                     <div className="flex items-center justify-between text-xs text-gray-300">
                       <div className="flex items-center gap-1.5">
                         <Mail className="w-3.5 h-3.5 text-cyan-400" />
-                        <span>Code sent to <strong className="text-white font-mono">{emailInput}</strong></span>
+                        <span>
+                          Code sent to <strong className="text-white font-mono">{emailInput}</strong>
+                        </span>
                       </div>
                       <button
                         type="button"
@@ -277,131 +292,114 @@ export const ShareBoardModal: React.FC<ShareBoardModalProps> = ({ isOpen, onClos
               </div>
             </div>
           ) : (
-            /* STATE 2: User IS signed in - Multi-Tier Pairing */
-            <div className="w-full flex flex-col items-center space-y-4">
-              {/* Role Switcher Tabs */}
-              <div className="w-full grid grid-cols-2 gap-1.5 bg-gray-950 p-1 rounded-xl border border-gray-800">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('admin')}
-                  className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                    activeTab === 'admin'
-                      ? 'bg-blue-600 text-white shadow-md'
-                      : 'text-gray-400 hover:text-gray-200'
-                  }`}
-                >
-                  <Smartphone className="w-4 h-4" />
-                  <span>Pair My Phone / Spouse</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('family')}
-                  className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                    activeTab === 'family'
-                      ? 'bg-cyan-600 text-white shadow-md'
-                      : 'text-gray-400 hover:text-gray-200'
-                  }`}
-                >
-                  <Users className="w-4 h-4" />
-                  <span>Kids & Family (No Account)</span>
-                </button>
-              </div>
-
-              {/* Tab Description & Badge */}
-              <div className="text-center space-y-1">
-                {activeTab === 'admin' ? (
-                  <>
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[11px] font-medium">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                      <span>One-Tap Login as <strong className="font-mono">{userEmail}</strong></span>
-                    </div>
-                    <p className="text-xs text-gray-300 leading-relaxed max-w-sm pt-1">
-                      Scan with your phone camera to <strong>automatically sign in</strong> on mobile. No passwords, emails, or codes to type on your phone!
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-[11px] font-medium">
-                      <HeartHandshake className="w-3.5 h-3.5 text-cyan-400" />
-                      <span>Household Member Mode (Zero Account Needed)</span>
-                    </div>
-                    <p className="text-xs text-gray-300 leading-relaxed max-w-sm pt-1">
-                      Kids and household guests can check off chores and add notes to this board <strong>without needing an email or account</strong>.
-                    </p>
-                  </>
-                )}
-              </div>
-
-              {/* QR Code Container */}
-              <div className="p-4 bg-white rounded-2xl shadow-2xl border-2 border-gray-200">
-                {loading ? (
-                  <div className="w-44 h-44 flex items-center justify-center text-xs text-gray-500">
-                    <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+            /* STATE 2: User IS signed in - Verified Household Email Accesslist */
+            <div className="w-full space-y-4">
+              {/* Signed-In Owner Banner */}
+              <div className="p-3.5 rounded-xl bg-emerald-950/30 border border-emerald-500/30 flex items-start gap-3">
+                <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                <div className="text-xs text-gray-200 space-y-1">
+                  <div className="font-bold text-white">
+                    Zero-Trust Protection Active ({userEmail})
                   </div>
-                ) : currentQrUrl ? (
-                  <QRCodeSVG
-                    value={currentQrUrl}
-                    size={180}
-                    level="M"
-                    includeMargin={false}
+                  <p className="text-[11px] text-gray-300 leading-relaxed">
+                    Public join codes and token links are disabled. Only you and the verified household email addresses listed below can access this board after signing in with an email verification code.
+                  </p>
+                </div>
+              </div>
+
+              {/* How to Connect Your Own Phone */}
+              <div className="p-3.5 rounded-xl bg-gray-950/70 border border-gray-800 space-y-1.5">
+                <div className="flex items-center gap-2 text-xs font-semibold text-white">
+                  <Smartphone className="w-4 h-4 text-cyan-400" />
+                  <span>Connecting Your Own Phone</span>
+                </div>
+                <p className="text-[11px] text-gray-400 leading-relaxed">
+                  Open <strong className="text-gray-200 font-mono">{window.location.origin}</strong> on your phone and sign in with <strong className="text-cyan-300 font-mono">{userEmail}</strong>.
+                </p>
+              </div>
+
+              {/* Authorize Spouse / Household Member by Email */}
+              <div className="p-4 rounded-xl bg-gray-950/90 border border-gray-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-white">
+                    <Users className="w-4 h-4 text-blue-400" />
+                    <span>Authorized Household Emails ({members.length})</span>
+                  </div>
+                </div>
+
+                <form onSubmit={handleAddMember} className="flex gap-2">
+                  <input
+                    type="email"
+                    value={newMemberEmail}
+                    onChange={(e) => setNewMemberEmail(e.target.value)}
+                    placeholder="Spouse or family email (e.g. partner@gmail.com)"
+                    className="flex-1 px-3 py-2 bg-gray-900 border border-gray-700 rounded-xl text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                    required
                   />
-                ) : (
-                  <div className="w-44 h-44 flex items-center justify-center text-xs text-gray-500">
-                    Generating Code...
-                  </div>
-                )}
-              </div>
-
-              {inviteData && (
-                <div className="w-full space-y-3">
-                  {/* Prominent 6-Digit Code for Kids Mode + Rotate Button */}
-                  <div className="flex items-center justify-between bg-gray-950/70 px-3.5 py-2.5 rounded-xl border border-gray-800">
-                    <div className="flex flex-col text-left">
-                      <span className="text-[10px] uppercase font-semibold text-gray-400 tracking-wider">
-                        Household Join Code:
-                      </span>
-                      <span className="text-xl font-mono font-extrabold text-cyan-400 tracking-widest mt-0.5">
-                        {inviteData.code}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleRotateCode}
-                      disabled={rotatingCode}
-                      title="Generate a new invite code and revoke the old one"
-                      className="px-2.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-[11px] font-medium text-gray-300 flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 ${rotatingCode ? 'animate-spin text-cyan-400' : 'text-gray-400'}`} />
-                      <span>Reset Code</span>
-                    </button>
-                  </div>
-
-                  {/* Direct Copy Link Button (Strictly copies guest join URL without session tokens) */}
                   <button
-                    onClick={handleCopyLink}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gray-800 hover:bg-gray-750 border border-gray-700 text-xs font-semibold text-gray-200 transition-all active:scale-98 shadow-sm cursor-pointer"
+                    type="submit"
+                    disabled={isAddingMember}
+                    className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 active:scale-95 text-xs font-bold text-white rounded-xl shadow transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0"
                   >
-                    {copied ? (
-                      <>
-                        <Check className="w-4 h-4 text-emerald-400" />
-                        <span className="text-emerald-400">
-                          Household Join Link Copied! (Private calendars excluded)
-                        </span>
-                      </>
+                    {isAddingMember ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                     ) : (
                       <>
-                        <Copy className="w-4 h-4 text-gray-400" />
-                        <span>Copy Household Join Link (?join={inviteData.code})</span>
+                        <UserPlus className="w-3.5 h-3.5" />
+                        <span>Authorize</span>
                       </>
                     )}
                   </button>
+                </form>
 
-                  <div className="text-[11px] text-gray-500 flex items-center justify-center gap-1.5 pt-1">
-                    <Smartphone className="w-3.5 h-3.5 text-cyan-400/80" />
-                    <span>Private calendars stay owner-only • Guests only see shared board items</span>
+                {memberStatus && (
+                  <p
+                    className={`text-[11px] p-2 rounded-lg border ${
+                      memberStatus.type === 'success'
+                        ? 'bg-emerald-950/40 border-emerald-800/50 text-emerald-300'
+                        : 'bg-red-950/40 border-red-800/50 text-red-300'
+                    }`}
+                  >
+                    {memberStatus.text}
+                  </p>
+                )}
+
+                {loading ? (
+                  <div className="py-4 flex items-center justify-center text-xs text-gray-500 gap-2">
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Loading authorized emails...</span>
                   </div>
-                </div>
-              )}
+                ) : members.length === 0 ? (
+                  <div className="text-[11px] text-gray-500 py-2 text-center">
+                    No additional household emails authorized. Only <strong className="text-gray-400">{userEmail}</strong> can access this board.
+                  </div>
+                ) : (
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto pt-1">
+                    {members.map((m) => (
+                      <div
+                        key={m.id}
+                        className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-900 border border-gray-800 text-xs"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Mail className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                          <span className="font-mono text-gray-200 truncate">{m.email}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/30 uppercase">
+                            {m.role}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveMember(m.id, m.email)}
+                          title="Revoke access"
+                          className="p-1 text-gray-400 hover:text-red-400 transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

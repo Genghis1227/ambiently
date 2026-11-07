@@ -9,7 +9,8 @@ import { MobileCompanion } from './components/mobile/MobileCompanion';
 import { openLocalFileBinding, useFileSync, checkFileBindingStatus } from './services/fileSync';
 import {
   subscribeToRealtimeBoard,
-  joinBoardByCode,
+  resolveActiveDashboardId,
+  clearLegacyJoinKeys,
   onAuthStateChange,
   pullFromCloud,
   getCurrentUser,
@@ -86,6 +87,7 @@ export function App() {
 
   // Initialize and check persistent PC Auto-Sync file binding
   useEffect(() => {
+    clearLegacyJoinKeys();
     checkFileBindingStatus();
   }, []);
 
@@ -95,29 +97,19 @@ export function App() {
     return () => cleanup?.();
   }, []);
 
-  const [realtimeBoardState, setRealtimeBoardState] = useState<{
-    boardId: string | null;
-    isGuest: boolean;
-  }>(() => {
-    const joinedId = typeof window !== 'undefined' ? localStorage.getItem('joined_dashboard_id') : null;
-    return { boardId: joinedId, isGuest: Boolean(joinedId) };
-  });
+  const [realtimeBoardId, setRealtimeBoardId] = useState<string | null>(null);
 
   // Listen for Supabase Auth state changes (cleans up URL hash/code after magic link login)
   useEffect(() => {
-    getCurrentUser().then((user) => {
-      if (user) {
-        setRealtimeBoardState({ boardId: user.id, isGuest: false });
-      } else {
-        const joinedId = localStorage.getItem('joined_dashboard_id');
-        setRealtimeBoardState({ boardId: joinedId, isGuest: Boolean(joinedId) });
-      }
+    resolveActiveDashboardId().then((target) => {
+      setRealtimeBoardId(target?.dashboardId || null);
     });
 
     const unsubscribe = onAuthStateChange(async (user) => {
       if (user) {
         console.log('Ambiently authenticated as:', user.email);
-        setRealtimeBoardState({ boardId: user.id, isGuest: false });
+        const target = await resolveActiveDashboardId();
+        setRealtimeBoardId(target?.dashboardId || user.id);
         try {
           const res = await pullFromCloud();
           if (res.success) {
@@ -127,52 +119,22 @@ export function App() {
           console.warn('Initial cloud pull on auth change failed:', err);
         }
       } else {
-        const joinedId = localStorage.getItem('joined_dashboard_id');
-        setRealtimeBoardState({ boardId: joinedId, isGuest: Boolean(joinedId) });
+        setRealtimeBoardId(null);
       }
     });
     return () => unsubscribe();
   }, [initStore]);
 
-  // Auto-join shared board if ?join=CODE is in URL
+  // Live Supabase Realtime WebSocket subscription ONLY when authenticated
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const joinCode = params.get('join');
-    if (joinCode) {
-      const hasAuthHash = window.location.hash.includes('access_token');
-      joinBoardByCode(joinCode).then(async (res) => {
-        if (res.success) {
-          console.log('Connected to shared board:', res.boardTitle);
-          const user = await getCurrentUser();
-          const joinedId = localStorage.getItem('joined_dashboard_id');
-          setRealtimeBoardState({
-            boardId: user?.id || joinedId,
-            isGuest: !user && Boolean(joinedId),
-          });
-          initStore();
-        }
-        if (!hasAuthHash) {
-          const cleanUrl = window.location.origin + window.location.pathname;
-          window.history.replaceState({}, document.title, cleanUrl);
-        }
-      });
-    }
-  }, [initStore]);
-
-  // Live Supabase Realtime WebSocket subscription ONLY when authenticated or explicitly joined
-  useEffect(() => {
-    if (!realtimeBoardState.boardId) return;
-    const unsubscribe = subscribeToRealtimeBoard(
-      realtimeBoardState.boardId,
-      {
-        onRemoteNoteChange: (note, eventType) => syncRemoteNoteChange(note, eventType),
-        onRemoteWidgetChange: (widget, eventType) => syncRemoteWidgetChange(widget, eventType),
-        onRemoteTabChange: (tab, eventType) => syncRemoteTabChange(tab, eventType),
-      },
-      realtimeBoardState.isGuest
-    );
+    if (!realtimeBoardId) return;
+    const unsubscribe = subscribeToRealtimeBoard(realtimeBoardId, {
+      onRemoteNoteChange: (note, eventType) => syncRemoteNoteChange(note, eventType),
+      onRemoteWidgetChange: (widget, eventType) => syncRemoteWidgetChange(widget, eventType),
+      onRemoteTabChange: (tab, eventType) => syncRemoteTabChange(tab, eventType),
+    });
     return () => unsubscribe();
-  }, [realtimeBoardState.boardId, realtimeBoardState.isGuest, syncRemoteNoteChange, syncRemoteWidgetChange, syncRemoteTabChange]);
+  }, [realtimeBoardId, syncRemoteNoteChange, syncRemoteWidgetChange, syncRemoteTabChange]);
 
   // Cloud Pull: fetch fresh state on boot if logged in, on screen wake (visibilitychange), and 60s fallback poll
   useEffect(() => {
@@ -183,16 +145,6 @@ export function App() {
         const user = await getCurrentUser();
         if (user && !isCancelled) {
           const res = await pullFromCloud();
-          if (res.success && !isCancelled) {
-            await initStore();
-          }
-          return;
-        }
-
-        // If connected as a family member via invite code, re-sync board on wake
-        const joinedCode = localStorage.getItem('joined_invite_code');
-        if (joinedCode && !isCancelled) {
-          const res = await joinBoardByCode(joinedCode);
           if (res.success && !isCancelled) {
             await initStore();
           }

@@ -15,6 +15,34 @@ function isCancelled(component: any): boolean {
   return String(component.getFirstPropertyValue('status') || '').toUpperCase() === 'CANCELLED';
 }
 
+function isSafeExternalHttpsUrl(rawUrl: string): { valid: boolean; url?: URL; reason?: string } {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== 'https:') {
+      return { valid: false, reason: 'Only HTTPS calendar URLs are permitted.' };
+    }
+    const host = parsed.hostname.toLowerCase();
+    // Block localhost, loopback, link-local, metadata, and RFC1918 private networks
+    if (
+      host === 'localhost' ||
+      host.endsWith('.local') ||
+      host.endsWith('.internal') ||
+      host === '0.0.0.0' ||
+      host === '[::1]' ||
+      /^127\./.test(host) ||
+      /^10\./.test(host) ||
+      /^192\.168\./.test(host) ||
+      /^169\.254\./.test(host) ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+    ) {
+      return { valid: false, reason: 'Private or internal network addresses are forbidden.' };
+    }
+    return { valid: true, url: parsed };
+  } catch {
+    return { valid: false, reason: 'Malformed URL.' };
+  }
+}
+
 export async function onRequestGet(context: PagesContext): Promise<Response> {
   const url = new URL(context.request.url);
   const icsUrl = url.searchParams.get('url');
@@ -22,7 +50,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
   if (!icsUrl) {
     return new Response(JSON.stringify({ error: 'Missing "url" query parameter' }), {
       status: 400,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' },
     });
   }
 
@@ -34,8 +62,17 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     normalizedUrl = 'https://' + normalizedUrl.slice(10);
   }
 
+  const safetyCheck = isSafeExternalHttpsUrl(normalizedUrl);
+  if (!safetyCheck.valid) {
+    return new Response(JSON.stringify({ error: safetyCheck.reason || 'Invalid calendar URL' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' },
+    });
+  }
+
   try {
     const fetchRes = await fetch(normalizedUrl, {
+      redirect: 'follow',
       headers: {
         'User-Agent': 'Ambiently-Display/1.0 (+https://dashboard.trinhism.com)',
         Accept: 'text/calendar, text/plain, */*',
@@ -45,7 +82,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     if (!fetchRes.ok) {
       return new Response(
         JSON.stringify({ error: `Failed to fetch calendar feed: ${fetchRes.statusText}` }),
-        { status: fetchRes.status, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
+        { status: fetchRes.status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' } }
       );
     }
 
@@ -170,14 +207,13 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     return new Response(JSON.stringify({ events: parsedEvents, total: parsedEvents.length }), {
       headers: {
         'Content-Type': 'application/json',
-        'Cache-Control': 'public, max-age=300', // 5-minute edge cache
-        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'private, no-store',
       },
     });
   } catch (err: any) {
     return new Response(
       JSON.stringify({ error: `Calendar parsing error: ${err.message}` }),
-      { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
+      { status: 500, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' } }
     );
   }
 }

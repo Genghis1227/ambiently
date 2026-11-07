@@ -11,6 +11,18 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.3",
+    date: "November 6, 2026",
+    title: "Zero-Trust Security Architecture, Verified Household Email Access & Proxy Hardening",
+    highlights: [
+      "Eliminated Public QR & Invite Codes: Completely removed unauthenticated 6-digit invite codes (?join=CODE) and session-token QR links so anonymous visitors can never read or modify boards.",
+      "Zero-Trust Authenticated RLS Policies: Locked down Supabase Row-Level Security (to authenticated) so only the verified owner or explicitly authorized household emails can query or sync data.",
+      "Verified Household Email Accesslist: Replaced QR pairing with an email accesslist in Settings > Sync & Backup > Household Access, allowing spouses or family members to sign in securely with their own email OTP.",
+      "Local Kiosk PIN Isolation: Device kiosk PIN hashes are now strictly kept in local device storage and never pushed to cloud settings.",
+      "Private Calendar Cache & SSRF Hardening: Enforced Cache-Control: private, no-store on /api/ical so private calendar events are never cached on public CDN edge servers, and added SSRF host/protocol validation across all serverless proxies.",
+    ],
+  },
+  {
     version: "v0.3.2",
     date: "November 6, 2026",
     title: "Strict Realtime Isolation & Calendar Privacy, Local Subfolder Multi-Select & Plex Direct Play",

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.3] - 2026-11-06
+
+### Security
+* **Zero-Trust Security Architecture & Complete Removal of Public QR/Invite Codes (`supabase/schema.sql`, `src/services/supabase.ts`, `src/components/settings/ShareBoardModal.tsx`):**
+  * **Removed Unauthenticated Invite Codes & Session Token QR Links:** Completely eliminated public 6-character `invite_code` sharing (`?join=CODE`) and raw session token QR URLs (`#access_token=...`) so no anonymous visitor or stolen link can ever read or modify a dashboard.
+  * **Zero-Trust Authenticated RLS Policies (`supabase/schema.sql`):** Replaced `invite_code is not null` public policies with strict `to authenticated` PostgreSQL Row-Level Security policies. Access to `dashboards`, `tabs`, `widgets`, and `notes` now requires a cryptographically verified Supabase JWT matching either the board owner (`auth.uid() = user_id`) or an explicitly authorized household email (`lower(dashboard_members.email) = lower(auth.jwt()->>'email')`).
+  * **Verified Household Email Accesslist (`ShareBoardModal.tsx`):** Replaced the QR/join code modal with an authenticated Household Email Accesslist where owners can authorize or revoke specific family emails (e.g., spouse/partner) who sign in via Email OTP verification.
+  * **Local Kiosk PIN Isolation:** Stripped `pinHash` before pushing settings to Supabase Cloud (`pushToCloud`) so device kiosk PIN hashes remain strictly local.
+  * **Serverless Proxy SSRF & Private Cache Hardening (`functions/api/ical.ts`, `rss.ts`, `gphotos.ts`, `gdrive.ts`):** Changed `/api/ical` response headers from `Cache-Control: public` to `Cache-Control: private, no-store` so private calendars are never cached on public CDN edge nodes, and added strict HTTPS protocol and SSRF private-IP/host validation across all 4 Cloudflare Pages Functions.
+
+---
+
 ## [0.3.2] - 2026-11-06
 
 ### Added
