@@ -617,7 +617,7 @@ export async function getPlexPhotosFromSection(
   serverUri: string,
   serverAccessToken: string,
   sectionKey: string,
-  folderOrAlbumKey?: string,
+  folderOrAlbumKeys?: string | string[],
   maxPhotosOrOptions: number | PlexScanOptions = Infinity,
   legacyOnProgress?: (count: number) => void
 ): Promise<PhotoItem[]> {
@@ -634,9 +634,13 @@ export async function getPlexPhotosFromSection(
   const onBatch = options.onBatch;
   const signal = options.signal;
 
-  const isSpecificFolder = Boolean(
-    folderOrAlbumKey && folderOrAlbumKey.trim() !== '' && folderOrAlbumKey !== 'all'
-  );
+  const targetFolderKeys: string[] = Array.isArray(folderOrAlbumKeys)
+    ? folderOrAlbumKeys.filter((k) => k && k.trim() !== '' && k !== 'all')
+    : folderOrAlbumKeys && folderOrAlbumKeys.trim() !== '' && folderOrAlbumKeys !== 'all'
+    ? [folderOrAlbumKeys]
+    : [];
+
+  const isSpecificFolder = targetFolderKeys.length > 0;
 
   const isUnlimited = !maxPhotos || maxPhotos <= 0 || !isFinite(maxPhotos);
 
@@ -669,8 +673,10 @@ export async function getPlexPhotosFromSection(
 
   if (signal?.aborted) return photos;
 
-  if (isSpecificFolder && folderOrAlbumKey) {
-    directoryQueue.push({ key: folderOrAlbumKey, depth: 0 });
+  if (isSpecificFolder) {
+    for (const key of targetFolderKeys) {
+      directoryQueue.push({ key, depth: 0 });
+    }
   } else {
     // 1. When requesting entire section, try type=13 (photos) to flatten hierarchy
     const allPhotosUrl = `${cleanUri}/library/sections/${sectionKey}/all?type=13&includeDetails=1&includeAdvanced=1&checkFiles=1&${tokenParam}`;

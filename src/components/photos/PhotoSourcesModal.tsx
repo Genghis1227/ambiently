@@ -143,10 +143,48 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   const [photoSections, setPhotoSections] = useState<PlexLibrarySection[]>([]);
   const [selectedSectionKey, setSelectedSectionKey] = useState<string>('');
   const [sectionFolders, setSectionFolders] = useState<PlexFolderItem[]>([]);
-  const [selectedFolderKey, setSelectedFolderKey] = useState<string>('');
+  const [plexFolderMode, setPlexFolderMode] = useState<'all' | 'specific'>('all');
+  const [selectedPlexFolderKeys, setSelectedPlexFolderKeys] = useState<Set<string>>(new Set());
+  const [plexFolderSearchQuery, setPlexFolderSearchQuery] = useState<string>('');
   const [isFoldersLoading, setIsFoldersLoading] = useState(false);
   const [plexLoading, setPlexLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
+
+  const handleTogglePlexFolder = (key: string) => {
+    setSelectedPlexFolderKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const handleSelectAllPlexFolders = () => {
+    const all = new Set<string>(sectionFolders.map((f) => f.key));
+    setSelectedPlexFolderKeys(all);
+  };
+
+  const handleDeselectAllPlexFolders = () => {
+    setSelectedPlexFolderKeys(new Set());
+  };
+
+  const handleSelectRecentPlexYears = (yearCount = 3) => {
+    const yearFolders = sectionFolders.filter((f) => /^(19|20)\d{2}$/.test(f.title.trim()));
+    yearFolders.sort((a, b) => parseInt(b.title.trim(), 10) - parseInt(a.title.trim(), 10));
+    const targetPool = yearFolders.length > 0 ? yearFolders : sectionFolders;
+    const selected = new Set<string>(targetPool.slice(0, yearCount).map((f) => f.key));
+    setSelectedPlexFolderKeys(selected);
+  };
+
+  const filteredPlexFolders = useMemo(() => {
+    const query = plexFolderSearchQuery.trim().toLowerCase();
+    if (!query) return sectionFolders;
+    return sectionFolders.filter(
+      (f) =>
+        f.title.toLowerCase().includes(query) ||
+        (f.parentTitle && f.parentTitle.toLowerCase().includes(query))
+    );
+  }, [sectionFolders, plexFolderSearchQuery]);
 
   // Local NAS / PC multi-folder state
   const [selectedFolders, setSelectedFolders] = useState<SelectedFolderInfo[]>([]);
@@ -218,7 +256,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
     const uri = getBestPlexConnectionUri(server);
     if (!uri || !secKey) return;
     setIsFoldersLoading(true);
-    setSelectedFolderKey('');
+    setSelectedPlexFolderKeys(new Set());
     try {
       const folders = await getPlexSectionFolders(uri, server.accessToken || token, secKey);
       setSectionFolders(folders);
@@ -329,7 +367,8 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
     setPhotoSections([]);
     setSectionFolders([]);
     setSelectedSectionKey('');
-    setSelectedFolderKey('');
+    setSelectedPlexFolderKeys(new Set());
+    setPlexFolderMode('all');
     setStatusMessage('Plex disconnected.');
   };
 
@@ -340,24 +379,37 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
       setStatusMessage('No reachable connection URI for this server.');
       return;
     }
-    setPlexLoading(true);
-    setStatusMessage('Connecting to Plex and indexing library in background...');
 
     const currentSection = photoSections.find((s) => s.key === selectedSectionKey);
-    const currentFolder = sectionFolders.find((f) => f.key === selectedFolderKey);
     const sectionTitle = currentSection?.title || 'Photos';
-    const folderTitle = currentFolder
-      ? currentFolder.parentTitle
-        ? ` / ${currentFolder.parentTitle} / ${currentFolder.title}`
-        : ` / ${currentFolder.title}`
-      : '';
-    const sourceLabel = `Plex (${selectedServer.name} - ${sectionTitle}${folderTitle})`;
+
+    let targetFolderKeys: string[] | undefined = undefined;
+    let folderLabelSuffix = '';
+
+    if (plexFolderMode === 'specific') {
+      if (selectedPlexFolderKeys.size === 0) {
+        setStatusMessage('Please select at least one folder or album from your Plex library.');
+        return;
+      }
+      targetFolderKeys = Array.from(selectedPlexFolderKeys);
+      if (targetFolderKeys.length === 1) {
+        const singleFolder = sectionFolders.find((f) => f.key === targetFolderKeys![0]);
+        folderLabelSuffix = ` - ${singleFolder?.title || 'Folder'}`;
+      } else {
+        folderLabelSuffix = ` [${targetFolderKeys.length} Folders]`;
+      }
+    }
+
+    const sourceLabel = `Plex (${selectedServer.name} - ${sectionTitle}${folderLabelSuffix})`;
+
+    setPlexLoading(true);
+    setStatusMessage('Connecting to Plex and indexing library in background...');
 
     photoSyncService.startPlexBackgroundSync({
       serverUri: uri,
       serverAccessToken: selectedServer.accessToken || plexToken,
       sectionKey: selectedSectionKey,
-      folderOrAlbumKey: selectedFolderKey || undefined,
+      folderOrAlbumKeys: targetFolderKeys,
       sourceLabel,
       targetWidgetId: isCommonSource ? undefined : targetWidgetId,
       applyToAll,
@@ -982,39 +1034,188 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                         </select>
                       </div>
 
-                      {/* Optional Subfolder / Album Picker */}
-                      {(sectionFolders.length > 0 || isFoldersLoading) && (
-                        <div className="space-y-1.5 animate-fadeIn">
-                          <div className="flex items-center justify-between">
-                            <label className="text-xs font-semibold text-gray-300">Folder / Album (Optional)</label>
+                      {/* Folder Scope Picker: Entire Library vs Specific Folders */}
+                      <div className="space-y-2 pt-1 border-t border-gray-800/80">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-semibold text-gray-300">Folder Scope</label>
+                          {isFoldersLoading ? (
                             <span className="text-[10px] text-gray-400 flex items-center gap-1">
-                              {isFoldersLoading ? (
-                                <>
-                                  <RefreshCw className="w-2.5 h-2.5 animate-spin text-blue-400" />
-                                  <span>Scanning folders...</span>
-                                </>
-                              ) : (
-                                `${sectionFolders.length} subfolder${sectionFolders.length !== 1 ? 's' : ''} available`
-                              )}
+                              <RefreshCw className="w-2.5 h-2.5 animate-spin text-blue-400" />
+                              <span>Scanning folders...</span>
                             </span>
-                          </div>
-                          <select
-                            value={selectedFolderKey}
-                            onChange={(e) => setSelectedFolderKey(e.target.value)}
-                            disabled={isFoldersLoading}
-                            className="w-full bg-gray-950 border border-gray-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-blue-500 disabled:opacity-50"
-                          >
-                            <option value="">🌟 Entire Library (All Photos &amp; Subfolders)</option>
-                            {sectionFolders.map((f) => (
-                              <option key={f.key} value={f.key}>
-                                {f.depth && f.depth > 0
-                                  ? `${'　'.repeat(f.depth)}↳ 📁 ${f.title}`
-                                  : `📁 ${f.title} (All subfolders)`}
-                              </option>
-                            ))}
-                          </select>
+                          ) : (
+                            <span className="text-[10px] text-gray-400">
+                              {sectionFolders.length} {sectionFolders.length === 1 ? 'folder' : 'folders'} found
+                            </span>
+                          )}
                         </div>
-                      )}
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setPlexFolderMode('all')}
+                            className={`p-2.5 rounded-xl border text-left text-xs transition-all cursor-pointer ${
+                              plexFolderMode === 'all'
+                                ? 'bg-blue-500/15 border-blue-500/40 text-white shadow-sm'
+                                : 'bg-gray-950/60 border-gray-800 text-gray-400 hover:border-gray-700'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 font-semibold">
+                              <div
+                                className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
+                                  plexFolderMode === 'all' ? 'border-blue-400 bg-blue-500' : 'border-gray-600'
+                                }`}
+                              >
+                                {plexFolderMode === 'all' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                              </div>
+                              <span>Entire Library</span>
+                            </div>
+                            <p className="text-[10px] text-gray-400 mt-1 pl-5.5">
+                              Recursively streams all folders &amp; albums in this section
+                            </p>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setPlexFolderMode('specific')}
+                            className={`p-2.5 rounded-xl border text-left text-xs transition-all cursor-pointer ${
+                              plexFolderMode === 'specific'
+                                ? 'bg-blue-500/15 border-blue-500/40 text-white shadow-sm'
+                                : 'bg-gray-950/60 border-gray-800 text-gray-400 hover:border-gray-700'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 font-semibold">
+                              <div
+                                className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
+                                  plexFolderMode === 'specific' ? 'border-blue-400 bg-blue-500' : 'border-gray-600'
+                                }`}
+                              >
+                                {plexFolderMode === 'specific' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                              </div>
+                              <span>Select Folders</span>
+                            </div>
+                            <p className="text-[10px] text-gray-400 mt-1 pl-5.5">
+                              Pick specific subfolders (e.g. 2023 + 2024 + Vacations)
+                            </p>
+                          </button>
+                        </div>
+
+                        {/* Multi-Folder Checklist (when Specific Mode is chosen) */}
+                        {plexFolderMode === 'specific' && (
+                          <div className="p-3 rounded-xl bg-gray-950/80 border border-gray-800 space-y-2.5 animate-fadeIn">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="font-semibold text-gray-300">Choose Folders &amp; Albums</span>
+                              <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                {selectedPlexFolderKeys.size} Selected
+                              </span>
+                            </div>
+
+                            {/* Filter & Presets */}
+                            <div className="space-y-2">
+                              <div className="relative">
+                                <Search className="w-3.5 h-3.5 text-gray-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                                <input
+                                  type="text"
+                                  value={plexFolderSearchQuery}
+                                  onChange={(e) => setPlexFolderSearchQuery(e.target.value)}
+                                  placeholder="Filter Plex folders or albums (e.g. 2024)..."
+                                  className="w-full pl-8 pr-7 py-1.5 bg-gray-900 border border-gray-800 rounded-lg text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                                />
+                                {plexFolderSearchQuery && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setPlexFolderSearchQuery('')}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white text-xs cursor-pointer"
+                                  >
+                                    ×
+                                  </button>
+                                )}
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSelectRecentPlexYears(3)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/30 text-blue-300 text-[11px] font-semibold transition-all cursor-pointer"
+                                >
+                                  <Calendar className="w-3 h-3 text-blue-400" />
+                                  <span>Last 3 Years</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleSelectAllPlexFolders}
+                                  className="px-2 py-1 rounded-lg bg-gray-900 hover:bg-gray-800 border border-gray-800 text-gray-300 text-[11px] font-medium transition-all cursor-pointer"
+                                >
+                                  Select All ({sectionFolders.length})
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleDeselectAllPlexFolders}
+                                  className="px-2 py-1 rounded-lg bg-gray-900 hover:bg-gray-800 border border-gray-800 text-gray-400 hover:text-red-400 text-[11px] font-medium transition-all cursor-pointer"
+                                >
+                                  Clear
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Scrollable Folder Checklist */}
+                            <div className="space-y-1 max-h-56 overflow-y-auto pr-1">
+                              {filteredPlexFolders.map((f) => {
+                                const isSelected = selectedPlexFolderKeys.has(f.key);
+                                const isYear = /^(19|20)\d{2}$/.test(f.title.trim());
+                                return (
+                                  <div
+                                    key={f.key}
+                                    onClick={() => handleTogglePlexFolder(f.key)}
+                                    style={{ paddingLeft: `${Math.min(32, 8 + (f.depth || 0) * 14)}px` }}
+                                    className={`py-1.5 pr-2.5 rounded-lg border text-xs flex items-center justify-between gap-2.5 cursor-pointer transition-all ${
+                                      isSelected
+                                        ? 'bg-blue-500/10 border-blue-500/30 text-white'
+                                        : 'bg-gray-900/60 border-gray-800/80 text-gray-400 hover:border-gray-700'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      {isSelected ? (
+                                        <CheckSquare className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                                      ) : (
+                                        <Square className="w-3.5 h-3.5 text-gray-600 shrink-0" />
+                                      )}
+                                      <FolderOpen
+                                        className={`w-3.5 h-3.5 shrink-0 ${
+                                          isSelected ? 'text-blue-400' : 'text-gray-500'
+                                        }`}
+                                      />
+                                      <span className="font-semibold truncate">
+                                        {f.parentTitle ? `${f.parentTitle} / ` : ''}
+                                        {f.title}
+                                      </span>
+                                    </div>
+
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                      {isYear && (
+                                        <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                          Year
+                                        </span>
+                                      )}
+                                      <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700">
+                                        {f.type === 'photoalbum' ? 'Album' : 'Folder'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+
+                              {filteredPlexFolders.length === 0 && (
+                                <div className="text-center py-6 text-gray-500 text-xs">
+                                  {isFoldersLoading
+                                    ? 'Discovering folders & albums...'
+                                    : `No folders matching "${plexFolderSearchQuery}"`}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <div className="text-xs text-gray-500 italic p-2 bg-gray-950 rounded-lg flex items-center justify-between">
@@ -1037,7 +1238,11 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
 
                   <button
                     onClick={handleLoadPlexPhotos}
-                    disabled={plexLoading || photoSections.length === 0}
+                    disabled={
+                      plexLoading ||
+                      photoSections.length === 0 ||
+                      (plexFolderMode === 'specific' && selectedPlexFolderKeys.size === 0)
+                    }
                     className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-xs shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
                   >
                     {plexLoading ? (
@@ -1048,7 +1253,13 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                     ) : (
                       <>
                         <ImageIcon className="w-4 h-4" />
-                        <span>Stream from Selected Library</span>
+                        <span>
+                          {plexFolderMode === 'specific' && selectedPlexFolderKeys.size > 0
+                            ? `Stream from ${selectedPlexFolderKeys.size} Selected Folder${
+                                selectedPlexFolderKeys.size !== 1 ? 's' : ''
+                              }`
+                            : 'Stream from Selected Library'}
+                        </span>
                       </>
                     )}
                   </button>
