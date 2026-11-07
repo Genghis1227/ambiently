@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.5] - 2026-11-06
+
+### Security
+* **Resolved PostgreSQL RLS Infinite Recursion (`supabase/schema.sql`):**
+  * Moved all cross-table authorization checks into a dedicated `private` Postgres schema with `SECURITY DEFINER` functions (`can_read_dashboard`, `owns_dashboard`, `can_edit_dashboard`, `dashboard_owner`, `is_me`) and locked empty `search_path = ''`.
+  * Completely eliminated the circular policy evaluation between `dashboards` and `dashboard_members` that previously caused PostgreSQL to halt with `infinite recursion detected in policy`.
+* **Explicit Invitation Consent & Hijack Prevention (`src/services/supabase.ts`, `src/components/settings/ShareBoardModal.tsx`):**
+  * Added `accepted_at` timestamp column to `dashboard_members`. Adding an email to household members now creates an unaccepted invitation granting zero access to the board.
+  * Prevented silent dashboard hijacking: `resolveActiveDashboardId` now ignores unaccepted invitations (`accepted_at is not null`), ensuring external users cannot pull someone else's device onto their board without explicit consent.
+* **Interactive Board Invitations UI (`src/components/settings/ShareBoardModal.tsx`):**
+  * Added **Board Invitations** management in the Sync & Backup settings showing inviting owners, board titles, and explicit **Accept**, **Decline**, and **Leave** buttons.
+* **Multi-User Composite Primary Keys (`supabase/schema.sql`):**
+  * Changed primary keys for `tabs`, `widgets`, and `notes` to composite `(dashboard_id, id)` so multiple accounts can sync default IDs without primary key collision errors.
+* **SQL LIKE Wildcard Leak Fix (`src/services/supabase.ts`):**
+  * Replaced `.ilike('email', ...)` with exact lower-case `.eq('email', ...)` to prevent `_` and `%` wildcard characters from unintentionally matching user emails.
+* **Least Privilege Grants & Realtime Hygiene (`supabase/schema.sql`):**
+  * Revoked all table permissions from `anon` and `PUBLIC`, prevented table `TRUNCATE` from authenticated users, and restricted member updates strictly to `accepted_at`.
+  * Dropped `dashboards` and `dashboard_members` from the `supabase_realtime` publication since client devices only listen to `tabs`, `widgets`, and `notes`.
+* **Security Verification Audit Script (`supabase/security-check.sql`):**
+  * Added a comprehensive read-only SQL script that verifies 13 RLS and grant invariants and flags any un-cleared Plex tokens or open permissions.
+
+---
+
 ## [0.3.4] - 2026-11-06
 
 ### Fixed

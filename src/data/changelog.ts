@@ -11,6 +11,22 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.5",
+    date: "November 6, 2026",
+    title: "Database Access Rules Overhaul, Invitation Consent, and Security Verification Audit",
+    highlights: [
+      "Eliminated PostgreSQL RLS Infinite Recursion: Moved cross-table membership checks into secure private PostgreSQL helper functions (private.can_read_dashboard, private.owns_dashboard, private.can_edit_dashboard) with locked search_paths, resolving the recursive policy loop that blocked cloud sync.",
+      "Required Explicit Invitation Consent: Added accepted_at timestamp to household memberships; invitations no longer grant any access or automatically redirect active dashboards until the recipient explicitly accepts.",
+      "Prevented Silent Board Hijacking: Devices no longer automatically switch dashboards or upload local widgets/notes when added to an external board without consent.",
+      "Interactive Household Invitation UI: Added Board Invitations management to Settings > Sync & Backup with board titles, owner emails, and clear Accept, Decline, and Leave controls.",
+      "Multi-Account Primary Key Unification: Upgraded tabs, widgets, and notes to composite primary keys (dashboard_id, id), allowing multiple independent accounts to sync without colliding on default board IDs.",
+      "Hardened Email Matching: Replaced .ilike() queries with exact equality (.eq()) to prevent SQL LIKE wildcard characters (_ and %) from matching unintended user accounts.",
+      "Table Privilege Lockdown: Revoked all default table grants from public and anon roles, eliminated TRUNCATE permissions, and restricted member updates strictly to accepted_at.",
+      "Realtime Channel Hygiene: Removed private dashboards and dashboard_members tables from supabase_realtime publication.",
+      "Built-in Security Audit Tool: Added supabase/security-check.sql to verify 13 critical RLS invariants and scan for exposed tokens in widget configurations.",
+    ],
+  },
+  {
     version: "v0.3.4",
     date: "November 6, 2026",
     title: "Calendar Fast-Forward & Cache Resilience, Atom RSS Fix, Night Mode Schedule Guard & Canvas Polish",
