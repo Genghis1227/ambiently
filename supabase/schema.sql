@@ -301,6 +301,120 @@ begin
   end loop;
 end $$;
 
+-- 8b. Board Size Limits
+-- Sign-up is open and every account gets a board. Without a limit, one account could fill the
+-- database, and Supabase stops accepting writes for every board when a project runs out of space.
+-- Signed-in users can't add rows that take a board past the size limit. Changes to existing rows get
+-- 1 MB more, so moving or editing something on a board that is nearly full still works. A board
+-- already over that (from before this limit) can still shrink, delete, and save edits that don't
+-- add data. Work done in the SQL Editor or with the service_role key isn't limited. A refused save
+-- comes back from the API as HTTP 413 with the message below.
+-- To change a limit, edit the number in board_limit_bytes or board_limit_members below.
+-- To see how big each board is:
+--   select id, pg_size_pretty(u.bytes), u.members from public.dashboards, private.board_usage(id) u order by u.bytes desc;
+create or replace function private.board_limit_bytes() returns bigint
+language sql immutable set search_path = '' as $$ select (100 * 1024 * 1024)::bigint $$;
+
+create or replace function private.board_limit_members() returns bigint
+language sql immutable set search_path = '' as $$ select 50::bigint $$;
+
+-- Space a board's rows take on disk, with large values counted as stored (compressed), and how many
+-- members and invitations it has. Runs as its owner so the result doesn't depend on who is asking.
+create or replace function private.board_usage(target text, out bytes bigint, out members bigint)
+language sql stable security definer set search_path = '' as $$
+  select
+    coalesce((select sum(pg_column_size(r.*)) from public.dashboards r where r.id = target), 0)
+    + coalesce((select sum(pg_column_size(r.*)) from public.dashboard_members r where r.dashboard_id = target), 0)
+    + coalesce((select sum(pg_column_size(r.*)) from public.tabs r where r.dashboard_id = target), 0)
+    + coalesce((select sum(pg_column_size(r.*)) from public.widgets r where r.dashboard_id = target), 0)
+    + coalesce((select sum(pg_column_size(r.*)) from public.notes r where r.dashboard_id = target), 0),
+    (select count(*) from public.dashboard_members r where r.dashboard_id = target)
+$$;
+
+create or replace function private.check_board_limits() returns trigger
+language plpgsql set search_path = '' as $$
+declare
+  board_column text := case when tg_table_name = 'dashboards' then 'id' else 'dashboard_id' end;
+  boards text[];
+  board text;
+  usage record;
+  allowed bigint := private.board_limit_bytes() + case when tg_op = 'UPDATE' then 1024 * 1024 else 0 end;
+begin
+  if current_user is distinct from 'authenticated' then
+    return null;
+  end if;
+
+  -- The boards this statement made bigger. An update counts only if it grew the board. New values
+  -- arrive uncompressed, so the new size is read from the table as stored, like the old size.
+  if tg_op = 'INSERT' then
+    execute format('select array_agg(distinct %I) from new_rows', board_column) into boards;
+  else
+    execute format(
+      'select array_agg(n.board) from '
+      || '(select r.%1$I as board, sum(pg_column_size(t.*)) as size from new_rows r '
+      || 'join public.%2$I t on %3$s group by 1) n '
+      || 'left join (select %1$I as board, sum(pg_column_size(r.*)) as size from old_rows r group by 1) o '
+      || 'using (board) where n.size > coalesce(o.size, 0)',
+      board_column, tg_table_name,
+      case when tg_table_name in ('dashboards', 'dashboard_members') then 't.id = r.id'
+           else 't.dashboard_id = r.dashboard_id and t.id = r.id' end) into boards;
+  end if;
+
+  foreach board in array coalesce(boards, '{}') loop
+    select * into usage from private.board_usage(board);
+    if usage.bytes > allowed then
+      -- SQLSTATE PGRST lets the API answer 413 with this message instead of a generic server error
+      raise sqlstate 'PGRST' using
+        message = json_build_object(
+          'code', 'board_full',
+          'message', format('This board is full. It can hold up to %s MB, and this change would go over.',
+            private.board_limit_bytes() / 1024 / 1024),
+          'details', null,
+          'hint', 'Remove some photos, wallpapers, images or notes, then sync again.')::text,
+        detail = json_build_object('status', 413, 'headers', json_build_object())::text;
+    end if;
+    if tg_table_name = 'dashboard_members' and tg_op = 'INSERT' and usage.members > private.board_limit_members() then
+      raise sqlstate 'PGRST' using
+        message = json_build_object(
+          'code', 'board_members_full',
+          'message', format('This board already has %s members and invitations, the most it can have.',
+            private.board_limit_members()),
+          'details', null,
+          'hint', 'Remove a member or invitation first.')::text,
+        detail = json_build_object('status', 413, 'headers', json_build_object())::text;
+    end if;
+  end loop;
+
+  return null;
+end $$;
+
+revoke all on function private.board_limit_bytes() from public, anon;
+revoke all on function private.board_limit_members() from public, anon;
+revoke all on function private.board_usage(text) from public, anon;
+revoke all on function private.check_board_limits() from public, anon;
+grant execute on function private.board_limit_bytes() to authenticated;
+grant execute on function private.board_limit_members() to authenticated;
+grant execute on function private.board_usage(text) to authenticated;
+
+-- Checked once per statement, so a sync that writes many rows checks each board once
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['dashboards', 'dashboard_members', 'tabs', 'widgets', 'notes'] loop
+    execute format('drop trigger if exists check_board_limits_insert on public.%I', t);
+    execute format('drop trigger if exists check_board_limits_update on public.%I', t);
+    execute format(
+      'create trigger check_board_limits_insert after insert on public.%I
+       referencing new table as new_rows
+       for each statement execute function private.check_board_limits()', t);
+    execute format(
+      'create trigger check_board_limits_update after update on public.%I
+       referencing old table as old_rows new table as new_rows
+       for each statement execute function private.check_board_limits()', t);
+  end loop;
+end $$;
+
 -- 9. Table Permissions
 -- Supabase grants every table to anon and authenticated by default, TRUNCATE included, and RLS doesn't
 -- apply to TRUNCATE. Grant only what the app uses. Members can change accepted_at and nothing else.

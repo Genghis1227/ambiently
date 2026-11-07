@@ -104,6 +104,7 @@ To enable multi-device sync across phones and displays:
 2. Run the SQL schema located in [`supabase/schema.sql`](supabase/schema.sql) in the SQL Editor, then run [`supabase/security-check.sql`](supabase/security-check.sql). It changes nothing, and any row it returns is a problem to fix.
    * In **Authentication**, keep **Confirm email** and **Secure email change** on, and keep anonymous sign-ins off. Household access relies on confirmed emails.
    * Never put the `service_role` key in the app. It skips every access rule.
+   * Each board can hold up to 100 MB and 50 members and invitations, so one account can't fill the database for everyone. To change these, edit `board_limit_bytes` and `board_limit_members` in the schema. If only your household uses this project, you can also turn off **Allow new users to sign up** in Authentication and add household accounts yourself from the **Users** page.
 3. Configure the environment variables in Cloudflare Pages (**Settings -> Environment variables**):
    * `VITE_SUPABASE_URL` = `https://your-project.supabase.co`
    * `VITE_SUPABASE_ANON_KEY` = `your-supabase-publishable-or-anon-key`
