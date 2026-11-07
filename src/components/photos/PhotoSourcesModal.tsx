@@ -162,29 +162,6 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
     });
   };
 
-  const handleSelectAllPlexFolders = () => {
-    const all = new Set<string>(sectionFolders.map((f) => f.key));
-    setSelectedPlexFolderKeys(all);
-  };
-
-  const handleDeselectAllPlexFolders = () => {
-    setSelectedPlexFolderKeys(new Set());
-  };
-
-  const handleSelectRecentPlexYears = (yearCount = 3) => {
-    const yearFolders = sectionFolders.filter((f) => /\b(19|20\d{2})\b/.test(f.title.trim()));
-    yearFolders.sort((a, b) => {
-      const matchA = b.title.match(/\b(19|20\d{2})\b/);
-      const matchB = a.title.match(/\b(19|20\d{2})\b/);
-      const valA = matchA ? parseInt(matchA[1], 10) : 0;
-      const valB = matchB ? parseInt(matchB[1], 10) : 0;
-      return valA - valB;
-    });
-    const targetPool = yearFolders.length > 0 ? yearFolders : sectionFolders;
-    const selected = new Set<string>(targetPool.slice(0, yearCount).map((f) => f.key));
-    setSelectedPlexFolderKeys(selected);
-  };
-
   const filteredPlexFolders = useMemo(() => {
     const query = plexFolderSearchQuery.trim().toLowerCase();
     if (!query) return sectionFolders;
@@ -194,6 +171,31 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
         (f.parentTitle && f.parentTitle.toLowerCase().includes(query))
     );
   }, [sectionFolders, plexFolderSearchQuery]);
+
+  const isAllPlexFoldersSelected = useMemo(() => {
+    if (filteredPlexFolders.length === 0) return false;
+    return filteredPlexFolders.every((f) => selectedPlexFolderKeys.has(f.key));
+  }, [filteredPlexFolders, selectedPlexFolderKeys]);
+
+  const handleToggleSelectAllPlexFolders = () => {
+    if (isAllPlexFoldersSelected) {
+      setSelectedPlexFolderKeys((prev) => {
+        const next = new Set(prev);
+        filteredPlexFolders.forEach((f) => next.delete(f.key));
+        return next;
+      });
+    } else {
+      setSelectedPlexFolderKeys((prev) => {
+        const next = new Set(prev);
+        filteredPlexFolders.forEach((f) => next.add(f.key));
+        return next;
+      });
+    }
+  };
+
+  const handleDeselectAllPlexFolders = () => {
+    setSelectedPlexFolderKeys(new Set());
+  };
 
   // Local NAS / PC multi-folder state
   const [selectedFolders, setSelectedFolders] = useState<SelectedFolderInfo[]>([]);
@@ -1252,29 +1254,37 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                                 )}
                               </div>
 
-                              <div className="flex flex-wrap items-center gap-1.5">
+                              <div className="flex items-center justify-between gap-1.5 pt-0.5">
                                 <button
                                   type="button"
-                                  onClick={() => handleSelectRecentPlexYears(3)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/30 text-blue-300 text-[11px] font-semibold transition-all cursor-pointer"
+                                  onClick={handleToggleSelectAllPlexFolders}
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-medium transition-all cursor-pointer ${
+                                    isAllPlexFoldersSelected
+                                      ? 'bg-blue-500/20 border-blue-500/40 text-blue-300'
+                                      : 'bg-gray-900 hover:bg-gray-800 border-gray-800 text-gray-300'
+                                  }`}
                                 >
-                                  <Calendar className="w-3 h-3 text-blue-400" />
-                                  <span>Last 3 Years</span>
+                                  {isAllPlexFoldersSelected ? (
+                                    <CheckSquare className="w-3.5 h-3.5 text-blue-400" />
+                                  ) : (
+                                    <Square className="w-3.5 h-3.5 text-gray-400" />
+                                  )}
+                                  <span>
+                                    {isAllPlexFoldersSelected
+                                      ? 'Deselect All'
+                                      : `Select All (${filteredPlexFolders.length})`}
+                                  </span>
                                 </button>
-                                <button
-                                  type="button"
-                                  onClick={handleSelectAllPlexFolders}
-                                  className="px-2 py-1 rounded-lg bg-gray-900 hover:bg-gray-800 border border-gray-800 text-gray-300 text-[11px] font-medium transition-all cursor-pointer"
-                                >
-                                  Select All ({sectionFolders.length})
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={handleDeselectAllPlexFolders}
-                                  className="px-2 py-1 rounded-lg bg-gray-900 hover:bg-gray-800 border border-gray-800 text-gray-400 hover:text-red-400 text-[11px] font-medium transition-all cursor-pointer"
-                                >
-                                  Clear
-                                </button>
+
+                                {selectedPlexFolderKeys.size > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={handleDeselectAllPlexFolders}
+                                    className="px-2 py-1 rounded-lg bg-gray-900 hover:bg-gray-800 border border-gray-800 text-gray-400 hover:text-red-400 text-[11px] font-medium transition-all cursor-pointer"
+                                  >
+                                    Clear Selection ({selectedPlexFolderKeys.size})
+                                  </button>
+                                )}
                               </div>
                             </div>
 
