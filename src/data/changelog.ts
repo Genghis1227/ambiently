@@ -11,6 +11,16 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.11",
+    date: "November 6, 2026",
+    title: "Plex Folder Checklist UX Polish & Select All / Deselect All Toggle",
+    highlights: [
+      "Select All / Deselect All Toggle: Replaced the static year button inside the Plex folder checklist with an interactive, stateful 'Select All' / 'Deselect All' toggle button that accurately reflects whether all visible folders are checked.",
+      "Clear Separation of Concerns: Removed redundant date-based presets from the folder checklist so folders remain purely for folder picking, while date range filtering is handled cleanly by the server-side EXIF Capture Date Filter.",
+      "Instant Clear Action: Added a clear selection button whenever folders are selected to quickly reset back to zero with one click.",
+    ],
+  },
+  {
     version: "v0.3.10",
     date: "November 6, 2026",
     title: "Server-Side Plex Capture Date Filter (EXIF & Timeline Querying)",
