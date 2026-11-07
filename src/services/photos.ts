@@ -12,6 +12,33 @@ export interface PhotoItem {
 
 export type PhotoDisplayStyle = 'ken_burns' | 'mosaic' | 'polaroid' | 'filmstrip';
 
+/**
+ * Formats a photo date string (e.g. "2023-08-15", "8/15/2023", or "2021")
+ * into a human-friendly format (e.g. "Aug 15, 2023").
+ */
+export function formatPhotoDate(dateStr?: string): string | null {
+  if (!dateStr || !dateStr.trim()) return null;
+  const trimmed = dateStr.trim();
+  if (/^(19|20)\d{2}$/.test(trimmed)) {
+    return trimmed;
+  }
+  const ymdMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (ymdMatch) {
+    const year = parseInt(ymdMatch[1], 10);
+    const month = parseInt(ymdMatch[2], 10) - 1;
+    const day = parseInt(ymdMatch[3], 10);
+    const d = new Date(year, month, day);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+  }
+  const d = new Date(trimmed);
+  if (!isNaN(d.getTime())) {
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+  return trimmed;
+}
+
 import { getPlexServerTokens } from './plex';
 import { addPlexToken } from './plexLinks';
 import {
