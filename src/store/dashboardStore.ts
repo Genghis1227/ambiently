@@ -37,7 +37,7 @@ async function scheduleCloudAutoPush(get: () => DashboardState) {
       cloudAutoSyncTimer = setTimeout(async () => {
         const state = get();
         await pushToCloud(state.settings, state.tabs, state.widgets, state.notes);
-      }, 1200);
+      }, 2500);
     }
   } catch (err) {
     console.warn('Cloud auto-push skipped:', err);

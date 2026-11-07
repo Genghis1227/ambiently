@@ -14,6 +14,7 @@ import {
   onAuthStateChange,
   pullFromCloud,
   getCurrentUser,
+  isRealtimeConnected,
 } from './services/supabase';
 import { useIdleCursor } from './hooks/useIdleCursor';
 import { isCanvasThemeLight } from './data/canvasThemes';
@@ -117,8 +118,8 @@ export function App() {
         const target = await resolveActiveDashboardId();
         setRealtimeBoardId(target?.dashboardId || user.id);
         try {
-          const res = await pullFromCloud();
-          if (res.success) {
+          const res = await pullFromCloud({ force: true });
+          if (res.success && res.hasChanges) {
             await initStore();
           }
         } catch (err) {
@@ -142,16 +143,17 @@ export function App() {
     return () => unsubscribe();
   }, [realtimeBoardId, syncRemoteNoteChange, syncRemoteWidgetChange, syncRemoteTabChange]);
 
-  // Cloud Pull: fetch fresh state on boot if logged in, on screen wake (visibilitychange), and 60s fallback poll
+  // Cloud Pull: fetch fresh state on boot if logged in, on screen wake (visibilitychange), and smart fallback poll
   useEffect(() => {
     let isCancelled = false;
+    let lastPollTime = 0;
 
-    const pullFreshCloudData = async () => {
+    const pullFreshCloudData = async (force = false) => {
       try {
         const user = await getCurrentUser();
         if (user && !isCancelled) {
-          const res = await pullFromCloud();
-          if (res.success && !isCancelled) {
+          const res = await pullFromCloud({ force });
+          if (res.success && res.hasChanges && !isCancelled) {
             await initStore();
           }
         }
@@ -160,21 +162,36 @@ export function App() {
       }
     };
 
-    // 1. Initial boot pull
-    pullFreshCloudData();
+    // 1. Initial boot pull (forced so we seed/verify fresh state on startup)
+    pullFreshCloudData(true);
 
     // 2. Pull immediately when device / kiosk screen wakes up or tab becomes visible
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        pullFreshCloudData();
+        const now = Date.now();
+        // Throttle rapid visibility changes (min 15 seconds between visibility checks)
+        if (now - lastPollTime > 15000) {
+          lastPollTime = now;
+          pullFreshCloudData(false);
+        }
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // 3. Fallback interval poll (every 60s) for always-on wall kiosks
+    // 3. Smart interval poll for always-on wall kiosks:
+    // - Completely pauses when document.visibilityState is 'hidden'
+    // - If Realtime WebSocket is connected, polls lightweight revision every 10 minutes (600,000ms)
+    // - If Realtime is disconnected, polls lightweight revision every 2 minutes (120,000ms)
+    // - Fast-paths in 0ms / 0 IO when cloud revision hasn't changed
     const intervalTimer = setInterval(() => {
-      pullFreshCloudData();
-    }, 60000);
+      if (document.visibilityState === 'hidden') return;
+      const now = Date.now();
+      const intervalNeeded = isRealtimeConnected() ? 600000 : 120000;
+      if (now - lastPollTime >= intervalNeeded) {
+        lastPollTime = now;
+        pullFreshCloudData(false);
+      }
+    }, 30000);
 
     return () => {
       isCancelled = true;

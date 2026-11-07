@@ -335,7 +335,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
 
   const handlePullCloud = async () => {
     setSyncLoading(true);
-    const res = await pullFromCloud();
+    const res = await pullFromCloud({ force: true });
     setSyncLoading(false);
     if (res.success) {
       setAuthMessage('Dashboard successfully restored from the cloud!');
