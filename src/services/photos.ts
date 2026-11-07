@@ -201,22 +201,24 @@ export function inspectLocalFileList(files: FileList | File[]): LocalDirectoryIn
     const file = files[i];
     const path = (file as any).webkitRelativePath || file.name;
     const parts = path.split('/');
-    if (parts.length > 1) {
-      if (detectedRoot === 'Selected Folder') {
-        detectedRoot = parts[0];
-      }
-      const subName = parts[1];
-      if (!subfolderMap.has(subName)) {
-        subfolderMap.set(subName, []);
-      }
-      if (IMAGE_EXT_REGEX.test(file.name) || (file.type && file.type.startsWith('image/'))) {
+    const isImage = IMAGE_EXT_REGEX.test(file.name) || (file.type && file.type.startsWith('image/'));
+
+    if (parts.length > 1 && detectedRoot === 'Selected Folder') {
+      detectedRoot = parts[0];
+    }
+
+    // The path always starts with the selected folder, so [root, file] sits directly inside it
+    if (parts.length > 2) {
+      if (isImage) {
+        const subName = parts[1];
+        if (!subfolderMap.has(subName)) {
+          subfolderMap.set(subName, []);
+        }
         subfolderMap.get(subName)!.push(file);
       }
-    } else {
-      if (IMAGE_EXT_REGEX.test(file.name) || (file.type && file.type.startsWith('image/'))) {
-        hasDirectPhotos = true;
-        directPhotosCount++;
-      }
+    } else if (isImage) {
+      hasDirectPhotos = true;
+      directPhotosCount++;
     }
   }
 
@@ -301,6 +303,21 @@ export async function scanSelectedSubfolders(
       }
     }
   } else if (inspection.files) {
+    if (includeRootPhotos && inspection.hasDirectPhotos) {
+      const rootFiles = inspection.files.filter(
+        (file) => ((file as any).webkitRelativePath || file.name).split('/').length <= 2
+      );
+      const { photos } = parseFileListToPhotos(rootFiles, isUnlimited ? Infinity : maxPhotos);
+      if (photos.length > 0) {
+        totalPhotos.push(...photos);
+        folderEntries.push({
+          id: `folder-root-${Date.now()}`,
+          name: `${inspection.rootName} (Root)`,
+          photos,
+        });
+      }
+    }
+
     for (const sub of inspection.subfolders) {
       if (!selectedSubfolderNames.has(sub.name)) continue;
       if (!isUnlimited && totalPhotos.length >= maxPhotos) break;

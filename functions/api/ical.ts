@@ -7,6 +7,14 @@ interface PagesContext {
   request: Request;
 }
 
+// Repeating events are generated from their first occurrence, so an old series has to be walked
+// forward to reach the display window. This only stops a rule that would otherwise never end.
+const MAX_OCCURRENCES_SCANNED = 20000;
+
+function isCancelled(component: any): boolean {
+  return String(component.getFirstPropertyValue('status') || '').toUpperCase() === 'CANCELLED';
+}
+
 export async function onRequestGet(context: PagesContext): Promise<Response> {
   const url = new URL(context.request.url);
   const icsUrl = url.searchParams.get('url');
@@ -53,9 +61,32 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
 
     const parsedEvents: any[] = [];
 
+    // A moved or edited instance of a repeating event is its own VEVENT with the series' UID and a
+    // RECURRENCE-ID. Group them so the series can apply them instead of listing them twice.
+    const overridesByUid = new Map<string, any[]>();
+    const repeatingUids = new Set<string>();
+    for (const v of vevents) {
+      const uid = v.getFirstPropertyValue('uid');
+      if (v.hasProperty('recurrence-id')) {
+        overridesByUid.set(uid, [...(overridesByUid.get(uid) || []), v]);
+      } else if (v.hasProperty('rrule') || v.hasProperty('rdate')) {
+        repeatingUids.add(uid);
+      }
+    }
+
     for (const v of vevents) {
       try {
-        const event = new ICAL.Event(v);
+        const uid = v.getFirstPropertyValue('uid');
+        const isOverride = v.hasProperty('recurrence-id');
+
+        // Its series reports this one. An override with no series in the feed stays: that is how
+        // an invite to a single instance of someone else's repeating event arrives.
+        if (isOverride && repeatingUids.has(uid)) continue;
+        if (isCancelled(v)) continue;
+
+        // Passing exceptions explicitly stops ical.js applying every override in the file to this
+        // event whatever its UID.
+        const event = new ICAL.Event(v, { exceptions: isOverride ? [] : overridesByUid.get(uid) || [] });
         if (!event.startDate) continue;
 
         const isAllDay = Boolean(event.startDate.isDate);
@@ -63,23 +94,26 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
         if (event.isRecurring()) {
           const iter = event.iterator();
           let nextTime: any;
-          let count = 0;
-          const maxIterations = 300;
+          let scanned = 0;
 
-          while ((nextTime = iter.next()) && count < maxIterations) {
-            count++;
+          while ((nextTime = iter.next()) && scanned < MAX_OCCURRENCES_SCANNED) {
+            scanned++;
+            // Cheap skip for occurrences long before the window. The year of margin leaves room
+            // for an override that moves an old occurrence into it.
+            if (nextTime.year < rangeStart.getUTCFullYear() - 1) continue;
+            if (nextTime.toJSDate() > rangeEnd) break;
+
             const occ = event.getOccurrenceDetails(nextTime);
+            if (isCancelled(occ.item.component)) continue;
+
             const occStart = occ.startDate.toJSDate();
+            const occIsAllDay = Boolean(occ.startDate.isDate);
 
-            if (occStart > rangeEnd) {
-              break;
-            }
-
-            if (occStart >= rangeStart) {
+            if (occStart >= rangeStart && occStart <= rangeEnd) {
               let startStr: string;
               let endStr: string | null = null;
 
-              if (isAllDay) {
+              if (occIsAllDay) {
                 startStr = `${String(occ.startDate.year).padStart(4, '0')}-${String(occ.startDate.month).padStart(2, '0')}-${String(occ.startDate.day).padStart(2, '0')}T00:00:00`;
                 if (occ.endDate) {
                   endStr = `${String(occ.endDate.year).padStart(4, '0')}-${String(occ.endDate.month).padStart(2, '0')}-${String(occ.endDate.day).padStart(2, '0')}T00:00:00`;
@@ -91,12 +125,12 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
 
               parsedEvents.push({
                 uid: `${event.uid || Math.random().toString()}-${occ.startDate.toICALString()}`,
-                summary: event.summary || 'Untitled Event',
-                description: event.description || '',
-                location: event.location || '',
+                summary: occ.item.summary || event.summary || 'Untitled Event',
+                description: occ.item.description || event.description || '',
+                location: occ.item.location || event.location || '',
                 start: startStr,
                 end: endStr,
-                isAllDay,
+                isAllDay: occIsAllDay,
               });
             }
           }

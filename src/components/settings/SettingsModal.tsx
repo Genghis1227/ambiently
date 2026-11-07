@@ -1032,6 +1032,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                 </div>
               </div>
 
+              {/* Automatic Night Schedule Toggle */}
+              <div className="flex items-center justify-between pt-2 border-t border-gray-800/60">
+                <span className="text-xs text-gray-300">Automatic Night Schedule</span>
+                <button
+                  onClick={() => updateSettings({ nightScheduleEnabled: settings.nightScheduleEnabled === false })}
+                  className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                    settings.nightScheduleEnabled !== false ? 'bg-emerald-600' : 'bg-gray-700'
+                  }`}
+                >
+                  <div
+                    className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                      settings.nightScheduleEnabled !== false ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
               {/* Night Schedule Start / End & Dim Opacity */}
               <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-800/60">
                 <div>
@@ -1041,8 +1058,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                   <input
                     type="time"
                     value={settings.nightModeStart || '22:00'}
+                    disabled={settings.nightScheduleEnabled === false}
                     onChange={(e) => updateSettings({ nightModeStart: e.target.value })}
-                    className="w-full rounded-lg bg-gray-900 border border-gray-800 p-1.5 text-xs text-white"
+                    className="w-full rounded-lg bg-gray-900 border border-gray-800 p-1.5 text-xs text-white disabled:opacity-50"
                   />
                 </div>
                 <div>
@@ -1052,8 +1070,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                   <input
                     type="time"
                     value={settings.nightModeEnd || '07:00'}
+                    disabled={settings.nightScheduleEnabled === false}
                     onChange={(e) => updateSettings({ nightModeEnd: e.target.value })}
-                    className="w-full rounded-lg bg-gray-900 border border-gray-800 p-1.5 text-xs text-white"
+                    className="w-full rounded-lg bg-gray-900 border border-gray-800 p-1.5 text-xs text-white disabled:opacity-50"
                   />
                 </div>
               </div>

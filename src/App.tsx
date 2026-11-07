@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
+import { useEffect, useRef, useState, useCallback, lazy, Suspense } from 'react';
 import { Lock } from 'lucide-react';
 import { useDashboardStore } from './store/dashboardStore';
 import { NavigationDock } from './components/dock/NavigationDock';
@@ -43,6 +43,7 @@ export function App() {
     widgets,
     notes,
     setActiveTabId,
+    rotateToTab,
     unlockKiosk,
     isCarouselPaused,
     pauseCarouselTemporarily,
@@ -485,13 +486,20 @@ export function App() {
     };
   }, [nightWakeSnoozeUntil, wakeTimeoutMin]);
 
-  // Smart Scheduled Night Mode Evaluator (runs on mount and every 5 seconds)
+  const wasInNightWindow = useRef<boolean | null>(null);
+
+  // Smart Scheduled Night Mode Evaluator (runs once settings have loaded and every 5 seconds)
   useEffect(() => {
+    // Wait for saved settings: updateSettings saves the store's current settings, which are still
+    // the defaults at this point, over the user's real ones.
+    if (!isInitialized || settings.nightScheduleEnabled === false) return;
     if (!settings.nightModeStart || !settings.nightModeEnd) return;
 
     const checkSchedule = () => {
       const now = new Date();
       const inWindow = isTimeInNightWindow(now, settings.nightModeStart, settings.nightModeEnd);
+      const wasInWindow = wasInNightWindow.current;
+      wasInNightWindow.current = inWindow;
 
       if (inWindow) {
         const isSnoozed = Boolean(nightWakeSnoozeUntil && Date.now() < nightWakeSnoozeUntil);
@@ -522,7 +530,9 @@ export function App() {
             sessionStorage.removeItem('ambiently_night_snooze');
           } catch {}
         }
-        if (settings.nightModeEnabled) {
+        // End night mode only as the window closes (or on load), so it can still be switched on
+        // by hand during the day
+        if (wasInWindow !== false && settings.nightModeEnabled) {
           updateSettings({ nightModeEnabled: false });
         }
       }
@@ -532,6 +542,8 @@ export function App() {
     const timer = setInterval(checkSchedule, 5000);
     return () => clearInterval(timer);
   }, [
+    isInitialized,
+    settings.nightScheduleEnabled,
     settings.nightModeStart,
     settings.nightModeEnd,
     settings.nightModeEnabled,
@@ -544,21 +556,23 @@ export function App() {
     t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false
   );
 
+  // `visibleTabs` is a new array on every render, and a background cloud refresh renders every 60
+  // seconds. Depending on the ids instead keeps that from restarting the countdown.
+  const visibleTabIds = visibleTabs.map((t) => t.id).join('\n');
+  const rotateDurationSec = settings.defaultRotateDurationSec || 30;
+
   // Tab auto-carousel rotation (pauses automatically when user interacts)
   useEffect(() => {
-    if (!settings.carouselEnabled || isCarouselPaused || visibleTabs.length <= 1) return;
-
-    const currentTab = visibleTabs.find((t) => t.id === activeTabId);
-    const duration = currentTab?.autoRotateDurationSec || settings.defaultRotateDurationSec || 30;
+    const tabIds = visibleTabIds.split('\n');
+    if (!settings.carouselEnabled || isCarouselPaused || tabIds.length <= 1) return;
 
     const interval = setInterval(() => {
-      const currentIndex = visibleTabs.findIndex((t) => t.id === activeTabId);
-      const nextIndex = (currentIndex + 1) % visibleTabs.length;
-      setActiveTabId(visibleTabs[nextIndex].id);
-    }, duration * 1000);
+      const nextIndex = (tabIds.indexOf(activeTabId) + 1) % tabIds.length;
+      rotateToTab(tabIds[nextIndex]);
+    }, rotateDurationSec * 1000);
 
     return () => clearInterval(interval);
-  }, [settings.carouselEnabled, isCarouselPaused, settings.defaultRotateDurationSec, visibleTabs, activeTabId, setActiveTabId]);
+  }, [settings.carouselEnabled, isCarouselPaused, rotateDurationSec, visibleTabIds, activeTabId, rotateToTab]);
 
   if (!isInitialized) {
     return (

@@ -136,30 +136,41 @@ export async function fetchCalendarEvents(sources: CalendarSource[], forceRefres
     }
   }
 
+  // If a calendar can't be reached, keep what we last got from it instead of blanking it.
+  const previousEvents = getCachedCalendarEvents(sources)?.events ?? [];
+
   const promises = enabledSources.map(async (src) => {
+    const lastKnown = () => ({
+      fetched: false,
+      events: previousEvents.filter((e) => e.calendarId === src.id),
+    });
+
     try {
       let res = await fetch(`/api/ical?url=${encodeURIComponent(src.url.trim())}`);
       if (res.status === 404) {
         res = await fetch(`/functions/api/ical?url=${encodeURIComponent(src.url.trim())}`);
       }
-      if (!res.ok) return [];
+      if (!res.ok) return lastKnown();
       const ct = res.headers.get('content-type') || '';
-      if (!ct.includes('application/json')) return [];
+      if (!ct.includes('application/json')) return lastKnown();
       const data = await res.json();
-      return (data.events || []).map((e: any) => ({
-        ...e,
-        calendarId: src.id,
-        calendarName: src.name,
-        color: src.color,
-      }));
+      return {
+        fetched: true,
+        events: (data.events || []).map((e: any) => ({
+          ...e,
+          calendarId: src.id,
+          calendarName: src.name,
+          color: src.color,
+        })) as CalendarEvent[],
+      };
     } catch (err) {
       console.warn(`Failed to fetch calendar ${src.name}:`, err);
-      return [];
+      return lastKnown();
     }
   });
 
   const results = await Promise.all(promises);
-  const flattened: CalendarEvent[] = results.flat();
+  const flattened: CalendarEvent[] = results.flatMap((r) => r.events);
 
   // Sort chronologically (accounting for all-day date strings)
   const sorted = flattened.sort((a, b) => {
@@ -175,8 +186,11 @@ export async function fetchCalendarEvents(sources: CalendarSource[], forceRefres
     return parseTime(a.start, a.isAllDay) - parseTime(b.start, b.isAllDay);
   });
 
-  // Update memory and localStorage cache
-  setCachedCalendarEvents(sources, sorted);
+  // Update memory and localStorage cache. If every calendar failed, leave it alone so its age stays
+  // accurate and the next load retries.
+  if (results.some((r) => r.fetched)) {
+    setCachedCalendarEvents(sources, sorted);
+  }
 
   return sorted;
 }

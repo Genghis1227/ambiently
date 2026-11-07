@@ -140,6 +140,7 @@ export interface AppSettings {
   nightModeStyle: 'dim' | 'oled_clock';
   nightDimOpacity: number; // 0.0 - 0.95
   nightModeWakeTimeoutMin?: number; // Inactivity timeout in minutes before returning to night mode (0 = keep awake until morning)
+  nightScheduleEnabled?: boolean; // false = night mode only starts by hand (unset counts as on)
 
   // Canvas & Dock Options
   snapToGrid?: boolean;
