@@ -11,6 +11,18 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.12",
+    date: "November 6, 2026",
+    title: "Device-Local Plex Re-Authentication Notification & Pairing Banner",
+    highlights: [
+      "Zero-Trust Device-Local Security: Plex authentication tokens remain strictly device-local in indexedDB (db.vault) and are never uploaded or synced to Supabase Cloud, keeping your Plex credentials entirely in your control.",
+      "Smart Display Re-Auth Banner: Added an ambient floating notification banner on displays when the dashboard configuration expects Plex photos but the local display has not yet been linked to Plex.",
+      "One-Click TV PIN & QR Pairing: Clicking 'Link Display' in the banner opens the Plex pairing tab directly, showing a 4-letter PIN and scannable QR code for swift pairing from your phone.",
+      "PhotoFrame Pairing Status Badge: Added a 'Pairing Needed' status indicator on photo widgets when streaming from Plex without local device authorization.",
+      "In-Modal Security Notice: Added informative guidance inside the Plex Photo Sources settings explaining device-local pairing and zero-cloud credential storage.",
+    ],
+  },
+  {
     version: "v0.3.11",
     date: "November 6, 2026",
     title: "Plex Folder Checklist UX Polish & Select All / Deselect All Toggle",

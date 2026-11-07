@@ -102,6 +102,7 @@ interface PhotoSourcesModalProps {
   currentSourceType?: 'plex' | 'local' | 'web' | 'curated';
   currentPhotoCount?: number;
   isCommonSource?: boolean;
+  initialTab?: 'plex' | 'local' | 'web' | 'curated';
   // Backward compatibility optional props (styled in Tile Settings)
   currentStyle?: PhotoDisplayStyle;
   onStyleChange?: (style: PhotoDisplayStyle) => void;
@@ -123,10 +124,17 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   currentSourceType,
   currentPhotoCount,
   isCommonSource,
+  initialTab,
 }) => {
   const photoSyncState = useDashboardStore((s) => s.photoSyncState);
-  const [activeTab, setActiveTab] = useState<'plex' | 'local' | 'web' | 'curated'>('plex');
+  const [activeTab, setActiveTab] = useState<'plex' | 'local' | 'web' | 'curated'>(initialTab || 'plex');
   const [applyToAll, setApplyToAll] = useState<boolean>(isCommonSource ?? false);
+
+  useEffect(() => {
+    if (isOpen && initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [isOpen, initialTab]);
 
   useEffect(() => {
     if (isCommonSource !== undefined) {
@@ -852,6 +860,19 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                     <p className="text-xs text-gray-400 max-w-sm mx-auto mt-1">
                       Stream your personal photos directly from your home NAS or Plex server.
                     </p>
+                  </div>
+
+                  {/* Device-Local Pairing Security Notice */}
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200/90 text-left flex items-start gap-2.5 max-w-md mx-auto">
+                    <Tv className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-semibold text-amber-300 block mb-0.5">
+                        Device-Local Plex Pairing
+                      </span>
+                      <span className="text-[11px] text-gray-300 leading-relaxed block">
+                        For your security, Plex credentials stay strictly on this device and are never stored in the cloud. Link this screen to stream your personal photo libraries.
+                      </span>
+                    </div>
                   </div>
 
                   {!pinData ? (
