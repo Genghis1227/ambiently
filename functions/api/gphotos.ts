@@ -2,16 +2,29 @@
 // Resolves and parses Google Photos shared album links into direct high-resolution photo URLs
 // Supports deep pagination via Google Photos batchexecute RPC to accommodate large albums (e.g. 7,000+ photos)
 
+import { fetchExternal, externalFetchErrorResponse, refuseOtherSites } from '../_shared/fetchExternal';
+
+// Share links start on one of the first three hosts. Google may pass through its sign-in or consent
+// pages, which then fail to parse like any other page without photos.
+const SHARE_HOSTS = ['photos.app.goo.gl', 'photos.google.com', 'goo.gl'];
+const GOOGLE_HOSTS = [...SHARE_HOSTS, 'accounts.google.com', 'consent.google.com'];
+const MAX_PHOTOS = 10000;
+const MAX_PAGE_BYTES = 10 * 1024 * 1024;
+
 interface PagesContext {
   request: Request;
 }
 
 export async function onRequestGet(context: PagesContext): Promise<Response> {
+  const refused = refuseOtherSites(context.request);
+  if (refused) return refused;
+
   const url = new URL(context.request.url);
   const shareUrl = url.searchParams.get('url');
-  // Optional maxPhotos parameter (defaults to 10000 to cover large albums)
-  const maxPhotosParam = parseInt(url.searchParams.get('maxPhotos') || '10000', 10);
-  const maxPhotos = isNaN(maxPhotosParam) || maxPhotosParam <= 0 ? 10000 : maxPhotosParam;
+  // Optional maxPhotos parameter (defaults to 10000 to cover large albums). Each 300 more photos is
+  // another request to Google, so it can't go higher than that.
+  const maxPhotosParam = parseInt(url.searchParams.get('maxPhotos') || String(MAX_PHOTOS), 10);
+  const maxPhotos = isNaN(maxPhotosParam) || maxPhotosParam <= 0 ? MAX_PHOTOS : Math.min(maxPhotosParam, MAX_PHOTOS);
 
   if (!shareUrl) {
     return new Response(JSON.stringify({ error: 'Missing "url" query parameter' }), {
@@ -23,8 +36,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
   let parsedShareUrl: URL;
   try {
     parsedShareUrl = new URL(shareUrl.trim());
-    const allowedHosts = ['photos.app.goo.gl', 'photos.google.com', 'goo.gl'];
-    if (parsedShareUrl.protocol !== 'https:' || !allowedHosts.includes(parsedShareUrl.hostname.toLowerCase())) {
+    if (parsedShareUrl.protocol !== 'https:' || !SHARE_HOSTS.includes(parsedShareUrl.hostname.toLowerCase())) {
       return new Response(JSON.stringify({ error: 'Only official Google Photos HTTPS links are supported.' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
@@ -38,8 +50,10 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
   }
 
   try {
-    const fetchRes = await fetch(shareUrl, {
-      redirect: 'follow',
+    // Every redirect has to stay on Google's hosts
+    const fetchRes = await fetchExternal(parsedShareUrl.toString(), {
+      maxBytes: MAX_PAGE_BYTES,
+      allowedHosts: GOOGLE_HOSTS,
       headers: {
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -50,11 +64,11 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     if (!fetchRes.ok) {
       return new Response(
         JSON.stringify({ error: `Failed to fetch Google Photos page: ${fetchRes.statusText}` }),
-        { status: fetchRes.status, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
+        { status: fetchRes.status, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    const html = await fetchRes.text();
+    const html = fetchRes.text;
 
     // 1. Extract Album Title
     const titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/);
@@ -106,7 +120,9 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
         const body = new URLSearchParams();
         body.set('f.req', JSON.stringify(payload));
 
-        const rpcRes = await fetch('https://photos.google.com/_/PhotosUi/data/batchexecute', {
+        const rpcRes = await fetchExternal('https://photos.google.com/_/PhotosUi/data/batchexecute', {
+          maxBytes: MAX_PAGE_BYTES,
+          allowedHosts: GOOGLE_HOSTS,
           method: 'POST',
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
@@ -118,7 +134,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
 
         if (!rpcRes.ok) break;
 
-        const rpcText = await rpcRes.text();
+        const rpcText = rpcRes.text;
         const rpcMatches = rpcText.match(regex) || [];
         for (const m of rpcMatches) {
           collectedUrls.add(m);
@@ -151,15 +167,17 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       {
         headers: {
           'Content-Type': 'application/json',
-          'Cache-Control': 'public, max-age=3600', // 1-hour edge cache
-          'Access-Control-Allow-Origin': '*',
+          // Anyone with the link can see the album, but it isn't public, so only the browser keeps a copy
+          'Cache-Control': 'private, max-age=3600',
         },
       }
     );
   } catch (err: any) {
+    const fetchError = externalFetchErrorResponse(err);
+    if (fetchError) return fetchError;
     return new Response(
       JSON.stringify({ error: `Google Photos parsing error: ${err.message}` }),
-      { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
 }

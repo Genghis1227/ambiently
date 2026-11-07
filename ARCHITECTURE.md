@@ -65,8 +65,10 @@ To support 1080p tablets, 1440p monitors, and 4K TVs cleanly:
 Cloudflare Pages Functions handle CORS-free feeds, media parsing, and deep pagination:
 * **`functions/api/ical.ts` (`/api/ical`)**: Normalizes `webcal://` URLs to `https://`, fetches raw `.ics` streams, parses `VEVENT` blocks (folded lines, `DTSTART`, `DTEND`, `SUMMARY`, `LOCATION`), and returns clean JSON cached at the edge for 15 minutes.
 * **`functions/api/rss.ts` (`/api/rss`)**: Fetches RSS 2.0 `<item>` and Atom `<entry>` XML feeds, strips HTML/CDATA tags, and returns normalized JSON headlines cached for 15 minutes.
-* **`functions/api/gphotos.ts` (`/api/gphotos`)**: Resolves public Google Photos shared albums (`photos.app.goo.gl` / `photos.google.com/share`). Extracts album metadata (`AF_initDataCallback 'ds:1'`) and automates subsequent `snAcKc` batchexecute RPC pagination to retrieve full photo collections (tested up to 7,500+ photos in ~11s) with 1-hour edge caching.
+* **`functions/api/gphotos.ts` (`/api/gphotos`)**: Resolves public Google Photos shared albums (`photos.app.goo.gl` / `photos.google.com/share`). Extracts album metadata (`AF_initDataCallback 'ds:1'`) and automates subsequent `snAcKc` batchexecute RPC pagination to retrieve full photo collections (tested up to 7,500+ photos in ~11s, at most 10,000), kept in the browser's cache for 1 hour.
 * **`functions/api/gdrive.ts` (`/api/gdrive`)**: Resolves public Google Drive shared folders (`drive.google.com/drive/folders/...`) into high-resolution streamable photos (`=w1920-h1080`), skipping video/document formats and validating public access permissions.
+* **`functions/_shared/fetchExternal.ts`**: Every function fetches through this. It allows only public HTTPS addresses and checks each redirect too, caps the wait and the size of the answer, and refuses requests from other websites. The photo functions also only follow redirects within Google's hosts.
+* **`npm run dev`** runs these same functions through a small adapter in `vite.config.ts`, so development behaves like the deployed site.
 
 ---
 

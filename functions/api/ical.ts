@@ -2,6 +2,7 @@
 // Proxies and parses public/secret .ics or webcal:// URLs into normalized JSON events
 
 import ICAL from 'ical.js';
+import { fetchExternal, externalFetchErrorResponse, refuseOtherSites } from '../_shared/fetchExternal';
 
 interface PagesContext {
   request: Request;
@@ -15,35 +16,10 @@ function isCancelled(component: any): boolean {
   return String(component.getFirstPropertyValue('status') || '').toUpperCase() === 'CANCELLED';
 }
 
-function isSafeExternalHttpsUrl(rawUrl: string): { valid: boolean; url?: URL; reason?: string } {
-  try {
-    const parsed = new URL(rawUrl);
-    if (parsed.protocol !== 'https:') {
-      return { valid: false, reason: 'Only HTTPS calendar URLs are permitted.' };
-    }
-    const host = parsed.hostname.toLowerCase();
-    // Block localhost, loopback, link-local, metadata, and RFC1918 private networks
-    if (
-      host === 'localhost' ||
-      host.endsWith('.local') ||
-      host.endsWith('.internal') ||
-      host === '0.0.0.0' ||
-      host === '[::1]' ||
-      /^127\./.test(host) ||
-      /^10\./.test(host) ||
-      /^192\.168\./.test(host) ||
-      /^169\.254\./.test(host) ||
-      /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
-    ) {
-      return { valid: false, reason: 'Private or internal network addresses are forbidden.' };
-    }
-    return { valid: true, url: parsed };
-  } catch {
-    return { valid: false, reason: 'Malformed URL.' };
-  }
-}
-
 export async function onRequestGet(context: PagesContext): Promise<Response> {
+  const refused = refuseOtherSites(context.request);
+  if (refused) return refused;
+
   const url = new URL(context.request.url);
   const icsUrl = url.searchParams.get('url');
 
@@ -62,17 +38,11 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     normalizedUrl = 'https://' + normalizedUrl.slice(10);
   }
 
-  const safetyCheck = isSafeExternalHttpsUrl(normalizedUrl);
-  if (!safetyCheck.valid) {
-    return new Response(JSON.stringify({ error: safetyCheck.reason || 'Invalid calendar URL' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' },
-    });
-  }
-
   try {
-    const fetchRes = await fetch(normalizedUrl, {
-      redirect: 'follow',
+    // Checks the address and every redirect, waits at most 15 seconds and reads at most 15 MB
+    const fetchRes = await fetchExternal(normalizedUrl, {
+      maxBytes: 15 * 1024 * 1024,
+      timeoutMs: 15_000,
       headers: {
         'User-Agent': 'Ambiently-Display/1.0 (+https://dashboard.trinhism.com)',
         Accept: 'text/calendar, text/plain, */*',
@@ -86,7 +56,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       );
     }
 
-    const icsText = await fetchRes.text();
+    const icsText = fetchRes.text;
     const jcalData = ICAL.parse(icsText);
     const comp = new ICAL.Component(jcalData);
     const vevents = comp.getAllSubcomponents('vevent');
@@ -211,6 +181,8 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       },
     });
   } catch (err: any) {
+    const fetchError = externalFetchErrorResponse(err);
+    if (fetchError) return fetchError;
     return new Response(
       JSON.stringify({ error: `Calendar parsing error: ${err.message}` }),
       { status: 500, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' } }
