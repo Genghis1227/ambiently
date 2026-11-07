@@ -28,6 +28,13 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     }
   }
 
+  if (!/^[a-zA-Z0-9_-]{10,120}$/.test(folderId)) {
+    return new Response(JSON.stringify({ error: 'Invalid Google Drive folder ID format.' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   try {
     const embeddedUrl = `https://drive.google.com/embeddedfolderview?id=${encodeURIComponent(folderId)}#grid`;
     const fetchRes = await fetch(embeddedUrl, {

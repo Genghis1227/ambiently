@@ -96,32 +96,12 @@ export interface RealtimeBoardHandlers {
   onRemoteTabChange?: (tab: DashboardTab, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void;
 }
 
-// Sanitize sensitive widget configs (such as private Google Calendar .ics URLs or Plex tokens)
-// when syncing to unauthenticated guest devices joined via code.
-function sanitizeWidgetForGuest(widget: DashboardWidget): DashboardWidget {
-  if (widget.type === 'calendar' && widget.config?.sources) {
-    // Strip private secret iCal URLs for unauthenticated guests unless explicitly public holiday feed
-    const safeSources = (widget.config.sources as any[]).filter(
-      (s) => typeof s?.url === 'string' && s.url.includes('holiday%40group.v.calendar.google.com')
-    );
-    return {
-      ...widget,
-      config: {
-        ...widget.config,
-        sources: safeSources,
-      },
-    };
-  }
-  return widget;
-}
-
-// Subscribe to Realtime WebSocket updates ONLY when authenticated or explicitly joined to a specific boardId
+// Subscribe to Realtime WebSocket updates ONLY when authenticated to a specific boardId
 export function subscribeToRealtimeBoard(
   boardId: string | null | undefined,
   handlers:
     | RealtimeBoardHandlers
-    | ((note: StickyNoteItem, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void),
-  isGuestSession = false
+    | ((note: StickyNoteItem, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void)
 ): () => void {
   const sb = getSupabase();
   if (!sb || !boardId || boardId === 'default') {
@@ -193,7 +173,7 @@ export function subscribeToRealtimeBoard(
         if (!raw) return;
         if (raw.dashboard_id && raw.dashboard_id !== boardId) return;
 
-        const rawWidget: DashboardWidget = {
+        const widget: DashboardWidget = {
           id: raw.id,
           tabId: raw.tab_id,
           type: raw.type,
@@ -205,7 +185,6 @@ export function subscribeToRealtimeBoard(
           deleted_at: raw.deleted_at,
         };
 
-        const widget = isGuestSession ? sanitizeWidgetForGuest(rawWidget) : rawWidget;
         widgetHandler(widget, eventType);
       }
     )
@@ -251,249 +230,159 @@ export function subscribeToRealtimeBoard(
   };
 }
 
-export interface InviteData {
-  code: string;
-  url: string;           // Family / Kids URL (no account required)
-  adminPairUrl?: string; // One-tap session pairing URL (for admin / spouse QR only)
-  userEmail?: string;
+export interface HouseholdMember {
+  id: string;
+  dashboard_id: string;
+  email: string;
+  role: 'owner' | 'editor' | 'viewer';
+  created_at: string;
 }
 
-// Generate or fetch shareable 6-character Invite Code for family & admin pairing
-export async function getOrCreateInviteCode(_boardId = 'default'): Promise<InviteData | null> {
+// Fetch authorized household members for the current owner's dashboard
+export async function getHouseholdMembers(): Promise<HouseholdMember[]> {
   const sb = getSupabase();
   const user = await getCurrentUser();
-  if (!sb || !user) return null;
+  if (!sb || !user) return [];
 
   try {
-    const { data } = await sb.from('dashboards').select('invite_code').eq('user_id', user.id).maybeSingle();
-    let code = data?.invite_code;
+    const { data, error } = await sb
+      .from('dashboard_members')
+      .select('id, dashboard_id, email, role, created_at')
+      .eq('dashboard_id', user.id)
+      .order('created_at', { ascending: true });
 
-    if (!code) {
-      // Generate clean 6-character uppercase code (e.g. TRINH7)
-      code = Math.random().toString(36).substring(2, 8).toUpperCase();
-      if (data) {
-        await sb.from('dashboards').update({ invite_code: code }).eq('user_id', user.id);
-      } else {
-        await sb.from('dashboards').upsert({
-          id: user.id,
-          user_id: user.id,
-          title: 'Ambiently Command Center',
-          settings: {},
-          invite_code: code,
-          updated_at: new Date().toISOString(),
-        });
-      }
-    }
-
-    const shareUrl = `${window.location.origin}/?join=${code}`;
-    let adminPairUrl: string | undefined = undefined;
-
-    const { data: sessionData } = await sb.auth.getSession();
-    if (sessionData?.session) {
-      const { access_token, refresh_token } = sessionData.session;
-      adminPairUrl = `${window.location.origin}/?join=${code}#access_token=${encodeURIComponent(access_token)}&refresh_token=${encodeURIComponent(refresh_token)}&token_type=bearer&type=recovery`;
-    }
-
-    return { code, url: shareUrl, adminPairUrl, userEmail: user.email };
-  } catch (err) {
-    console.warn('Failed to get invite code:', err);
-    return null;
+    if (error || !data) return [];
+    return data as HouseholdMember[];
+  } catch {
+    return [];
   }
 }
 
-// Rotate (regenerate) the 6-character Invite Code to immediately revoke old invite links
-export async function rotateInviteCode(): Promise<InviteData | null> {
+// Authorize an email address (e.g. spouse/partner) to collaborate on this dashboard when they sign in via Email OTP
+export async function addHouseholdMember(
+  email: string,
+  role: 'editor' | 'viewer' = 'editor'
+): Promise<{ success: boolean; member?: HouseholdMember; error?: string }> {
   const sb = getSupabase();
   const user = await getCurrentUser();
-  if (!sb || !user) return null;
+  if (!sb || !user) return { success: false, error: 'You must be signed in to add household members.' };
 
-  try {
-    const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    await sb
-      .from('dashboards')
-      .update({ invite_code: newCode, updated_at: new Date().toISOString() })
-      .eq('user_id', user.id);
-
-    return getOrCreateInviteCode();
-  } catch (err) {
-    console.warn('Failed to rotate invite code:', err);
-    return null;
+  const cleanEmail = email.trim().toLowerCase();
+  if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+    return { success: false, error: 'Please enter a valid email address.' };
   }
-}
-
-// Join a shared board via Invite Code (e.g. when family scans QR or enters 6-digit code)
-export async function joinBoardByCode(code: string): Promise<{ success: boolean; boardTitle?: string; error?: string }> {
-  const sb = getSupabase();
-  if (!sb) return { success: false, error: 'Cloud service not connected.' };
+  if (cleanEmail === user.email?.toLowerCase()) {
+    return { success: false, error: 'You are already the owner of this board.' };
+  }
 
   try {
-    const cleanCode = code.trim().toUpperCase();
-    if (!cleanCode) {
-      return { success: false, error: 'Invite code is required.' };
-    }
+    // Ensure parent dashboard record exists and clear any legacy invite_code
+    await sb.from('dashboards').upsert({
+      id: user.id,
+      user_id: user.id,
+      invite_code: null,
+      updated_at: new Date().toISOString(),
+    });
 
-    const user = await getCurrentUser();
+    const existing = await sb
+      .from('dashboard_members')
+      .select('id')
+      .eq('dashboard_id', user.id)
+      .ilike('email', cleanEmail)
+      .maybeSingle();
+
+    if (existing.data) {
+      return { success: false, error: 'This email is already on your household list.' };
+    }
 
     const { data, error } = await sb
-      .from('dashboards')
-      .select('id, title, user_id, settings, updated_at')
-      .eq('invite_code', cleanCode)
+      .from('dashboard_members')
+      .insert({
+        dashboard_id: user.id,
+        email: cleanEmail,
+        role,
+      })
+      .select('id, dashboard_id, email, role, created_at')
       .single();
 
-    if (error || !data) {
-      return { success: false, error: 'Invalid or expired invite code.' };
-    }
-
-    const isOwner = Boolean(user && user.id === data.user_id);
-
-    // Persist joined dashboard info in localStorage for offline persistence & unauthenticated syncing
-    localStorage.setItem('joined_dashboard_id', data.id);
-    localStorage.setItem('joined_owner_id', data.user_id);
-    localStorage.setItem('joined_board_title', data.title || 'Family Board');
-    localStorage.setItem('joined_invite_code', cleanCode);
-
-    // Pull shared notes, tabs, and widgets from that board
-    const [tabsRes, notesRes, widgetsRes] = await Promise.all([
-      sb.from('tabs').select('*').eq('dashboard_id', data.id),
-      sb.from('notes').select('*').eq('dashboard_id', data.id),
-      sb.from('widgets').select('*').eq('dashboard_id', data.id),
-    ]);
-
-    // Apply dashboard settings (wallpapers, clock format, themes, common photos)
-    if (data.settings) {
-      await db.settings.put({
-        ...data.settings,
-        id: 'global',
-        updated_at: data.updated_at || new Date().toISOString(),
-      });
-    }
-
-    // Clean up local seeded default notes and default widgets so they don't mix with the real board
-    const defaultNoteIds = ['note-welcome', 'note-groceries'];
-    await db.notes.bulkDelete(defaultNoteIds);
-
-    const defaultWidgetIds = ['widget-clock', 'widget-notes-tile', 'widget-photo-tile', 'widget-countdown-tile'];
-    if (widgetsRes.data && widgetsRes.data.length > 0) {
-      await db.widgets.bulkDelete(defaultWidgetIds);
-    }
-
-    if (tabsRes.data && tabsRes.data.length > 0) {
-      await db.tabs.bulkDelete(['tab-corkboard']);
-      await db.tabs.bulkPut(
-        tabsRes.data.map((t: any) => ({
-          id: t.id,
-          name: t.name,
-          icon: t.icon,
-          order: t.order_index,
-          layoutMode: t.layout_mode,
-          autoRotateDurationSec: t.auto_rotate_duration_sec,
-          updated_at: t.updated_at,
-          deleted_at: t.deleted_at,
-        }))
-      );
-    }
-
-    if (notesRes.data) {
-      await db.notes.bulkPut(
-        notesRes.data.map((n: any) => ({
-          id: n.id,
-          tabId: n.tab_id,
-          widgetId: n.widget_id,
-          title: n.title,
-          content: n.content,
-          isChecklist: n.is_checklist,
-          checklistItems: n.checklist_items,
-          bgColor: n.bg_color,
-          fontSize: n.font_size,
-          expiresAt: n.expires_at,
-          archivedAt: n.archived_at,
-          freeformPos: n.freeform_pos,
-          updated_at: n.updated_at,
-          deleted_at: n.deleted_at,
-        }))
-      );
-    }
-
-    if (widgetsRes.data) {
-      await db.widgets.bulkPut(
-        widgetsRes.data.map((w: any) => {
-          const mapped: DashboardWidget = {
-            id: w.id,
-            tabId: w.tab_id,
-            type: w.type,
-            title: w.title,
-            gridPos: w.grid_pos,
-            freeformPos: w.freeform_pos,
-            config: w.config,
-            updated_at: w.updated_at,
-            deleted_at: w.deleted_at,
-          };
-          return isOwner ? mapped : sanitizeWidgetForGuest(mapped);
-        })
-      );
-    }
-
-    return { success: true, boardTitle: data.title };
+    if (error) return { success: false, error: error.message };
+    return { success: true, member: data as HouseholdMember };
   } catch (err: any) {
-    return { success: false, error: err.message };
+    return { success: false, error: err.message || 'Failed to add member.' };
   }
 }
 
-// Push notes to joined board for family members / kids without an account
-export async function pushNotesToJoinedBoard(notes: StickyNoteItem[]): Promise<void> {
+// Revoke household member access by ID
+export async function removeHouseholdMember(memberId: string): Promise<boolean> {
   const sb = getSupabase();
-  const dashboardId = localStorage.getItem('joined_dashboard_id');
-  const ownerId = localStorage.getItem('joined_owner_id');
-  if (!sb || !dashboardId || !ownerId) return;
+  const user = await getCurrentUser();
+  if (!sb || !user) return false;
 
   try {
-    const notesToUpsert = notes.map((n) => ({
-      id: n.id,
-      dashboard_id: dashboardId,
-      user_id: ownerId,
-      tab_id: n.tabId,
-      widget_id: n.widgetId,
-      title: n.title,
-      content: n.content || '',
-      is_checklist: Boolean(n.isChecklist),
-      checklist_items: n.checklistItems || [],
-      bg_color: n.bgColor || '#fef08a',
-      font_size: n.fontSize || 'base',
-      expires_at: n.expiresAt,
-      archived_at: n.archivedAt,
-      freeform_pos: n.freeformPos || {},
-      updated_at: n.updated_at || new Date().toISOString(),
-      deleted_at: n.deleted_at,
-    }));
-
-    if (notesToUpsert.length > 0) {
-      await sb.from('notes').upsert(notesToUpsert);
-    }
-  } catch (err) {
-    console.warn('Failed to push notes to joined board:', err);
+    const { error } = await sb
+      .from('dashboard_members')
+      .delete()
+      .eq('id', memberId)
+      .eq('dashboard_id', user.id);
+    return !error;
+  } catch {
+    return false;
   }
 }
 
-// Disconnect from a joined board (resets member mode on mobile)
-export function leaveJoinedBoard(): void {
+// Resolve active target dashboard ID for authenticated user (either own board or a board shared with their verified email)
+export async function resolveActiveDashboardId(): Promise<{ dashboardId: string; ownerId: string; isMember: boolean } | null> {
+  const sb = getSupabase();
+  const user = await getCurrentUser();
+  if (!sb || !user) return null;
+
+  try {
+    // Check if this user's verified email was invited as a household member to another owner's board
+    if (user.email) {
+      const { data: membership } = await sb
+        .from('dashboard_members')
+        .select('dashboard_id')
+        .ilike('email', user.email)
+        .limit(1)
+        .maybeSingle();
+
+      if (membership?.dashboard_id && membership.dashboard_id !== user.id) {
+        const { data: sharedDash } = await sb
+          .from('dashboards')
+          .select('id, user_id')
+          .eq('id', membership.dashboard_id)
+          .maybeSingle();
+
+        if (sharedDash) {
+          return {
+            dashboardId: sharedDash.id,
+            ownerId: sharedDash.user_id,
+            isMember: true,
+          };
+        }
+      }
+    }
+  } catch {
+    // Fall back to user's own board
+  }
+
+  return {
+    dashboardId: user.id,
+    ownerId: user.id,
+    isMember: false,
+  };
+}
+
+// Clean up any legacy local storage keys from older versions
+export function clearLegacyJoinKeys(): void {
+  if (typeof window === 'undefined') return;
   localStorage.removeItem('joined_dashboard_id');
   localStorage.removeItem('joined_owner_id');
   localStorage.removeItem('joined_board_title');
   localStorage.removeItem('joined_invite_code');
 }
 
-// Check if currently operating as a joined family member
-export function getJoinedBoardInfo(): { dashboardId: string; title: string; code: string } | null {
-  const dashboardId = localStorage.getItem('joined_dashboard_id');
-  if (!dashboardId) return null;
-  return {
-    dashboardId,
-    title: localStorage.getItem('joined_board_title') || 'Family Board',
-    code: localStorage.getItem('joined_invite_code') || '',
-  };
-}
-
-// Push local Dexie snapshot to Supabase Cloud
+// Push local Dexie snapshot to Supabase Cloud (Strictly authenticated only)
 export async function pushToCloud(
   settings: AppSettings,
   tabs: DashboardTab[],
@@ -505,26 +394,41 @@ export async function pushToCloud(
   if (!sb || !user) return { success: false, error: 'Not authenticated' };
 
   try {
-    // 1. Upsert Dashboard (includes tab metadata such as backgroundTheme and custom wallpapers)
-    const tabThemeMeta = tabs.reduce((acc, t) => {
-      acc[t.id] = {
-        backgroundTheme: t.backgroundTheme,
-        customWallpaperUrl: t.customWallpaperUrl,
-        backgroundDimLevel: t.backgroundDimLevel,
-        hideNotes: t.hideNotes,
-        isHome: t.isHome,
-      };
-      return acc;
-    }, {} as Record<string, any>);
+    const target = await resolveActiveDashboardId();
+    const dashboardId = target?.dashboardId || user.id;
+    const ownerId = target?.ownerId || user.id;
+    const isMember = Boolean(target?.isMember);
 
-    const { error: dashErr } = await sb.from('dashboards').upsert({
-      id: user.id,
-      user_id: user.id,
-      title: settings.dashboardTitle,
-      settings: { ...settings, canvasThemes: tabThemeMeta },
-      updated_at: new Date().toISOString(),
-    });
-    if (dashErr) throw dashErr;
+    // 1. Upsert Dashboard (only owner updates root dashboard settings; never sync local kiosk pinHash to cloud)
+    if (!isMember) {
+      const tabThemeMeta = tabs.reduce((acc, t) => {
+        acc[t.id] = {
+          backgroundTheme: t.backgroundTheme,
+          customWallpaperUrl: t.customWallpaperUrl,
+          backgroundDimLevel: t.backgroundDimLevel,
+          hideNotes: t.hideNotes,
+          isHome: t.isHome,
+        };
+        return acc;
+      }, {} as Record<string, any>);
+
+      // Security: Strip local device PIN hash before cloud storage
+      const cloudSafeSettings = {
+        ...settings,
+        pinHash: null,
+        canvasThemes: tabThemeMeta,
+      };
+
+      const { error: dashErr } = await sb.from('dashboards').upsert({
+        id: dashboardId,
+        user_id: ownerId,
+        title: settings.dashboardTitle,
+        settings: cloudSafeSettings,
+        invite_code: null, // Ensure legacy public invite codes are nulled out
+        updated_at: new Date().toISOString(),
+      });
+      if (dashErr) throw dashErr;
+    }
 
     // 2. Query Dexie to include all active and soft-deleted records so remote devices sync additions and deletions
     const [dbTabs, dbWidgets, dbNotes] = await Promise.all([
@@ -539,9 +443,9 @@ export async function pushToCloud(
 
     // 3. Query remote updated_at timestamps to avoid stomping newer remote edits from other devices
     const [remoteTabsRes, remoteWidgetsRes, remoteNotesRes] = await Promise.all([
-      sb.from('tabs').select('id, updated_at').eq('user_id', user.id),
-      sb.from('widgets').select('id, updated_at').eq('user_id', user.id),
-      sb.from('notes').select('id, updated_at').eq('user_id', user.id),
+      sb.from('tabs').select('id, updated_at').eq('dashboard_id', dashboardId),
+      sb.from('widgets').select('id, updated_at').eq('dashboard_id', dashboardId),
+      sb.from('notes').select('id, updated_at').eq('dashboard_id', dashboardId),
     ]);
 
     const remoteTabsMap = new Map((remoteTabsRes.data || []).map((t: any) => [t.id, new Date(t.updated_at || 0).getTime()]));
@@ -552,8 +456,8 @@ export async function pushToCloud(
     if (tabsToPush.length > 0) {
       const formattedTabs = tabsToPush.map((t) => ({
         id: t.id,
-        dashboard_id: user.id,
-        user_id: user.id,
+        dashboard_id: dashboardId,
+        user_id: ownerId,
         name: t.name,
         icon: t.icon,
         layout_mode: t.layoutMode,
@@ -579,9 +483,9 @@ export async function pushToCloud(
     if (widgetsToPush.length > 0) {
       const formattedWidgets = widgetsToPush.map((w) => ({
         id: w.id,
-        dashboard_id: user.id,
+        dashboard_id: dashboardId,
         tab_id: w.tabId,
-        user_id: user.id,
+        user_id: ownerId,
         type: w.type,
         title: w.title,
         grid_pos: w.gridPos,
@@ -607,8 +511,8 @@ export async function pushToCloud(
     if (notesToPush.length > 0) {
       const formattedNotes = notesToPush.map((n) => ({
         id: n.id,
-        dashboard_id: user.id,
-        user_id: user.id,
+        dashboard_id: dashboardId,
+        user_id: ownerId,
         tab_id: n.tabId,
         widget_id: n.widgetId,
         title: n.title,
@@ -643,18 +547,21 @@ export async function pushToCloud(
   }
 }
 
-// Pull latest changes from Supabase Cloud to local Dexie
+// Pull latest changes from Supabase Cloud to local Dexie (Strictly authenticated only)
 export async function pullFromCloud(): Promise<{ success: boolean; error?: string }> {
   const sb = getSupabase();
   const user = await getCurrentUser();
   if (!sb || !user) return { success: false, error: 'Not authenticated' };
 
   try {
+    const target = await resolveActiveDashboardId();
+    const dashboardId = target?.dashboardId || user.id;
+
     const [dashRes, tabsRes, widgetsRes, notesRes] = await Promise.all([
-      sb.from('dashboards').select('*').eq('user_id', user.id).maybeSingle(),
-      sb.from('tabs').select('*').eq('user_id', user.id),
-      sb.from('widgets').select('*').eq('user_id', user.id),
-      sb.from('notes').select('*').eq('user_id', user.id),
+      sb.from('dashboards').select('*').eq('id', dashboardId).maybeSingle(),
+      sb.from('tabs').select('*').eq('dashboard_id', dashboardId),
+      sb.from('widgets').select('*').eq('dashboard_id', dashboardId),
+      sb.from('notes').select('*').eq('dashboard_id', dashboardId),
     ]);
 
     if (dashRes.error) throw dashRes.error;
@@ -673,6 +580,9 @@ export async function pullFromCloud(): Promise<{ success: boolean; error?: strin
       if (cloudTime >= localTime || !currentSettings) {
         await db.settings.put({
           ...dashRes.data.settings,
+          // Preserve local device PIN lock state rather than overwriting from cloud
+          pinHash: currentSettings?.pinHash ?? null,
+          pinLockEnabled: currentSettings?.pinLockEnabled ?? false,
           id: 'global',
           updated_at: dashRes.data.updated_at || new Date().toISOString(),
         });

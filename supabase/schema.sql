@@ -89,11 +89,16 @@ alter table public.tabs enable row level security;
 alter table public.widgets enable row level security;
 alter table public.notes enable row level security;
 
--- Drop outdated policies
+-- Clear any legacy public invite codes so no board is exposed
+update public.dashboards set invite_code = null where invite_code is not null;
+
+-- Drop outdated or insecure policies
 drop policy if exists "Users manage own dashboards" on public.dashboards;
 drop policy if exists "Owners manage dashboards" on public.dashboards;
 drop policy if exists "Members view shared dashboards" on public.dashboards;
 drop policy if exists "Public invite code read" on public.dashboards;
+drop policy if exists "Owners manage members" on public.dashboard_members;
+drop policy if exists "Members view own membership" on public.dashboard_members;
 drop policy if exists "Users manage own notes" on public.notes;
 drop policy if exists "Users and members manage notes" on public.notes;
 drop policy if exists "Users manage own tabs" on public.tabs;
@@ -103,103 +108,124 @@ drop policy if exists "Users manage own widgets" on public.widgets;
 drop policy if exists "Users and members view widgets" on public.widgets;
 drop policy if exists "Users and members manage widgets" on public.widgets;
 
--- 7. Multi-User RLS Policies
+-- 7. Strict Zero-Trust Authenticated RLS Policies (NO anonymous access)
 create policy "Owners manage dashboards" on public.dashboards
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+  for all to authenticated
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
 
 create policy "Members view shared dashboards" on public.dashboards
-  for select using (
+  for select to authenticated
+  using (
     exists (
       select 1 from public.dashboard_members
       where dashboard_members.dashboard_id = dashboards.id
-      and dashboard_members.user_id = auth.uid()
+      and (
+        dashboard_members.user_id = auth.uid()
+        or lower(dashboard_members.email) = lower(auth.jwt()->>'email')
+      )
     )
   );
 
-create policy "Public invite code read" on public.dashboards
-  for select using (invite_code is not null);
+create policy "Owners manage members" on public.dashboard_members
+  for all to authenticated
+  using (
+    exists (
+      select 1 from public.dashboards
+      where dashboards.id = dashboard_members.dashboard_id
+      and dashboards.user_id = auth.uid()
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.dashboards
+      where dashboards.id = dashboard_members.dashboard_id
+      and dashboards.user_id = auth.uid()
+    )
+  );
+
+create policy "Members view own membership" on public.dashboard_members
+  for select to authenticated
+  using (
+    user_id = auth.uid()
+    or lower(email) = lower(auth.jwt()->>'email')
+  );
 
 create policy "Users and members manage notes" on public.notes
-  for all using (
+  for all to authenticated
+  using (
     auth.uid() = user_id or
     exists (
       select 1 from public.dashboard_members
       where dashboard_members.dashboard_id = notes.dashboard_id
-      and dashboard_members.user_id = auth.uid()
-    ) or
-    exists (
-      select 1 from public.dashboards
-      where dashboards.id = notes.dashboard_id
-      and dashboards.invite_code is not null
+      and (
+        dashboard_members.user_id = auth.uid()
+        or lower(dashboard_members.email) = lower(auth.jwt()->>'email')
+      )
     )
-  ) with check (
+  )
+  with check (
     auth.uid() = user_id or
     exists (
       select 1 from public.dashboard_members
       where dashboard_members.dashboard_id = notes.dashboard_id
-      and dashboard_members.user_id = auth.uid()
+      and (
+        dashboard_members.user_id = auth.uid()
+        or lower(dashboard_members.email) = lower(auth.jwt()->>'email')
+      )
       and dashboard_members.role in ('owner', 'editor')
-    ) or
-    exists (
-      select 1 from public.dashboards
-      where dashboards.id = notes.dashboard_id
-      and dashboards.invite_code is not null
     )
   );
 
 create policy "Users and members manage tabs" on public.tabs
-  for all using (
+  for all to authenticated
+  using (
     auth.uid() = user_id or
     exists (
       select 1 from public.dashboard_members
       where dashboard_members.dashboard_id = tabs.dashboard_id
-      and dashboard_members.user_id = auth.uid()
-    ) or
-    exists (
-      select 1 from public.dashboards
-      where dashboards.id = tabs.dashboard_id
-      and dashboards.invite_code is not null
+      and (
+        dashboard_members.user_id = auth.uid()
+        or lower(dashboard_members.email) = lower(auth.jwt()->>'email')
+      )
     )
-  ) with check (
+  )
+  with check (
     auth.uid() = user_id or
     exists (
       select 1 from public.dashboard_members
       where dashboard_members.dashboard_id = tabs.dashboard_id
-      and dashboard_members.user_id = auth.uid()
+      and (
+        dashboard_members.user_id = auth.uid()
+        or lower(dashboard_members.email) = lower(auth.jwt()->>'email')
+      )
       and dashboard_members.role in ('owner', 'editor')
-    ) or
-    exists (
-      select 1 from public.dashboards
-      where dashboards.id = tabs.dashboard_id
-      and dashboards.invite_code is not null
     )
   );
 
 create policy "Users and members manage widgets" on public.widgets
-  for all using (
+  for all to authenticated
+  using (
     auth.uid() = user_id or
     exists (
       select 1 from public.dashboard_members
       where dashboard_members.dashboard_id = widgets.dashboard_id
-      and dashboard_members.user_id = auth.uid()
-    ) or
-    exists (
-      select 1 from public.dashboards
-      where dashboards.id = widgets.dashboard_id
-      and dashboards.invite_code is not null
+      and (
+        dashboard_members.user_id = auth.uid()
+        or lower(dashboard_members.email) = lower(auth.jwt()->>'email')
+      )
     )
-  ) with check (
+  )
+  with check (
     auth.uid() = user_id or
     exists (
       select 1 from public.dashboard_members
       where dashboard_members.dashboard_id = widgets.dashboard_id
-      and dashboard_members.user_id = auth.uid()
+      and (
+        dashboard_members.user_id = auth.uid()
+        or lower(dashboard_members.email) = lower(auth.jwt()->>'email')
+      )
       and dashboard_members.role in ('owner', 'editor')
-    ) or
-    exists (
-      select 1 from public.dashboards
-      where dashboards.id = widgets.dashboard_id
-      and dashboards.invite_code is not null
     )
   );
 

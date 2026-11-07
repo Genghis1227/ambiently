@@ -20,7 +20,6 @@ import {
   Plus,
   Moon,
   Sun,
-  QrCode,
   Eye,
   EyeOff,
   SunDim,
@@ -1288,8 +1287,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                     onClick={() => setIsShareOpen(true)}
                     className="px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
                   >
-                    <QrCode className="w-3.5 h-3.5" />
-                    <span>Family QR Invite</span>
+                    <Shield className="w-3.5 h-3.5" />
+                    <span>Household Access</span>
                   </button>
                   {user && (
                     <button
