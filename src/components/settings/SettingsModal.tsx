@@ -1294,7 +1294,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                 </div>
               )}
 
-              <div className="flex items-center justify-between text-xs px-3 py-2 rounded-lg bg-gray-900/60 border border-gray-800 text-gray-300">
+              <div className="flex items-center justify-between text-xs px-3 py-2.5 rounded-lg bg-gray-900/60 border border-gray-800 text-gray-300">
                 <span className="text-gray-400">Current Shared Source:</span>
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-amber-300">
@@ -1312,35 +1312,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                     </button>
                   )}
                 </div>
+              </div>
 
-                {/* Common Library Date Taken Toggle */}
-                <div className="flex items-center justify-between p-3.5 rounded-xl bg-gray-950/80 border border-gray-800">
-                  <div className="space-y-0.5 pr-3">
-                    <div className="text-xs font-semibold text-white flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Show Date Taken by Default</span>
-                    </div>
-                    <div className="text-[11px] text-gray-400">
-                      {settings.commonPhotoShowDateTaken
-                        ? 'Displaying capture date or year taken on photos across shared frames'
-                        : 'Capture date hidden unless enabled on specific tiles'}
-                    </div>
+              {/* Common Library Date Taken Toggle */}
+              <div className="flex items-center justify-between p-3.5 rounded-xl bg-gray-900/60 border border-gray-800">
+                <div className="space-y-0.5 pr-3">
+                  <div className="text-xs font-semibold text-white flex items-center gap-2">
+                    <Calendar className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Show Date Taken by Default</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => updateSettings({ commonPhotoShowDateTaken: !settings.commonPhotoShowDateTaken })}
-                    className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer shrink-0 ${
-                      settings.commonPhotoShowDateTaken ? 'bg-emerald-600' : 'bg-gray-700'
-                    }`}
-                    title={settings.commonPhotoShowDateTaken ? 'Hide date taken' : 'Show date taken across all shared photo frames'}
-                  >
-                    <div
-                      className={`w-4 h-4 rounded-full bg-white transition-transform absolute top-1 ${
-                        settings.commonPhotoShowDateTaken ? 'left-6' : 'left-1'
-                      }`}
-                    />
-                  </button>
+                  <div className="text-[11px] text-gray-400">
+                    {settings.commonPhotoShowDateTaken
+                      ? 'Displaying capture date or year taken on photos across shared frames'
+                      : 'Capture date hidden unless enabled on specific tiles'}
+                  </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => updateSettings({ commonPhotoShowDateTaken: !settings.commonPhotoShowDateTaken })}
+                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer shrink-0 ${
+                    settings.commonPhotoShowDateTaken ? 'bg-blue-600' : 'bg-gray-700'
+                  }`}
+                  title={settings.commonPhotoShowDateTaken ? 'Hide date taken' : 'Show date taken across all shared photo frames'}
+                >
+                  <div
+                    className={`w-4 h-4 rounded-full bg-white transition-transform absolute top-1 ${
+                      settings.commonPhotoShowDateTaken ? 'left-6' : 'left-1'
+                    }`}
+                  />
+                </button>
               </div>
             </div>
             )}

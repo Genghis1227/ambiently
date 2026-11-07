@@ -11,6 +11,17 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.19",
+    date: "November 7, 2026",
+    title: "Shared Photos Settings Layout & Ambient Date Styling Polish",
+    highlights: [
+      "Shared Photos Settings Layout: Fixed nested flexbox bug where the Date Taken toggle was squished inside the Current Shared Source row, separating it into a clean, full-width settings card.",
+      "Sleek Ambient Date Typography: Replaced boxy monospace green badges with seamless ambient typography ((1/150) · Aug 15, 2023) in soft text-gray-300.",
+      "Minimal Clean Mode Date Pill: Moved clean picture mode date badge to a translucent glass pill in the bottom-right corner.",
+      "Removed Redundant Year Attribution: Filtered out raw numeric years from Plex photographer attributions.",
+    ],
+  },
+  {
     version: "v0.3.18",
     date: "November 7, 2026",
     title: "Photo Count Visibility, Full Library Pagination & Date Taken Toggles",
