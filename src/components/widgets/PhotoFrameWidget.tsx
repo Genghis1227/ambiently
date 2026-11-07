@@ -10,6 +10,8 @@ import {
 } from '../../services/photos';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { getPlexToken } from '../../services/plex';
+import { addPlexToken } from '../../services/plexLinks';
+import { usePlexServerTokens } from '../../hooks/usePlexServerTokens';
 
 
 export type PolaroidDensity = 6 | 12 | 18 | 24 | 32;
@@ -419,12 +421,14 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   const failedPhotoIdsRef = useRef<Set<string>>(new Set());
   const [urlOverrides, setUrlOverrides] = useState<Record<string, string>>({});
 
+  const { tokens: plexServerTokens, ready: plexTokensReady } = usePlexServerTokens();
   const getPhotoDisplayUrl = useCallback(
     (photo: PhotoItem, targetWidth = 1920) => {
       const activeUrl = urlOverrides[photo.id] || photo.url;
-      return getOptimizedPhotoUrl(activeUrl, targetWidth);
+      const sized = getOptimizedPhotoUrl(activeUrl, targetWidth);
+      return photo.source === 'plex' ? addPlexToken(sized, plexServerTokens) : sized;
     },
-    [urlOverrides]
+    [urlOverrides, plexServerTokens]
   );
 
   const handlePolaroidError = useCallback((slotIdx: number, photoId: string) => {
@@ -844,8 +848,9 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
 
   // Cache photos on mount for 0ms offline fallback
   useEffect(() => {
+    if (isPlexSource && !plexTokensReady) return;
     cachePhotosLocally(photos);
-  }, [photos]);
+  }, [photos, isPlexSource, plexTokensReady]);
 
   const kenBurnsHistoryRef = useRef<number[]>([]);
 
@@ -1016,6 +1021,12 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
       }
     }
   };
+
+  // Plex links are saved without a token. Until this device's tokens are read (usually a few
+  // milliseconds), a Plex photo would load without one, fail, and be skipped, so show the empty frame.
+  if (isPlexSource && !plexTokensReady) {
+    return <div className="relative w-full h-full rounded-2xl overflow-hidden bg-black" />;
+  }
 
   return (
     <div

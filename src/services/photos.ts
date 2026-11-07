@@ -12,6 +12,8 @@ export interface PhotoItem {
 
 export type PhotoDisplayStyle = 'ken_burns' | 'mosaic' | 'polaroid' | 'filmstrip';
 
+import { getPlexServerTokens } from './plex';
+import { addPlexToken } from './plexLinks';
 import {
   ALL_CURATED_PHOTOS,
   CURATED_CATEGORIES,
@@ -35,11 +37,13 @@ export async function cachePhotosLocally(photos: PhotoItem[]): Promise<void> {
       if (photo.url.startsWith('blob:') || photo.url.startsWith('data:')) {
         continue;
       }
-      const match = await cache.match(photo.url);
+      // Saved Plex links have no token, so add this device's token to fetch the same image it shows
+      const url = photo.source === 'plex' ? addPlexToken(photo.url, getPlexServerTokens()) : photo.url;
+      const match = await cache.match(url);
       if (!match) {
         // Fetch and cache without failing the app if network drops
-        fetch(photo.url, { mode: 'no-cors' })
-          .then((res) => cache.put(photo.url, res))
+        fetch(url, { mode: 'no-cors' })
+          .then((res) => cache.put(url, res))
           .catch(() => {});
       }
     }

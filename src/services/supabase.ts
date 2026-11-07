@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient, type User, type RealtimeChannel } from '@supabase/supabase-js';
 import { db } from './db';
+import { stripPlexTokens } from './plexLinks';
 import type { DashboardTab, DashboardWidget, StickyNoteItem, AppSettings } from '../types/dashboard';
 
 let supabaseClient: SupabaseClient | null = null;
@@ -465,12 +466,13 @@ export async function pushToCloud(
         return acc;
       }, {} as Record<string, any>);
 
-      // Security: Strip local device PIN hash before cloud storage
-      const cloudSafeSettings = {
+      // Security: Strip local device PIN hash before cloud storage, and any Plex token left in a
+      // saved photo link (from an older version), since every household member can read this
+      const cloudSafeSettings = stripPlexTokens({
         ...settings,
         pinHash: null,
         canvasThemes: tabThemeMeta,
-      };
+      });
 
       const { error: dashErr } = await sb.from('dashboards').upsert({
         id: dashboardId,
@@ -543,7 +545,7 @@ export async function pushToCloud(
         title: w.title,
         grid_pos: w.gridPos,
         freeform_pos: w.freeformPos,
-        config: w.config,
+        config: stripPlexTokens(w.config),
         updated_at: w.updated_at,
         deleted_at: w.deleted_at || null,
       }));

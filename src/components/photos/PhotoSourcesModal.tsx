@@ -66,6 +66,8 @@ import {
   type PhotoDisplayStyle,
 } from '../../services/photos';
 import { photoSyncService } from '../../services/photoSyncService';
+import { addPlexToken } from '../../services/plexLinks';
+import { usePlexServerTokens } from '../../hooks/usePlexServerTokens';
 import { useDashboardStore } from '../../store/dashboardStore';
 
 const CATEGORY_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -143,6 +145,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   }, [isCommonSource]);
 
   // Plex auth & server states
+  const { tokens: plexServerTokens } = usePlexServerTokens();
   const [plexToken, setPlexToken] = useState<string | null>(null);
   const [pinData, setPinData] = useState<PlexPinResponse | null>(null);
   const [isPinLoading, setIsPinLoading] = useState(false);
@@ -1763,7 +1766,11 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                           {folder.photos.slice(0, 3).map((photo) => (
                             <img
                               key={photo.id}
-                              src={getOptimizedPhotoUrl(photo.url, 120)}
+                              src={
+                                photo.source === 'plex'
+                                  ? addPlexToken(getOptimizedPhotoUrl(photo.url, 120), plexServerTokens)
+                                  : getOptimizedPhotoUrl(photo.url, 120)
+                              }
                               alt=""
                               referrerPolicy="no-referrer"
                               className="w-7 h-7 rounded object-cover border border-white/10 bg-gray-800"

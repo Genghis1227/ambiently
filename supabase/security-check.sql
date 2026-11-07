@@ -89,13 +89,24 @@ from public.dashboards
 where id <> user_id::text and id <> 'default'
 
 union all
+select 'Plex token guard is missing or turned off', t.name
+from (values ('dashboards'), ('widgets')) as t(name)
+where not exists (
+  select 1
+  from pg_trigger tr
+  where tr.tgrelid = format('public.%I', t.name)::regclass
+  and tr.tgname = 'strip_plex_tokens'
+  and tr.tgenabled <> 'D'
+)
+
+union all
 select 'Secret-looking value stored in settings or widget config', 'dashboard ' || id
 from public.dashboards
-where settings::text ilike '%x-plex-token%'
+where settings::text ilike '%x-plex-token=%'
 
 union all
 select 'Secret-looking value stored in settings or widget config', 'widget ' || dashboard_id || '/' || id
 from public.widgets
-where config::text ilike '%x-plex-token%'
+where config::text ilike '%x-plex-token=%'
 
 order by 1, 2;

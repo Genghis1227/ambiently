@@ -339,3 +339,46 @@ begin
     end if;
   end loop;
 end $$;
+
+-- 11. Keep Plex Tokens Out of Shared Data
+-- A Plex token in a saved photo link opens the whole Plex server to every household member and device.
+-- Current versions of the app save links without one, and each device adds its own when it shows a
+-- photo. This removes any token that still arrives, from an older version or another client.
+create or replace function private.strip_plex_tokens_from_settings() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if new.settings::text ~* 'x-plex-token=' then
+    new.settings := regexp_replace(
+      regexp_replace(new.settings::text, '([?&])x-plex-token=[^&"\\#]*&', '\1', 'gi'),
+      '[?&]x-plex-token=[^&"\\#]*', '', 'gi'
+    )::jsonb;
+  end if;
+  return new;
+end $$;
+
+create or replace function private.strip_plex_tokens_from_config() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if new.config::text ~* 'x-plex-token=' then
+    new.config := regexp_replace(
+      regexp_replace(new.config::text, '([?&])x-plex-token=[^&"\\#]*&', '\1', 'gi'),
+      '[?&]x-plex-token=[^&"\\#]*', '', 'gi'
+    )::jsonb;
+  end if;
+  return new;
+end $$;
+
+revoke all on function private.strip_plex_tokens_from_settings() from public, anon;
+revoke all on function private.strip_plex_tokens_from_config() from public, anon;
+
+drop trigger if exists strip_plex_tokens on public.dashboards;
+create trigger strip_plex_tokens before insert or update on public.dashboards
+  for each row execute function private.strip_plex_tokens_from_settings();
+
+drop trigger if exists strip_plex_tokens on public.widgets;
+create trigger strip_plex_tokens before insert or update on public.widgets
+  for each row execute function private.strip_plex_tokens_from_config();
+
+-- Clean what is already stored. Each update runs through the trigger above.
+update public.dashboards set settings = settings where settings::text ~* 'x-plex-token=';
+update public.widgets set config = config where config::text ~* 'x-plex-token=';
