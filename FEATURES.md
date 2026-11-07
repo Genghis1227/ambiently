@@ -118,8 +118,8 @@ Every widget features a top-right **Tile Settings (`⚙️`)** button to customi
   * **Hardware Momentum Touch Scrolling:** Bound to `fixed inset-0 w-full h-[100dvh]` with `touch-action: pan-y` and momentum scrolling for smooth vertical swiping.
 * **Quick Note & Inline Mobile Editing:** Post new notes/checklists to the selected canvas, edit existing notes (`✏️`), or append new items (`+ Add item`) to existing checklists directly from your phone.
 * **Remote Tab Switcher:** Tap any tab pill on your phone to view and manage that canvas's widgets and notes.
-* **Family QR Code Invite (`ShareBoardModal.tsx`):**
-  * Generate a scannable QR code and 6-digit join code in Settings so family members can connect their phones without typing passwords.
+* **Household Email Invitations (`ShareBoardModal.tsx`):**
+  * Invite a family member by email. They sign in with that address, then accept the invitation in the same screen before their device joins the board. They can decline, or leave later.
 * **3-Tier Persistence & Backup:**
   1. **Tier 1 (Default - Primary Storage):** 100% local IndexedDB storage (`Dexie.js`). All widgets, notes, checklists, canvas configurations, themes, and layouts persist in browser storage. Zero network or server dependencies; the app boots in 0ms offline even if external files are unlinked.
   2. **Tier 2 (Local PC Auto-Sync & File Mirroring):**

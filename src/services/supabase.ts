@@ -235,7 +235,16 @@ export interface HouseholdMember {
   dashboard_id: string;
   email: string;
   role: 'owner' | 'editor' | 'viewer';
+  accepted_at: string | null;
   created_at: string;
+}
+
+export interface BoardInvitation {
+  id: string;
+  role: 'owner' | 'editor' | 'viewer';
+  accepted_at: string | null;
+  board_title: string;
+  owner_email: string;
 }
 
 // Fetch authorized household members for the current owner's dashboard
@@ -247,7 +256,7 @@ export async function getHouseholdMembers(): Promise<HouseholdMember[]> {
   try {
     const { data, error } = await sb
       .from('dashboard_members')
-      .select('id, dashboard_id, email, role, created_at')
+      .select('id, dashboard_id, email, role, accepted_at, created_at')
       .eq('dashboard_id', user.id)
       .order('created_at', { ascending: true });
 
@@ -288,7 +297,7 @@ export async function addHouseholdMember(
       .from('dashboard_members')
       .select('id')
       .eq('dashboard_id', user.id)
-      .ilike('email', cleanEmail)
+      .eq('email', cleanEmail)
       .maybeSingle();
 
     if (existing.data) {
@@ -302,7 +311,7 @@ export async function addHouseholdMember(
         email: cleanEmail,
         role,
       })
-      .select('id, dashboard_id, email, role, created_at')
+      .select('id, dashboard_id, email, role, accepted_at, created_at')
       .single();
 
     if (error) return { success: false, error: error.message };
@@ -330,19 +339,63 @@ export async function removeHouseholdMember(memberId: string): Promise<boolean> 
   }
 }
 
-// Resolve active target dashboard ID for authenticated user (either own board or a board shared with their verified email)
+// Boards that have invited the signed-in user, accepted or not
+export async function getMyInvitations(): Promise<BoardInvitation[]> {
+  const sb = getSupabase();
+  if (!sb) return [];
+
+  try {
+    const { data, error } = await sb.rpc('get_my_invitations');
+    if (error || !data) return [];
+    return data as BoardInvitation[];
+  } catch {
+    return [];
+  }
+}
+
+export async function acceptInvitation(invitationId: string): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb) return false;
+
+  try {
+    const { error } = await sb
+      .from('dashboard_members')
+      .update({ accepted_at: new Date().toISOString() })
+      .eq('id', invitationId);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+// Decline an invitation, or leave a board already joined
+export async function leaveBoard(invitationId: string): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb) return false;
+
+  try {
+    const { error } = await sb.from('dashboard_members').delete().eq('id', invitationId);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+// Resolve active target dashboard ID for authenticated user (either own board or a board they accepted an invitation to)
 export async function resolveActiveDashboardId(): Promise<{ dashboardId: string; ownerId: string; isMember: boolean } | null> {
   const sb = getSupabase();
   const user = await getCurrentUser();
   if (!sb || !user) return null;
 
   try {
-    // Check if this user's verified email was invited as a household member to another owner's board
+    // Check if this user accepted an invitation to another owner's board. An invitation they haven't
+    // accepted must not move them, or anyone who knew their email could receive their synced data.
     if (user.email) {
       const { data: membership } = await sb
         .from('dashboard_members')
         .select('dashboard_id')
-        .ilike('email', user.email)
+        .eq('email', user.email.toLowerCase())
+        .not('accepted_at', 'is', null)
         .limit(1)
         .maybeSingle();
 
