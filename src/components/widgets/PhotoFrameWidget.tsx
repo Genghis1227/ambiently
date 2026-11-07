@@ -499,6 +499,10 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
 
     // Staggered quadrant rotation: swap one photo every rotation interval
     const timer = setInterval(() => {
+      const slotToReplace = mosaicSlotRef.current % 4;
+      mosaicSlotRef.current = (mosaicSlotRef.current + 1) % 4;
+      setFocusedMosaicSlot(slotToReplace);
+
       setMosaicPhotos((prev) => {
         if (photos.length <= 1) return prev;
         const currentSlots = prev.length >= 4 ? prev : photos.slice(0, 4);
@@ -514,10 +518,6 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
           nextPhoto = photos[nextIdx];
           mosaicIndexRef.current = (nextIdx + 1) % photos.length;
         }
-
-        const slotToReplace = mosaicSlotRef.current % 4;
-        mosaicSlotRef.current = (mosaicSlotRef.current + 1) % 4;
-        setFocusedMosaicSlot(slotToReplace);
 
         const updated = [...currentSlots];
         updated[slotToReplace] = nextPhoto;

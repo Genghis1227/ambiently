@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Settings,
@@ -168,9 +168,21 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const [imageLinkUrl, setImageLinkUrl] = useState('');
   const [isMediaSearchOpen, setIsMediaSearchOpen] = useState(false);
 
+  // Prevents re-renders or background photo syncs from resetting active form edits while modal is open
+  const lastOpenedWidgetIdRef = useRef<string | null>(null);
+
   // Populate initial state when modal opens with a widget
   useEffect(() => {
-    if (!widget) return;
+    if (!isOpen || !widget) {
+      lastOpenedWidgetIdRef.current = null;
+      return;
+    }
+
+    // Only populate on initial open or when editing a different widget instance
+    if (lastOpenedWidgetIdRef.current === widget.id) {
+      return;
+    }
+    lastOpenedWidgetIdRef.current = widget.id;
 
     setTitle(widget.title || '');
     setThemeMode((widget.config?.themeMode as WidgetThemeMode) || 'auto');
@@ -841,10 +853,10 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    { id: 'ken_burns', label: 'Ken Burns (Slow Pan & Zoom)' },
-                    { id: 'mosaic', label: 'Mosaic Collage' },
+                    { id: 'ken_burns', label: 'Single Photo (Ken Burns Pan & Zoom)' },
+                    { id: 'mosaic', label: 'Mosaic Collage (4-Grid)' },
                     { id: 'polaroid', label: 'Scattered Polaroids' },
-                    { id: 'filmstrip', label: 'Filmstrip' },
+                    { id: 'filmstrip', label: 'Cinematic Filmstrip' },
                   ].map((s) => (
                     <button
                       key={s.id}
@@ -863,21 +875,36 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
               </div>
 
               {photoStyle === 'mosaic' && (
-                <div className="flex items-center justify-between p-3.5 rounded-xl bg-gray-950 border border-gray-800">
+                <div
+                  onClick={() => setMosaicKenBurns(!mosaicKenBurns)}
+                  className={`flex items-center justify-between p-3.5 rounded-xl border transition-all cursor-pointer select-none ${
+                    mosaicKenBurns
+                      ? 'bg-blue-950/30 border-blue-500/50 shadow-sm'
+                      : 'bg-gray-950 border-gray-800 hover:border-gray-700'
+                  }`}
+                >
                   <div className="space-y-0.5 pr-3">
                     <div className="text-xs font-semibold text-white flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-                      <span>Focused Photo Ken Burns Effect</span>
+                      <Sparkles className={`w-3.5 h-3.5 ${mosaicKenBurns ? 'text-blue-400' : 'text-gray-400'}`} />
+                      <span>Ken Burns Pan & Zoom Effect</span>
+                      {mosaicKenBurns && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                          Active
+                        </span>
+                      )}
                     </div>
                     <div className="text-[11px] text-gray-400">
                       {mosaicKenBurns
                         ? 'Active quadrant pans and zooms gently with focus indicator; click any photo to focus'
-                        : 'Static 4-quadrant photo collage grid'}
+                        : 'Enable gentle pan & zoom motion on the focused photo (default is static 4-grid)'}
                     </div>
                   </div>
                   <button
                     type="button"
-                    onClick={() => setMosaicKenBurns(!mosaicKenBurns)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMosaicKenBurns(!mosaicKenBurns);
+                    }}
                     className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
                       mosaicKenBurns ? 'bg-blue-600' : 'bg-gray-800'
                     }`}
