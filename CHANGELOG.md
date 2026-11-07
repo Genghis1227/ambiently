@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.20] - 2026-11-07
+
+### Fixed
+* **Cloud Backup Payload Capping & Statement Timeout Prevention (`src/services/supabase.ts`):**
+  * Sliced `customPhotos` on widgets and `commonPhotos` in settings to 250 items in the cloud JSON sync payload, reducing payload sizes from multi-megabyte blobs to ~50 KB and completely preventing PostgreSQL `statement_timeout` (8000ms) errors.
+  * Chunked widget upserts into small batches of 5 with an automatic single-item fallback retry, ensuring individual large widgets cannot abort the entire backup transaction.
+  * Chunked note upserts into batches of 25.
+* **Supabase Disk IO & Memory Commitment Optimization (`supabase/migrations/20261107_optimize_disk_io.sql`):**
+  * Provided an idempotent SQL migration replacing heavy 5-table sequential detoasting scans (`pg_column_size`) with an in-memory batch size validation check (`< 5 MB`), stabilizing memory commitment and preventing compute restarts.
+
+---
+
 ## [0.3.19] - 2026-11-07
 
 ### Fixed
