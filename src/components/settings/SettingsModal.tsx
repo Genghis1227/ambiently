@@ -395,29 +395,37 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
             </button>
           </div>
 
-          {/* Navigation Tabs Header */}
-          <div className="flex items-center gap-1 px-4 pt-2 border-b border-gray-800 bg-gray-950/60 overflow-x-auto no-scrollbar shrink-0">
+          {/* Navigation Tabs Header - All 5 tabs visible at a glance on mobile & desktop */}
+          <div className="grid grid-cols-5 sm:flex sm:items-center gap-1 px-2 sm:px-4 pt-2 pb-1.5 sm:pb-0 border-b border-gray-800 bg-gray-950/60 shrink-0">
             {[
-              { id: 'boards' as const, label: 'Canvases', icon: <Grid className="w-3.5 h-3.5" />, badge: tabs.length },
-              { id: 'display' as const, label: 'Display & Kiosk', icon: <Sliders className="w-3.5 h-3.5" /> },
-              { id: 'photos' as const, label: 'Shared Photos', icon: <ImageIcon className="w-3.5 h-3.5" /> },
-              { id: 'sync' as const, label: 'Sync & Backup', icon: <FolderSync className="w-3.5 h-3.5" /> },
-              { id: 'system' as const, label: 'Security & System', icon: <Shield className="w-3.5 h-3.5" /> },
+              { id: 'boards' as const, label: 'Canvases', shortLabel: 'Canvases', icon: <Grid className="w-4 h-4 sm:w-3.5 sm:h-3.5" />, badge: tabs.length },
+              { id: 'display' as const, label: 'Display & Kiosk', shortLabel: 'Display', icon: <Sliders className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> },
+              { id: 'photos' as const, label: 'Shared Photos', shortLabel: 'Photos', icon: <ImageIcon className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> },
+              { id: 'sync' as const, label: 'Sync & Backup', shortLabel: 'Sync', icon: <FolderSync className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> },
+              { id: 'system' as const, label: 'Security & System', shortLabel: 'Security', icon: <Shield className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> },
             ].map((tab) => (
               <button
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-xl transition-all border-b-2 cursor-pointer whitespace-nowrap ${
+                className={`relative flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 py-2 text-[10px] sm:text-xs font-semibold rounded-xl sm:rounded-b-none sm:rounded-t-xl transition-all sm:border-b-2 cursor-pointer whitespace-nowrap ${
                   activeTab === tab.id
-                    ? 'border-blue-500 text-blue-400 bg-gray-900/90 shadow-sm'
-                    : 'border-transparent text-gray-400 hover:text-gray-200 hover:bg-gray-900/30'
+                    ? 'bg-blue-600/20 sm:bg-gray-900/90 text-blue-400 border border-blue-500/40 sm:border-0 sm:border-b-2 sm:border-blue-500 shadow-sm'
+                    : 'border border-transparent sm:border-0 sm:border-b-2 text-gray-400 hover:text-gray-200 hover:bg-gray-900/40'
                 }`}
               >
-                {tab.icon}
-                <span>{tab.label}</span>
+                <div className="relative flex items-center justify-center">
+                  {tab.icon}
+                  {tab.badge !== undefined && (
+                    <span className="sm:hidden -top-1.5 -right-3 absolute text-[9px] px-1 rounded-full bg-blue-500/30 text-blue-200 border border-blue-400/30 font-mono leading-tight">
+                      {tab.badge}
+                    </span>
+                  )}
+                </div>
+                <span className="sm:hidden tracking-tight">{tab.shortLabel}</span>
+                <span className="hidden sm:inline">{tab.label}</span>
                 {tab.badge !== undefined && (
-                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-gray-800 text-gray-300 font-mono">
+                  <span className="hidden sm:inline text-[10px] px-1.5 py-0.2 rounded-full bg-gray-800 text-gray-300 font-mono">
                     {tab.badge}
                   </span>
                 )}

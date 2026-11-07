@@ -285,6 +285,48 @@ function buildPlexItemUrl(
   return `${cleanUri}/${key}${key.includes('?') ? '&' : '?'}${combinedParam}`;
 }
 
+// Helper to determine if a Plex JSON item represents a subfolder, directory, or photoalbum container
+function isPlexDirectoryItem(item: any): boolean {
+  if (!item) return false;
+  if (
+    item.type === 'folder' ||
+    item.type === 'photoalbum' ||
+    item.type === 'directory' ||
+    item.type === 'album'
+  ) {
+    return true;
+  }
+  const key = String(item.key || '');
+  if (
+    key.includes('/folder') ||
+    key.endsWith('/children') ||
+    key.includes('/children?')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+// Normalizes the traversal key for a Plex folder/photoalbum item
+function getPlexDirectoryTargetKey(item: any): string | null {
+  if (!item) return null;
+  if (item.key) {
+    const k = String(item.key);
+    // If a photoalbum's key is /library/metadata/123 without /children, append /children so Plex returns its child items
+    if (
+      (item.type === 'photoalbum' || item.type === 'album') &&
+      /^\/library\/metadata\/\d+$/.test(k)
+    ) {
+      return `${k}/children`;
+    }
+    return k;
+  }
+  if (item.ratingKey && isPlexDirectoryItem(item)) {
+    return `/library/metadata/${item.ratingKey}/children`;
+  }
+  return null;
+}
+
 // Enriches Plex photo items by resolving full Media parts when missing from folder/summary responses
 async function enrichPlexPhotoItemsWithParts(
   items: any[],
@@ -294,10 +336,7 @@ async function enrichPlexPhotoItemsWithParts(
   const needsEnrichment = items.filter(
     (item) =>
       item &&
-      item.type !== 'folder' &&
-      item.type !== 'photoalbum' &&
-      item.type !== 'directory' &&
-      item.type !== 'album' &&
+      !isPlexDirectoryItem(item) &&
       !item.Media?.[0]?.Part?.[0]?.key &&
       Boolean(item.ratingKey)
   );
@@ -307,7 +346,7 @@ async function enrichPlexPhotoItemsWithParts(
   }
 
   const resolvedMap = new Map<string, any>();
-  const BATCH_SIZE = 25;
+  const BATCH_SIZE = 50;
 
   for (let i = 0; i < needsEnrichment.length; i += BATCH_SIZE) {
     const batch = needsEnrichment.slice(i, i + BATCH_SIZE);
@@ -384,12 +423,12 @@ function extractPlexPhotoItem(
   tokenParam: string
 ): PhotoItem | null {
   // Never treat directories/albums/folders as photos
-  if (
-    item.type === 'folder' ||
-    item.type === 'photoalbum' ||
-    item.type === 'directory' ||
-    item.type === 'album'
-  ) {
+  if (isPlexDirectoryItem(item)) {
+    return null;
+  }
+
+  // Also ignore video clips in mixed libraries so only still images are added to photo frames
+  if (item.type === 'clip' || item.type === 'movie' || item.type === 'episode') {
     return null;
   }
 
@@ -448,6 +487,13 @@ function extractPlexPhotoItem(
   };
 }
 
+// Helper to extract both Directory and Metadata entries from a Plex MediaContainer response
+function getContainerEntries(data: any): any[] {
+  const dirs = data?.MediaContainer?.Directory || [];
+  const meta = data?.MediaContainer?.Metadata || [];
+  return [...dirs, ...meta];
+}
+
 // Discover subfolders or albums within a library section (including child subfolders)
 export async function getPlexSectionFolders(
   serverUri: string,
@@ -457,6 +503,7 @@ export async function getPlexSectionFolders(
   const cleanUri = serverUri.replace(/\/$/, '');
   const tokenParam = `X-Plex-Token=${encodeURIComponent(serverAccessToken)}`;
   const folders: PlexFolderItem[] = [];
+  const seenKeys = new Set<string>();
 
   // 1. Try folder hierarchy endpoint: /library/sections/{id}/folder
   try {
@@ -465,13 +512,14 @@ export async function getPlexSectionFolders(
     });
     if (folderRes.ok) {
       const folderData = await folderRes.json();
-      const dirs = folderData.MediaContainer?.Directory || [];
+      const rawEntries = getContainerEntries(folderData).filter(isPlexDirectoryItem);
 
       // For each root folder, fetch immediate child folders (depth: 1)
-      const childPromises = dirs.map(async (d: any) => {
-        if (!d.title || !d.key) return null;
+      const childPromises = rawEntries.map(async (d: any) => {
+        const rootKey = getPlexDirectoryTargetKey(d);
+        if (!d.title || !rootKey) return null;
         const rootItem: PlexFolderItem = {
-          key: d.key,
+          key: rootKey,
           title: d.title,
           type: d.type || 'folder',
           thumb: d.thumb,
@@ -480,15 +528,16 @@ export async function getPlexSectionFolders(
 
         const subItems: PlexFolderItem[] = [];
         try {
-          const childUrl = buildPlexItemUrl(cleanUri, d.key, tokenParam, sectionKey);
+          const childUrl = buildPlexItemUrl(cleanUri, rootKey, tokenParam, sectionKey);
           const childRes = await fetch(childUrl, { headers: { Accept: 'application/json' } });
           if (childRes.ok) {
             const childData = await childRes.json();
-            const childDirs = childData.MediaContainer?.Directory || [];
-            for (const c of childDirs) {
-              if (c.title && c.key) {
+            const childEntries = getContainerEntries(childData).filter(isPlexDirectoryItem);
+            for (const c of childEntries) {
+              const childKey = getPlexDirectoryTargetKey(c);
+              if (c.title && childKey) {
                 subItems.push({
-                  key: c.key,
+                  key: childKey,
                   title: c.title,
                   parentTitle: d.title,
                   type: c.type || 'folder',
@@ -508,8 +557,16 @@ export async function getPlexSectionFolders(
       const results = await Promise.allSettled(childPromises);
       for (const r of results) {
         if (r.status === 'fulfilled' && r.value) {
-          folders.push(r.value.rootItem);
-          folders.push(...r.value.subItems);
+          if (!seenKeys.has(r.value.rootItem.key)) {
+            seenKeys.add(r.value.rootItem.key);
+            folders.push(r.value.rootItem);
+          }
+          for (const sub of r.value.subItems) {
+            if (!seenKeys.has(sub.key)) {
+              seenKeys.add(sub.key);
+              folders.push(sub);
+            }
+          }
         }
       }
     }
@@ -525,11 +582,13 @@ export async function getPlexSectionFolders(
       });
       if (albumRes.ok) {
         const albumData = await albumRes.json();
-        const dirs = albumData.MediaContainer?.Metadata || albumData.MediaContainer?.Directory || [];
+        const dirs = getContainerEntries(albumData);
         for (const d of dirs) {
-          if (d.title && (d.key || d.ratingKey)) {
+          const albumKey = getPlexDirectoryTargetKey(d) || (d.ratingKey ? `/library/metadata/${d.ratingKey}/children` : d.key);
+          if (d.title && albumKey && !seenKeys.has(albumKey)) {
+            seenKeys.add(albumKey);
             folders.push({
-              key: d.key || `/library/metadata/${d.ratingKey}/children`,
+              key: albumKey,
               title: d.title,
               type: 'photoalbum',
               thumb: d.thumb,
@@ -590,8 +649,9 @@ export async function getPlexPhotosFromSection(
       });
       if (res.ok) {
         const data = await res.json();
-        const rawMetadata = data.MediaContainer?.Metadata || [];
-        const metadataItems = await enrichPlexPhotoItemsWithParts(rawMetadata, cleanUri, tokenParam);
+        const rawEntries = getContainerEntries(data);
+        const leafCandidates = rawEntries.filter((item) => !isPlexDirectoryItem(item));
+        const metadataItems = await enrichPlexPhotoItemsWithParts(leafCandidates, cleanUri, tokenParam);
         for (const item of metadataItems) {
           const photo = extractPlexPhotoItem(item, cleanUri, tokenParam);
           if (photo) addPhoto(photo);
@@ -601,19 +661,20 @@ export async function getPlexPhotosFromSection(
       console.warn('Plex /all?type=13 query failed, falling back to folder traversal:', e);
     }
 
-    // If type=13 returned photos across the library, report progress & return them
-    if (photos.length > 0) {
+    // Always also queue root folder traversal if type=13 returned suspiciously few photos or 0,
+    // because some Plex scanners only return top-level un-nested photos on type=13
+    if (photos.length > 100) {
       if (onProgress) onProgress(photos.length);
       return photos;
     }
 
-    // Fallback: start traversing from the section folder root
+    // Fallback or supplement: traverse from the section folder root
     directoryQueue.push({ key: `/library/sections/${sectionKey}/folder`, depth: 0 });
   }
 
-  // Breadth-first recursive directory traversal (up to depth 12, unlimited photos)
-  const MAX_DEPTH = 12;
-  const BATCH_SIZE = 6;
+  // Breadth-first recursive directory traversal (up to depth 15, unlimited photos)
+  const MAX_DEPTH = 15;
+  const BATCH_SIZE = 8;
 
   while (directoryQueue.length > 0 && (isUnlimited || photos.length < maxPhotos)) {
     const currentBatch = directoryQueue.splice(0, BATCH_SIZE);
@@ -640,23 +701,29 @@ export async function getPlexPhotosFromSection(
       if (res.status !== 'fulfilled' || !res.value) continue;
       const { data, depth } = res.value;
 
-      // 1. Extract leaf photo items from Metadata (enriched with full Part keys for sharp high-res rendering)
-      const rawMetadata = data.MediaContainer?.Metadata || [];
-      const metadata = await enrichPlexPhotoItemsWithParts(rawMetadata, cleanUri, tokenParam);
-      for (const item of metadata) {
-        const photo = extractPlexPhotoItem(item, cleanUri, tokenParam);
-        if (photo) {
-          addPhoto(photo);
-          if (!isUnlimited && photos.length >= maxPhotos) break;
+      // Plex returns folders/photoalbums and leaf photos across BOTH MediaContainer.Metadata and MediaContainer.Directory!
+      const allEntries = getContainerEntries(data);
+
+      // 1. Extract leaf photo items (enriched with full Part keys for sharp high-res rendering)
+      const leafCandidates = allEntries.filter((item) => !isPlexDirectoryItem(item));
+      if (leafCandidates.length > 0) {
+        const enrichedLeaves = await enrichPlexPhotoItemsWithParts(leafCandidates, cleanUri, tokenParam);
+        for (const item of enrichedLeaves) {
+          const photo = extractPlexPhotoItem(item, cleanUri, tokenParam);
+          if (photo) {
+            addPhoto(photo);
+            if (!isUnlimited && photos.length >= maxPhotos) break;
+          }
         }
       }
 
-      // 2. Discover subdirectories to traverse recursively
+      // 2. Discover subdirectories and child photoalbums from BOTH Directory and Metadata to traverse recursively
       if (depth < MAX_DEPTH && (isUnlimited || photos.length < maxPhotos)) {
-        const directories = data.MediaContainer?.Directory || [];
-        for (const dir of directories) {
-          if (dir.key && !visitedDirectoryKeys.has(dir.key)) {
-            directoryQueue.push({ key: dir.key, depth: depth + 1 });
+        const subDirEntries = allEntries.filter(isPlexDirectoryItem);
+        for (const dir of subDirEntries) {
+          const targetKey = getPlexDirectoryTargetKey(dir);
+          if (targetKey && !visitedDirectoryKeys.has(targetKey)) {
+            directoryQueue.push({ key: targetKey, depth: depth + 1 });
           }
         }
       }

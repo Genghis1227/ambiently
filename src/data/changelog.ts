@@ -11,6 +11,17 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.7",
+    date: "November 6, 2026",
+    title: "Plex Deep Subfolder & PhotoAlbum Traversal Fix & Mobile Settings Tab Grid",
+    highlights: [
+      "Fixed Plex Nested Subfolder & PhotoAlbum Discovery: Diagnosed that Plex Media Server places child folders and nested year albums (type: 'photoalbum') inside MediaContainer.Metadata rather than MediaContainer.Directory, which previously caused recursive traversal to stop after scanning only root-level photos.",
+      "Unified Container Traversal (getContainerEntries): Updated getPlexPhotosFromSection and getPlexSectionFolders to inspect both Directory and Metadata arrays at every depth (up to 15 levels deep) and resolve /children keys, unlocking all thousands of nested photos.",
+      "Faster Batch Metadata Enrichment: Doubled batch enrichment size to 50 items per request for rapid scanning across multi-thousand-photo libraries.",
+      "Mobile Settings All-At-A-Glance Tab Grid: Replaced hidden horizontal scrolling in SettingsModal and PhotoSourcesModal with responsive multi-column icon + label grids on mobile screens so all 5 settings categories (Canvases, Display, Photos, Sync, Security) and all 4 photo sources are immediately visible without scrolling.",
+    ],
+  },
+  {
     version: "v0.3.6",
     date: "November 6, 2026",
     title: "Multi-Display Local Photo Guidance & Night Mode Command Center Auto-Dismiss",

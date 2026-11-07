@@ -691,13 +691,13 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
           </button>
         </div>
 
-        {/* Source Navigation Tabs */}
-        <div className="flex border-b border-gray-800 bg-gray-950/40 px-2 pt-2 gap-1 overflow-x-auto">
+        {/* Source Navigation Tabs - All 4 sources visible at a glance on mobile & desktop */}
+        <div className="grid grid-cols-4 sm:flex border-b border-gray-800 bg-gray-950/60 px-2 pt-2 pb-1.5 sm:pb-0 gap-1 shrink-0">
           {[
-            { id: 'plex', label: 'Plex Server', icon: Tv },
-            { id: 'local', label: 'Local Folder', icon: FolderOpen },
-            { id: 'web', label: 'Google Photos & Web', icon: Globe },
-            { id: 'curated', label: 'Curated Scenery', icon: Cloud },
+            { id: 'plex', label: 'Plex Server', shortLabel: 'Plex', icon: Tv },
+            { id: 'local', label: 'Local Folder', shortLabel: 'Local', icon: FolderOpen },
+            { id: 'web', label: 'Google Photos & Web', shortLabel: 'Web / Cloud', icon: Globe },
+            { id: 'curated', label: 'Curated Scenery', shortLabel: 'Scenery', icon: Cloud },
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -708,14 +708,15 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                   setActiveTab(tab.id as any);
                   setStatusMessage('');
                 }}
-                className={`flex items-center gap-2 py-2 px-3 text-xs font-semibold rounded-t-lg transition-all ${
+                className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 py-2 px-1 sm:px-3 text-[10px] sm:text-xs font-semibold rounded-xl sm:rounded-b-none sm:rounded-t-lg transition-all cursor-pointer whitespace-nowrap ${
                   isActive
-                    ? 'bg-gray-900 text-blue-400 border-t-2 border-blue-500 shadow'
-                    : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40'
+                    ? 'bg-blue-600/20 sm:bg-gray-900 text-blue-400 border border-blue-500/40 sm:border-0 sm:border-t-2 sm:border-blue-500 shadow'
+                    : 'border border-transparent sm:border-0 text-gray-400 hover:text-gray-200 hover:bg-gray-800/40'
                 }`}
               >
-                <Icon className="w-3.5 h-3.5" />
-                <span>{tab.label}</span>
+                <Icon className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                <span className="sm:hidden tracking-tight">{tab.shortLabel}</span>
+                <span className="hidden sm:inline">{tab.label}</span>
               </button>
             );
           })}

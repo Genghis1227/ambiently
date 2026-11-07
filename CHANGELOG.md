@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.7] - 2026-11-06
+
+### Fixed
+* **Plex Nested Subfolder & PhotoAlbum Traversal (`src/services/plex.ts`):**
+  * Fixed an issue where selecting a parent folder in Plex (such as `Photos / Personal`) only loaded the loose photos directly inside that folder and skipped nested year/event subfolders (`2011`–`2024`).
+  * Diagnosed that Plex Media Server returns nested folders and photo albums (`type: "photoalbum"`) inside `MediaContainer.Metadata` rather than `MediaContainer.Directory`.
+  * Added `getContainerEntries()`, `isPlexDirectoryItem()`, and `getPlexDirectoryTargetKey()` so recursive breadth-first traversal (up to 15 levels deep) inspects both `Directory` and `Metadata` arrays, automatically resolves `/children` paths, and discovers all thousands of nested photos.
+  * Increased batch metadata enrichment size from 25 to 50 items per request for faster scanning of large libraries.
+* **Mobile Settings & Photo Sources Tab Visibility (`src/components/settings/SettingsModal.tsx`, `src/components/photos/PhotoSourcesModal.tsx`):**
+  * Replaced hidden horizontal scrolling (`overflow-x-auto no-scrollbar`) on mobile viewports with a responsive `grid-cols-5` (Settings) and `grid-cols-4` (Photo Sources) icon + label layout so every settings tab (**Canvases**, **Display**, **Photos**, **Sync**, **Security**) is immediately apparent at a glance without scrolling.
+
+---
+
 ## [0.3.6] - 2026-11-06
 
 ### Added
