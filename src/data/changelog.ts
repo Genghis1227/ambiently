@@ -11,6 +11,17 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.14",
+    date: "November 7, 2026",
+    title: "Shielded Widget Modal State & Mosaic Ken Burns Presentation Polish",
+    highlights: [
+      "Shielded Modal Edits: Added widget instance tracking so background photo scans, store updates, and cloud syncs never reset unsaved settings or untoggle switches while editing.",
+      "Clear Layout vs Effect Modes: Renamed presentation modes to 'Single Photo (Ken Burns Pan & Zoom)' and 'Mosaic Collage (4-Grid)' to eliminate naming confusion between layout options and animation effects.",
+      "Interactive Ken Burns Toggle: Made the entire Mosaic Ken Burns settings card clickable with active badge indicators and smooth toggle feedback.",
+      "Decoupled Slot Rotation: Fixed staggered quadrant rotation in PhotoFrameWidget to eliminate nested state updates during interval cycles.",
+    ],
+  },
+  {
     version: "v0.3.13",
     date: "November 7, 2026",
     title: "Unified Plex Stream Scope Switcher & Reactive Display Pairing",
