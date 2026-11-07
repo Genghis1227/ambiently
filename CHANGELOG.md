@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.21] - 2026-11-07
+
+### Added
+* **Two-Option Sign-Out Dialog (`src/components/settings/SettingsModal.tsx`):**
+  * Added a confirmation decision dialog when signing out of Cloud Sync, providing two distinct workflows:
+    * **Keep Local Board (Offline):** Disconnects cloud sync and session, preserving all current widgets, notes, and photos locally.
+    * **Wipe & Clean Slate (Reset):** Signs out and purges IndexedDB databases, browser caches, and storage, returning the machine to a factory-fresh dashboard.
+
+### Fixed
+* **Pure Config Cloud Sync & Catalog Stripping (`src/services/supabase.ts`):**
+  * Completely removed photo catalog arrays (`customPhotos` and `commonPhotos`) from the Supabase cloud sync payload, keeping database payloads strictly under 5 KB and executing backups in milliseconds.
+  * Preserved local Dexie photo collections during cloud pulls, ensuring remote config sync never overwrites or empties locally scanned photo libraries.
+* **Plex Total Photo Count Probe & Smart Section Picker (`src/services/plex.ts`, `src/components/photos/PhotoSourcesModal.tsx`):**
+  * Fixed Plex pagination probe query (`Container-Size=1`) so Plex Media Server computes and returns the actual total photo count instead of returning 0.
+  * Configured library dropdowns to automatically detect and pre-select photo libraries (`📷 Photo`) by default.
+
+---
+
 ## [0.3.20] - 2026-11-07
 
 ### Fixed

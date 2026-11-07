@@ -323,8 +323,9 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
       const sections = await getPlexPhotoLibraries(uri, server.accessToken || token, true);
       setPhotoSections(sections);
       if (sections.length > 0) {
-        setSelectedSectionKey(sections[0].key);
-        loadSectionFolders(server, token, sections[0].key);
+        const preferredSection = sections.find((s) => s.isPhoto) || sections[0];
+        setSelectedSectionKey(preferredSection.key);
+        loadSectionFolders(server, token, preferredSection.key);
       } else {
         setStatusMessage("No libraries found on this Plex server.");
       }
@@ -1111,7 +1112,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                         <div className="flex items-center justify-between">
                           <label className="text-xs font-semibold text-gray-300">Photo Library</label>
                           <div className="flex items-center gap-2">
-                            {sectionTotalPhotos !== null && (
+                            {sectionTotalPhotos !== null && sectionTotalPhotos > 0 && (
                               <span className="text-[10px] text-emerald-400 font-mono font-medium">
                                 {sectionTotalPhotos.toLocaleString()} photos on server
                               </span>

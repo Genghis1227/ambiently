@@ -11,6 +11,16 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.21",
+    date: "November 7, 2026",
+    title: "Pure Config Cloud Sync, Two-Option Sign Out & Plex Library Probing",
+    highlights: [
+      "Pure Config Cloud Payloads: Stripped photo catalog arrays from cloud sync payloads, reducing database writes to pure layout and widget configuration (< 5 KB) with 99.9% faster backup execution.",
+      "Two-Option Sign-Out Dialog: Added a confirmation dialog when signing out of Cloud Sync, letting users choose between 'Keep Local Board (Offline)' and 'Wipe & Clean Slate (Reset)'.",
+      "Plex Server Photo Count Fix: Refined Plex container pagination probes to query and display the accurate total photo count on server, automatically pre-selecting photo libraries.",
+    ],
+  },
+  {
     version: "v0.3.20",
     date: "November 7, 2026",
     title: "Cloud Backup Payload Optimization & Batched Upserts",

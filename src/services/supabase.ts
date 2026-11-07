@@ -560,13 +560,11 @@ export async function pushToCloud(
     let widgetsToUpsert: any[] = [];
     if (widgetsToPush.length > 0) {
       const formattedWidgets = widgetsToPush.map((w) => {
-        let configToPush = w.config || {};
-        if (Array.isArray(configToPush.customPhotos) && configToPush.customPhotos.length > 250) {
-          // Cap photos in cloud payload to 250 to keep JSON payload small and prevent statement timeouts
-          configToPush = {
-            ...configToPush,
-            customPhotos: configToPush.customPhotos.slice(0, 250),
-          };
+        let configToPush = { ...(w.config || {}) };
+        // Strip customPhotos array from cloud sync payload to keep database pure config (< 5 KB)
+        if ('customPhotos' in configToPush) {
+          const { customPhotos: _, ...restConfig } = configToPush;
+          configToPush = restConfig;
         }
         return {
           id: w.id,
@@ -639,12 +637,10 @@ export async function pushToCloud(
       }, {} as Record<string, any>);
 
       let settingsToPush = { ...settings };
-      if (Array.isArray(settingsToPush.commonPhotos) && settingsToPush.commonPhotos.length > 250) {
-        // Cap commonPhotos in cloud JSON payload to 250 to prevent statement timeouts
-        settingsToPush = {
-          ...settingsToPush,
-          commonPhotos: settingsToPush.commonPhotos.slice(0, 250),
-        };
+      // Strip commonPhotos array from cloud sync payload to keep database pure config (< 5 KB)
+      if ('commonPhotos' in settingsToPush) {
+        const { commonPhotos: _, ...restSettings } = settingsToPush;
+        settingsToPush = restSettings;
       }
 
       const cloudSafeSettings = stripPlexTokens({
@@ -753,6 +749,10 @@ export async function pullFromCloud(options?: { force?: boolean }): Promise<{ su
       if (cloudTime >= localTime || !currentSettings) {
         await db.settings.put({
           ...dashRes.data.settings,
+          // Preserve local photo catalog when cloud sync is pure configuration
+          commonPhotos: currentSettings?.commonPhotos?.length
+            ? currentSettings.commonPhotos
+            : (dashRes.data.settings?.commonPhotos || []),
           // Preserve local device PIN lock state rather than overwriting from cloud
           pinHash: currentSettings?.pinHash ?? null,
           pinLockEnabled: currentSettings?.pinLockEnabled ?? false,
@@ -821,6 +821,15 @@ export async function pullFromCloud(options?: { force?: boolean }): Promise<{ su
 
       const widgetsToPut: DashboardWidget[] = [];
       for (const w of widgetsRes.data) {
+        const local = localMap.get(w.id);
+        const config = {
+          ...(w.config || {}),
+          // Preserve local customPhotos when cloud widget config is pure configuration
+          customPhotos: local?.config?.customPhotos?.length
+            ? local.config.customPhotos
+            : (w.config?.customPhotos || []),
+        };
+
         const mapped: DashboardWidget = {
           id: w.id,
           tabId: w.tab_id,
@@ -828,12 +837,11 @@ export async function pullFromCloud(options?: { force?: boolean }): Promise<{ su
           title: w.title,
           gridPos: w.grid_pos,
           freeformPos: w.freeform_pos,
-          config: w.config,
+          config,
           updated_at: w.updated_at,
           deleted_at: w.deleted_at,
         };
 
-        const local = localMap.get(w.id);
         if (!local) {
           widgetsToPut.push(mapped);
         } else {
