@@ -84,6 +84,18 @@ and not exists (
 )
 
 union all
+select 'Board size limit is missing or turned off', t.name || ': ' || e.event
+from app_tables t
+cross join (values ('insert'), ('update')) as e(event)
+where not exists (
+  select 1
+  from pg_trigger tr
+  where tr.tgrelid = format('public.%I', t.name)::regclass
+  and tr.tgname = 'check_board_limits_' || e.event
+  and tr.tgenabled <> 'D'
+)
+
+union all
 select 'Dashboard id does not match its owner', id
 from public.dashboards
 where id <> user_id::text and id <> 'default'
