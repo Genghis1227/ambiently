@@ -370,6 +370,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
               initialPolaroidSizeMode={widget.config?.polaroidSizeMode || 'mixed'}
               photoOrder={widget.config?.photoOrder || 'random'}
               showCaptions={widget.config?.showCaptions ?? true}
+              showDateTaken={widget.config?.showDateTaken}
               mosaicKenBurns={widget.config?.mosaicKenBurns ?? false}
             />
           </div>

@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.18] - 2026-11-07
+
+### Added
+* **Photo Capture Date Taken Option (`src/components/widgets/PhotoFrameWidget.tsx`, `src/components/widgets/WidgetSettingsModal.tsx`, `src/components/layout/Corkboard.tsx`, `src/components/settings/SettingsModal.tsx`, `src/services/photos.ts`):**
+  * Added a dedicated **Show Date Taken** toggle in Photo Frame Tile Settings, allowing users to show or hide capture dates for each photo.
+  * Added a quick-toggle option directly in the canvas right-click context menu (`Date Taken: ON / OFF`) for instant one-click toggling.
+  * Added `Show Date Taken by Default` in the Shared Photos settings tab to control the baseline display state across shared board frames.
+  * Displayed capture dates across all photo display styles:
+    * **Ken Burns**: Shown in the ambient header pill with a calendar badge, or as a corner timestamp in clean picture mode.
+    * **Mosaic Grid**: Shown in each quadrant's caption overlay or as a corner timestamp.
+    * **Polaroid**: Rendered handwritten on the bottom margin of polaroid prints.
+    * **Filmstrip**: Displayed on the centered active photo.
+  * Added `formatPhotoDate` helper to parse Plex EXIF timeline dates (`YYYY-MM-DD`), timestamps, and localized strings into human-readable date formats (e.g., `Aug 15, 2023`).
+* **Photo Count Visibility in Photo Sources Hub (`src/components/photos/PhotoSourcesModal.tsx`):**
+  * Added an emerald photo count badge (`📷 X photos loaded`) in the Photo Sources modal header.
+  * Added a live server-side count indicator beside the Plex library dropdown (e.g. `4,521 photos on server`).
+  * Added an Active Configured Library Banner to both Plex and Local tabs showing current library name and loaded photo counts.
+  * Added a persistent scan completion banner with checkmark and photo count badge (`Scan Complete: Plex sync complete (X photos loaded)!`).
+  * Updated streaming buttons to show total server counts: `Stream Entire Library (X Photos)`.
+
+### Fixed
+* **Full Plex Library Scan Pagination (`src/services/plex.ts`):**
+  * Removed artificial 100-photo cutoff when querying `/all?type=13` on Plex Media Server sections.
+  * Implemented container pagination in chunks of 250 (`X-Plex-Container-Start` and `X-Plex-Container-Size`) until all photos are retrieved, streaming batches progressively into the dashboard.
+
+---
+
 ## [0.3.17] - 2026-11-07
 
 ### Fixed

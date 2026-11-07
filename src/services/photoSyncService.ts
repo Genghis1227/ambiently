@@ -59,7 +59,7 @@ class PhotoSyncService {
     useDashboardStore.getState().setPhotoSyncState(null);
   }
 
-  private scheduleStatusClear(delayMs = 3500) {
+  private scheduleStatusClear(delayMs = 45000) {
     if (this.clearTimer) clearTimeout(this.clearTimer);
     this.clearTimer = setTimeout(() => {
       useDashboardStore.getState().setPhotoSyncState(null);

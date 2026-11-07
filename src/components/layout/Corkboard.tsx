@@ -28,6 +28,7 @@ import {
   SendToBack,
   ArrowUp,
   ArrowDown,
+  Calendar,
   Sun,
   Moon,
 } from 'lucide-react';
@@ -1516,6 +1517,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   initialPolaroidSizeMode={widget.config?.polaroidSizeMode || 'mixed'}
                   photoOrder={widget.config?.photoOrder || 'random'}
                   showCaptions={widget.config?.showCaptions ?? true}
+                  showDateTaken={widget.config?.showDateTaken}
                   mosaicKenBurns={widget.config?.mosaicKenBurns ?? false}
                   onUpdateConfig={(updates) => {
                     if (onUpdateWidget) {
@@ -2439,6 +2441,32 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                     </button>
                   ))}
                 </div>
+
+                {activeWidget?.type === 'photo_frame' && onUpdateWidget && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !(activeWidget.config?.showDateTaken ?? false);
+                      onUpdateWidget(activeWidget.id, {
+                        config: { ...activeWidget.config, showDateTaken: next },
+                      });
+                      setContextMenu(null);
+                    }}
+                    className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-300 hover:text-white transition-colors cursor-pointer text-left"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Calendar className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>Date Taken</span>
+                    </div>
+                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                      activeWidget.config?.showDateTaken
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                        : 'bg-gray-800 text-gray-400'
+                    }`}>
+                      {activeWidget.config?.showDateTaken ? 'ON' : 'OFF'}
+                    </span>
+                  </button>
+                )}
 
                 <button
                   type="button"

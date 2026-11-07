@@ -153,6 +153,7 @@ export interface AppSettings {
   commonPhotoSourceLabel?: string;
   commonPhotoSourceUrl?: string;
   commonPhotoSourceType?: 'plex' | 'local' | 'web' | 'curated';
+  commonPhotoShowDateTaken?: boolean;
 
   // PIN Protection & Kid Kiosk Controls
   pinLockEnabled: boolean;

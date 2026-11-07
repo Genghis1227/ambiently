@@ -11,6 +11,16 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.18",
+    date: "November 7, 2026",
+    title: "Photo Count Visibility, Full Library Pagination & Date Taken Toggles",
+    highlights: [
+      "Photo Capture Date Taken Option: Added toggles across Tile Settings, Corkboard right-click context menu, and Shared Library settings to display capture dates across Ken Burns, Mosaic, Polaroid, and Filmstrip styles with EXIF formatting.",
+      "Photo Count Visibility Everywhere: Added photo count indicators in the Photo Sources modal header, beside the Plex library picker (showing server total), in active library banners, and in a persistent scan completion banner.",
+      "Full Plex Library Scan Pagination: Fixed premature 100-photo scan limit with 250-item container pagination, allowing complete Plex photo collections to stream progressively into your dashboard.",
+    ],
+  },
+  {
     version: "v0.3.17",
     date: "November 7, 2026",
     title: "Supabase Disk IO Budget & Burst Credit Preservation",

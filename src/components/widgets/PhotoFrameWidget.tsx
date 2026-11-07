@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Image as ImageIcon, ChevronLeft, ChevronRight, Sparkles, Loader2, Tv } from 'lucide-react';
+import { Image as ImageIcon, ChevronLeft, ChevronRight, Sparkles, Loader2, Tv, Calendar } from 'lucide-react';
 import {
   CURATED_AMBIENT_PHOTOS,
   cachePhotosLocally,
   getOptimizedPhotoUrl,
+  formatPhotoDate,
   type PhotoItem,
   type PhotoDisplayStyle,
 } from '../../services/photos';
@@ -211,6 +212,7 @@ interface PhotoFrameWidgetProps {
   initialPolaroidSizeMode?: PolaroidSizeMode;
   photoOrder?: 'random' | 'sequential';
   showCaptions?: boolean;
+  showDateTaken?: boolean;
   mosaicKenBurns?: boolean;
   onUpdateConfig?: (updates: Record<string, any>) => void;
 }
@@ -226,11 +228,13 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   initialPolaroidSizeMode = 'mixed',
   photoOrder = 'random',
   showCaptions = true,
+  showDateTaken: propShowDateTaken,
   mosaicKenBurns = false,
   onUpdateConfig: _onUpdateConfig,
 }) => {
   const commonPhotos = useDashboardStore((s) => s.settings.commonPhotos);
   const commonPhotoSourceLabel = useDashboardStore((s) => s.settings.commonPhotoSourceLabel);
+  const commonPhotoShowDateTaken = useDashboardStore((s) => s.settings.commonPhotoShowDateTaken);
   const photoSyncState = useDashboardStore((s) => s.photoSyncState);
 
   const isThisWidgetSyncing =
@@ -239,6 +243,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
 
   const isUsingCommonSource =
     useCommonSource !== false && Boolean(commonPhotos && commonPhotos.length > 0);
+  const showDateTaken = propShowDateTaken ?? (isUsingCommonSource ? (commonPhotoShowDateTaken ?? false) : false);
   const resolvedPhotos = isUsingCommonSource
     ? commonPhotos!
     : customPhotos && customPhotos.length > 0
@@ -1168,11 +1173,22 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                       onLoad={(e) => handleImageLoad(p.id, e.currentTarget)}
                       onError={() => handleMosaicError(idx, p.id)}
                     />
-                    {showCaptions && (
-                      <div className="absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black/85 via-black/40 to-transparent text-[11px] text-white truncate font-medium">
-                        {p.caption || p.author || 'Captured Moment'}
+                    {showCaptions ? (
+                      <div className="absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black/85 via-black/40 to-transparent text-[11px] text-white font-medium flex items-center justify-between gap-1.5">
+                        <span className="truncate">{p.caption || p.author || 'Captured Moment'}</span>
+                        {showDateTaken && p.date && (
+                          <span className="text-[9px] text-emerald-300 font-mono bg-emerald-950/70 border border-emerald-500/30 px-1.5 py-0.5 rounded shrink-0 flex items-center gap-1">
+                            <Calendar className="w-2.5 h-2.5 text-emerald-400" />
+                            <span>{formatPhotoDate(p.date)}</span>
+                          </span>
+                        )}
                       </div>
-                    )}
+                    ) : showDateTaken && p.date ? (
+                      <div className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded bg-black/70 backdrop-blur-sm border border-white/10 text-[9px] text-emerald-300 font-mono flex items-center gap-1 shadow">
+                        <Calendar className="w-2.5 h-2.5 text-emerald-400" />
+                        <span>{formatPhotoDate(p.date)}</span>
+                      </div>
+                    ) : null}
                   </motion.div>
                 </AnimatePresence>
 
@@ -1264,46 +1280,62 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                 className="aspect-[4/5] cursor-pointer touch-manipulation group"
               >
                 {/* Classic white polaroid paper frame */}
-                <div
-                  className={`relative w-full h-full bg-[#fdfbf7] rounded-sm shadow-2xl border border-black/15 flex flex-col justify-between transition-shadow group-hover:shadow-cyan-500/30 ${
-                    isHero
-                      ? showCaptions ? 'p-2 sm:p-3 pb-6 sm:pb-9 ring-1 ring-black/5' : 'p-2 sm:p-3 pb-3 ring-1 ring-black/5'
-                      : isSmall
-                      ? showCaptions ? 'p-1 pb-4' : 'p-1'
-                      : showCaptions ? 'p-1.5 sm:p-2 pb-5 sm:pb-7' : 'p-1.5 sm:p-2'
-                  }`}
-                >
-                  <div className="w-full flex-1 min-h-0 overflow-hidden rounded-xs bg-gray-900 relative">
-                    <img
-                      src={getPhotoDisplayUrl(item.photo, isHero ? 800 : 600)}
-                      alt={item.photo.caption || 'Polaroid moment'}
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover select-none pointer-events-none"
-                      style={{
-                        objectPosition: photoFocals[item.photo.id] || photoFocalCache.get(item.photo.id) || undefined,
-                      }}
-                      loading="lazy"
-                      onLoad={(e) => handleImageLoad(item.photo.id, e.currentTarget)}
-                      onError={() => handlePolaroidError(idx, item.photo.id)}
-                    />
-                  </div>
-                  {showCaptions && (
-                    <div className="mt-1 sm:mt-1.5 px-0.5 text-center shrink-0">
-                      <div
-                        className={`font-handwriting font-bold text-gray-800 truncate tracking-tight ${
-                          isHero ? 'text-xs sm:text-sm font-extrabold' : isSmall ? 'text-[9px]' : 'text-[10px] sm:text-xs'
-                        }`}
-                      >
-                        {item.photo.caption || 'Captured Moment'}
+                {(() => {
+                  const hasBottomContent = showCaptions || (showDateTaken && Boolean(item.photo.date));
+                  return (
+                    <div
+                      className={`relative w-full h-full bg-[#fdfbf7] rounded-sm shadow-2xl border border-black/15 flex flex-col justify-between transition-shadow group-hover:shadow-cyan-500/30 ${
+                        isHero
+                          ? hasBottomContent ? 'p-2 sm:p-3 pb-6 sm:pb-9 ring-1 ring-black/5' : 'p-2 sm:p-3 pb-3 ring-1 ring-black/5'
+                          : isSmall
+                          ? hasBottomContent ? 'p-1 pb-4' : 'p-1'
+                          : hasBottomContent ? 'p-1.5 sm:p-2 pb-5 sm:pb-7' : 'p-1.5 sm:p-2'
+                      }`}
+                    >
+                      <div className="w-full flex-1 min-h-0 overflow-hidden rounded-xs bg-gray-900 relative">
+                        <img
+                          src={getPhotoDisplayUrl(item.photo, isHero ? 800 : 600)}
+                          alt={item.photo.caption || 'Polaroid moment'}
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover select-none pointer-events-none"
+                          style={{
+                            objectPosition: photoFocals[item.photo.id] || photoFocalCache.get(item.photo.id) || undefined,
+                          }}
+                          loading="lazy"
+                          onLoad={(e) => handleImageLoad(item.photo.id, e.currentTarget)}
+                          onError={() => handlePolaroidError(idx, item.photo.id)}
+                        />
                       </div>
-                      {item.photo.author && !isSmall && (
-                        <div className="text-[8px] sm:text-[9px] text-gray-500 font-sans truncate">
-                          {item.photo.author}
+                      {hasBottomContent && (
+                        <div className="mt-1 sm:mt-1.5 px-0.5 text-center shrink-0">
+                          {showCaptions && (
+                            <div
+                              className={`font-handwriting font-bold text-gray-800 truncate tracking-tight ${
+                                isHero ? 'text-xs sm:text-sm font-extrabold' : isSmall ? 'text-[9px]' : 'text-[10px] sm:text-xs'
+                              }`}
+                            >
+                              {item.photo.caption || 'Captured Moment'}
+                            </div>
+                          )}
+                          {showDateTaken && item.photo.date && (
+                            <div
+                              className={`font-handwriting text-gray-600 truncate ${
+                                isHero ? 'text-[10px] sm:text-xs' : isSmall ? 'text-[8px]' : 'text-[9px] sm:text-[10px]'
+                              }`}
+                            >
+                              {formatPhotoDate(item.photo.date)}
+                            </div>
+                          )}
+                          {showCaptions && item.photo.author && !isSmall && (
+                            <div className="text-[8px] sm:text-[9px] text-gray-500 font-sans truncate">
+                              {item.photo.author}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
-                  )}
-                </div>
+                  );
+                })()}
               </motion.div>
             );
           })}
@@ -1409,12 +1441,20 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   onError={() => handleFilmstripError(p.id)}
                 />
 
-                {isCenter && showCaptions && (
+                {isCenter && (showCaptions || (showDateTaken && Boolean(p.date))) && (
                   <div className="absolute bottom-0 inset-x-0 p-3 bg-gradient-to-t from-black/95 via-black/60 to-transparent text-center">
-                    <div className="text-xs sm:text-sm font-bold text-white truncate drop-shadow-md">
-                      {p.caption || 'Captured Moment'}
-                    </div>
-                    {p.author && (
+                    {showCaptions && (
+                      <div className="text-xs sm:text-sm font-bold text-white truncate drop-shadow-md">
+                        {p.caption || 'Captured Moment'}
+                      </div>
+                    )}
+                    {showDateTaken && p.date && (
+                      <div className="text-[11px] text-emerald-300 font-mono drop-shadow flex items-center justify-center gap-1 mt-0.5">
+                        <Calendar className="w-3 h-3 text-emerald-400" />
+                        <span>{formatPhotoDate(p.date)}</span>
+                      </div>
+                    )}
+                    {showCaptions && p.author && (
                       <div className="text-[10px] text-gray-300 font-sans truncate drop-shadow mt-0.5">
                         {p.author}
                       </div>
@@ -1428,7 +1468,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
       )}
 
       {/* Ambient Top Caption Pill with Integrated Navigation Controls */}
-      {showCaptions && (
+      {showCaptions ? (
         <div className="relative z-40 p-3 flex items-center justify-between text-white drop-shadow-md pointer-events-none pr-24">
           <div className="flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/15 text-xs shadow-lg pointer-events-auto">
             {photos.length > 1 && (
@@ -1455,6 +1495,12 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
             <span className="text-[10px] text-gray-400 font-mono">
               ({activeDisplayIndex + 1}/{photos.length})
             </span>
+            {showDateTaken && currentPhoto.date && (
+              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-300 font-mono bg-emerald-950/70 border border-emerald-500/30 px-1.5 py-0.5 rounded-full">
+                <Calendar className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+                <span>{formatPhotoDate(currentPhoto.date)}</span>
+              </span>
+            )}
             {isThisWidgetSyncing && (
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-[9px] font-medium border border-blue-400/30">
                 <Loader2 className="w-2.5 h-2.5 animate-spin text-blue-400" />
@@ -1489,7 +1535,14 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
             )}
           </div>
         </div>
-      )}
+      ) : showDateTaken && currentPhoto.date ? (
+        <div className="relative z-40 p-3 flex items-center justify-between text-white drop-shadow-md pointer-events-none pr-24">
+          <div className="inline-flex items-center gap-1.5 bg-black/65 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/15 text-xs text-emerald-300 font-mono shadow-lg pointer-events-auto">
+            <Calendar className="w-3 h-3 text-emerald-400 shrink-0" />
+            <span>{formatPhotoDate(currentPhoto.date)}</span>
+          </div>
+        </div>
+      ) : null}
 
       {/* Non-intrusive Background Photo Indexing Pill */}
       {isThisWidgetSyncing && (
