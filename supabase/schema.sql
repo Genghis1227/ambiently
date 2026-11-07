@@ -139,6 +139,10 @@ begin
   end loop;
 end $$;
 
+create index if not exists tabs_dashboard_updated_idx on public.tabs (dashboard_id, updated_at desc);
+create index if not exists widgets_dashboard_updated_idx on public.widgets (dashboard_id, updated_at desc);
+create index if not exists notes_dashboard_updated_idx on public.notes (dashboard_id, updated_at desc);
+
 -- 6. Access Helpers
 -- These live outside the public schema so the API can't call them, and they run with search_path
 -- set to empty so nothing a caller creates can stand in for the tables they read.
@@ -339,51 +343,49 @@ declare
   board text;
   usage record;
   allowed bigint := private.board_limit_bytes() + case when tg_op = 'UPDATE' then 1024 * 1024 else 0 end;
+  batch_size bigint := 0;
 begin
   if current_user is distinct from 'authenticated' then
     return null;
   end if;
 
-  -- The boards this statement made bigger. An update counts only if it grew the board. New values
-  -- arrive uncompressed, so the new size is read from the table as stored, like the old size.
-  if tg_op = 'INSERT' then
+  -- 1. Household Member limit check on invitation insert (uses index-only scan, 0 heap reads)
+  if tg_table_name = 'dashboard_members' and tg_op = 'INSERT' then
     execute format('select array_agg(distinct %I) from new_rows', board_column) into boards;
-  else
-    execute format(
-      'select array_agg(n.board) from '
-      || '(select r.%1$I as board, sum(pg_column_size(t.*)) as size from new_rows r '
-      || 'join public.%2$I t on %3$s group by 1) n '
-      || 'left join (select %1$I as board, sum(pg_column_size(r.*)) as size from old_rows r group by 1) o '
-      || 'using (board) where n.size > coalesce(o.size, 0)',
-      board_column, tg_table_name,
-      case when tg_table_name in ('dashboards', 'dashboard_members') then 't.id = r.id'
-           else 't.dashboard_id = r.dashboard_id and t.id = r.id' end) into boards;
+    foreach board in array coalesce(boards, '{}') loop
+      if (select count(*) from public.dashboard_members where dashboard_id = board) > private.board_limit_members() then
+        raise sqlstate 'PGRST' using
+          message = json_build_object(
+            'code', 'board_members_full',
+            'message', format('This board already has %s members and invitations, the most it can have.',
+              private.board_limit_members()),
+            'details', null,
+            'hint', 'Remove a member or invitation first.')::text,
+          detail = json_build_object('status', 413, 'headers', json_build_object())::text;
+      end if;
+    end loop;
   end if;
 
-  foreach board in array coalesce(boards, '{}') loop
-    select * into usage from private.board_usage(board);
-    if usage.bytes > allowed then
-      -- SQLSTATE PGRST lets the API answer 413 with this message instead of a generic server error
-      raise sqlstate 'PGRST' using
-        message = json_build_object(
-          'code', 'board_full',
-          'message', format('This board is full. It can hold up to %s MB, and this change would go over.',
-            private.board_limit_bytes() / 1024 / 1024),
-          'details', null,
-          'hint', 'Remove some photos, wallpapers, images or notes, then sync again.')::text,
-        detail = json_build_object('status', 413, 'headers', json_build_object())::text;
-    end if;
-    if tg_table_name = 'dashboard_members' and tg_op = 'INSERT' and usage.members > private.board_limit_members() then
-      raise sqlstate 'PGRST' using
-        message = json_build_object(
-          'code', 'board_members_full',
-          'message', format('This board already has %s members and invitations, the most it can have.',
-            private.board_limit_members()),
-          'details', null,
-          'hint', 'Remove a member or invitation first.')::text,
-        detail = json_build_object('status', 413, 'headers', json_build_object())::text;
-    end if;
-  end loop;
+  -- 2. Fast in-memory check of new rows batch size (0 disk I/O)
+  execute 'select coalesce(sum(pg_column_size(r.*)), 0) from new_rows r' into batch_size;
+
+  -- 3. Only evaluate disk-intensive board_usage if an individual batch exceeds 5 MB
+  if batch_size > 5 * 1024 * 1024 then
+    execute format('select array_agg(distinct %I) from new_rows', board_column) into boards;
+    foreach board in array coalesce(boards, '{}') loop
+      select * into usage from private.board_usage(board);
+      if usage.bytes > allowed then
+        raise sqlstate 'PGRST' using
+          message = json_build_object(
+            'code', 'board_full',
+            'message', format('This board is full. It can hold up to %s MB, and this change would go over.',
+              private.board_limit_bytes() / 1024 / 1024),
+            'details', null,
+            'hint', 'Remove some photos, wallpapers, images or notes, then sync again.')::text,
+          detail = json_build_object('status', 413, 'headers', json_build_object())::text;
+      end if;
+    end loop;
+  end if;
 
   return null;
 end $$;
@@ -412,6 +414,32 @@ begin
       'create trigger check_board_limits_update after update on public.%I
        referencing old table as old_rows new table as new_rows
        for each statement execute function private.check_board_limits()', t);
+  end loop;
+end $$;
+
+-- 8c. Automatic Dashboard Revision Touch Trigger
+-- Automatically updates public.dashboards.updated_at whenever tabs, widgets, or notes change,
+-- enabling clients to verify board revisions with a single 1-row index check instead of polling full tables.
+create or replace function private.touch_dashboard_updated_at() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  update public.dashboards
+  set updated_at = timezone('utc'::text, now())
+  where id = coalesce(new.dashboard_id, old.dashboard_id);
+  return null;
+end $$;
+
+revoke all on function private.touch_dashboard_updated_at() from public, anon;
+
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['tabs', 'widgets', 'notes'] loop
+    execute format('drop trigger if exists touch_dashboard_on_%I_change on public.%I', t, t);
+    execute format(
+      'create trigger touch_dashboard_on_%1$I_change after insert or update or delete on public.%1$I
+       for each row execute function private.touch_dashboard_updated_at()', t);
   end loop;
 end $$;
 

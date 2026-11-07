@@ -5,6 +5,21 @@ import type { DashboardTab, DashboardWidget, StickyNoteItem, AppSettings } from 
 
 let supabaseClient: SupabaseClient | null = null;
 let realtimeChannel: RealtimeChannel | null = null;
+let realtimeConnectionActive = false;
+let cachedDashboardTarget: {
+  userId: string;
+  result: { dashboardId: string; ownerId: string; isMember: boolean };
+  expiresAt: number;
+} | null = null;
+let lastKnownCloudUpdatedAt: string | null = null;
+
+export function isRealtimeConnected(): boolean {
+  return realtimeConnectionActive;
+}
+
+export function invalidateDashboardIdCache(): void {
+  cachedDashboardTarget = null;
+}
 
 export function getSupabase(): SupabaseClient | null {
   if (supabaseClient) return supabaseClient;
@@ -87,6 +102,9 @@ export async function signOutSupabase(): Promise<void> {
       sb.removeChannel(realtimeChannel);
       realtimeChannel = null;
     }
+    realtimeConnectionActive = false;
+    cachedDashboardTarget = null;
+    lastKnownCloudUpdatedAt = null;
     await sb.auth.signOut();
   }
 }
@@ -106,6 +124,7 @@ export function subscribeToRealtimeBoard(
 ): () => void {
   const sb = getSupabase();
   if (!sb || !boardId || boardId === 'default') {
+    realtimeConnectionActive = false;
     if (realtimeChannel && sb) {
       sb.removeChannel(realtimeChannel);
       realtimeChannel = null;
@@ -221,9 +240,16 @@ export function subscribeToRealtimeBoard(
         tabHandler(tab, eventType);
       }
     )
-    .subscribe();
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        realtimeConnectionActive = true;
+      } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        realtimeConnectionActive = false;
+      }
+    });
 
   return () => {
+    realtimeConnectionActive = false;
     if (realtimeChannel && sb) {
       sb.removeChannel(realtimeChannel);
       realtimeChannel = null;
@@ -316,6 +342,7 @@ export async function addHouseholdMember(
       .single();
 
     if (error) return { success: false, error: error.message };
+    invalidateDashboardIdCache();
     return { success: true, member: data as HouseholdMember };
   } catch (err: any) {
     return { success: false, error: err.message || 'Failed to add member.' };
@@ -334,6 +361,7 @@ export async function removeHouseholdMember(memberId: string): Promise<boolean> 
       .delete()
       .eq('id', memberId)
       .eq('dashboard_id', user.id);
+    if (!error) invalidateDashboardIdCache();
     return !error;
   } catch {
     return false;
@@ -363,6 +391,7 @@ export async function acceptInvitation(invitationId: string): Promise<boolean> {
       .from('dashboard_members')
       .update({ accepted_at: new Date().toISOString() })
       .eq('id', invitationId);
+    if (!error) invalidateDashboardIdCache();
     return !error;
   } catch {
     return false;
@@ -376,6 +405,7 @@ export async function leaveBoard(invitationId: string): Promise<boolean> {
 
   try {
     const { error } = await sb.from('dashboard_members').delete().eq('id', invitationId);
+    if (!error) invalidateDashboardIdCache();
     return !error;
   } catch {
     return false;
@@ -387,6 +417,14 @@ export async function resolveActiveDashboardId(): Promise<{ dashboardId: string;
   const sb = getSupabase();
   const user = await getCurrentUser();
   if (!sb || !user) return null;
+
+  if (
+    cachedDashboardTarget &&
+    cachedDashboardTarget.userId === user.id &&
+    Date.now() < cachedDashboardTarget.expiresAt
+  ) {
+    return cachedDashboardTarget.result;
+  }
 
   try {
     // Check if this user accepted an invitation to another owner's board. An invitation they haven't
@@ -408,11 +446,17 @@ export async function resolveActiveDashboardId(): Promise<{ dashboardId: string;
           .maybeSingle();
 
         if (sharedDash) {
-          return {
+          const res = {
             dashboardId: sharedDash.id,
             ownerId: sharedDash.user_id,
             isMember: true,
           };
+          cachedDashboardTarget = {
+            userId: user.id,
+            result: res,
+            expiresAt: Date.now() + 180000,
+          };
+          return res;
         }
       }
     }
@@ -420,11 +464,17 @@ export async function resolveActiveDashboardId(): Promise<{ dashboardId: string;
     // Fall back to user's own board
   }
 
-  return {
+  const res = {
     dashboardId: user.id,
     ownerId: user.id,
     isMember: false,
   };
+  cachedDashboardTarget = {
+    userId: user.id,
+    result: res,
+    expiresAt: Date.now() + 180000,
+  };
+  return res;
 }
 
 // Clean up any legacy local storage keys from older versions
@@ -453,39 +503,7 @@ export async function pushToCloud(
     const ownerId = target?.ownerId || user.id;
     const isMember = Boolean(target?.isMember);
 
-    // 1. Upsert Dashboard (only owner updates root dashboard settings; never sync local kiosk pinHash to cloud)
-    if (!isMember) {
-      const tabThemeMeta = tabs.reduce((acc, t) => {
-        acc[t.id] = {
-          backgroundTheme: t.backgroundTheme,
-          customWallpaperUrl: t.customWallpaperUrl,
-          backgroundDimLevel: t.backgroundDimLevel,
-          hideNotes: t.hideNotes,
-          isHome: t.isHome,
-        };
-        return acc;
-      }, {} as Record<string, any>);
-
-      // Security: Strip local device PIN hash before cloud storage, and any Plex token left in a
-      // saved photo link (from an older version), since every household member can read this
-      const cloudSafeSettings = stripPlexTokens({
-        ...settings,
-        pinHash: null,
-        canvasThemes: tabThemeMeta,
-      });
-
-      const { error: dashErr } = await sb.from('dashboards').upsert({
-        id: dashboardId,
-        user_id: ownerId,
-        title: settings.dashboardTitle,
-        settings: cloudSafeSettings,
-        invite_code: null, // Ensure legacy public invite codes are nulled out
-        updated_at: new Date().toISOString(),
-      });
-      if (dashErr) throw dashErr;
-    }
-
-    // 2. Query Dexie to include all active and soft-deleted records so remote devices sync additions and deletions
+    // 1. Query Dexie to include all active and soft-deleted records so remote devices sync additions and deletions
     const [dbTabs, dbWidgets, dbNotes] = await Promise.all([
       db.tabs.toArray(),
       db.widgets.toArray(),
@@ -496,8 +514,9 @@ export async function pushToCloud(
     const widgetsToPush = dbWidgets.length > 0 ? dbWidgets : widgets;
     const notesToPush = dbNotes.length > 0 ? dbNotes : notes;
 
-    // 3. Query remote updated_at timestamps to avoid stomping newer remote edits from other devices
-    const [remoteTabsRes, remoteWidgetsRes, remoteNotesRes] = await Promise.all([
+    // 2. Query remote updated_at timestamps to avoid stomping newer remote edits and avoid re-upserting unchanged rows
+    const [remoteDashRes, remoteTabsRes, remoteWidgetsRes, remoteNotesRes] = await Promise.all([
+      sb.from('dashboards').select('id, updated_at').eq('id', dashboardId).maybeSingle(),
       sb.from('tabs').select('id, updated_at').eq('dashboard_id', dashboardId),
       sb.from('widgets').select('id, updated_at').eq('dashboard_id', dashboardId),
       sb.from('notes').select('id, updated_at').eq('dashboard_id', dashboardId),
@@ -507,7 +526,15 @@ export async function pushToCloud(
     const remoteWidgetsMap = new Map((remoteWidgetsRes.data || []).map((w: any) => [w.id, new Date(w.updated_at || 0).getTime()]));
     const remoteNotesMap = new Map((remoteNotesRes.data || []).map((n: any) => [n.id, new Date(n.updated_at || 0).getTime()]));
 
-    // Upsert Tabs
+    const nowIso = new Date().toISOString();
+    const remoteDashTime = remoteDashRes.data?.updated_at
+      ? new Date(remoteDashRes.data.updated_at).getTime()
+      : 0;
+    const localDashTime = new Date(settings.updated_at || 0).getTime();
+    const shouldUpsertDash = !isMember && (!remoteDashRes.data || localDashTime > remoteDashTime);
+
+    // Upsert Tabs: only send tabs with genuinely newer timestamps or new records
+    let tabsToUpsert: any[] = [];
     if (tabsToPush.length > 0) {
       const formattedTabs = tabsToPush.map((t) => ({
         id: t.id,
@@ -522,19 +549,15 @@ export async function pushToCloud(
         deleted_at: t.deleted_at || null,
       }));
 
-      const tabsToUpsert = formattedTabs.filter((t) => {
+      tabsToUpsert = formattedTabs.filter((t) => {
         const remoteTime = remoteTabsMap.get(t.id);
         if (remoteTime === undefined) return true;
-        return new Date(t.updated_at || 0).getTime() >= remoteTime;
+        return new Date(t.updated_at || 0).getTime() > remoteTime;
       });
-
-      if (tabsToUpsert.length > 0) {
-        const { error: tabErr } = await sb.from('tabs').upsert(tabsToUpsert);
-        if (tabErr) throw tabErr;
-      }
     }
 
-    // Upsert Widgets
+    // Upsert Widgets: only send widgets with genuinely newer timestamps or new records
+    let widgetsToUpsert: any[] = [];
     if (widgetsToPush.length > 0) {
       const formattedWidgets = widgetsToPush.map((w) => ({
         id: w.id,
@@ -550,19 +573,15 @@ export async function pushToCloud(
         deleted_at: w.deleted_at || null,
       }));
 
-      const widgetsToUpsert = formattedWidgets.filter((w) => {
+      widgetsToUpsert = formattedWidgets.filter((w) => {
         const remoteTime = remoteWidgetsMap.get(w.id);
         if (remoteTime === undefined) return true;
-        return new Date(w.updated_at || 0).getTime() >= remoteTime;
+        return new Date(w.updated_at || 0).getTime() > remoteTime;
       });
-
-      if (widgetsToUpsert.length > 0) {
-        const { error: widgetErr } = await sb.from('widgets').upsert(widgetsToUpsert);
-        if (widgetErr) throw widgetErr;
-      }
     }
 
-    // Upsert Notes
+    // Upsert Notes: only send notes with genuinely newer timestamps or new records
+    let notesToUpsert: any[] = [];
     if (notesToPush.length > 0) {
       const formattedNotes = notesToPush.map((n) => ({
         id: n.id,
@@ -583,18 +602,68 @@ export async function pushToCloud(
         deleted_at: n.deleted_at || null,
       }));
 
-      const notesToUpsert = formattedNotes.filter((n) => {
+      notesToUpsert = formattedNotes.filter((n) => {
         const remoteTime = remoteNotesMap.get(n.id);
         if (remoteTime === undefined) return true;
-        return new Date(n.updated_at || 0).getTime() >= remoteTime;
+        return new Date(n.updated_at || 0).getTime() > remoteTime;
       });
-
-      if (notesToUpsert.length > 0) {
-        const { error: noteErr } = await sb.from('notes').upsert(notesToUpsert);
-        if (noteErr) throw noteErr;
-      }
     }
 
+    const hasAnyItemUpserted = tabsToUpsert.length > 0 || widgetsToUpsert.length > 0 || notesToUpsert.length > 0;
+
+    if (!shouldUpsertDash && !hasAnyItemUpserted) {
+      // Nothing changed locally compared to remote state! 0 database writes.
+      return { success: true };
+    }
+
+    if (shouldUpsertDash) {
+      const tabThemeMeta = tabs.reduce((acc, t) => {
+        acc[t.id] = {
+          backgroundTheme: t.backgroundTheme,
+          customWallpaperUrl: t.customWallpaperUrl,
+          backgroundDimLevel: t.backgroundDimLevel,
+          hideNotes: t.hideNotes,
+          isHome: t.isHome,
+        };
+        return acc;
+      }, {} as Record<string, any>);
+
+      const cloudSafeSettings = stripPlexTokens({
+        ...settings,
+        pinHash: null,
+        canvasThemes: tabThemeMeta,
+      });
+
+      const { error: dashErr } = await sb.from('dashboards').upsert({
+        id: dashboardId,
+        user_id: ownerId,
+        title: settings.dashboardTitle,
+        settings: cloudSafeSettings,
+        invite_code: null,
+        updated_at: nowIso,
+      });
+      if (dashErr) throw dashErr;
+    } else if (hasAnyItemUpserted && !isMember) {
+      // Touch dashboard updated_at so all remote clients recognize the board revision change
+      await sb.from('dashboards').update({ updated_at: nowIso }).eq('id', dashboardId);
+    }
+
+    if (tabsToUpsert.length > 0) {
+      const { error: tabErr } = await sb.from('tabs').upsert(tabsToUpsert);
+      if (tabErr) throw tabErr;
+    }
+
+    if (widgetsToUpsert.length > 0) {
+      const { error: widgetErr } = await sb.from('widgets').upsert(widgetsToUpsert);
+      if (widgetErr) throw widgetErr;
+    }
+
+    if (notesToUpsert.length > 0) {
+      const { error: noteErr } = await sb.from('notes').upsert(notesToUpsert);
+      if (noteErr) throw noteErr;
+    }
+
+    lastKnownCloudUpdatedAt = nowIso;
     return { success: true };
   } catch (err: any) {
     console.error('Cloud push failed:', err);
@@ -603,7 +672,7 @@ export async function pushToCloud(
 }
 
 // Pull latest changes from Supabase Cloud to local Dexie (Strictly authenticated only)
-export async function pullFromCloud(): Promise<{ success: boolean; error?: string }> {
+export async function pullFromCloud(options?: { force?: boolean }): Promise<{ success: boolean; hasChanges?: boolean; error?: string }> {
   const sb = getSupabase();
   const user = await getCurrentUser();
   if (!sb || !user) return { success: false, error: 'Not authenticated' };
@@ -611,6 +680,20 @@ export async function pullFromCloud(): Promise<{ success: boolean; error?: strin
   try {
     const target = await resolveActiveDashboardId();
     const dashboardId = target?.dashboardId || user.id;
+
+    // Fast-path: Check lightweight dashboard revision before scanning full tables with JSON payloads
+    if (!options?.force) {
+      const { data: dashHead, error: headErr } = await sb
+        .from('dashboards')
+        .select('updated_at')
+        .eq('id', dashboardId)
+        .maybeSingle();
+
+      if (!headErr && dashHead?.updated_at && lastKnownCloudUpdatedAt && dashHead.updated_at === lastKnownCloudUpdatedAt) {
+        // Cloud revision has not changed since our last pull
+        return { success: true, hasChanges: false };
+      }
+    }
 
     const [dashRes, tabsRes, widgetsRes, notesRes] = await Promise.all([
       sb.from('dashboards').select('*').eq('id', dashboardId).maybeSingle(),
@@ -796,7 +879,8 @@ export async function pullFromCloud(): Promise<{ success: boolean; error?: strin
       }
     }
 
-    return { success: true };
+    lastKnownCloudUpdatedAt = dashRes.data?.updated_at || new Date().toISOString();
+    return { success: true, hasChanges: true };
   } catch (err: any) {
     console.error('Cloud pull failed:', err);
     return { success: false, error: err.message || 'Cloud pull failed' };

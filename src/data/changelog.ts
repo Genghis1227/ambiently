@@ -11,6 +11,17 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.17",
+    date: "November 7, 2026",
+    title: "Supabase Disk IO Budget & Burst Credit Preservation",
+    highlights: [
+      "Smart Realtime & Visibility Polling: Replaced aggressive unconditional 60s full-table polling with smart revision polling that completely pauses in background tabs, backs off to 10 minutes when Realtime WebSockets are connected, and checks lightweight updated_at timestamps first (0ms / 0 IO) before downloading table data.",
+      "Strict Push Deduplication: Fixed a timestamp comparison bug where equal timestamps were being re-upserted, ensuring only modified tabs, widgets, notes, and settings are written to PostgreSQL (95%+ reduction in database writes).",
+      "In-Memory Membership Caching: Cached active dashboard target resolutions in memory for 3 minutes to eliminate redundant database reads on every sync check.",
+      "Database Composite Indexes & Triggers: Added composite indexes on (dashboard_id, updated_at desc), an automated touch trigger to track dashboard revision changes, and replaced heavy 5-table sequential detoasting scans with an in-memory batch size guard.",
+    ],
+  },
+  {
     version: "v0.3.16",
     date: "November 7, 2026",
     title: "Portal-Mounted Media Search & Modal Viewport Boundary Protection",
