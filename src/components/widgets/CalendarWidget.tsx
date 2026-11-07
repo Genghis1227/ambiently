@@ -149,7 +149,8 @@ function isEventOnDate(evt: CalendarEvent, targetDate: Date): boolean {
   const dayEnd = new Date(targetY, targetM, targetD, 23, 59, 59, 999).getTime();
   const evtStart = new Date(evt.start).getTime();
   const evtEnd = evt.end ? new Date(evt.end).getTime() : evtStart;
-  return evtStart <= dayEnd && evtEnd >= dayStart;
+  // An event ending exactly at midnight is over before this day starts
+  return evtStart <= dayEnd && (evtEnd > dayStart || evtStart >= dayStart);
 }
 
 function sortDayEvents(dayEvents: CalendarEvent[]): CalendarEvent[] {
@@ -457,7 +458,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
     try {
       const data = await fetchCalendarEvents(sources, force);
       setEvents(data);
-      setLastUpdated(Date.now());
+      setLastUpdated(getCachedCalendarEvents(sources)?.lastFetched ?? Date.now());
     } catch (err) {
       console.warn('Failed to load events:', err);
     } finally {

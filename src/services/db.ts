@@ -43,6 +43,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   nightModeStyle: 'dim',
   nightDimOpacity: 0.85,
   nightModeWakeTimeoutMin: 2,
+  nightScheduleEnabled: true,
   snapToGrid: false,
   isDockHidden: false,
   autoHideCursor: true,

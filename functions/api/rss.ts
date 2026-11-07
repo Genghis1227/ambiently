@@ -27,6 +27,13 @@ function decodeHtmlEntities(str: string): string {
     .trim();
 }
 
+// The XML parser returns { '#text': ..., '@_type': ... } for a tag with attributes (such as Atom's
+// <title type="html">) and a number for numeric text, so normalize before using string methods.
+function textOf(value: any): string {
+  if (value === null || value === undefined) return '';
+  return String(typeof value === 'object' ? value['#text'] ?? '' : value);
+}
+
 function isSafeExternalHttpsUrl(rawUrl: string): { valid: boolean; reason?: string } {
   try {
     const parsed = new URL(rawUrl);
@@ -107,28 +114,24 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     let feedTitle = 'RSS Feed';
 
     if (parsed.rss && parsed.rss.channel) {
-      feedTitle = decodeHtmlEntities(parsed.rss.channel.title || feedTitle);
+      feedTitle = decodeHtmlEntities(textOf(parsed.rss.channel.title)) || feedTitle;
       rawItems = Array.isArray(parsed.rss.channel.item)
         ? parsed.rss.channel.item
         : parsed.rss.channel.item
         ? [parsed.rss.channel.item]
         : [];
     } else if (parsed.feed && parsed.feed.entry) {
-      feedTitle = decodeHtmlEntities(parsed.feed.title || feedTitle);
+      feedTitle = decodeHtmlEntities(textOf(parsed.feed.title)) || feedTitle;
       rawItems = Array.isArray(parsed.feed.entry)
         ? parsed.feed.entry
         : [parsed.feed.entry];
     }
 
     const items = rawItems.slice(0, 25).map((item: any, idx: number) => {
-      const title = decodeHtmlEntities(typeof item.title === 'string' ? item.title : item.title?.['#text'] || 'Untitled');
+      const title = decodeHtmlEntities(textOf(item.title)) || 'Untitled';
       const link = typeof item.link === 'string' ? item.link : item.link?.['@_href'] || '';
       const pubDate = item.pubDate || item.published || item.updated || new Date().toISOString();
-      const rawDesc = typeof item.description === 'string'
-        ? item.description.replace(/<[^>]*>?/gm, '').slice(0, 200)
-        : typeof item.summary === 'string'
-        ? item.summary.replace(/<[^>]*>?/gm, '').slice(0, 200)
-        : '';
+      const rawDesc = (textOf(item.description) || textOf(item.summary)).replace(/<[^>]*>?/gm, '').slice(0, 200);
       const description = decodeHtmlEntities(rawDesc);
 
       return {

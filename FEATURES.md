@@ -32,7 +32,7 @@
 * **Screen Wake Lock API:** Prevents tablets and smart displays from dimming or locking while the dashboard is open.
 * **Fullscreen Kiosk Toggle:** One-tap fullscreen mode via the browser Fullscreen API.
 * **Scheduled Night Mode & Burn-In Protection:**
-  * Configurable auto-start and morning wake times (`22:00` – `07:00`).
+  * Configurable auto-start and morning wake times (`22:00` – `07:00`). Turn off **Automatic Night Schedule** in Settings to only start night mode by hand.
   * **OLED Clock Mode:** Pitch-black `#000000` background with an ultra-dim red digital clock that shifts pixels every 60 seconds (`±15px`) to prevent OLED/LCD image retention.
   * **Dim Overlay Mode:** Adjustable opacity dark veil (`40%`–`95%`).
   * Tap anywhere on the screen to wake immediately.

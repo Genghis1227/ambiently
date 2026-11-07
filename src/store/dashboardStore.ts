@@ -68,6 +68,7 @@ interface DashboardState {
   // Actions
   initStore: () => Promise<void>;
   setActiveTabId: (tabId: string) => void;
+  rotateToTab: (tabId: string) => void;
   addTab: (
     name: string,
     icon: string,
@@ -205,6 +206,11 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       ...DEFAULT_SETTINGS,
       ...(rawSettings || {}),
       carouselEnabled: rawSettings?.carouselEnabled ?? true,
+      // Night mode is what this screen is doing right now. The background cloud refresh re-runs
+      // initStore every 60 seconds and must not switch it on or off.
+      nightModeEnabled: get().isInitialized
+        ? get().settings.nightModeEnabled
+        : rawSettings?.nightModeEnabled ?? false,
     };
     const allTabs = await db.tabs.toArray();
     const loadedTabs = allTabs
@@ -232,8 +238,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       settings: loadedSettings,
       tabs: tabsToUse,
       activeTabId: resolvedActiveTabId,
-      widgets: loadedWidgets.length > 0 ? loadedWidgets : DEFAULT_WIDGETS,
-      notes: loadedNotes.length > 0 ? loadedNotes : DEFAULT_NOTES,
+      widgets: loadedWidgets,
+      notes: loadedNotes,
       isUnlocked: !loadedSettings.pinLockEnabled,
     });
   },
@@ -241,6 +247,11 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   setActiveTabId: (tabId) => {
     set({ activeTabId: tabId });
     get().pauseCarouselTemporarily();
+  },
+
+  // Used by the carousel itself, which must not trigger the pause meant for a person switching tabs
+  rotateToTab: (tabId) => {
+    set({ activeTabId: tabId });
   },
 
   addTab: async (
@@ -312,7 +323,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const tab = get().tabs.find((t) => t.id === tabId);
     if (!tab) return;
 
-    const updated = { ...tab, deleted_at: new Date().toISOString() };
+    const now = new Date().toISOString();
+    const updated = { ...tab, deleted_at: now, updated_at: now };
     await db.tabs.put(updated);
 
     const remainingTabs = get().tabs.filter((t) => t.id !== tabId);
