@@ -20,6 +20,7 @@ import { isCanvasThemeLight } from './data/canvasThemes';
 import { isTimeInNightWindow } from './utils/nightMode';
 import { initUpdateChecker } from './services/updateChecker';
 import { UpdateNotificationBanner } from './components/common/UpdateNotificationBanner';
+import { PlexReauthBanner } from './components/common/PlexReauthBanner';
 
 const SettingsModal = lazy(() =>
   import('./components/settings/SettingsModal').then((m) => ({ default: m.SettingsModal }))
@@ -32,6 +33,9 @@ const AddWidgetModal = lazy(() =>
 );
 const CreateCanvasModal = lazy(() =>
   import('./components/dock/CreateCanvasModal').then((m) => ({ default: m.CreateCanvasModal }))
+);
+const PhotoSourcesModal = lazy(() =>
+  import('./components/photos/PhotoSourcesModal').then((m) => ({ default: m.PhotoSourcesModal }))
 );
 
 export function App() {
@@ -79,11 +83,13 @@ export function App() {
   const [isCreateCanvasOpen, setIsCreateCanvasOpen] = useState(false);
   const [isNoteCreatorOpen, setIsNoteCreatorOpen] = useState(false);
   const [isTrashOpen, setIsTrashOpen] = useState(false);
+  const [isPlexPairingModalOpen, setIsPlexPairingModalOpen] = useState(false);
   const fileSync = useFileSync();
   const hasFileBound = fileSync.status === 'connected';
   const syncRemoteNoteChange = useDashboardStore((s) => s.syncRemoteNoteChange);
   const syncRemoteWidgetChange = useDashboardStore((s) => s.syncRemoteWidgetChange);
   const syncRemoteTabChange = useDashboardStore((s) => s.syncRemoteTabChange);
+  const applyCommonPhotosToAllWidgets = useDashboardStore((s) => s.applyCommonPhotosToAllWidgets);
 
   // Initialize and check persistent PC Auto-Sync file binding
   useEffect(() => {
@@ -684,6 +690,28 @@ export function App() {
 
       {/* Realtime Version Update Prompt & Refresh Banner */}
       <UpdateNotificationBanner />
+
+      {/* Device-Local Plex Pairing Prompt when Plex is configured on dashboard */}
+      <PlexReauthBanner onOpenPlexAuth={() => setIsPlexPairingModalOpen(true)} />
+
+      {/* Dedicated Plex Pairing Modal */}
+      {isPlexPairingModalOpen && (
+        <Suspense fallback={null}>
+          <PhotoSourcesModal
+            isOpen={true}
+            onClose={() => setIsPlexPairingModalOpen(false)}
+            initialTab="plex"
+            isCommonSource={true}
+            currentSourceLabel={settings.commonPhotoSourceLabel || 'Plex Photos'}
+            currentSourceType="plex"
+            currentPhotoCount={settings.commonPhotos?.length}
+            onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType) => {
+              applyCommonPhotosToAllWidgets(newPhotos, sourceName, sourceUrl, sourceType);
+              setIsPlexPairingModalOpen(false);
+            }}
+          />
+        </Suspense>
+      )}
 
       {/* Kiosk Fullscreen Warning Banner when kiosk lock is enabled but not in fullscreen */}
       {isFullscreenKioskLocked && !isFullscreen && !pinChallenge && (

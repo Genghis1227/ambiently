@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Image as ImageIcon, ChevronLeft, ChevronRight, Sparkles, Loader2 } from 'lucide-react';
+import { Image as ImageIcon, ChevronLeft, ChevronRight, Sparkles, Loader2, Tv } from 'lucide-react';
 import {
   CURATED_AMBIENT_PHOTOS,
   cachePhotosLocally,
@@ -9,6 +9,7 @@ import {
   type PhotoDisplayStyle,
 } from '../../services/photos';
 import { useDashboardStore } from '../../store/dashboardStore';
+import { getPlexToken } from '../../services/plex';
 
 
 export type PolaroidDensity = 6 | 12 | 18 | 24 | 32;
@@ -273,6 +274,25 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   const [resetTrigger, setResetTrigger] = useState(0);
   const [photoFocals, setPhotoFocals] = useState<Record<string, string>>({});
   const topZIndexRef = useRef(30);
+
+  const [hasLocalPlexAuth, setHasLocalPlexAuth] = useState(true);
+  const isPlexSource =
+    sourceLabel?.toLowerCase().includes('plex') ||
+    photos.some((p) => p.source === 'plex');
+
+  useEffect(() => {
+    if (!isPlexSource) {
+      setHasLocalPlexAuth(true);
+      return;
+    }
+    let isMounted = true;
+    getPlexToken().then((token) => {
+      if (isMounted) setHasLocalPlexAuth(Boolean(token));
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [isPlexSource]);
 
   // Sync props to state if parent config updates
   useEffect(() => {
@@ -1413,6 +1433,15 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-[9px] font-medium border border-blue-400/30">
                 <Loader2 className="w-2.5 h-2.5 animate-spin text-blue-400" />
                 <span>Syncing</span>
+              </span>
+            )}
+            {isPlexSource && !hasLocalPlexAuth && (
+              <span
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[9px] font-semibold border border-amber-500/40"
+                title="Plex credentials needed on this screen to stream or sync library."
+              >
+                <Tv className="w-2.5 h-2.5 text-amber-400" />
+                <span>Pairing Needed</span>
               </span>
             )}
             {photos.length > 1 && (
