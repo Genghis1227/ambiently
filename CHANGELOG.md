@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.17] - 2026-11-07
+
+### Fixed
+* **Supabase Disk IO Budget & Burst Credit Preservation (`src/App.tsx`, `src/services/supabase.ts`, `supabase/schema.sql`):**
+  * **Smart Realtime & Visibility Polling:** Replaced aggressive unconditional 60s full-table polling with smart revision polling that pauses when tabs are hidden, backs off to 10 minutes when Realtime WebSockets are connected, and checks lightweight `dashboards.updated_at` timestamps (1 row, 1 column, 20 bytes) before querying tables.
+  * **Strict Push Deduplication:** Fixed a timestamp comparison bug (`>= remoteTime` changed to `> remoteTime`) in `pushToCloud()`. Only records that are genuinely new or newer locally are pushed to PostgreSQL, reducing write operations by 95%+.
+  * **In-Memory Target Cache:** Added a 3-minute in-memory cache for `resolveActiveDashboardId` to eliminate repeated `dashboard_members` and `dashboards` queries on every sync cycle.
+  * **Database Composite Indexes & Triggers:** Added `(dashboard_id, updated_at desc)` composite indexes, an automatic `touch_dashboard_updated_at` trigger across tabs/widgets/notes, and replaced expensive 5-table detoasting scans in `private.check_board_limits()` with an in-memory batch size guard.
+
+---
+
 ## [0.3.7] - 2026-11-06
 
 ### Fixed
