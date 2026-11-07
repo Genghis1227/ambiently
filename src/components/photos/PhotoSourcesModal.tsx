@@ -463,6 +463,9 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
       onInitialBatchReady: (initialBatch) => {
         onPhotosLoaded(initialBatch, sourceLabel, undefined, 'plex', applyToAll);
         setStatusMessage(`Streaming ${initialBatch.length} photos! Continuing library indexing in background...`);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('plex_auth_changed', { detail: { hasToken: true } }));
+        }
         setTimeout(() => onClose(), 800);
       },
       onError: (errMsg) => {

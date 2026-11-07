@@ -708,6 +708,9 @@ export function App() {
             onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType) => {
               applyCommonPhotosToAllWidgets(newPhotos, sourceName, sourceUrl, sourceType);
               setIsPlexPairingModalOpen(false);
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('plex_auth_changed', { detail: { hasToken: true } }));
+              }
             }}
           />
         </Suspense>

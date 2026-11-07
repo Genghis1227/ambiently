@@ -35,18 +35,24 @@ export const PlexReauthBanner: React.FC<PlexReauthBannerProps> = ({ onOpenPlexAu
   }, [settings, widgets]);
 
   useEffect(() => {
-    if (!isPlexConfigured) {
-      setHasToken(true);
-      return;
-    }
     let isMounted = true;
-    getPlexToken().then((token) => {
-      if (isMounted) {
-        setHasToken(Boolean(token));
+    const checkToken = () => {
+      if (!isPlexConfigured) {
+        if (isMounted) setHasToken(true);
+        return;
       }
-    });
+      getPlexToken().then((token) => {
+        if (isMounted) {
+          setHasToken(Boolean(token));
+        }
+      });
+    };
+
+    checkToken();
+    window.addEventListener('plex_auth_changed', checkToken);
     return () => {
       isMounted = false;
+      window.removeEventListener('plex_auth_changed', checkToken);
     };
   }, [isPlexConfigured]);
 
@@ -57,6 +63,11 @@ export const PlexReauthBanner: React.FC<PlexReauthBannerProps> = ({ onOpenPlexAu
     } catch {
       // ignore
     }
+  };
+
+  const handleLinkDisplay = () => {
+    handleDismiss();
+    onOpenPlexAuth();
   };
 
   const show = isPlexConfigured && hasToken === false && !isDismissed;
@@ -91,7 +102,7 @@ export const PlexReauthBanner: React.FC<PlexReauthBannerProps> = ({ onOpenPlexAu
             <div className="flex items-center gap-1.5 shrink-0 ml-1">
               <button
                 type="button"
-                onClick={onOpenPlexAuth}
+                onClick={handleLinkDisplay}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-95 text-gray-950 font-bold text-xs shadow-md shadow-amber-500/20 transition-all cursor-pointer"
                 title="Pair this screen via 4-character PIN or QR code"
               >
