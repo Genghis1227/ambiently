@@ -968,6 +968,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
             <PhotoSourcesModal
               isOpen={Boolean(photoSourcesTarget)}
               onClose={() => setPhotoSourcesTarget(null)}
+              targetWidgetId={isUsingCommon ? undefined : activePhotoWidget.id}
               isCommonSource={isUsingCommon}
               initialWebUrls={
                 (isUsingCommon

@@ -243,21 +243,49 @@ export function inspectLocalFileList(files: FileList | File[]): LocalDirectoryIn
   return { rootName: detectedRoot, files: Array.from(files), subfolders, hasDirectPhotos, directPhotosCount };
 }
 
+export interface LocalScanOptions {
+  maxPhotos?: number;
+  onProgress?: (count: number, currentDirName: string) => void;
+  onBatch?: (photos: PhotoItem[], isInitial: boolean, isDone: boolean) => void;
+  signal?: AbortSignal;
+}
+
 export async function scanSelectedSubfolders(
   inspection: LocalDirectoryInspection,
   selectedSubfolderNames: Set<string>,
   includeRootPhotos: boolean,
-  maxPhotos = Infinity,
-  onProgress?: (count: number, currentDirName: string) => void
+  maxPhotosOrOptions: number | LocalScanOptions = Infinity,
+  legacyOnProgress?: (count: number, currentDirName: string) => void
 ): Promise<{ folderEntries: { id: string; name: string; photos: PhotoItem[] }[]; totalPhotos: PhotoItem[] }> {
+  const options: LocalScanOptions =
+    typeof maxPhotosOrOptions === 'number'
+      ? { maxPhotos: maxPhotosOrOptions, onProgress: legacyOnProgress }
+      : maxPhotosOrOptions || {};
+
+  const maxPhotos = options.maxPhotos ?? Infinity;
+  const onProgress = options.onProgress;
+  const onBatch = options.onBatch;
+  const signal = options.signal;
+
   const folderEntries: { id: string; name: string; photos: PhotoItem[] }[] = [];
   const totalPhotos: PhotoItem[] = [];
   const isUnlimited = !maxPhotos || maxPhotos <= 0 || !isFinite(maxPhotos);
+
+  let hasEmittedInitial = false;
+  const checkEmitInitial = () => {
+    if (!hasEmittedInitial && totalPhotos.length > 0 && onBatch) {
+      hasEmittedInitial = true;
+      onBatch([...totalPhotos], true, false);
+    }
+  };
+
+  if (signal?.aborted) return { folderEntries, totalPhotos };
 
   if (inspection.dirHandle) {
     if (includeRootPhotos && inspection.hasDirectPhotos) {
       const rootPhotos: PhotoItem[] = [];
       for await (const entry of inspection.dirHandle.values()) {
+        if (signal?.aborted) break;
         if (!isUnlimited && totalPhotos.length >= maxPhotos) break;
         if (entry.kind === 'file' && IMAGE_EXT_REGEX.test(entry.name)) {
           try {
@@ -283,10 +311,12 @@ export async function scanSelectedSubfolders(
           name: `${inspection.rootName} (Root)`,
           photos: rootPhotos,
         });
+        checkEmitInitial();
       }
     }
 
     for (const sub of inspection.subfolders) {
+      if (signal?.aborted) break;
       if (!selectedSubfolderNames.has(sub.name)) continue;
       if (!isUnlimited && totalPhotos.length >= maxPhotos) break;
 
@@ -300,6 +330,10 @@ export async function scanSelectedSubfolders(
           name: `${inspection.rootName} ❯ ${sub.name}`,
           photos: subPhotos,
         });
+        checkEmitInitial();
+        if (onBatch) {
+          onBatch([...totalPhotos], false, false);
+        }
       }
     }
   } else if (inspection.files) {
@@ -315,10 +349,12 @@ export async function scanSelectedSubfolders(
           name: `${inspection.rootName} (Root)`,
           photos,
         });
+        checkEmitInitial();
       }
     }
 
     for (const sub of inspection.subfolders) {
+      if (signal?.aborted) break;
       if (!selectedSubfolderNames.has(sub.name)) continue;
       if (!isUnlimited && totalPhotos.length >= maxPhotos) break;
 
@@ -332,8 +368,16 @@ export async function scanSelectedSubfolders(
           name: `${inspection.rootName} ❯ ${sub.name}`,
           photos,
         });
+        checkEmitInitial();
+        if (onBatch) {
+          onBatch([...totalPhotos], false, false);
+        }
       }
     }
+  }
+
+  if (onBatch) {
+    onBatch([...totalPhotos], !hasEmittedInitial, true);
   }
 
   return { folderEntries, totalPhotos };
@@ -629,10 +673,16 @@ export function parseWebPhotoUrls(text: string): PhotoItem[] {
   return items;
 }
 
+export interface WebScanOptions {
+  maxPhotos?: number;
+  onBatch?: (photos: PhotoItem[], sourceTitle: string, isInitial: boolean, isDone: boolean) => void;
+  signal?: AbortSignal;
+}
+
 // Resolves both Google Photos shared albums, Google Drive links, and direct web images
 export async function resolveWebAndCloudPhotoUrls(
   text: string,
-  maxPhotos: number = 10000
+  maxPhotosOrOptions: number | WebScanOptions = 10000
 ): Promise<{
   photos: PhotoItem[];
   sourceTitle: string;
@@ -641,26 +691,30 @@ export async function resolveWebAndCloudPhotoUrls(
 }> {
   if (!text.trim()) return { photos: [], sourceTitle: '' };
 
+  const options: WebScanOptions =
+    typeof maxPhotosOrOptions === 'number'
+      ? { maxPhotos: maxPhotosOrOptions }
+      : maxPhotosOrOptions || {};
+
+  const maxPhotos = options.maxPhotos ?? 10000;
+  const onBatch = options.onBatch;
+  const signal = options.signal;
+
   const lines = text
     .split(/[\r\n,]+/)
     .map((l) => l.trim())
     .filter((l) => l.length > 5);
 
   const directItems: PhotoItem[] = [];
-  const albumPromises: Promise<{
-    title: string;
-    count: number;
-    totalAlbumCount: number;
-    photos: PhotoItem[];
-    error?: string;
-  }>[] = [];
+  const gphotosUrls: string[] = [];
+  const gdriveUrls: string[] = [];
 
   for (let idx = 0; idx < lines.length; idx++) {
     const line = lines[idx];
     if (isGooglePhotosUrl(line)) {
-      albumPromises.push(fetchGooglePhotosAlbum(line, maxPhotos));
+      gphotosUrls.push(line);
     } else if (isGoogleDriveFolderUrl(line)) {
-      albumPromises.push(fetchGoogleDriveFolder(line));
+      gdriveUrls.push(line);
     } else {
       const gdriveResolved = parseGoogleDriveLink(line);
       const finalUrl = gdriveResolved || line;
@@ -674,7 +728,15 @@ export async function resolveWebAndCloudPhotoUrls(
     }
   }
 
-  const albumResults = await Promise.all(albumPromises);
+  // Fast initial batch: for Google Photos albums, fetch first 150 items for instant response
+  const initialGPhotosLimit = onBatch ? Math.min(150, maxPhotos) : maxPhotos;
+
+  const initialAlbumPromises = [
+    ...gphotosUrls.map((u) => fetchGooglePhotosAlbum(u, initialGPhotosLimit)),
+    ...gdriveUrls.map((u) => fetchGoogleDriveFolder(u)),
+  ];
+
+  const albumResults = await Promise.all(initialAlbumPromises);
   const albumItems: PhotoItem[] = [];
   const albumTitles: string[] = [];
   let highestAlbumTotal = 0;
@@ -691,9 +753,9 @@ export async function resolveWebAndCloudPhotoUrls(
     }
   }
 
-  const combined = [...albumItems, ...directItems];
+  const initialCombined = [...albumItems, ...directItems];
 
-  if (combined.length === 0) {
+  if (initialCombined.length === 0) {
     const firstError = albumResults.find((r) => r.error)?.error;
     return {
       photos: [],
@@ -703,16 +765,59 @@ export async function resolveWebAndCloudPhotoUrls(
   }
 
   const mainAlbumTitle = albumTitles.join(' + ');
-
   const sourceTitle =
     mainAlbumTitle && directItems.length === 0
       ? mainAlbumTitle
       : mainAlbumTitle
       ? `${mainAlbumTitle} & Web`
-      : `Web Images (${combined.length})`;
+      : `Web Images (${initialCombined.length})`;
+
+  // Emit initial batch immediately so PhotoFrame starts playing right away
+  if (onBatch) {
+    onBatch(initialCombined, sourceTitle, true, false);
+  }
+
+  // Check if deep pagination is needed in background for Google Photos albums
+  const needsDeepPagination =
+    Boolean(onBatch) &&
+    gphotosUrls.length > 0 &&
+    maxPhotos > initialGPhotosLimit &&
+    albumResults.some((r) => (r.totalAlbumCount || 0) > r.count);
+
+  if (needsDeepPagination && !signal?.aborted) {
+    // Background deep pagination
+    (async () => {
+      try {
+        const deepGPhotos = await Promise.all(
+          gphotosUrls.map((u) => fetchGooglePhotosAlbum(u, maxPhotos))
+        );
+        if (signal?.aborted) return;
+
+        const deepItems: PhotoItem[] = [];
+        for (const res of deepGPhotos) {
+          if (res.photos && res.photos.length > 0) {
+            deepItems.push(...res.photos);
+          }
+        }
+        // Retain Drive and direct items
+        const gdriveItems = albumResults
+          .filter((_, idx) => idx >= gphotosUrls.length)
+          .flatMap((r) => r.photos || []);
+        const fullCombined = [...deepItems, ...gdriveItems, ...directItems];
+
+        if (onBatch && fullCombined.length > initialCombined.length) {
+          onBatch(fullCombined, sourceTitle, false, true);
+        }
+      } catch {
+        // Deep pagination failed or completed
+      }
+    })();
+  } else if (onBatch) {
+    onBatch(initialCombined, sourceTitle, false, true);
+  }
 
   return {
-    photos: combined,
+    photos: initialCombined,
     sourceTitle,
     totalAlbumCount: highestAlbumTotal,
   };

@@ -2249,6 +2249,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             <PhotoSourcesModal
               isOpen={true}
               onClose={() => setPhotoSourcesTarget(null)}
+              targetWidgetId={isUsingCommon ? undefined : activePhotoWidget.id}
               isCommonSource={isUsingCommon}
               initialWebUrls={
                 (isUsingCommon
