@@ -1,6 +1,7 @@
 // Plex PIN / OAuth2-style Authentication & Photo Library API Service
 import { db } from './db';
 import type { PhotoItem } from './photos';
+import { serverTokensFrom } from './plexLinks';
 
 const PLEX_API_URL = 'https://plex.tv/api/v2';
 const PLEX_CLIENT_ID_KEY = 'ambiently_plex_client_id';
@@ -156,6 +157,8 @@ export async function getPlexToken(): Promise<string | null> {
 }
 
 export async function clearPlexToken(): Promise<void> {
+  await db.vault.delete(PLEX_SERVER_TOKENS_KEY);
+  setServerTokens({ tokens: {}, ready: true });
   await db.vault.delete('plex_auth_token');
   await db.vault.delete('plex_selected_server');
   await db.vault.delete('plex_selected_section');
@@ -177,7 +180,85 @@ export async function getPlexServers(authToken: string): Promise<PlexServerResou
 
   const data: PlexServerResource[] = await res.json();
   // Filter only servers that provide the server role
-  return data.filter((s) => s.provides && s.provides.includes('server'));
+  const servers = data.filter((s) => s.provides && s.provides.includes('server'));
+  await rememberPlexServers(servers, authToken).catch((err) => {
+    console.warn('Could not save Plex server tokens on this device:', err);
+  });
+  return servers;
+}
+
+// Each server's token, by connection address, kept on this device only. Saved photo links don't
+// carry a token (see plexLinks.ts), so this is what lets this device show them.
+const PLEX_SERVER_TOKENS_KEY = 'plex_server_tokens';
+
+export interface PlexServerTokenState {
+  tokens: Record<string, string>;
+  // False until this device's tokens have been read. A Plex photo shown before then would load
+  // without a token, fail, and be skipped.
+  ready: boolean;
+}
+
+let serverTokenState: PlexServerTokenState = { tokens: {}, ready: false };
+let serverTokensLoad: Promise<void> | null = null;
+const serverTokenListeners = new Set<() => void>();
+
+function setServerTokens(next: PlexServerTokenState): void {
+  serverTokenState = next;
+  serverTokenListeners.forEach((listener) => listener());
+}
+
+export function getPlexServerTokenState(): PlexServerTokenState {
+  return serverTokenState;
+}
+
+export function getPlexServerTokens(): Record<string, string> {
+  return serverTokenState.tokens;
+}
+
+export function subscribePlexServerTokens(listener: () => void): () => void {
+  serverTokenListeners.add(listener);
+  void loadPlexServerTokens();
+  return () => {
+    serverTokenListeners.delete(listener);
+  };
+}
+
+async function rememberPlexServers(servers: PlexServerResource[], accountToken: string): Promise<void> {
+  const tokens = serverTokensFrom(servers, accountToken);
+  setServerTokens({ tokens, ready: true });
+  await db.vault.put({
+    key: PLEX_SERVER_TOKENS_KEY,
+    value: JSON.stringify(tokens),
+    description: 'Plex server tokens for this device only',
+    updated_at: new Date().toISOString(),
+  });
+}
+
+// Loads the saved server tokens, then refreshes them from plex.tv once per app start if this device
+// is signed in to Plex, so a changed token or a new server address is picked up. With none saved yet
+// (the first start after this change), photos wait for that refresh instead of the saved copy.
+export function loadPlexServerTokens(): Promise<void> {
+  if (!serverTokensLoad) {
+    serverTokensLoad = (async () => {
+      try {
+        const saved = await db.vault.get(PLEX_SERVER_TOKENS_KEY);
+        const parsed = saved?.value ? JSON.parse(saved.value) : null;
+        if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+          setServerTokens({ tokens: parsed, ready: true });
+        }
+      } catch {
+        // Missing or unreadable, so wait for the refresh below
+      }
+      try {
+        const accountToken = await getPlexToken();
+        if (accountToken) await getPlexServers(accountToken);
+      } catch {
+        // Offline or Plex unreachable: keep the saved tokens
+      }
+      if (!serverTokenState.ready) setServerTokens({ ...serverTokenState, ready: true });
+    })();
+  }
+  return serverTokensLoad;
 }
 
 // Choose best connection (prefers secure HTTPS / plex.direct connections to avoid mixed content in browser)
@@ -445,7 +526,6 @@ export function matchesPlexYearFilter(item: any, minYear?: number, maxYear?: num
 function extractPlexPhotoItem(
   item: any,
   cleanUri: string,
-  tokenParam: string,
   minYear?: number,
   maxYear?: number
 ): PhotoItem | null {
@@ -485,10 +565,11 @@ function extractPlexPhotoItem(
     partKey || thumbKey || (ratingKey ? `/library/metadata/${ratingKey}/thumb` : undefined);
   if (!imageResourcePath) return null;
 
+  // These links are saved and synced, so they carry no token. The device that shows a photo adds
+  // its own token for this server (addPlexToken in plexLinks.ts).
+
   // Direct raw photo URL (Full original camera resolution, zero transcoding, zero compression artifacts)
-  const directUrl = partKey
-    ? `${cleanUri}${partKey}${partKey.includes('?') ? '&' : '?'}${tokenParam}`
-    : `${cleanUri}${imageResourcePath}${imageResourcePath.includes('?') ? '&' : '?'}${tokenParam}`;
+  const directUrl = `${cleanUri}${imageResourcePath}`;
 
   // High-fidelity 4K transcode URL (3840x2160, quality=95, upscale=0)
   // - width/height 3840x2160 ensures full 4K UHD resolution on high-DPI/Retina/TV screens
@@ -496,7 +577,7 @@ function extractPlexPhotoItem(
   // - upscale=0 prevents Plex from artificially stretching small images/thumbnails into blurry pixelated messes
   const transcodeUrl = `${cleanUri}/photo/:/transcode?width=3840&height=2160&quality=95&upscale=0&url=${encodeURIComponent(
     imageResourcePath
-  )}&${tokenParam}`;
+  )}`;
 
   // If partKey is present and points to a web-compatible image (JPEG, PNG, WebP), directUrl serves
   // native uncompressed resolution with instant local streaming and zero Plex transcode overhead.
@@ -764,7 +845,7 @@ export async function getPlexPhotosFromSection(
 
         // Fast-path: extract photos immediately so initial display has 0 latency
         for (const item of leafCandidates) {
-          const photo = extractPlexPhotoItem(item, cleanUri, tokenParam, options.minYear, options.maxYear);
+          const photo = extractPlexPhotoItem(item, cleanUri, options.minYear, options.maxYear);
           if (photo) addPhoto(photo);
           if (!isUnlimited && photos.length >= maxPhotos) break;
         }
@@ -776,7 +857,7 @@ export async function getPlexPhotosFromSection(
           try {
             const enrichedLeaves = await enrichPlexPhotoItemsWithParts(leafCandidates.slice(0, 50), cleanUri, tokenParam);
             for (const item of enrichedLeaves) {
-              const photo = extractPlexPhotoItem(item, cleanUri, tokenParam, options.minYear, options.maxYear);
+              const photo = extractPlexPhotoItem(item, cleanUri, options.minYear, options.maxYear);
               if (photo) addPhoto(photo);
             }
           } catch {
@@ -847,7 +928,7 @@ export async function getPlexPhotosFromSection(
       const leafCandidates = allEntries.filter((item) => !isPlexDirectoryItem(item));
       if (leafCandidates.length > 0) {
         for (const item of leafCandidates) {
-          const photo = extractPlexPhotoItem(item, cleanUri, tokenParam, options.minYear, options.maxYear);
+          const photo = extractPlexPhotoItem(item, cleanUri, options.minYear, options.maxYear);
           if (photo) {
             addPhoto(photo);
             if (!isUnlimited && photos.length >= maxPhotos) break;
