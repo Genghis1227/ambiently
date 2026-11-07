@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.19] - 2026-11-07
+
+### Fixed
+* **Shared Photos Settings Layout & Clean Card Separation (`src/components/settings/SettingsModal.tsx`):**
+  * Fixed an issue where the "Show Date Taken by Default" toggle was nested inside the single-line flexbox container of `Current Shared Source`, causing the toggle card to be cramped and lopsided.
+  * Separated into an independent, full-width card with theme-consistent blue accenting (`text-blue-400`, `bg-blue-600`).
+* **Sleek Photo Date Taken Typography & Ambient Layout (`src/components/widgets/PhotoFrameWidget.tsx`):**
+  * Replaced the boxy emerald monospace badge with an integrated ambient bullet separator (`(1/150) · Aug 15, 2023`) in soft `text-gray-300 font-normal`.
+  * Moved clean picture mode date badge to a minimal, translucent glass pill in the bottom-right corner.
+  * Cleaned up Mosaic 2x2 grid captions by placing date as a soft subtitle underneath the photo title.
+  * Filtered out raw 4-digit numeric years from Plex photographer attributions (`Photo: 2024`).
+
+---
+
 ## [0.3.18] - 2026-11-07
 
 ### Added
