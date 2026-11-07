@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Calendar, ExternalLink, Check, Copy, AlertTriangle, ShieldCheck } from 'lucide-react';
 
 interface CalendarUrlGuideModalProps {
@@ -31,7 +32,7 @@ export const CalendarUrlGuideModal: React.FC<CalendarUrlGuideModalProps> = ({ is
     setTimeout(() => setCopiedExample(false), 2000);
   };
 
-  return (
+  const modalContent = (
     <div
       className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 cursor-pointer"
       onClick={(e) => {
@@ -335,4 +336,6 @@ export const CalendarUrlGuideModal: React.FC<CalendarUrlGuideModalProps> = ({ is
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };

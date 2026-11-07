@@ -11,6 +11,16 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.16",
+    date: "November 7, 2026",
+    title: "Portal-Mounted Media Search & Modal Viewport Boundary Protection",
+    highlights: [
+      "Portal-Mounted GIPHY & Media Search: Mounted MediaSearchModal directly into document.body using createPortal, escaping CSS transform and overflow-hidden constraints on canvas widget tiles so the search bar, category tabs, and results grid are fully visible and accessible.",
+      "Keyboard Accessibility: Added Escape key listener to MediaSearchModal for swift, natural keyboard dismissal.",
+      "Calendar Guide Portal Guard: Wrapped CalendarUrlGuideModal in createPortal to prevent similar clipping when accessed directly from within Calendar widget tiles.",
+    ],
+  },
+  {
     version: "v0.3.15",
     date: "November 7, 2026",
     title: "Seamless Mosaic Transitions, Persistent Rotation State & Canvas Duplicate Note",
