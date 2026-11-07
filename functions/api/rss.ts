@@ -27,6 +27,33 @@ function decodeHtmlEntities(str: string): string {
     .trim();
 }
 
+function isSafeExternalHttpsUrl(rawUrl: string): { valid: boolean; reason?: string } {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== 'https:') {
+      return { valid: false, reason: 'Only HTTPS feed URLs are permitted.' };
+    }
+    const host = parsed.hostname.toLowerCase();
+    if (
+      host === 'localhost' ||
+      host.endsWith('.local') ||
+      host.endsWith('.internal') ||
+      host === '0.0.0.0' ||
+      host === '[::1]' ||
+      /^127\./.test(host) ||
+      /^10\./.test(host) ||
+      /^192\.168\./.test(host) ||
+      /^169\.254\./.test(host) ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+    ) {
+      return { valid: false, reason: 'Private or internal network addresses are forbidden.' };
+    }
+    return { valid: true };
+  } catch {
+    return { valid: false, reason: 'Malformed URL.' };
+  }
+}
+
 export async function onRequestGet(context: PagesContext): Promise<Response> {
   const url = new URL(context.request.url);
   const feedUrl = url.searchParams.get('url');
@@ -34,7 +61,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
   if (!feedUrl) {
     return new Response(JSON.stringify({ error: 'Missing "url" query parameter' }), {
       status: 400,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Content-Type': 'application/json' },
     });
   }
 
@@ -42,6 +69,14 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
   // Automatically upgrade insecure http:// to https:// to prevent Cloudflare Worker redirect hangs
   if (normalizedUrl.startsWith('http://')) {
     normalizedUrl = 'https://' + normalizedUrl.slice(7);
+  }
+
+  const safetyCheck = isSafeExternalHttpsUrl(normalizedUrl);
+  if (!safetyCheck.valid) {
+    return new Response(JSON.stringify({ error: safetyCheck.reason || 'Invalid RSS URL' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   try {
@@ -56,7 +91,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     if (!fetchRes.ok) {
       return new Response(
         JSON.stringify({ error: `Failed to fetch RSS feed: ${fetchRes.statusText}` }),
-        { status: fetchRes.status, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
+        { status: fetchRes.status, headers: { 'Content-Type': 'application/json' } }
       );
     }
 

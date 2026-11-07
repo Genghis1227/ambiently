@@ -16,7 +16,24 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
   if (!shareUrl) {
     return new Response(JSON.stringify({ error: 'Missing "url" query parameter' }), {
       status: 400,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  let parsedShareUrl: URL;
+  try {
+    parsedShareUrl = new URL(shareUrl.trim());
+    const allowedHosts = ['photos.app.goo.gl', 'photos.google.com', 'goo.gl'];
+    if (parsedShareUrl.protocol !== 'https:' || !allowedHosts.includes(parsedShareUrl.hostname.toLowerCase())) {
+      return new Response(JSON.stringify({ error: 'Only official Google Photos HTTPS links are supported.' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  } catch {
+    return new Response(JSON.stringify({ error: 'Invalid Google Photos URL.' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
     });
   }
 

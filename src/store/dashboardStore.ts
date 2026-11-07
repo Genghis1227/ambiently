@@ -20,7 +20,7 @@ import { MAX_CANVASES } from '../types/dashboard';
 import { saveSnapshotToFile, hasActiveLocalFile } from '../services/fileSync';
 import { computeNonOverlappingLayout, findOpenCanvasSpot } from '../utils/autoLayout';
 import type { PhotoItem } from '../services/photos';
-import { getSupabase, getCurrentUser, pushToCloud, pushNotesToJoinedBoard } from '../services/supabase';
+import { getSupabase, getCurrentUser, pushToCloud } from '../services/supabase';
 
 let backupDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 let cloudAutoSyncTimer: ReturnType<typeof setTimeout> | null = null;
@@ -38,19 +38,6 @@ async function scheduleCloudAutoPush(get: () => DashboardState) {
         const state = get();
         await pushToCloud(state.settings, state.tabs, state.widgets, state.notes);
       }, 1200);
-      return;
-    }
-
-    // Unauthenticated family member / kid joined via family invite code
-    const joinedDashboardId = localStorage.getItem('joined_dashboard_id');
-    if (joinedDashboardId) {
-      if (cloudAutoSyncTimer) {
-        clearTimeout(cloudAutoSyncTimer);
-      }
-      cloudAutoSyncTimer = setTimeout(async () => {
-        const state = get();
-        await pushNotesToJoinedBoard(state.notes);
-      }, 800);
     }
   } catch (err) {
     console.warn('Cloud auto-push skipped:', err);

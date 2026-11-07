@@ -24,18 +24,11 @@ import {
   Globe,
   Hourglass,
   Sparkles,
-  Users,
-  KeyRound,
   Cloud,
   Smartphone,
 } from 'lucide-react';
 import type { DashboardTab, DashboardWidget, StickyNoteItem, WidgetThemeMode } from '../../types/dashboard';
-import {
-  getCurrentUser,
-  getJoinedBoardInfo,
-  leaveJoinedBoard,
-  joinBoardByCode,
-} from '../../services/supabase';
+import { getCurrentUser } from '../../services/supabase';
 import { isCanvasThemeLight } from '../../data/canvasThemes';
 import { APP_VERSION } from '../../data/changelog';
 import { ChangelogModal } from '../changelog/ChangelogModal';
@@ -136,19 +129,11 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
   } | null>(null);
   const [isAddWidgetOpen, setIsAddWidgetOpen] = useState(false);
 
-  // Household member & join code status
+  // Authenticated status
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [joinedBoard, setJoinedBoard] = useState<{ dashboardId: string; title: string; code: string } | null>(() =>
-    getJoinedBoardInfo()
-  );
-  const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
-  const [joinCodeInput, setJoinCodeInput] = useState('');
-  const [isJoining, setIsJoining] = useState(false);
-  const [joinError, setJoinError] = useState('');
 
   React.useEffect(() => {
     getCurrentUser().then((u) => setUserEmail(u?.email || null));
-    setJoinedBoard(getJoinedBoardInfo());
   }, []);
 
   const now = new Date();
@@ -480,25 +465,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
                 >
                   v{APP_VERSION}
                 </button>
-                {joinedBoard ? (
-                  <div className="flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-[9px] text-cyan-300 font-medium">
-                    <Users className="w-2.5 h-2.5 text-cyan-400" />
-                    <span className="truncate max-w-[90px]">{joinedBoard.title}</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (confirm('Disconnect from this family board?')) {
-                          leaveJoinedBoard();
-                          window.location.reload();
-                        }
-                      }}
-                      className="ml-0.5 text-gray-400 hover:text-red-400 cursor-pointer"
-                      title="Disconnect from board"
-                    >
-                      <X className="w-2.5 h-2.5" />
-                    </button>
-                  </div>
-                ) : userEmail ? (
+                {userEmail ? (
                   <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                     Synced
                   </span>
@@ -527,7 +494,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         </div>
 
         {/* Unconnected Phone Banner */}
-        {!userEmail && !joinedBoard && (
+        {!userEmail && (
           <div className="p-2.5 mb-2.5 rounded-xl bg-gradient-to-r from-blue-950/50 via-cyan-950/30 to-gray-900 border border-blue-500/30 flex items-center justify-between gap-2.5 shrink-0 shadow-md">
             <div className="min-w-0">
               <div className="text-xs font-bold text-white flex items-center gap-1.5">
@@ -535,25 +502,17 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
                 <span className="truncate">Connect to Your Smart Display</span>
               </div>
               <p className="text-[10px] text-gray-300 truncate mt-0.5">
-                Enter your wall display's 6-digit code or sign in to sync live.
+                Sign in with your verified email to sync live with your display.
               </p>
             </div>
             <div className="flex items-center gap-1 shrink-0">
               <button
                 type="button"
-                onClick={() => setIsJoinModalOpen(true)}
-                className="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-[11px] transition-all flex items-center gap-1 cursor-pointer shadow"
-              >
-                <KeyRound className="w-3 h-3" />
-                <span>Join Code</span>
-              </button>
-              <button
-                type="button"
                 onClick={onOpenSettings}
-                className="px-2 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold text-[11px] transition-all flex items-center gap-1 cursor-pointer"
+                className="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-[11px] transition-all flex items-center gap-1 cursor-pointer shadow"
                 title="Sign in with Cloud Sync"
               >
-                <Cloud className="w-3 h-3 text-cyan-400" />
+                <Cloud className="w-3 h-3" />
                 <span>Sign In</span>
               </button>
             </div>
@@ -1062,76 +1021,6 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
               setIsAddWidgetOpen(false);
             }}
           />
-        )}
-
-        {/* Enter 6-Digit Join Code Modal */}
-        {isJoinModalOpen && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 animate-in fade-in"
-            onClick={() => setIsJoinModalOpen(false)}
-          >
-            <div
-              className="w-full max-w-sm rounded-2xl bg-gray-900 border border-gray-800 p-5 shadow-2xl text-center space-y-4"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm font-bold text-white">
-                  <Users className="w-4 h-4 text-cyan-400" />
-                  <span>Join Family Board</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsJoinModalOpen(false)}
-                  className="p-1 rounded-lg text-gray-400 hover:text-white"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <p className="text-xs text-gray-300 leading-relaxed">
-                Enter the 6-character code shown on your wall display under <strong>Connect Phone (QR Code)</strong>.
-              </p>
-
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  const clean = joinCodeInput.trim().toUpperCase();
-                  if (clean.length < 4) return;
-                  setIsJoining(true);
-                  setJoinError('');
-                  const res = await joinBoardByCode(clean);
-                  setIsJoining(false);
-                  if (res.success) {
-                    setIsJoinModalOpen(false);
-                    window.location.reload();
-                  } else {
-                    setJoinError(res.error || 'Invalid or expired code.');
-                  }
-                }}
-                className="space-y-3"
-              >
-                <input
-                  type="text"
-                  maxLength={8}
-                  value={joinCodeInput}
-                  onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
-                  placeholder="e.g. TRINH7"
-                  className="w-full px-4 py-3 bg-gray-950 border border-cyan-500/50 rounded-xl text-center text-xl font-mono font-bold tracking-widest text-cyan-300 placeholder-gray-600 focus:outline-none focus:border-cyan-400"
-                  autoFocus
-                />
-
-                {joinError && <p className="text-xs text-red-400">{joinError}</p>}
-
-                <button
-                  type="submit"
-                  disabled={isJoining || joinCodeInput.trim().length < 4}
-                  className="w-full py-2.5 bg-cyan-600 hover:bg-cyan-500 active:scale-98 text-xs font-bold text-white rounded-xl shadow transition-all disabled:opacity-50 cursor-pointer"
-                >
-                  {isJoining ? 'Connecting to Board...' : 'Connect to Family Board'}
-                </button>
-              </form>
-            </div>
-          </div>
         )}
       </React.Suspense>
     </>
