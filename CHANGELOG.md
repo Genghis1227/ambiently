@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.4] - 2026-11-06
+
+### Fixed
+* **Night Mode Initialization Race Condition (`src/App.tsx`):**
+  * Prevented uninitialized default settings from overwriting Dexie and syncing to Supabase when a user reloads the app during night schedule hours (between 22:00 and 07:00).
+  * Added `if (!isInitialized || settings.nightScheduleEnabled === false) return;` guard to guarantee local storage settings are loaded first.
+* **Atom RSS Feed Crash (`functions/api/rss.ts`):**
+  * Handled typed Atom title and summary elements (e.g. `<title type="html">` or numeric nodes) parsing as objects by extracting plain text via `textOf()`, fixing HTTP 500 crashes on Atom feeds like The Verge.
+* **Recurring Calendar Event Disappearance & Overrides (`functions/api/ical.ts`):**
+  * Fast-forwarded repeating event calculation using `iterator.fromUnixTime()` to bypass past occurrences up to a 20,000 occurrence cap, preventing daily events older than 10 months from vanishing.
+  * Correctly incorporated recurrence exceptions/rescheduled instances (`RECURRENCE-ID`) and dropped `STATUS:CANCELLED` instances.
+* **Calendar Cache Resilience (`src/services/feeds.ts`):**
+  * Retained previously cached events when a single calendar feed fails or times out, preventing the calendar widget from turning blank during temporary network outages.
+* **Midnight Event Boundary (`src/components/widgets/CalendarWidget.tsx`):**
+  * Fixed midnight-ending events (00:00:00) so they do not spill over and duplicate onto the following day.
+* **Canvas Auto-Rotation & Timer Reset (`src/App.tsx`, `src/store/dashboardStore.ts`):**
+  * Fixed canvas rotation timers resetting every 60 seconds on cloud refresh, applied the user-selected Rotation Interval setting, and introduced `rotateToTab()` to prevent automated switches from activating the 20-second manual interaction pause.
+* **Empty Board Re-Seeding (`src/store/dashboardStore.ts`):**
+  * Fixed store initialization logic so intentionally deleting all widgets or sticky notes leaves the board empty instead of restoring default demo widgets on reload.
+* **Firefox & Safari Local Folder Picker (`src/services/photos.ts`):**
+  * Corrected relative path depth handling so root-level images within picked directories are recognized alongside subdirectories across all browsers.
+
+### Added
+* **Automatic Night Schedule Switch (`src/components/settings/SettingsModal.tsx`, `src/types/dashboard.ts`):**
+  * Added a user setting to enable or disable automatic night schedule dimming.
+  * Preserved manual night mode overrides triggered outside schedule hours until tapped.
+
+---
+
 ## [0.3.3] - 2026-11-06
 
 ### Security

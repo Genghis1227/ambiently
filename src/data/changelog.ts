@@ -11,6 +11,23 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.4",
+    date: "November 6, 2026",
+    title: "Calendar Fast-Forward & Cache Resilience, Atom RSS Fix, Night Mode Schedule Guard & Canvas Polish",
+    highlights: [
+      "Guarded Against Night Mode Settings Wipe: Fixed a critical race condition where loading Ambiently between 22:00 and 07:00 evaluated night mode schedule before IndexedDB loaded, preventing uninitialized default settings from overwriting custom titles, PIN hashes, and photos.",
+      "Automatic Night Schedule Toggle & Manual Hold: Added an Automatic Night Schedule switch in Settings so users can opt out of automatic night dimming, and ensured manual 'Activate Now' actions stay active outside schedule hours until tapped.",
+      "Atom RSS Feed Proxy Fix: Added a robust XML text extractor in functions/api/rss.ts to properly read typed titles (like type=\"html\") and numeric nodes, eliminating HTTP 500 crashes on feeds like The Verge.",
+      "Calendar Recurring Events & 20k Occurrence Cap: Fast-forwards long-running repeating events past ancient occurrences up to a 20,000 occurrence cap so daily recurring events older than 10 months never disappear from the calendar view.",
+      "Recurrence Exceptions & Cancelled Events: Properly applies individual recurrence overrides (rescheduled instances) and suppresses STATUS:CANCELLED events.",
+      "Calendar Cache Resilience: When a calendar feed times out or fails to fetch, existing cached events are preserved rather than overwritten with an empty array.",
+      "Midnight Event Boundary Fix: Events ending precisely at 00:00:00 no longer duplicate onto the following day.",
+      "Canvas Auto-Rotation & Timer Stability: Canvas rotation timer now ignores 60s cloud refresh rebuilds, respects the configured Rotation Interval setting, and no longer triggers the 20s manual pause on automated rotations.",
+      "Preserve Intentionally Empty Boards: Clearing all widgets or permanently deleting all notes now properly leaves the board blank rather than re-seeding default demo items on page refresh.",
+      "Firefox & Safari Local Folder Photos: Corrected relative path depth handling so root-level photos inside picked folders are correctly discovered alongside subdirectories across all browsers.",
+    ],
+  },
+  {
     version: "v0.3.3",
     date: "November 6, 2026",
     title: "Zero-Trust Security Architecture, Verified Household Email Access & Proxy Hardening",
