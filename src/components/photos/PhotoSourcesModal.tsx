@@ -152,7 +152,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   const [photoSections, setPhotoSections] = useState<PlexLibrarySection[]>([]);
   const [selectedSectionKey, setSelectedSectionKey] = useState<string>('');
   const [sectionFolders, setSectionFolders] = useState<PlexFolderItem[]>([]);
-  const [plexFolderMode, setPlexFolderMode] = useState<'all' | 'specific'>('all');
+  const [plexScopeMode, setPlexScopeMode] = useState<'timeline' | 'folders'>('timeline');
   const [selectedPlexFolderKeys, setSelectedPlexFolderKeys] = useState<Set<string>>(new Set());
   const [plexDateFilter, setPlexDateFilter] = useState<'all' | 'last3Years' | 'last5Years' | 'last1Year'>('all');
   const [plexAvailableYears, setPlexAvailableYears] = useState<number[]>([]);
@@ -393,7 +393,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
     setSectionFolders([]);
     setSelectedSectionKey('');
     setSelectedPlexFolderKeys(new Set());
-    setPlexFolderMode('all');
+    setPlexScopeMode('timeline');
     setPlexDateFilter('all');
     setPlexAvailableYears([]);
     setStatusMessage('Plex disconnected.');
@@ -412,8 +412,10 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
 
     let targetFolderKeys: string[] | undefined = undefined;
     let folderLabelSuffix = '';
+    let minYear: number | undefined = undefined;
+    let timeLabelSuffix = '';
 
-    if (plexFolderMode === 'specific') {
+    if (plexScopeMode === 'folders') {
       if (selectedPlexFolderKeys.size === 0) {
         setStatusMessage('Please select at least one folder or album from your Plex library.');
         return;
@@ -425,21 +427,19 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
       } else {
         folderLabelSuffix = ` [${targetFolderKeys.length} Folders]`;
       }
-    }
-
-    const currentYear = new Date().getFullYear();
-    let minYear: number | undefined = undefined;
-    let timeLabelSuffix = '';
-
-    if (plexDateFilter === 'last3Years') {
-      minYear = currentYear - 2;
-      timeLabelSuffix = ` [Last 3 Years: ${minYear}–${currentYear}]`;
-    } else if (plexDateFilter === 'last5Years') {
-      minYear = currentYear - 4;
-      timeLabelSuffix = ` [Last 5 Years: ${minYear}–${currentYear}]`;
-    } else if (plexDateFilter === 'last1Year') {
-      minYear = currentYear - 1;
-      timeLabelSuffix = ` [Past Year: ${minYear}–${currentYear}]`;
+    } else {
+      // Timeline / Date Scope
+      const currentYear = new Date().getFullYear();
+      if (plexDateFilter === 'last3Years') {
+        minYear = currentYear - 2;
+        timeLabelSuffix = ` [Last 3 Years: ${minYear}–${currentYear}]`;
+      } else if (plexDateFilter === 'last5Years') {
+        minYear = currentYear - 4;
+        timeLabelSuffix = ` [Last 5 Years: ${minYear}–${currentYear}]`;
+      } else if (plexDateFilter === 'last1Year') {
+        minYear = currentYear - 1;
+        timeLabelSuffix = ` [Past Year: ${minYear}–${currentYear}]`;
+      }
     }
 
     const sourceLabel = `Plex (${selectedServer.name} - ${sectionTitle}${folderLabelSuffix}${timeLabelSuffix})`;
@@ -1097,94 +1097,15 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                         </select>
                       </div>
 
-                      {/* Capture Date Filter (EXIF / Timeline) */}
-                      <div className="space-y-2 pt-1 border-t border-gray-800/80">
+                      {/* Stream Scope: Timeline (By Date) vs Specific Folders & Albums */}
+                      <div className="space-y-3 pt-2 border-t border-gray-800/80">
                         <div className="flex items-center justify-between">
-                          <label className="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
-                            <Calendar className="w-3.5 h-3.5 text-blue-400" />
-                            <span>Capture Date Filter (EXIF)</span>
-                          </label>
-                          <span className="text-[10px] text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full font-mono">
-                            ⚡ Fast Server-Side Query
-                          </span>
-                        </div>
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-[10px] text-gray-400">
-                          <p>
-                            Filters photos by when they were actually taken using camera EXIF data, independent of folder names or organization.
-                          </p>
-                          {plexAvailableYears.length > 0 && (
-                            <span className="shrink-0 text-blue-300 font-mono bg-blue-950/40 border border-blue-900/40 px-1.5 py-0.5 rounded text-[9px] self-start sm:self-auto">
-                              Library Range: {plexAvailableYears[plexAvailableYears.length - 1]}–{plexAvailableYears[0]}
+                          <label className="text-xs font-semibold text-gray-300">Choose Stream Scope</label>
+                          {plexScopeMode === 'timeline' ? (
+                            <span className="text-[10px] text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full font-mono flex items-center gap-1">
+                              <span>⚡ Fast Server-Side Query</span>
                             </span>
-                          )}
-                        </div>
-
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setPlexDateFilter('all')}
-                            className={`p-2 rounded-xl border text-xs font-medium transition-all cursor-pointer flex flex-col items-center justify-center text-center ${
-                              plexDateFilter === 'all'
-                                ? 'bg-blue-500/20 border-blue-500/50 text-white font-semibold shadow-sm'
-                                : 'bg-gray-950/60 border-gray-800 text-gray-400 hover:border-gray-700'
-                            }`}
-                          >
-                            <span>🌟 All Time</span>
-                            <span className="text-[9px] text-gray-500 mt-0.5">Entire library</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setPlexDateFilter('last3Years')}
-                            className={`p-2 rounded-xl border text-xs font-medium transition-all cursor-pointer flex flex-col items-center justify-center text-center ${
-                              plexDateFilter === 'last3Years'
-                                ? 'bg-blue-500/20 border-blue-500/50 text-white font-semibold shadow-sm'
-                                : 'bg-gray-950/60 border-gray-800 text-gray-400 hover:border-gray-700'
-                            }`}
-                          >
-                            <span>📅 Last 3 Years</span>
-                            <span className="text-[9px] text-gray-500 mt-0.5">
-                              {new Date().getFullYear() - 2}–{new Date().getFullYear()}
-                            </span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setPlexDateFilter('last5Years')}
-                            className={`p-2 rounded-xl border text-xs font-medium transition-all cursor-pointer flex flex-col items-center justify-center text-center ${
-                              plexDateFilter === 'last5Years'
-                                ? 'bg-blue-500/20 border-blue-500/50 text-white font-semibold shadow-sm'
-                                : 'bg-gray-950/60 border-gray-800 text-gray-400 hover:border-gray-700'
-                            }`}
-                          >
-                            <span>📅 Last 5 Years</span>
-                            <span className="text-[9px] text-gray-500 mt-0.5">
-                              {new Date().getFullYear() - 4}–{new Date().getFullYear()}
-                            </span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setPlexDateFilter('last1Year')}
-                            className={`p-2 rounded-xl border text-xs font-medium transition-all cursor-pointer flex flex-col items-center justify-center text-center ${
-                              plexDateFilter === 'last1Year'
-                                ? 'bg-blue-500/20 border-blue-500/50 text-white font-semibold shadow-sm'
-                                : 'bg-gray-950/60 border-gray-800 text-gray-400 hover:border-gray-700'
-                            }`}
-                          >
-                            <span>📅 Past Year</span>
-                            <span className="text-[9px] text-gray-500 mt-0.5">
-                              {new Date().getFullYear() - 1}–{new Date().getFullYear()}
-                            </span>
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Folder Scope Picker: Entire Library vs Specific Folders */}
-                      <div className="space-y-2 pt-1 border-t border-gray-800/80">
-                        <div className="flex items-center justify-between">
-                          <label className="text-xs font-semibold text-gray-300">Folder Scope</label>
-                          {isFoldersLoading ? (
+                          ) : isFoldersLoading ? (
                             <span className="text-[10px] text-gray-400 flex items-center gap-1">
                               <RefreshCw className="w-2.5 h-2.5 animate-spin text-blue-400" />
                               <span>Scanning folders...</span>
@@ -1196,58 +1117,135 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                           )}
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2">
+                        {/* Top-Level Scope Switcher Cards */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <button
                             type="button"
-                            onClick={() => setPlexFolderMode('all')}
-                            className={`p-2.5 rounded-xl border text-left text-xs transition-all cursor-pointer ${
-                              plexFolderMode === 'all'
-                                ? 'bg-blue-500/15 border-blue-500/40 text-white shadow-sm'
+                            onClick={() => setPlexScopeMode('timeline')}
+                            className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                              plexScopeMode === 'timeline'
+                                ? 'bg-blue-500/15 border-blue-500/50 text-white shadow-sm ring-1 ring-blue-500/30'
                                 : 'bg-gray-950/60 border-gray-800 text-gray-400 hover:border-gray-700'
                             }`}
                           >
-                            <div className="flex items-center gap-2 font-semibold">
+                            <div className="flex items-center gap-2 font-semibold text-xs">
                               <div
                                 className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
-                                  plexFolderMode === 'all' ? 'border-blue-400 bg-blue-500' : 'border-gray-600'
+                                  plexScopeMode === 'timeline' ? 'border-blue-400 bg-blue-500' : 'border-gray-600'
                                 }`}
                               >
-                                {plexFolderMode === 'all' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                                {plexScopeMode === 'timeline' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                               </div>
-                              <span>Entire Library</span>
+                              <Calendar className={`w-4 h-4 ${plexScopeMode === 'timeline' ? 'text-blue-400' : 'text-gray-500'}`} />
+                              <span>Capture Date &amp; Timeline</span>
                             </div>
-                            <p className="text-[10px] text-gray-400 mt-1 pl-5.5">
-                              Recursively streams all folders &amp; albums in this section
+                            <p className="text-[10px] text-gray-400 mt-1 pl-5.5 leading-relaxed">
+                              Stream entire library by when photos were actually taken (e.g. recent memories or all time)
                             </p>
                           </button>
 
                           <button
                             type="button"
-                            onClick={() => setPlexFolderMode('specific')}
-                            className={`p-2.5 rounded-xl border text-left text-xs transition-all cursor-pointer ${
-                              plexFolderMode === 'specific'
-                                ? 'bg-blue-500/15 border-blue-500/40 text-white shadow-sm'
+                            onClick={() => setPlexScopeMode('folders')}
+                            className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                              plexScopeMode === 'folders'
+                                ? 'bg-blue-500/15 border-blue-500/50 text-white shadow-sm ring-1 ring-blue-500/30'
                                 : 'bg-gray-950/60 border-gray-800 text-gray-400 hover:border-gray-700'
                             }`}
                           >
-                            <div className="flex items-center gap-2 font-semibold">
+                            <div className="flex items-center gap-2 font-semibold text-xs">
                               <div
                                 className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
-                                  plexFolderMode === 'specific' ? 'border-blue-400 bg-blue-500' : 'border-gray-600'
+                                  plexScopeMode === 'folders' ? 'border-blue-400 bg-blue-500' : 'border-gray-600'
                                 }`}
                               >
-                                {plexFolderMode === 'specific' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                                {plexScopeMode === 'folders' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                               </div>
-                              <span>Select Folders</span>
+                              <FolderOpen className={`w-4 h-4 ${plexScopeMode === 'folders' ? 'text-blue-400' : 'text-gray-500'}`} />
+                              <span>Specific Folders &amp; Albums</span>
                             </div>
-                            <p className="text-[10px] text-gray-400 mt-1 pl-5.5">
-                              Pick specific subfolders (e.g. 2023 + 2024 + Vacations)
+                            <p className="text-[10px] text-gray-400 mt-1 pl-5.5 leading-relaxed">
+                              Pick specific disk folders or personal albums (e.g. Vacations, Favorites, Wallpapers)
                             </p>
                           </button>
                         </div>
 
-                        {/* Multi-Folder Checklist (when Specific Mode is chosen) */}
-                        {plexFolderMode === 'specific' && (
+                        {/* Mode 1: Timeline Presets */}
+                        {plexScopeMode === 'timeline' && (
+                          <div className="p-3 rounded-xl bg-gray-950/80 border border-gray-800 space-y-2.5 animate-fadeIn">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-[10px] text-gray-400">
+                              <span>Queries Plex EXIF capture dates directly without scanning folders:</span>
+                              {plexAvailableYears.length > 0 && (
+                                <span className="shrink-0 text-blue-300 font-mono bg-blue-950/40 border border-blue-900/40 px-1.5 py-0.5 rounded text-[9px] self-start sm:self-auto">
+                                  Available Range: {plexAvailableYears[plexAvailableYears.length - 1]}–{plexAvailableYears[0]}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setPlexDateFilter('all')}
+                                className={`p-2 rounded-xl border text-xs font-medium transition-all cursor-pointer flex flex-col items-center justify-center text-center ${
+                                  plexDateFilter === 'all'
+                                    ? 'bg-blue-500/20 border-blue-500/50 text-white font-semibold shadow-sm'
+                                    : 'bg-gray-900/60 border-gray-800 text-gray-400 hover:border-gray-700'
+                                }`}
+                              >
+                                <span>🌟 All Time</span>
+                                <span className="text-[9px] text-gray-500 mt-0.5">Entire library</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setPlexDateFilter('last3Years')}
+                                className={`p-2 rounded-xl border text-xs font-medium transition-all cursor-pointer flex flex-col items-center justify-center text-center ${
+                                  plexDateFilter === 'last3Years'
+                                    ? 'bg-blue-500/20 border-blue-500/50 text-white font-semibold shadow-sm'
+                                    : 'bg-gray-900/60 border-gray-800 text-gray-400 hover:border-gray-700'
+                                }`}
+                              >
+                                <span>📅 Last 3 Years</span>
+                                <span className="text-[9px] text-gray-500 mt-0.5">
+                                  {new Date().getFullYear() - 2}–{new Date().getFullYear()}
+                                </span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setPlexDateFilter('last5Years')}
+                                className={`p-2 rounded-xl border text-xs font-medium transition-all cursor-pointer flex flex-col items-center justify-center text-center ${
+                                  plexDateFilter === 'last5Years'
+                                    ? 'bg-blue-500/20 border-blue-500/50 text-white font-semibold shadow-sm'
+                                    : 'bg-gray-900/60 border-gray-800 text-gray-400 hover:border-gray-700'
+                                }`}
+                              >
+                                <span>📅 Last 5 Years</span>
+                                <span className="text-[9px] text-gray-500 mt-0.5">
+                                  {new Date().getFullYear() - 4}–{new Date().getFullYear()}
+                                </span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setPlexDateFilter('last1Year')}
+                                className={`p-2 rounded-xl border text-xs font-medium transition-all cursor-pointer flex flex-col items-center justify-center text-center ${
+                                  plexDateFilter === 'last1Year'
+                                    ? 'bg-blue-500/20 border-blue-500/50 text-white font-semibold shadow-sm'
+                                    : 'bg-gray-900/60 border-gray-800 text-gray-400 hover:border-gray-700'
+                                }`}
+                              >
+                                <span>📅 Past Year</span>
+                                <span className="text-[9px] text-gray-500 mt-0.5">
+                                  {new Date().getFullYear() - 1}–{new Date().getFullYear()}
+                                </span>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Mode 2: Multi-Folder Checklist */}
+                        {plexScopeMode === 'folders' && (
                           <div className="p-3 rounded-xl bg-gray-950/80 border border-gray-800 space-y-2.5 animate-fadeIn">
                             <div className="flex items-center justify-between text-xs">
                               <span className="font-semibold text-gray-300">Choose Folders &amp; Albums</span>
@@ -1395,7 +1393,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                     disabled={
                       plexLoading ||
                       photoSections.length === 0 ||
-                      (plexFolderMode === 'specific' && selectedPlexFolderKeys.size === 0)
+                      (plexScopeMode === 'folders' && selectedPlexFolderKeys.size === 0)
                     }
                     className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-xs shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
                   >
@@ -1408,27 +1406,17 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                       <>
                         <ImageIcon className="w-4 h-4" />
                         <span>
-                          {plexFolderMode === 'specific' && selectedPlexFolderKeys.size > 0
+                          {plexScopeMode === 'folders'
                             ? `Stream from ${selectedPlexFolderKeys.size} Selected Folder${
                                 selectedPlexFolderKeys.size !== 1 ? 's' : ''
-                              }${
-                                plexDateFilter === 'last3Years'
-                                  ? ' (Last 3 Years)'
-                                  : plexDateFilter === 'last5Years'
-                                  ? ' (Last 5 Years)'
-                                  : plexDateFilter === 'last1Year'
-                                  ? ' (Past Year)'
-                                  : ''
                               }`
-                            : `Stream from Selected Library${
-                                plexDateFilter === 'last3Years'
-                                  ? ' (Last 3 Years)'
-                                  : plexDateFilter === 'last5Years'
-                                  ? ' (Last 5 Years)'
-                                  : plexDateFilter === 'last1Year'
-                                  ? ' (Past Year)'
-                                  : ''
-                              }`}
+                            : plexDateFilter === 'last3Years'
+                            ? 'Stream Memories (Last 3 Years)'
+                            : plexDateFilter === 'last5Years'
+                            ? 'Stream Memories (Last 5 Years)'
+                            : plexDateFilter === 'last1Year'
+                            ? 'Stream Memories (Past Year)'
+                            : 'Stream Entire Library (All Time)'}
                         </span>
                       </>
                     )}
