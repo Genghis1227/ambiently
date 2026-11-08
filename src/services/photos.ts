@@ -53,6 +53,7 @@ export const CURATED_AMBIENT_PHOTOS: PhotoItem[] = ALL_CURATED_PHOTOS;
 
 // Offline Photo Cache via Cache Storage API (preserves last 30-50 photos offline)
 const CACHE_NAME = 'ambiently-photo-cache-v1';
+const MAX_CACHE_ENTRIES = 50;
 const IMAGE_EXT_REGEX = /\.(jpe?g|png|webp|avif|gif|bmp|heic|heif)$/i;
 
 export async function cachePhotosLocally(photos: PhotoItem[]): Promise<void> {
@@ -73,6 +74,13 @@ export async function cachePhotosLocally(photos: PhotoItem[]): Promise<void> {
           .then((res) => cache.put(url, res))
           .catch(() => {});
       }
+    }
+
+    // Prune oldest cache entries if total items exceed MAX_CACHE_ENTRIES
+    const keys = await cache.keys();
+    if (keys.length > MAX_CACHE_ENTRIES) {
+      const keysToDelete = keys.slice(0, keys.length - MAX_CACHE_ENTRIES);
+      await Promise.all(keysToDelete.map((req) => cache.delete(req)));
     }
   } catch (err) {
     console.warn('Cache API error:', err);

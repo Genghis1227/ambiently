@@ -66,7 +66,10 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({
 
   useEffect(() => {
     loadWeather();
-    const interval = setInterval(loadWeather, 15 * 60 * 1000);
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      loadWeather();
+    }, 15 * 60 * 1000);
     return () => clearInterval(interval);
   }, [latitude, longitude, locationName, unit]);
 

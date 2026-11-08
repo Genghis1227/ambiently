@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.22] - 2026-11-07
+
+### Added
+* **Automatic Tombstone Garbage Collection (`src/services/db.ts`, `src/services/supabase.ts`, `src/store/dashboardStore.ts`):**
+  * Added `purgeOldTombstones(30)` to permanently purge soft-deleted tabs, widgets, and notes older than 30 days from local IndexedDB on startup.
+  * Added non-blocking automatic deletion of 30-day-old soft-deleted rows in Supabase Cloud during sync, preventing database bloat.
+* **Photo Cache Storage LRU Cap (`src/services/photos.ts`):**
+  * Capped offline `CacheStorage` (`ambiently-photo-cache-v1`) to 50 items with automatic eviction of oldest requests, preventing unbounded disk cache growth.
+* **Photo Focal Point Memory Cap (`src/components/widgets/PhotoFrameWidget.tsx`):**
+  * Implemented bounded LRU caching for detected facial and focal point coordinates (`MAX_FOCAL_CACHE_ENTRIES = 250`), keeping memory strictly flat on 24/7 displays.
+
+### Performance
+* **Visibility-Aware Sleeping & Timer Optimization (`src/App.tsx`, `src/components/widgets/*`):**
+  * Increased night mode schedule check interval from 5 seconds to 30 seconds, eliminating 83% of schedule interrupts.
+  * Paused clock tick intervals in `ClockWidget` and `ClockWeatherWidget` when the display or tab is hidden, resuming immediately on screen wake. Reduced tick frequency when seconds are not displayed.
+  * Paused background polling in `WeatherWidget`, `ClockWeatherWidget`, `RssWidget`, `CalendarWidget`, and `QuotesWidget` when the document is hidden.
+* **Desktop Bundle Code-Splitting (`src/App.tsx`):**
+  * Code-split `MobileCompanion` into an on-demand chunk, shaving ~20 KB off the initial bundle for wall displays and desktop screens.
+
+---
+
 ## [0.3.21] - 2026-11-07
 
 ### Added

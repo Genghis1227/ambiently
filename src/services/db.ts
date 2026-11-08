@@ -148,3 +148,49 @@ export const DEFAULT_NOTES: StickyNoteItem[] = [
     updated_at: '1970-01-01T00:00:00.000Z',
   },
 ];
+
+/**
+ * Permanently purges soft-deleted records older than 30 days from local IndexedDB
+ * to keep memory and disk footprint lean over time.
+ */
+export async function purgeOldTombstones(retentionDays = 30): Promise<{ tabs: number; widgets: number; notes: number }> {
+  const threshold = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+  let tabsCount = 0;
+  let widgetsCount = 0;
+  let notesCount = 0;
+
+  try {
+    const [allTabs, allWidgets, allNotes] = await Promise.all([
+      db.tabs.toArray(),
+      db.widgets.toArray(),
+      db.notes.toArray(),
+    ]);
+
+    const expiredTabIds = allTabs
+      .filter((t) => t.deleted_at && new Date(t.deleted_at).getTime() < threshold)
+      .map((t) => t.id);
+    const expiredWidgetIds = allWidgets
+      .filter((w) => w.deleted_at && new Date(w.deleted_at).getTime() < threshold)
+      .map((w) => w.id);
+    const expiredNoteIds = allNotes
+      .filter((n) => n.deleted_at && new Date(n.deleted_at).getTime() < threshold)
+      .map((n) => n.id);
+
+    if (expiredTabIds.length > 0) {
+      await db.tabs.bulkDelete(expiredTabIds);
+      tabsCount = expiredTabIds.length;
+    }
+    if (expiredWidgetIds.length > 0) {
+      await db.widgets.bulkDelete(expiredWidgetIds);
+      widgetsCount = expiredWidgetIds.length;
+    }
+    if (expiredNoteIds.length > 0) {
+      await db.notes.bulkDelete(expiredNoteIds);
+      notesCount = expiredNoteIds.length;
+    }
+  } catch (err) {
+    console.warn('Tombstone cleanup failed:', err);
+  }
+
+  return { tabs: tabsCount, widgets: widgetsCount, notes: notesCount };
+}

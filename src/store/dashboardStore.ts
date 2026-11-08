@@ -5,6 +5,7 @@ import {
   DEFAULT_TABS,
   DEFAULT_WIDGETS,
   DEFAULT_NOTES,
+  purgeOldTombstones,
 } from '../services/db';
 import type {
   DashboardTab,
@@ -219,6 +220,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   photoSyncState: null,
 
   initStore: async () => {
+    // Non-blocking cleanup of soft-deleted records older than 30 days
+    purgeOldTombstones().catch(() => {});
+
     // Load from Dexie or seed fresh database
     const settingsCount = await db.settings.count();
     if (settingsCount === 0) {

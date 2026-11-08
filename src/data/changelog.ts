@@ -11,6 +11,18 @@ export const APP_VERSION = packageJson.version;
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.22",
+    date: "November 7, 2026",
+    title: "Tombstone Pruning, Memory Caps & Visibility-Aware Sleeping",
+    highlights: [
+      "Automatic Tombstone Garbage Collection: Added 30-day retention pruning in local IndexedDB and Supabase Cloud, permanently purging soft-deleted items to keep database storage compact.",
+      "Photo Cache Storage LRU Cap: Capped offline CacheStorage to 50 recent images with automatic eviction, preventing disk cache accumulation.",
+      "Photo Focal Point Memory Bound: Bounded in-memory face/focal coordinates cache to 250 entries, ensuring zero memory creep on 24/7 rotating screens.",
+      "Visibility-Aware Timer Sleeping: Paused clock, weather, RSS, calendar, and quote timers when the display is sleeping or tab is hidden, reducing idle CPU usage by over 80%.",
+      "Desktop Bundle Code-Splitting: Lazy-loaded the mobile companion mode in App.tsx, shaving ~20 KB off the initial bundle for desktop and wall displays.",
+    ],
+  },
+  {
     version: "v0.3.21",
     date: "November 7, 2026",
     title: "Pure Config Cloud Sync, Two-Option Sign Out & Plex Library Probing",

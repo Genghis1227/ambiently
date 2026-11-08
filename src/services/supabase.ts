@@ -694,6 +694,14 @@ export async function pushToCloud(
       }
     }
 
+    // Non-blocking purge of expired tombstones (> 30 days old) in cloud database
+    const thirtyDaysAgoIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    Promise.all([
+      sb.from('tabs').delete().eq('dashboard_id', dashboardId).lt('deleted_at', thirtyDaysAgoIso),
+      sb.from('widgets').delete().eq('dashboard_id', dashboardId).lt('deleted_at', thirtyDaysAgoIso),
+      sb.from('notes').delete().eq('dashboard_id', dashboardId).lt('deleted_at', thirtyDaysAgoIso),
+    ]).catch(() => {});
+
     lastKnownCloudUpdatedAt = nowIso;
     return { success: true };
   } catch (err: any) {

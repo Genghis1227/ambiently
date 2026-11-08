@@ -117,7 +117,10 @@ export const RssWidget: React.FC<RssWidgetProps> = ({
 
   useEffect(() => {
     loadFeed();
-    const interval = setInterval(loadFeed, 15 * 60 * 1000);
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      loadFeed();
+    }, 15 * 60 * 1000);
     return () => clearInterval(interval);
   }, [feedUrl]);
 
