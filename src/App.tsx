@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, lazy, Suspense } from 'react';
-import { Lock } from 'lucide-react';
+import { ShieldAlert, Maximize2, KeyRound } from 'lucide-react';
 import { useDashboardStore } from './store/dashboardStore';
 import { NavigationDock } from './components/dock/NavigationDock';
 import { Corkboard } from './components/layout/Corkboard';
@@ -56,7 +56,9 @@ export function App() {
     notes,
     setActiveTabId,
     rotateToTab,
+    isUnlocked,
     unlockKiosk,
+    lockKiosk,
     isCarouselPaused,
     pauseCarouselTemporarily,
     toggleNightModeManual,
@@ -239,15 +241,15 @@ export function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Granular kiosk & protection controls (active only when PIN protection is configured)
-  const isFullscreenKioskLocked = Boolean(settings.pinLockEnabled && settings.lockFullscreenKiosk !== false);
-  const isSettingsLocked = Boolean(settings.pinLockEnabled && settings.lockSettingsAccess !== false);
-  const isCanvasLocked = Boolean(settings.pinLockEnabled && settings.lockCanvasEditing);
+  // Granular kiosk & protection controls (active only when PIN protection is configured and kiosk is not unlocked)
+  const isFullscreenKioskLocked = Boolean(settings.pinLockEnabled && settings.lockFullscreenKiosk !== false && !isUnlocked);
+  const isSettingsLocked = Boolean(settings.pinLockEnabled && settings.lockSettingsAccess !== false && !isUnlocked);
+  const isCanvasLocked = Boolean(settings.pinLockEnabled && settings.lockCanvasEditing && !isUnlocked);
 
   // Keyboard shortcuts:
   // '\' (backslash) to toggle toolbar visibility
   // '1'-'9' and '0' (for 10) to switch between canvases
-  // Escape to prompt PIN if in fullscreen and kiosk fullscreen lock is enabled
+  // Escape or F11 to prompt PIN if kiosk fullscreen lock is enabled
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -260,7 +262,7 @@ export function App() {
         return;
       }
 
-      if (e.key === 'Escape' && isFullscreenKioskLocked && document.fullscreenElement) {
+      if ((e.key === 'Escape' || e.key === 'F11') && isFullscreenKioskLocked) {
         e.preventDefault();
         setPinChallenge({
           action: 'exit_fullscreen',
@@ -300,8 +302,14 @@ export function App() {
       const isNowFullscreen = Boolean(document.fullscreenElement);
       setIsFullscreen(isNowFullscreen);
 
-      if (isNowFullscreen && 'keyboard' in navigator && (navigator as any).keyboard?.lock) {
-        (navigator as any).keyboard.lock(['Escape']).catch(() => {});
+      if (isNowFullscreen) {
+        // Re-lock kiosk security as soon as display returns to fullscreen
+        if (settings.pinLockEnabled) {
+          lockKiosk();
+        }
+        if ('keyboard' in navigator && (navigator as any).keyboard?.lock) {
+          (navigator as any).keyboard.lock(['Escape', 'F11']).catch(() => {});
+        }
       } else if (!isNowFullscreen && 'keyboard' in navigator && (navigator as any).keyboard?.unlock) {
         (navigator as any).keyboard.unlock();
       }
@@ -309,7 +317,21 @@ export function App() {
 
     document.addEventListener('fullscreenchange', onFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
-  }, []);
+  }, [settings.pinLockEnabled, lockKiosk]);
+
+  // Prevent accidental window closure or taskbar exit when kiosk mode is locked
+  useEffect(() => {
+    if (!isFullscreenKioskLocked) return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isFullscreenKioskLocked]);
 
   // Prevent context menu (right click / long press) when kiosk fullscreen lock is enabled to prevent kids accessing browser menu
   useEffect(() => {
@@ -325,7 +347,11 @@ export function App() {
   useEffect(() => {
     if (!isFullscreenKioskLocked) return;
 
-    const handlePointerDown = () => {
+    const handlePointerDown = (e: PointerEvent) => {
+      // Don't auto-fullscreen if interacting with dialog or modal inputs
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('[role="dialog"], input, button')) return;
+
       if (!document.fullscreenElement && !pinChallenge && !isSettingsOpen) {
         document.documentElement.requestFullscreen().catch(() => {});
       }
@@ -787,16 +813,61 @@ export function App() {
         </Suspense>
       )}
 
-      {/* Kiosk Fullscreen Warning Banner when kiosk lock is enabled but not in fullscreen */}
+      {/* Full-Viewport Kiosk Blocker Curtain when Kid Lock is active but screen dropped out of fullscreen */}
       {isFullscreenKioskLocked && !isFullscreen && !pinChallenge && (
         <div
           onClick={() => {
             document.documentElement.requestFullscreen().catch(() => {});
           }}
-          className="fixed top-3 left-1/2 -translate-x-1/2 z-[70] px-4 py-2 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-200 text-xs font-semibold shadow-2xl backdrop-blur-md flex items-center gap-2 cursor-pointer animate-pulse"
+          className="fixed inset-0 z-[9990] bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-6 text-center select-none cursor-pointer"
         >
-          <Lock className="w-4 h-4 text-amber-400 shrink-0" />
-          <span>Kid Lock Active • Tap anywhere to return to Fullscreen</span>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md p-6 rounded-3xl bg-gray-900/90 border border-amber-500/40 shadow-2xl shadow-amber-950/50 flex flex-col items-center text-white space-y-4 animate-in fade-in zoom-in-95 duration-200"
+          >
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center shadow-lg shadow-amber-500/20">
+              <ShieldAlert className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-1">
+              <h2 className="text-xl font-bold tracking-tight text-white">Kiosk Mode Protected</h2>
+              <p className="text-xs text-gray-400 leading-relaxed max-w-sm">
+                This display is locked in kiosk mode to prevent closing or leaving the dashboard.
+              </p>
+            </div>
+
+            <div className="w-full space-y-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  document.documentElement.requestFullscreen().catch(() => {});
+                }}
+                className="w-full py-3.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-bold text-sm shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <Maximize2 className="w-4 h-4" />
+                <span>Return to Fullscreen Display</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPinChallenge({
+                    action: 'exit_fullscreen',
+                    title: 'Unlock Windowed Mode',
+                    subtitle: 'Enter parent PIN to allow windowed mode',
+                  });
+                }}
+                className="w-full py-2.5 px-4 rounded-xl bg-gray-800 hover:bg-gray-700 active:scale-95 text-gray-300 hover:text-white font-semibold text-xs border border-gray-700 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                <span>Enter Parent PIN to Unlock</span>
+              </button>
+            </div>
+
+            <p className="text-[11px] text-gray-500 pt-1">
+              Tap anywhere outside this card to immediately resume fullscreen.
+            </p>
+          </div>
         </div>
       )}
 
