@@ -480,8 +480,9 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
       loadEvents(false, false);
     }
 
-    // Recommended refresh frequency: 15-minute background polling
+    // Recommended refresh frequency: 15-minute background polling (pauses when tab is hidden)
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       loadEvents(true, true);
     }, 15 * 60 * 1000);
 

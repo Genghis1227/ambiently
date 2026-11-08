@@ -144,8 +144,17 @@ interface PhotoWidgetRuntimeState {
   scatteredPolaroids?: ActivePolaroidItem[];
 }
 
+const MAX_FOCAL_CACHE_ENTRIES = 250;
 const photoRuntimeCache = new Map<string, PhotoWidgetRuntimeState>();
 const photoFocalCache = new Map<string, string>();
+
+function setCachedPhotoFocal(photoId: string, focalPos: string): void {
+  if (photoFocalCache.size >= MAX_FOCAL_CACHE_ENTRIES) {
+    const oldestKey = photoFocalCache.keys().next().value;
+    if (oldestKey) photoFocalCache.delete(oldestKey);
+  }
+  photoFocalCache.set(photoId, focalPos);
+}
 
 function getPhotosSignature(items: PhotoItem[]): string {
   if (!items || items.length === 0) return 'empty';
@@ -684,7 +693,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     const defaultFocalPos = isPortrait ? 'center 25%' : 'center center';
 
     const applyFocal = (pos: string) => {
-      photoFocalCache.set(photoId, pos);
+      setCachedPhotoFocal(photoId, pos);
       setPhotoFocals((prev) => ({ ...prev, [photoId]: pos }));
     };
 

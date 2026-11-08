@@ -5,7 +5,6 @@ import { NavigationDock } from './components/dock/NavigationDock';
 import { Corkboard } from './components/layout/Corkboard';
 import { PinOverlay } from './components/kiosk/PinOverlay';
 import { NightMode } from './components/kiosk/NightMode';
-import { MobileCompanion } from './components/mobile/MobileCompanion';
 import { openLocalFileBinding, useFileSync, checkFileBindingStatus } from './services/fileSync';
 import {
   subscribeToRealtimeBoard,
@@ -37,6 +36,9 @@ const CreateCanvasModal = lazy(() =>
 );
 const PhotoSourcesModal = lazy(() =>
   import('./components/photos/PhotoSourcesModal').then((m) => ({ default: m.PhotoSourcesModal }))
+);
+const MobileCompanion = lazy(() =>
+  import('./components/mobile/MobileCompanion').then((m) => ({ default: m.MobileCompanion }))
 );
 
 export function App() {
@@ -514,7 +516,7 @@ export function App() {
     };
 
     checkSchedule();
-    const timer = setInterval(checkSchedule, 5000);
+    const timer = setInterval(checkSchedule, 30000);
     return () => clearInterval(timer);
   }, [
     isInitialized,
@@ -569,7 +571,8 @@ export function App() {
   if (isMobileViewport && !forceDesktopMode) {
     return (
       <>
-        <MobileCompanion
+        <Suspense fallback={null}>
+          <MobileCompanion
           tabs={visibleTabs}
           activeTabId={activeTabIdResolved}
           notes={notes}
@@ -584,6 +587,7 @@ export function App() {
           onToggleDesktopView={() => setForceDesktopMode(true)}
           onOpenSettings={handleOpenSettings}
         />
+      </Suspense>
         {isSettingsOpen && (
           <Suspense fallback={null}>
             <SettingsModal
