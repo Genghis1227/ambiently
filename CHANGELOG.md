@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.28] - 2026-11-08
+
+### Security & Kiosk Lockdown
+* **Full-Viewport Kiosk Blocker Curtain (`src/App.tsx`):**
+  * Replaced the small top warning banner with a full-viewport modal barrier (`fixed inset-0 z-[9990] bg-black/95 backdrop-blur-2xl`) whenever fullscreen drops while Kid Lock is active.
+  * Tapping anywhere outside the card or tapping the primary button immediately forces the browser back into full-screen display.
+* **Parent PIN Challenge for Windowed Mode (`src/App.tsx`):**
+  * Added an **"Enter Parent PIN to Unlock"** button on the blocker card. Entering the parent PIN sets `isUnlocked`, allowing parents to legitimately work in windowed mode or access settings.
+  * Security automatically re-arms with `lockKiosk()` the moment the display returns to full-screen.
+* **Keyboard Lock & Keydown Interception (`src/App.tsx`):**
+  * Activated Chromium Keyboard Lock API on both `Escape` and `F11`.
+  * Added global keydown interception for `Escape` and `F11` to challenge with the PIN overlay before the window can exit fullscreen.
+* **Window Closure Prevention (`src/App.tsx`):**
+  * Added a `beforeunload` listener while kiosk fullscreen lock is active to guard against accidental or unauthorized closing of the window/tab from the OS taskbar.
+
+---
+
 ## [0.3.27] - 2026-11-08
 
 ### Security
