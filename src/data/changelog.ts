@@ -11,6 +11,19 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.27",
+    date: "November 8, 2026",
+    title: "PIN Security Hardening, Offline PWA Caching & Cloud Sync Leak Fixes",
+    highlights: [
+      "Protected Sharing & Plex Reauth: Enforced PIN authentication on the dock's 'Connect Phone' QR shortcut and the Plex reauth prompt, preventing unauthorized member invitations.",
+      "Secure Email OTP PIN Reset: Replaced the 4-second hold bypass with a secure 6-digit email OTP reset ('Forgot PIN?') sent only to the authenticated owner's email.",
+      "Cross-Board Isolation: Local boards are now tracked by ID (ambiently_local_board), ensuring accepted invitations or account switches never leak private local notes into shared boards.",
+      "Offline PWA Caching Fix: Fixed service worker asset precaching so all compiled scripts and styles are cached offline, eliminating blank screens on offline boot.",
+      "Preserved Canvas Wallpapers & Photos: Ensured incoming Realtime updates and settings merges retain local photo frame collections and canvas themes.",
+      "Optimized Polling & Statement Touch Triggers: Normalised cloud timestamps to prevent redundant full-table re-downloads, and updated touch triggers to execute once per statement.",
+    ],
+  },
+  {
     version: "v0.3.26",
     date: "November 8, 2026",
     title: "Edge SSRF Hardening, Security Headers & Zero-IO Board Limit Triggers",

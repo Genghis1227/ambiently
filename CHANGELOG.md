@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.27] - 2026-11-08
+
+### Security
+* **Protected Phone Pairing & Plex Reauth (`src/App.tsx`, `src/components/dock/AmbientQuickMenu.tsx`):**
+  * Enforced PIN challenge before opening the "Connect Phone (QR Code)" household sharing screen and Plex reauthentication dialog when PIN protection is active.
+* **Email OTP PIN Reset (`src/components/kiosk/PinOverlay.tsx`):**
+  * Removed the 4-second hold bypass button. Added **"Forgot PIN?"** with a secure 6-digit email OTP reset flow delivered to the authenticated account's email via `signInWithOtp`.
+* **Cross-Board Data Isolation (`src/services/supabase.ts`, `src/store/dashboardStore.ts`):**
+  * Tracked the board owner's ID in `ambiently_local_board`. When accepting an invite or switching accounts, the device replaces its local board rather than merging private notes into the shared board.
+
+### Bug Fixes
+* **PWA Offline Boot Caching (`vite.config.ts`):**
+  * Fixed glob pattern in `vite-plugin-pwa` so compiled application scripts and stylesheets are properly precached in the service worker, eliminating offline blank screens.
+* **Preserved Canvas Themes & Photo Lists in Realtime (`src/services/syncMerge.ts`, `src/services/supabase.ts`):**
+  * Ensured canvas appearance changes mark settings dirty and incoming Realtime updates preserve local photo frame lists and canvas wallpapers.
+* **Concurrent Settings Resolution (`src/services/supabase.ts`):**
+  * Tracked `settings_updated_at` to prevent concurrent board edits from overwriting each other's settings.
+
+### Performance & Database
+* **Eliminated Redundant Full-Board Re-downloads (`src/services/supabase.ts`):**
+  * Normalized stored timestamp comparisons to prevent false-positive revisions on polling.
+  * Stopped unconditional board downloads on periodic token refresh events.
+* **Statement-Level Touch Triggers (`supabase/migrations/20261109_touch_board_once_per_save.sql`, `supabase/schema.sql`):**
+  * Converted the board `updated_at` touch trigger to fire once per statement rather than once per row, reducing database block reads by ~30%.
+
+---
+
 ## [0.3.26] - 2026-11-08
 
 ### Security & Hardening
