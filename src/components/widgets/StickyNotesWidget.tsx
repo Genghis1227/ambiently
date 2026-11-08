@@ -7,6 +7,7 @@ import {
   Clock,
   Archive,
   Pin,
+  Copy,
   X,
 } from 'lucide-react';
 import type { StickyNoteItem } from '../../types/dashboard';
@@ -113,6 +114,45 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
       item.id === itemId ? { ...item, done: !item.done } : item
     );
     onUpdateNote(note.id, { checklistItems: updated });
+  };
+
+  const handleDuplicateTileNote = (note: StickyNoteItem) => {
+    let nextExpiresAt = note.expiresAt;
+    if (note.expiresAt) {
+      try {
+        const d = new Date(note.expiresAt);
+        if (!Number.isNaN(d.getTime())) {
+          if (d.getTime() < Date.now()) {
+            const todayBase = new Date();
+            todayBase.setHours(d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds());
+            todayBase.setDate(todayBase.getDate() + 1);
+            nextExpiresAt = todayBase.toISOString();
+          } else {
+            d.setDate(d.getDate() + 1);
+            nextExpiresAt = d.toISOString();
+          }
+        }
+      } catch {
+        // keep original
+      }
+    }
+
+    onAddNote({
+      tabId: note.tabId,
+      title: note.title ? `${note.title} (Copy)` : undefined,
+      content: note.content,
+      isChecklist: note.isChecklist,
+      checklistItems: note.checklistItems
+        ? note.checklistItems.map((item) => ({
+            ...item,
+            id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          }))
+        : undefined,
+      bgColor: note.bgColor,
+      fontSize: note.fontSize,
+      expiresAt: nextExpiresAt,
+      isPinnedToCanvas: note.isPinnedToCanvas,
+    });
   };
 
   return (
@@ -406,14 +446,28 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
                         </button>
                       )}
 
-                      <button
-                        type="button"
-                        onClick={() => onDeleteNote(note.id)}
-                        className="text-gray-700 hover:text-red-700 p-0.5 rounded transition-all cursor-pointer"
-                        title="Archive note"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleDuplicateTileNote(note)}
+                          className="text-gray-700 hover:text-blue-800 p-0.5 rounded transition-all cursor-pointer"
+                          title={
+                            note.expiresAt
+                              ? 'Duplicate note (+1 day)'
+                              : 'Duplicate note'
+                          }
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDeleteNote(note.id)}
+                          className="text-gray-700 hover:text-red-700 p-0.5 rounded transition-all cursor-pointer"
+                          title="Archive note"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
