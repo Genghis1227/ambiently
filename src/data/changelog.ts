@@ -11,6 +11,19 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.26",
+    date: "November 8, 2026",
+    title: "Edge SSRF Hardening, Security Headers & Zero-IO Board Limit Triggers",
+    highlights: [
+      "Edge SSRF Hardening: Hardened calendar, RSS, and photo edge functions against SSRF with private IP blocking, 5-hop redirect validation, and strict response size caps.",
+      "Production Security Headers: Deployed Content-Security-Policy (CSP), HSTS, and Permissions-Policy headers via Cloudflare Pages _headers.",
+      "Vite Dev Server Parity: Replaced ~470 lines of mock server code in vite.config.ts with an SSR module runner that directly executes real edge functions in development.",
+      "Zero-IO Board Limit Triggers: Replaced disk-intensive board limit checks with per-column pg_column_size calculations that inspect compressed TOAST pointers without reading values off disk.",
+      "Plex Token Trigger Optimization: Restricted Plex token sanitization triggers to only fire when settings or config columns change, eliminating repetitive full-settings scans on timestamp touches.",
+      "Media Embed Sandboxing: Sandboxed embedded iframes with restricted permissions and enforced https:// protocols.",
+    ],
+  },
+  {
     version: "v0.3.25",
     date: "November 8, 2026",
     title: "Sync Refusal Alerts, Zero-Payload Tombstones & Priority Deletions",

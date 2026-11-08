@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.26] - 2026-11-08
+
+### Security & Hardening
+* **Edge SSRF Hardening (`functions/_shared/fetchExternal.ts`, `functions/api/*`):**
+  * Hardened calendar (`/api/ical`), RSS (`/api/rss`), Google Photos (`/api/gphotos`), and Google Drive (`/api/gdrive`) edge functions with strict target validation.
+  * Blocked private/internal IPv4 ranges, IPv6 literals, cloud metadata endpoints (`169.254.x.x`), decimal/hex IP encodings, and local network TLDs (`.local`, `.internal`, `.lan`, `localhost`).
+  * Enforced per-hop URL validation on redirects (up to 5 hops) and added response download size and timeout cutoffs (5 MB for RSS, 15 MB for calendars, 10 MB for Google Photos/Drive).
+  * Restricted cross-site execution (`Sec-Fetch-Site: cross-site`) and removed wildcard CORS headers.
+* **Production Security Headers (`public/_headers`):**
+  * Configured Content-Security-Policy (`script-src 'self'`), `Strict-Transport-Security: max-age=31536000`, `object-src 'none'`, and restricted `Permissions-Policy` across Cloudflare Pages deployments.
+* **Media Embed Sandboxing (`src/components/widgets/MediaEmbedWidget.tsx`):**
+  * Sandboxed embedded iframes with restricted permissions and enforced `https://` protocols for custom URLs.
+
+### Performance & Database
+* **Zero-IO Board Limit Triggers (`supabase/schema.sql`, `supabase/migrations/20261108_board_limit_every_write.sql`):**
+  * Replaced disk-heavy full-tuple TOAST scans with per-column `pg_column_size` inspection via `private.row_size_expression`, allowing incremental quota enforcement without fetching large stored values off disk.
+  * Restricted `strip_plex_tokens` triggers to only fire on writes to `settings` or `config` columns, preventing expensive regex searches on routine timestamp updates.
+* **Vite Dev Server Parity (`vite.config.ts`):**
+  * Replaced ~470 lines of mock server endpoints with an SSR module loader that runs the actual Cloudflare Pages functions directly in local development.
+
+---
+
 ## [0.3.25] - 2026-11-08
 
 ### Added
