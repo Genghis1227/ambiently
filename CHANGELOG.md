@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.23] - 2026-11-07
+
+### Performance
+* **89 KB Main Bundle Size Reduction (`src/data/version.ts`, `src/components/dock/AmbientQuickMenu.tsx`, `src/components/settings/SettingsModal.tsx`, `src/components/mobile/MobileCompanion.tsx`):**
+  * Extracted `APP_VERSION` into a dedicated module (`src/data/version.ts`) so importing the version string no longer pulls the 80 KB release history array (`RELEASES`) into the main bundle.
+  * Lazy-loaded `ChangelogModal` (`80.36 kB` chunk) and `ShareBoardModal` (`13.05 kB` chunk) on demand, reducing `index.js` from `433.52 kB` to `344.49 kB`.
+* **Cached `Intl.DateTimeFormat` Instances & Idle Timer Elimination (`src/components/widgets/WorldClockWidget.tsx`, `src/components/widgets/CountdownWidget.tsx`, `src/components/dock/AmbientQuickMenu.tsx`, `src/components/kiosk/NightMode.tsx`):**
+  * Cached `Intl.DateTimeFormat` formatters and validated IANA timezone strings in module-level `Map` caches, eliminating 54,000+ ICU object allocations per hour during 1-second clock ticks.
+  * Added visibility-aware timer sleeping to `WorldClockWidget` and `CountdownWidget`.
+  * Stopped hidden 1-second background timers in `AmbientQuickMenu` when closed and in `NightMode` when using the dim overlay style.
+* **15-Minute Weather & RSS Caching Across Canvas Rotations (`src/services/weather.ts`, `src/services/feeds.ts`):**
+  * Added 15-minute TTL in-memory + `localStorage` fallback caching to `fetchWeatherData` and `fetchRssFeed` so canvas carousel switches render weather and news feeds in 0ms without firing redundant network requests every 30 seconds.
+* **LocalStorage Cache Pruning & Local Photo Blob Reclamation (`src/services/feeds.ts`, `src/services/photos.ts`):**
+  * Automatically swept stale `ambiently_cal_cache_*`, `ambiently_weather_cache_*`, and `ambiently_rss_cache_*` keys from `localStorage`.
+  * Tracked and revoked previous `blob:` ObjectURLs via `URL.revokeObjectURL()` whenever rescanning local photo directories.
+
+---
+
 ## [0.3.22] - 2026-11-07
 
 ### Added
