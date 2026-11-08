@@ -38,7 +38,7 @@
   * Tap anywhere on the screen to wake immediately.
 * **Kid-Proof PIN Lock:**
   * SHA-256 hashed 4-digit PIN lock that disables widget dragging, note deletion, and settings modifications.
-  * Includes a **4-second press-and-hold Parent Challenge** fallback in case a PIN is forgotten.
+  * A forgotten PIN is removed with **a code emailed to the account the screen is signed in to** (Forgot PIN? on the PIN pad). Without cloud sign-in, only clearing the site's data removes it.
 * **Isolated Canvas Display Density Scaler:** Scale board cards (`75%`, `100%`, `125%`, `150%`) for 1080p, 1440p, or 4K screens while keeping the Navigation Dock and Settings modals pinned at 100% viewport scale.
 
 ---

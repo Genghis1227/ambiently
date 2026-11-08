@@ -38,6 +38,9 @@ const CreateCanvasModal = lazy(() =>
 const PhotoSourcesModal = lazy(() =>
   import('./components/photos/PhotoSourcesModal').then((m) => ({ default: m.PhotoSourcesModal }))
 );
+const ShareBoardModal = lazy(() =>
+  import('./components/settings/ShareBoardModal').then((m) => ({ default: m.ShareBoardModal }))
+);
 const MobileCompanion = lazy(() =>
   import('./components/mobile/MobileCompanion').then((m) => ({ default: m.MobileCompanion }))
 );
@@ -78,7 +81,7 @@ export function App() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [pinChallenge, setPinChallenge] = useState<{
-    action: 'exit_fullscreen' | 'open_settings';
+    action: 'exit_fullscreen' | 'open_settings' | 'open_share' | 'open_plex_pairing';
     title?: string;
     subtitle?: string;
   } | null>(null);
@@ -88,6 +91,7 @@ export function App() {
   const [isNoteCreatorOpen, setIsNoteCreatorOpen] = useState(false);
   const [isTrashOpen, setIsTrashOpen] = useState(false);
   const [isPlexPairingModalOpen, setIsPlexPairingModalOpen] = useState(false);
+  const [isShareOpen, setIsShareOpen] = useState(false);
   const fileSync = useFileSync();
   const hasFileBound = fileSync.status === 'connected';
   const syncRemoteNoteChange = useDashboardStore((s) => s.syncRemoteNoteChange);
@@ -115,8 +119,13 @@ export function App() {
       setRealtimeBoardId(target?.dashboardId || null);
     });
 
-    const unsubscribe = onAuthStateChange(async (user) => {
+    // Supabase also reports the session at startup, after each hourly token refresh and on some screen
+    // wakes. Only a different account signing in needs a fresh pull; startup pulls on its own below.
+    let pulledForUserId: string | null = null;
+    const unsubscribe = onAuthStateChange(async (user, event) => {
       if (user) {
+        if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED' || user.id === pulledForUserId) return;
+        pulledForUserId = user.id;
         console.log('Ambiently authenticated as:', user.email);
         const target = await resolveActiveDashboardId();
         setRealtimeBoardId(target?.dashboardId || user.id);
@@ -129,6 +138,7 @@ export function App() {
           console.warn('Initial cloud pull on auth change failed:', err);
         }
       } else {
+        pulledForUserId = null;
         setRealtimeBoardId(null);
       }
     });
@@ -360,18 +370,52 @@ export function App() {
     setIsSettingsOpen(true);
   };
 
+  // The household sharing screen and Plex sign-in are settings too, so they need the PIN the same way
+  const handleOpenShare = () => {
+    if (isSettingsLocked) {
+      setPinChallenge({
+        action: 'open_share',
+        title: 'Kiosk Settings Locked',
+        subtitle: 'Enter parent PIN to manage who can use this board',
+      });
+      return;
+    }
+    setIsShareOpen(true);
+  };
+
+  const handleOpenPlexPairing = () => {
+    if (isSettingsLocked) {
+      setPinChallenge({
+        action: 'open_plex_pairing',
+        title: 'Kiosk Settings Locked',
+        subtitle: 'Enter parent PIN to sign in to Plex',
+      });
+      return;
+    }
+    setIsPlexPairingModalOpen(true);
+  };
+
+  // Does what the PIN pad was opened for, once the PIN is entered or removed
+  const finishPinChallenge = () => {
+    if (pinChallenge?.action === 'exit_fullscreen') {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+        setIsFullscreen(false);
+      }
+    } else if (pinChallenge?.action === 'open_settings') {
+      setIsSettingsOpen(true);
+    } else if (pinChallenge?.action === 'open_share') {
+      setIsShareOpen(true);
+    } else if (pinChallenge?.action === 'open_plex_pairing') {
+      setIsPlexPairingModalOpen(true);
+    }
+    setPinChallenge(null);
+  };
+
   const handlePinUnlock = async (enteredPin: string) => {
     const success = await unlockKiosk(enteredPin);
     if (success) {
-      if (pinChallenge?.action === 'exit_fullscreen') {
-        if (document.exitFullscreen) {
-          document.exitFullscreen().catch(() => {});
-          setIsFullscreen(false);
-        }
-      } else if (pinChallenge?.action === 'open_settings') {
-        setIsSettingsOpen(true);
-      }
-      setPinChallenge(null);
+      finishPinChallenge();
       return true;
     }
     return false;
@@ -684,6 +728,7 @@ export function App() {
         isCanvasLocked={isCanvasLocked}
         onSelectTab={setActiveTabId}
         onOpenSettings={handleOpenSettings}
+        onOpenShare={handleOpenShare}
         onToggleNightMode={toggleNightModeManual}
         onToggleFullscreen={handleToggleFullscreen}
         isFullscreen={isFullscreen}
@@ -715,7 +760,7 @@ export function App() {
       <UpdateNotificationBanner />
 
       {/* Device-Local Plex Pairing Prompt when Plex is configured on dashboard */}
-      <PlexReauthBanner onOpenPlexAuth={() => setIsPlexPairingModalOpen(true)} />
+      <PlexReauthBanner onOpenPlexAuth={handleOpenPlexPairing} />
 
       {/* Shown when the cloud refuses some changes because the board is full */}
       <SyncRefusedBanner />
@@ -761,23 +806,15 @@ export function App() {
           title={pinChallenge.title}
           subtitle={pinChallenge.subtitle}
           onUnlock={handlePinUnlock}
-          onForgotChallenge={() => {
-            unlockKiosk('');
-            if (pinChallenge.action === 'exit_fullscreen') {
-              if (document.exitFullscreen) {
-                document.exitFullscreen().catch(() => {});
-                setIsFullscreen(false);
-              }
-            } else if (pinChallenge.action === 'open_settings') {
-              setIsSettingsOpen(true);
-            }
-            setPinChallenge(null);
-          }}
+          onPinRemoved={finishPinChallenge}
           onCancel={() => setPinChallenge(null)}
         />
       )}
 
       <Suspense fallback={null}>
+        {/* Household sharing, opened from the dock's quick menu */}
+        {isShareOpen && <ShareBoardModal isOpen={isShareOpen} onClose={() => setIsShareOpen(false)} />}
+
         {/* Local Backup Info Modal */}
         {isBackupModalOpen && (
           <LocalBackupModal

@@ -1,7 +1,8 @@
 import { createClient, type SupabaseClient, type User, type RealtimeChannel } from '@supabase/supabase-js';
-import { db } from './db';
+import { db, DEFAULT_SETTINGS, DEFAULT_TABS, DEFAULT_WIDGETS, DEFAULT_NOTES } from './db';
 import { stripPlexTokens } from './plexLinks';
 import { isBoardFullError, setSyncRefusal } from './syncRefusal';
+import { keepLocalNoteFields, keepLocalTabFields, keepLocalWidgetFields } from './syncMerge';
 import type { DashboardTab, DashboardWidget, StickyNoteItem, AppSettings } from '../types/dashboard';
 
 let supabaseClient: SupabaseClient | null = null;
@@ -12,7 +13,77 @@ let cachedDashboardTarget: {
   result: { dashboardId: string; ownerId: string; isMember: boolean };
   expiresAt: number;
 } | null = null;
+// The board's updated_at as the cloud last returned it, compared as text to skip downloading an
+// unchanged board
 let lastKnownCloudUpdatedAt: string | null = null;
+
+// The board this device's tabs, widgets and notes belong to. When the signed-in account moves to
+// another board (accepting an invitation, leaving or being removed from one, or a different account
+// signing in after "keep this board" sign-out), this device's copy is replaced by that board's rather
+// than merged into it, so nothing from one board is ever uploaded to another.
+const LOCAL_BOARD_KEY = 'ambiently_local_board';
+
+function getLocalBoard(): string | null {
+  try {
+    return localStorage.getItem(LOCAL_BOARD_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function setLocalBoard(boardId: string): void {
+  try {
+    localStorage.setItem(LOCAL_BOARD_KEY, boardId);
+  } catch {
+    // Without storage the board can't be remembered; the next sync checks again
+  }
+}
+
+// When the board's settings were last saved, as this device last saw them in the cloud. Settings are
+// compared by their own time, not the board's updated_at, which also moves whenever any device saves
+// a note, widget or tab.
+const CLOUD_SETTINGS_AT_KEY = 'ambiently_cloud_settings_at';
+
+function getKnownCloudSettingsAt(boardId: string): number | null {
+  try {
+    const [board, at] = (localStorage.getItem(CLOUD_SETTINGS_AT_KEY) || '').split('|');
+    const time = Date.parse(at || '');
+    return board === boardId && !Number.isNaN(time) ? time : null;
+  } catch {
+    return null;
+  }
+}
+
+function setKnownCloudSettingsAt(boardId: string, at: string): void {
+  try {
+    localStorage.setItem(CLOUD_SETTINGS_AT_KEY, `${boardId}|${at}`);
+  } catch {
+    // Without storage the next sync reads the cloud's settings time again
+  }
+}
+
+// Settings that belong to this screen, not to a board: the PIN, the kiosk locks and the display size.
+// They stay when the device moves to another board.
+function deviceOwnSettings(settings?: AppSettings): Partial<AppSettings> {
+  if (!settings) return {};
+  return {
+    pinLockEnabled: settings.pinLockEnabled,
+    pinHash: settings.pinHash,
+    lockFullscreenKiosk: settings.lockFullscreenKiosk,
+    lockCanvasEditing: settings.lockCanvasEditing,
+    lockSettingsAccess: settings.lockSettingsAccess,
+    displayDensity: settings.displayDensity,
+  };
+}
+
+// Removes the previous board's tabs, widgets, notes, settings and photo catalog from this device
+async function clearLocalBoard(): Promise<void> {
+  const current = await db.settings.get('global');
+  await db.transaction('rw', db.tabs, db.widgets, db.notes, db.settings, async () => {
+    await Promise.all([db.tabs.clear(), db.widgets.clear(), db.notes.clear()]);
+    await db.settings.put({ ...DEFAULT_SETTINGS, ...deviceOwnSettings(current) });
+  });
+}
 
 export function isRealtimeConnected(): boolean {
   return realtimeConnectionActive;
@@ -41,7 +112,7 @@ export async function getCurrentUser(): Promise<User | null> {
   return data.user;
 }
 
-export function onAuthStateChange(callback: (user: User | null) => void): () => void {
+export function onAuthStateChange(callback: (user: User | null, event: string) => void): () => void {
   const sb = getSupabase();
   if (!sb) return () => {};
 
@@ -52,7 +123,7 @@ export function onAuthStateChange(callback: (user: User | null) => void): () => 
         window.history.replaceState({}, document.title, cleanUrl);
       }
     }
-    callback(session?.user ?? null);
+    callback(session?.user ?? null, event);
   });
 
   return () => subscription.unsubscribe();
@@ -94,6 +165,15 @@ export async function verifyOtpCode(email: string, token: string): Promise<{ suc
 
   if (error) return { success: false, error: error.message };
   return { success: true };
+}
+
+// Emails a sign-in code to the account this screen is signed in to, to remove a forgotten kiosk PIN
+// (see PinOverlay). It never creates an account.
+export async function sendPinResetCode(email: string): Promise<{ success: boolean; error?: string }> {
+  const sb = getSupabase();
+  if (!sb) return { success: false, error: 'Cloud sync is not set up on this screen.' };
+  const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
+  return error ? { success: false, error: error.message } : { success: true };
 }
 
 export async function signOutSupabase(): Promise<void> {
@@ -505,6 +585,13 @@ export async function pushToCloud(
     const ownerId = target?.ownerId || user.id;
     const isMember = Boolean(target?.isMember);
 
+    // This device still holds another board's copy. The next pull replaces it, and until then nothing
+    // is sent, so that board's content can't end up in this one.
+    const localBoard = getLocalBoard();
+    if (localBoard && localBoard !== dashboardId) {
+      return { success: false, error: 'This device is switching boards. Sync again in a moment.' };
+    }
+
     // 1. Query Dexie to include all active and soft-deleted records so remote devices sync additions and deletions
     const [dbTabs, dbWidgets, dbNotes] = await Promise.all([
       db.tabs.toArray(),
@@ -529,11 +616,27 @@ export async function pushToCloud(
     const remoteNotesMap = new Map((remoteNotesRes.data || []).map((n: any) => [n.id, new Date(n.updated_at || 0).getTime()]));
 
     const nowIso = new Date().toISOString();
-    const remoteDashTime = remoteDashRes.data?.updated_at
-      ? new Date(remoteDashRes.data.updated_at).getTime()
-      : 0;
-    const localDashTime = new Date(settings.updated_at || 0).getTime();
-    const shouldUpsertDash = !isMember && (!remoteDashRes.data || localDashTime > remoteDashTime);
+    // Settings are sent when they changed on this device since it last synced them, unless another
+    // device has saved newer ones since. Only then is the cloud's settings time read, which reads the
+    // settings themselves, so most syncs don't.
+    const localSettingsTime = Date.parse(settings.updated_at || '') || 0;
+    let shouldUpsertDash = false;
+    if (!isMember) {
+      const knownCloudSettingsTime = getKnownCloudSettingsAt(dashboardId);
+      if (!remoteDashRes.data) {
+        shouldUpsertDash = true;
+      } else if (knownCloudSettingsTime === null || localSettingsTime > knownCloudSettingsTime) {
+        const { data: cloudSettings } = await sb
+          .from('dashboards')
+          .select('settings_updated_at:settings->>updated_at')
+          .eq('id', dashboardId)
+          .maybeSingle();
+        const cloudSettingsAt = (cloudSettings as { settings_updated_at?: string | null } | null)?.settings_updated_at;
+        const cloudSettingsTime = Date.parse(cloudSettingsAt || '') || 0;
+        shouldUpsertDash = localSettingsTime > cloudSettingsTime;
+        if (!shouldUpsertDash && cloudSettingsAt) setKnownCloudSettingsAt(dashboardId, cloudSettingsAt);
+      }
+    }
 
     // Upsert Tabs: only send tabs with genuinely newer timestamps or new records
     let tabsToUpsert: any[] = [];
@@ -691,10 +794,10 @@ export async function pushToCloud(
         updated_at: nowIso,
       });
       if (dashErr) skipIfBoardFull(dashErr);
-    } else if (hasAnyItemUpserted && !isMember) {
-      // Touch dashboard updated_at so all remote clients recognize the board revision change
-      await sb.from('dashboards').update({ updated_at: nowIso }).eq('id', dashboardId);
+      else setKnownCloudSettingsAt(dashboardId, settings.updated_at);
     }
+    // Saving a tab, widget or note moves the board's updated_at in the database (the touch trigger in
+    // supabase/schema.sql), for members too, so the app doesn't send a separate update for it
 
     // Deletions next, so a full board makes room before anything new is sent
     await upsertRows('tabs', tabsToUpsert.filter(isDeletion), 25);
@@ -715,7 +818,15 @@ export async function pushToCloud(
       sb.from('notes').delete().eq('dashboard_id', dashboardId).lt('deleted_at', thirtyDaysAgoIso),
     ]).catch(() => {});
 
-    lastKnownCloudUpdatedAt = nowIso;
+    // Remember the board's revision after this device's own changes, so the next check doesn't download
+    // the whole board again. Only when nobody else had changed it since this device last synced, or
+    // their change would be skipped too.
+    if (lastKnownCloudUpdatedAt && remoteDashRes.data?.updated_at === lastKnownCloudUpdatedAt) {
+      const { data: head } = await sb.from('dashboards').select('updated_at').eq('id', dashboardId).maybeSingle();
+      if (head?.updated_at) lastKnownCloudUpdatedAt = head.updated_at;
+    }
+
+    setLocalBoard(dashboardId);
     if (refusedForSpace.length > 0) {
       const { message } = refusedForSpace[0];
       setSyncRefusal({ message });
@@ -729,8 +840,22 @@ export async function pushToCloud(
   }
 }
 
+type PullResult = { success: boolean; hasChanges?: boolean; error?: string };
+
+// Startup, sign-in and screen wake can each ask for a pull at the same moment. They share one download.
+const pullsInFlight = new Map<'full' | 'check', Promise<PullResult>>();
+
 // Pull latest changes from Supabase Cloud to local Dexie (Strictly authenticated only)
-export async function pullFromCloud(options?: { force?: boolean }): Promise<{ success: boolean; hasChanges?: boolean; error?: string }> {
+export function pullFromCloud(options?: { force?: boolean }): Promise<PullResult> {
+  const kind = options?.force ? 'full' : 'check';
+  const running = pullsInFlight.get(kind);
+  if (running) return running;
+  const pull = pullFromCloudOnce(options).finally(() => pullsInFlight.delete(kind));
+  pullsInFlight.set(kind, pull);
+  return pull;
+}
+
+async function pullFromCloudOnce(options?: { force?: boolean }): Promise<PullResult> {
   const sb = getSupabase();
   const user = await getCurrentUser();
   if (!sb || !user) return { success: false, error: 'Not authenticated' };
@@ -738,9 +863,12 @@ export async function pullFromCloud(options?: { force?: boolean }): Promise<{ su
   try {
     const target = await resolveActiveDashboardId();
     const dashboardId = target?.dashboardId || user.id;
+    // This device holds another board's copy, which this pull replaces
+    const localBoard = getLocalBoard();
+    const switchingBoards = localBoard !== null && localBoard !== dashboardId;
 
     // Fast-path: Check lightweight dashboard revision before scanning full tables with JSON payloads
-    if (!options?.force) {
+    if (!options?.force && !switchingBoards) {
       const { data: dashHead, error: headErr } = await sb
         .from('dashboards')
         .select('updated_at')
@@ -765,15 +893,45 @@ export async function pullFromCloud(options?: { force?: boolean }): Promise<{ su
     if (widgetsRes.error) throw widgetsRes.error;
     if (notesRes.error) throw notesRes.error;
 
+    if (switchingBoards) {
+      await clearLocalBoard();
+      lastKnownCloudUpdatedAt = null;
+    }
+
     if (!dashRes.data && (!tabsRes.data || tabsRes.data.length === 0) && (!widgetsRes.data || widgetsRes.data.length === 0)) {
+      if (switchingBoards) {
+        // The new board is empty, so this device starts it the way a new device does
+        await db.transaction('rw', db.tabs, db.widgets, db.notes, async () => {
+          await db.tabs.bulkPut(DEFAULT_TABS);
+          await db.widgets.bulkPut(DEFAULT_WIDGETS);
+          await db.notes.bulkPut(DEFAULT_NOTES);
+        });
+        setLocalBoard(dashboardId);
+        return { success: true, hasChanges: true };
+      }
       return { success: false, error: 'No cloud backup found for this account.' };
     }
 
-    if (dashRes.data?.settings) {
+    const cloudSettings = dashRes.data?.settings;
+    if (cloudSettings && Object.keys(cloudSettings).length > 0) {
       const currentSettings = await db.settings.get('global');
-      const localTime = new Date(currentSettings?.updated_at || 0).getTime();
-      const cloudTime = new Date(dashRes.data.updated_at || 0).getTime();
-      if (cloudTime >= localTime || !currentSettings) {
+      const localTime = Date.parse(currentSettings?.updated_at || '') || 0;
+      // The settings' own time. The board's updated_at also moves when any device saves a note or widget,
+      // so comparing with it would replace settings changed here that haven't been sent yet.
+      const cloudSettingsAt: string = cloudSettings.updated_at || dashRes.data.updated_at;
+      const cloudTime = Date.parse(cloudSettingsAt || '') || 0;
+      // The first time a device syncs this way, it still compares with the board's time, as before, so
+      // it takes the cloud's settings once rather than sending its own copy back. A member can't save
+      // the board's settings, so a member's device always follows the owner's.
+      const firstSyncThisWay = getKnownCloudSettingsAt(dashboardId) === null;
+      const boardTime = Date.parse(dashRes.data.updated_at || '') || 0;
+      const cloudIsNewer = target?.isMember
+        ? cloudTime !== localTime
+        : firstSyncThisWay
+          ? boardTime >= localTime
+          : cloudTime > localTime;
+      setKnownCloudSettingsAt(dashboardId, cloudSettingsAt);
+      if (switchingBoards || !currentSettings || cloudIsNewer) {
         await db.settings.put({
           ...dashRes.data.settings,
           // Preserve local photo catalog when cloud sync is pure configuration
@@ -784,7 +942,7 @@ export async function pullFromCloud(options?: { force?: boolean }): Promise<{ su
           pinHash: currentSettings?.pinHash ?? null,
           pinLockEnabled: currentSettings?.pinLockEnabled ?? false,
           id: 'global',
-          updated_at: dashRes.data.updated_at || new Date().toISOString(),
+          updated_at: cloudSettingsAt,
         });
       }
     }
@@ -820,7 +978,7 @@ export async function pullFromCloud(options?: { force?: boolean }): Promise<{ su
           const localTime = new Date(local.updated_at || 0).getTime();
           const cloudTime = new Date(mapped.updated_at || 0).getTime();
           if (cloudTime >= localTime) {
-            tabsToPut.push(mapped);
+            tabsToPut.push(keepLocalTabFields(mapped, local));
           }
         }
       }
@@ -875,7 +1033,7 @@ export async function pullFromCloud(options?: { force?: boolean }): Promise<{ su
           const localTime = new Date(local.updated_at || 0).getTime();
           const cloudTime = new Date(mapped.updated_at || 0).getTime();
           if (cloudTime >= localTime) {
-            widgetsToPut.push(mapped);
+            widgetsToPut.push(keepLocalWidgetFields(mapped, local));
           }
         }
       }
@@ -928,7 +1086,7 @@ export async function pullFromCloud(options?: { force?: boolean }): Promise<{ su
           const localTime = new Date(local.updated_at || 0).getTime();
           const cloudTime = new Date(mapped.updated_at || 0).getTime();
           if (cloudTime >= localTime) {
-            notesToPut.push(mapped);
+            notesToPut.push(keepLocalNoteFields(mapped, local));
           }
         }
       }
@@ -949,7 +1107,8 @@ export async function pullFromCloud(options?: { force?: boolean }): Promise<{ su
       }
     }
 
-    lastKnownCloudUpdatedAt = dashRes.data?.updated_at || new Date().toISOString();
+    lastKnownCloudUpdatedAt = dashRes.data?.updated_at || null;
+    setLocalBoard(dashboardId);
     return { success: true, hasChanges: true };
   } catch (err: any) {
     console.error('Cloud pull failed:', err);
