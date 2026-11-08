@@ -30,9 +30,12 @@ import {
 import type { DashboardTab, DashboardWidget, StickyNoteItem, WidgetThemeMode } from '../../types/dashboard';
 import { getCurrentUser } from '../../services/supabase';
 import { isCanvasThemeLight } from '../../data/canvasThemes';
-import { APP_VERSION } from '../../data/changelog';
-import { ChangelogModal } from '../changelog/ChangelogModal';
+import { APP_VERSION } from '../../data/version';
 import { useDashboardStore } from '../../store/dashboardStore';
+
+const ChangelogModal = React.lazy(() =>
+  import('../changelog/ChangelogModal').then((m) => ({ default: m.ChangelogModal }))
+);
 import { CalendarWidget } from '../widgets/CalendarWidget';
 import { ClockWeatherWidget } from '../widgets/ClockWeatherWidget';
 import { ClockWidget } from '../widgets/ClockWidget';
@@ -926,13 +929,15 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         <div className="h-20 shrink-0" />
       </div>
 
-      {/* Changelog Modal */}
-      <ChangelogModal
-        isOpen={isChangelogOpen}
-        onClose={() => setIsChangelogOpen(false)}
-      />
-
       <React.Suspense fallback={null}>
+        {/* Changelog Modal */}
+        {isChangelogOpen && (
+          <ChangelogModal
+            isOpen={isChangelogOpen}
+            onClose={() => setIsChangelogOpen(false)}
+          />
+        )}
+
         {/* Widget Settings Modal for modifying tiles on mobile */}
         {editingWidget && (
           <WidgetSettingsModal

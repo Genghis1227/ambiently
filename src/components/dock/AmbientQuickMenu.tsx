@@ -19,9 +19,14 @@ import {
 } from 'lucide-react';
 import type { DockPosition } from '../../types/dashboard';
 import { useDashboardStore } from '../../store/dashboardStore';
-import { APP_VERSION } from '../../data/changelog';
-import { ChangelogModal } from '../changelog/ChangelogModal';
-import { ShareBoardModal } from '../settings/ShareBoardModal';
+import { APP_VERSION } from '../../data/version';
+
+const ChangelogModal = React.lazy(() =>
+  import('../changelog/ChangelogModal').then((m) => ({ default: m.ChangelogModal }))
+);
+const ShareBoardModal = React.lazy(() =>
+  import('../settings/ShareBoardModal').then((m) => ({ default: m.ShareBoardModal }))
+);
 
 interface AmbientQuickMenuProps {
   dockPosition: DockPosition;
@@ -55,18 +60,20 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
   const toggleDockHidden = useDashboardStore((s) => s.toggleDockHidden);
   const tabs = useDashboardStore((s) => s.tabs);
 
-  // Live clock display in header
+  // Live clock display in header (only active while quick menu is open)
   useEffect(() => {
+    if (!isOpen) return;
     const updateTime = () => {
+      if (document.visibilityState === 'hidden') return;
       const now = new Date();
       setCurrentTime(
         now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
       );
     };
     updateTime();
-    const timer = setInterval(updateTime, 1000);
+    const timer = setInterval(updateTime, 10000);
     return () => clearInterval(timer);
-  }, []);
+  }, [isOpen]);
 
   // Close on Escape key
   useEffect(() => {
@@ -355,23 +362,29 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
         </div>
       </div>
 
-      {/* Changelog Modal */}
-      <ChangelogModal
-        isOpen={isChangelogOpen}
-        onClose={() => {
-          setIsChangelogOpen(false);
-          onClose();
-        }}
-      />
+      <React.Suspense fallback={null}>
+        {/* Changelog Modal */}
+        {isChangelogOpen && (
+          <ChangelogModal
+            isOpen={isChangelogOpen}
+            onClose={() => {
+              setIsChangelogOpen(false);
+              onClose();
+            }}
+          />
+        )}
 
-      {/* Share / Mobile Companion QR Modal */}
-      <ShareBoardModal
-        isOpen={isShareModalOpen}
-        onClose={() => {
-          setIsShareModalOpen(false);
-          onClose();
-        }}
-      />
+        {/* Share / Mobile Companion QR Modal */}
+        {isShareModalOpen && (
+          <ShareBoardModal
+            isOpen={isShareModalOpen}
+            onClose={() => {
+              setIsShareModalOpen(false);
+              onClose();
+            }}
+          />
+        )}
+      </React.Suspense>
     </>
   );
 };

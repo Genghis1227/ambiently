@@ -17,19 +17,42 @@ export const DEFAULT_WORLD_CITIES: WorldClockCity[] = [
   },
 ];
 
-export function getZoneOffsetMinutes(now: Date, timezone?: string): number {
-  if (!timezone) return 0;
+const validZoneCache = new Map<string, string | undefined>();
+const offsetFormatterCache = new Map<string, Intl.DateTimeFormat>();
+const partsFormatterCache = new Map<string, Intl.DateTimeFormat>();
+const dateFormatterCache = new Map<string, Intl.DateTimeFormat>();
+
+function getSafeTimezone(timezone?: string): string | undefined {
+  if (!timezone) return undefined;
+  if (validZoneCache.has(timezone)) return validZoneCache.get(timezone);
   try {
-    const partsFormatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      hour12: false,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
+    Intl.DateTimeFormat(undefined, { timeZone: timezone });
+    validZoneCache.set(timezone, timezone);
+    return timezone;
+  } catch {
+    validZoneCache.set(timezone, undefined);
+    return undefined;
+  }
+}
+
+export function getZoneOffsetMinutes(now: Date, timezone?: string): number {
+  const safeZone = getSafeTimezone(timezone);
+  if (!safeZone) return 0;
+  try {
+    let partsFormatter = offsetFormatterCache.get(safeZone);
+    if (!partsFormatter) {
+      partsFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: safeZone,
+        hour12: false,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
+      offsetFormatterCache.set(safeZone, partsFormatter);
+    }
     const parts = partsFormatter.formatToParts(now);
     const getPart = (type: string) => parseInt(parts.find((p) => p.type === type)?.value || '0', 10);
     const y = getPart('year');
@@ -63,27 +86,24 @@ export function getFormattedTimeForZone(
   now: Date,
   timezone?: string
 ): FormattedZoneTime {
-  const safeZone = (() => {
-    if (!timezone) return undefined;
-    try {
-      Intl.DateTimeFormat(undefined, { timeZone: timezone });
-      return timezone;
-    } catch {
-      return undefined;
-    }
-  })();
+  const safeZone = getSafeTimezone(timezone);
+  const cacheKey = safeZone || '__local__';
 
-  const partsFormatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: safeZone,
-    hour12: false,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    timeZoneName: 'short',
-  });
+  let partsFormatter = partsFormatterCache.get(cacheKey);
+  if (!partsFormatter) {
+    partsFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: safeZone,
+      hour12: false,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      timeZoneName: 'short',
+    });
+    partsFormatterCache.set(cacheKey, partsFormatter);
+  }
 
   const parts = partsFormatter.formatToParts(now);
   const getPart = (type: string) => parts.find((p) => p.type === type)?.value || '';
@@ -99,12 +119,17 @@ export function getFormattedTimeForZone(
   const ampm = hour24 >= 12 ? 'PM' : 'AM';
   const seconds = String(secondNum).padStart(2, '0');
 
-  const dateStr = new Intl.DateTimeFormat('en-US', {
-    timeZone: safeZone,
-    weekday: 'long',
-    month: 'short',
-    day: 'numeric',
-  }).format(now);
+  let dateFormatter = dateFormatterCache.get(cacheKey);
+  if (!dateFormatter) {
+    dateFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: safeZone,
+      weekday: 'long',
+      month: 'short',
+      day: 'numeric',
+    });
+    dateFormatterCache.set(cacheKey, dateFormatter);
+  }
+  const dateStr = dateFormatter.format(now);
 
   // Compute hour difference relative to device local time
   let diffLabel = 'Local Time';
@@ -174,9 +199,21 @@ export const WorldClockWidget: React.FC<WorldClockWidgetProps> = ({
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+    const intervalMs = showSeconds ? 1000 : 10000;
+    const tick = () => {
+      if (document.visibilityState === 'hidden') return;
+      setNow(new Date());
+    };
+    const timer = setInterval(tick, intervalMs);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') setNow(new Date());
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [showSeconds]);
 
   const activeCities =
     Array.isArray(cities) && cities.length > 0 ? cities : DEFAULT_WORLD_CITIES;

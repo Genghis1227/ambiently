@@ -108,16 +108,35 @@ export function getCachedCalendarEvents(sources: CalendarSource[]): { events: Ca
   };
 }
 
+const MAX_CALENDAR_CACHE_KEYS = 3;
+
 export function setCachedCalendarEvents(sources: CalendarSource[], events: CalendarEvent[]): void {
   const key = getCalendarCacheKey(sources);
   if (!key) return;
 
   const entry = { timestamp: Date.now(), events };
+  if (memoryCalendarCache.has(key)) {
+    memoryCalendarCache.delete(key);
+  } else if (memoryCalendarCache.size >= MAX_CALENDAR_CACHE_KEYS) {
+    const oldestKey = memoryCalendarCache.keys().next().value;
+    if (oldestKey !== undefined) memoryCalendarCache.delete(oldestKey);
+  }
   memoryCalendarCache.set(key, entry);
 
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
-      localStorage.setItem(`ambiently_cal_cache_${key}`, JSON.stringify(entry));
+      const targetStorageKey = `ambiently_cal_cache_${key}`;
+      localStorage.setItem(targetStorageKey, JSON.stringify(entry));
+      // Prune stale calendar cache keys from localStorage to prevent quota bloat
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('ambiently_cal_cache_')) {
+          const subKey = k.slice('ambiently_cal_cache_'.length);
+          if (!memoryCalendarCache.has(subKey)) {
+            localStorage.removeItem(k);
+          }
+        }
+      }
     } catch {
       // Storage quota restriction
     }
@@ -195,7 +214,23 @@ export async function fetchCalendarEvents(sources: CalendarSource[], forceRefres
   return sorted;
 }
 
-export async function fetchRssFeed(feedUrl: string): Promise<{ title: string; items: RssArticle[] }> {
+const RSS_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const MAX_RSS_CACHE_KEYS = 5;
+const memoryRssCache = new Map<string, { timestamp: number; title: string; items: RssArticle[] }>();
+
+function getRssCacheKey(url: string): string {
+  let hash = 0;
+  for (let i = 0; i < url.length; i++) {
+    hash = (hash << 5) - hash + url.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
+export async function fetchRssFeed(
+  feedUrl: string,
+  forceRefresh: boolean = false
+): Promise<{ title: string; items: RssArticle[] }> {
   if (!feedUrl || !feedUrl.trim()) return { title: '', items: [] };
 
   let normalized = feedUrl.trim();
@@ -203,17 +238,74 @@ export async function fetchRssFeed(feedUrl: string): Promise<{ title: string; it
     normalized = 'https://' + normalized.slice(7);
   }
 
+  const key = getRssCacheKey(normalized);
+  let cached = memoryRssCache.get(key);
+  if (!cached && typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const raw = localStorage.getItem(`ambiently_rss_cache_${key}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.items)) {
+          cached = parsed;
+          memoryRssCache.set(key, parsed);
+        }
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  if (!forceRefresh && cached && Date.now() - cached.timestamp <= RSS_CACHE_TTL_MS) {
+    return { title: cached.title, items: cached.items };
+  }
+
   try {
     let res = await fetch(`/api/rss?url=${encodeURIComponent(normalized)}`);
     if (res.status === 404) {
       res = await fetch(`/functions/api/rss?url=${encodeURIComponent(normalized)}`);
     }
-    if (!res.ok) return { title: '', items: [] };
+    if (!res.ok) return cached ? { title: cached.title, items: cached.items } : { title: '', items: [] };
     const ct = res.headers.get('content-type') || '';
-    if (!ct.includes('application/json')) return { title: '', items: [] };
-    return await res.json();
+    if (!ct.includes('application/json')) {
+      return cached ? { title: cached.title, items: cached.items } : { title: '', items: [] };
+    }
+    const data = await res.json();
+    const result = {
+      title: data.title || '',
+      items: Array.isArray(data.items) ? data.items : [],
+    };
+
+    if (result.items.length > 0) {
+      const entry = { timestamp: Date.now(), ...result };
+      if (memoryRssCache.has(key)) {
+        memoryRssCache.delete(key);
+      } else if (memoryRssCache.size >= MAX_RSS_CACHE_KEYS) {
+        const oldestKey = memoryRssCache.keys().next().value;
+        if (oldestKey !== undefined) memoryRssCache.delete(oldestKey);
+      }
+      memoryRssCache.set(key, entry);
+
+      if (typeof window !== 'undefined' && window.localStorage) {
+        try {
+          localStorage.setItem(`ambiently_rss_cache_${key}`, JSON.stringify(entry));
+          for (let i = localStorage.length - 1; i >= 0; i--) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith('ambiently_rss_cache_')) {
+              const subKey = k.slice('ambiently_rss_cache_'.length);
+              if (!memoryRssCache.has(subKey)) {
+                localStorage.removeItem(k);
+              }
+            }
+          }
+        } catch {
+          // ignore storage errors
+        }
+      }
+    }
+
+    return result;
   } catch (err) {
     console.warn('Failed to fetch RSS feed:', err);
-    return { title: '', items: [] };
+    return cached ? { title: cached.title, items: cached.items } : { title: '', items: [] };
   }
 }

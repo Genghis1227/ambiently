@@ -19,10 +19,15 @@ export const NightMode: React.FC<NightModeProps> = ({
   const [pixelShift, setPixelShift] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
-    if (!enabled) return;
-    const clockInterval = setInterval(() => setTime(new Date()), 1000);
+    if (!enabled || style !== 'oled_clock') return;
+    setTime(new Date());
+    const clockInterval = setInterval(() => {
+      if (document.visibilityState === 'hidden') return;
+      setTime(new Date());
+    }, 10000);
     // Shift pixels every 60 seconds by +/- 15px
     const shiftInterval = setInterval(() => {
+      if (document.visibilityState === 'hidden') return;
       setPixelShift({
         x: Math.floor(Math.random() * 30) - 15,
         y: Math.floor(Math.random() * 30) - 15,
@@ -33,7 +38,7 @@ export const NightMode: React.FC<NightModeProps> = ({
       clearInterval(clockInterval);
       clearInterval(shiftInterval);
     };
-  }, [enabled]);
+  }, [enabled, style]);
 
   if (!enabled) return null;
 

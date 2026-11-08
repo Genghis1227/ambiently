@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { APP_VERSION } from '../data/changelog';
+import { APP_VERSION } from '../data/version';
 
 export interface VersionInfo {
   version: string;

@@ -5,11 +5,23 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-import packageJson from '../../package.json';
+import { APP_VERSION } from './version';
 
-export const APP_VERSION = packageJson.version;
+export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: "v0.3.23",
+    date: "November 7, 2026",
+    title: "89 KB Bundle Reduction, Intl Formatter Caching & Instant Canvas Caching",
+    highlights: [
+      "89 KB Bundle Size Reduction: Extracted APP_VERSION into a standalone module and lazy-loaded ChangelogModal and ShareBoardModal on demand, shrinking the main index.js bundle from 433.52 kB to 344.49 kB.",
+      "Zero-Allocation Clock Ticks: Cached Intl.DateTimeFormat instances per timezone in WorldClockWidget, eliminating 54,000+ ICU formatter object allocations per hour.",
+      "Instant Weather & RSS Canvas Rotations: Added a 15-minute TTL in-memory + localStorage cache to Weather and RSS services so auto-carousel canvas switches render in 0ms without re-fetching.",
+      "LocalStorage Quota Sweeping: Bounded Calendar, Weather, and RSS caches and automatically pruned stale cache keys from localStorage.",
+      "Local Folder Blob Memory Reclamation: Tracked and revoked previous ObjectURL blobs whenever rescanning local photo directories.",
+    ],
+  },
   {
     version: "v0.3.22",
     date: "November 7, 2026",
