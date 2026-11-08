@@ -47,6 +47,7 @@ export const QuotesWidget: React.FC<QuotesWidgetProps> = ({
     if (intervalSec <= 0 || pool.length <= 1) return;
 
     const timer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       setIsFading(true);
       setTimeout(() => {
         setCurrentBlock((prev) => prev + 1);
