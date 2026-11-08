@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient, type User, type RealtimeChannel } from '@supabase/supabase-js';
 import { db } from './db';
 import { stripPlexTokens } from './plexLinks';
+import { isBoardFullError, setSyncRefusal } from './syncRefusal';
 import type { DashboardTab, DashboardWidget, StickyNoteItem, AppSettings } from '../types/dashboard';
 
 let supabaseClient: SupabaseClient | null = null;
@@ -105,6 +106,7 @@ export async function signOutSupabase(): Promise<void> {
     realtimeConnectionActive = false;
     cachedDashboardTarget = null;
     lastKnownCloudUpdatedAt = null;
+    setSyncRefusal(null);
     await sb.auth.signOut();
   }
 }
@@ -575,7 +577,9 @@ export async function pushToCloud(
           title: w.title,
           grid_pos: w.gridPos,
           freeform_pos: w.freeformPos,
-          config: stripPlexTokens(configToPush),
+          // A deleted widget only needs its id and deletion time, so its content (an uploaded image, say)
+          // doesn't keep using the board's space for the 30 days the deletion is kept
+          config: w.deleted_at ? {} : stripPlexTokens(configToPush),
           updated_at: w.updated_at,
           deleted_at: w.deleted_at || null,
         };
@@ -597,10 +601,11 @@ export async function pushToCloud(
         user_id: ownerId,
         tab_id: n.tabId,
         widget_id: n.widgetId,
-        title: n.title,
-        content: n.content,
+        // Like widgets, a deleted note is sent without its text
+        title: n.deleted_at ? null : n.title,
+        content: n.deleted_at ? '' : n.content,
         is_checklist: n.isChecklist,
-        checklist_items: n.checklistItems || [],
+        checklist_items: n.deleted_at ? [] : n.checklistItems || [],
         bg_color: n.bgColor,
         font_size: n.fontSize || 'base',
         expires_at: n.expiresAt || null,
@@ -621,8 +626,36 @@ export async function pushToCloud(
 
     if (!shouldUpsertDash && !hasAnyItemUpserted) {
       // Nothing changed locally compared to remote state! 0 database writes.
+      setSyncRefusal(null);
       return { success: true };
     }
+
+    // When the board is full, the database refuses rows that would make it bigger (see "Board Size
+    // Limits" in supabase/schema.sql). Those rows are skipped and stay newer here, so they're sent
+    // again next time, and everything else still syncs. Any other error stops the push as before.
+    const refusedForSpace: { message: string }[] = [];
+    const skipIfBoardFull = (error: unknown) => {
+      if (!isBoardFullError(error)) throw error;
+      refusedForSpace.push(error);
+    };
+    const upsertRows = async (table: 'tabs' | 'widgets' | 'notes', rows: any[], chunkSize: number) => {
+      for (let i = 0; i < rows.length; i += chunkSize) {
+        const chunk = rows.slice(i, i + chunkSize);
+        const { error } = await sb.from(table).upsert(chunk);
+        if (!error) continue;
+        if (chunk.length === 1) {
+          skipIfBoardFull(error);
+          continue;
+        }
+        // Send this chunk one row at a time, so one large or refused row doesn't hold back the rest
+        for (const row of chunk) {
+          const { error: rowError } = await sb.from(table).upsert(row);
+          if (rowError) skipIfBoardFull(rowError);
+        }
+      }
+    };
+    const isDeletion = (row: { deleted_at: string | null }) => Boolean(row.deleted_at);
+    const isNotDeletion = (row: { deleted_at: string | null }) => !row.deleted_at;
 
     if (shouldUpsertDash) {
       const tabThemeMeta = tabs.reduce((acc, t) => {
@@ -657,42 +690,22 @@ export async function pushToCloud(
         invite_code: null,
         updated_at: nowIso,
       });
-      if (dashErr) throw dashErr;
+      if (dashErr) skipIfBoardFull(dashErr);
     } else if (hasAnyItemUpserted && !isMember) {
       // Touch dashboard updated_at so all remote clients recognize the board revision change
       await sb.from('dashboards').update({ updated_at: nowIso }).eq('id', dashboardId);
     }
 
-    if (tabsToUpsert.length > 0) {
-      const { error: tabErr } = await sb.from('tabs').upsert(tabsToUpsert);
-      if (tabErr) throw tabErr;
-    }
+    // Deletions next, so a full board makes room before anything new is sent
+    await upsertRows('tabs', tabsToUpsert.filter(isDeletion), 25);
+    await upsertRows('widgets', widgetsToUpsert.filter(isDeletion), 25);
+    await upsertRows('notes', notesToUpsert.filter(isDeletion), 25);
 
-    if (widgetsToUpsert.length > 0) {
-      // Upsert widgets in small batches of 5 to avoid statement timeouts
-      const CHUNK_SIZE = 5;
-      for (let i = 0; i < widgetsToUpsert.length; i += CHUNK_SIZE) {
-        const chunk = widgetsToUpsert.slice(i, i + CHUNK_SIZE);
-        const { error: widgetErr } = await sb.from('widgets').upsert(chunk);
-        if (widgetErr) {
-          // If a chunk fails, try upserting one by one so large widgets don't fail the rest
-          for (const item of chunk) {
-            const { error: singleErr } = await sb.from('widgets').upsert(item);
-            if (singleErr) throw singleErr;
-          }
-        }
-      }
-    }
-
-    if (notesToUpsert.length > 0) {
-      // Upsert notes in batches of 25
-      const CHUNK_SIZE = 25;
-      for (let i = 0; i < notesToUpsert.length; i += CHUNK_SIZE) {
-        const chunk = notesToUpsert.slice(i, i + CHUNK_SIZE);
-        const { error: noteErr } = await sb.from('notes').upsert(chunk);
-        if (noteErr) throw noteErr;
-      }
-    }
+    // Then everything else
+    await upsertRows('tabs', tabsToUpsert.filter(isNotDeletion), 25);
+    // Widgets go in small batches to avoid statement timeouts
+    await upsertRows('widgets', widgetsToUpsert.filter(isNotDeletion), 5);
+    await upsertRows('notes', notesToUpsert.filter(isNotDeletion), 25);
 
     // Non-blocking purge of expired tombstones (> 30 days old) in cloud database
     const thirtyDaysAgoIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -703,6 +716,12 @@ export async function pushToCloud(
     ]).catch(() => {});
 
     lastKnownCloudUpdatedAt = nowIso;
+    if (refusedForSpace.length > 0) {
+      const { message } = refusedForSpace[0];
+      setSyncRefusal({ message });
+      return { success: false, error: message };
+    }
+    setSyncRefusal(null);
     return { success: true };
   } catch (err: any) {
     console.error('Cloud push failed:', err);

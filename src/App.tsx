@@ -21,6 +21,7 @@ import { isTimeInNightWindow } from './utils/nightMode';
 import { initUpdateChecker } from './services/updateChecker';
 import { UpdateNotificationBanner } from './components/common/UpdateNotificationBanner';
 import { PlexReauthBanner } from './components/common/PlexReauthBanner';
+import { SyncRefusedBanner } from './components/common/SyncRefusedBanner';
 
 const SettingsModal = lazy(() =>
   import('./components/settings/SettingsModal').then((m) => ({ default: m.SettingsModal }))
@@ -588,6 +589,7 @@ export function App() {
           onOpenSettings={handleOpenSettings}
         />
       </Suspense>
+        <SyncRefusedBanner withDock={false} />
         {isSettingsOpen && (
           <Suspense fallback={null}>
             <SettingsModal
@@ -714,6 +716,9 @@ export function App() {
 
       {/* Device-Local Plex Pairing Prompt when Plex is configured on dashboard */}
       <PlexReauthBanner onOpenPlexAuth={() => setIsPlexPairingModalOpen(true)} />
+
+      {/* Shown when the cloud refuses some changes because the board is full */}
+      <SyncRefusedBanner />
 
       {/* Dedicated Plex Pairing Modal */}
       {isPlexPairingModalOpen && (
