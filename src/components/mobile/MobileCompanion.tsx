@@ -32,6 +32,7 @@ import { getCurrentUser } from '../../services/supabase';
 import { isCanvasThemeLight } from '../../data/canvasThemes';
 import { APP_VERSION } from '../../data/version';
 import { useDashboardStore } from '../../store/dashboardStore';
+import { useSyncRefusal } from '../../hooks/useSyncRefusal';
 
 const ChangelogModal = React.lazy(() =>
   import('../changelog/ChangelogModal').then((m) => ({ default: m.ChangelogModal }))
@@ -134,6 +135,8 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
 
   // Authenticated status
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  // Set while the cloud refuses this board's changes because the board is full
+  const syncRefusal = useSyncRefusal();
 
   React.useEffect(() => {
     getCurrentUser().then((u) => setUserEmail(u?.email || null));
@@ -469,7 +472,11 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
                 >
                   v{APP_VERSION}
                 </button>
-                {userEmail ? (
+                {userEmail && syncRefusal ? (
+                  <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/30 whitespace-nowrap">
+                    Not syncing
+                  </span>
+                ) : userEmail ? (
                   <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                     Synced
                   </span>
