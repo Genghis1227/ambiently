@@ -11,6 +11,17 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.24",
+    date: "November 8, 2026",
+    title: "Smart Timed Note Duplication & Quick Time-Shift Pills",
+    highlights: [
+      "Default +1 Day Timed Note Duplication: Duplicating a note that has an expiration/reminder time now automatically increments the copy's date by +1 day while preserving the local time of day.",
+      "Quick Inline Time-Shift Pills: Added a compact Duplicate Time Shift bar (+1d, +1w, Same, Edit) in the note context menu when duplicating timed notes.",
+      "Pre-Filled Duplicate Editor ('Edit'): Selecting 'Edit' in the Duplicate Time Shift bar opens the Note Modal pre-populated with the duplicated note and +1 day time shift ready to customize.",
+      "Notes Tile Duplicate Action: Added a 1-click Duplicate button to note cards inside the Sticky Notes widget tile.",
+    ],
+  },
+  {
     version: "v0.3.23",
     date: "November 7, 2026",
     title: "89 KB Bundle Reduction, Intl Formatter Caching & Instant Canvas Caching",

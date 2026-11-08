@@ -967,9 +967,78 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     onUpdateNote(note.id, { checklistItems: updated });
   };
 
-  const handleDuplicateNote = (noteId: string) => {
+  const computeShiftedExpiry = (
+    originalExpiresAt: string | null | undefined,
+    daysOffset: number
+  ): string | null | undefined => {
+    if (!originalExpiresAt) return originalExpiresAt;
+    if (daysOffset === 0) return originalExpiresAt;
+    try {
+      const d = new Date(originalExpiresAt);
+      if (Number.isNaN(d.getTime())) return originalExpiresAt;
+      const nowMs = Date.now();
+      // If original date is already in the past, base the shift off today at the same local time of day
+      if (d.getTime() < nowMs) {
+        const todayBase = new Date();
+        todayBase.setHours(d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds());
+        todayBase.setDate(todayBase.getDate() + daysOffset);
+        return todayBase.toISOString();
+      }
+      d.setDate(d.getDate() + daysOffset);
+      return d.toISOString();
+    } catch {
+      return originalExpiresAt;
+    }
+  };
+
+  const handleDuplicateNote = (
+    noteId: string,
+    mode: 'plus1d' | 'plus3d' | 'plus1w' | 'same' | 'edit' = 'plus1d'
+  ) => {
     const original = notes.find((n) => n.id === noteId);
     if (!original) return;
+
+    const clonedChecklist = original.checklistItems
+      ? original.checklistItems.map((item) => ({
+          ...item,
+          id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        }))
+      : undefined;
+
+    if (mode === 'edit') {
+      if (isCanvasLocked) return;
+      setEditingNoteId(null); // New note (duplicate)
+      setNewTitle(original.title ? `${original.title} (Copy)` : '');
+      setNewContent(original.content || '');
+      setIsChecklist(Boolean(original.isChecklist));
+      setChecklistItems(clonedChecklist ? [...clonedChecklist] : []);
+      setSelectedColor(original.bgColor || COLOR_PALETTE[0]);
+      setSelectedFontSize(original.fontSize || 'base');
+      setSelectedNoteTabId(original.tabId || activeTabId);
+
+      const shiftedIso = computeShiftedExpiry(original.expiresAt, 1);
+      if (shiftedIso) {
+        setExpiryOption('custom');
+        try {
+          const d = new Date(shiftedIso);
+          const isoLocal = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+            .toISOString()
+            .slice(0, 16);
+          setCustomExpiry(isoLocal);
+        } catch {
+          setCustomExpiry('');
+        }
+      } else {
+        setExpiryOption('permanent');
+        setCustomExpiry('');
+      }
+      onOpenCreator?.();
+      return;
+    }
+
+    const daysOffset =
+      mode === 'same' ? 0 : mode === 'plus3d' ? 3 : mode === 'plus1w' ? 7 : 1;
+    const nextExpiresAt = computeShiftedExpiry(original.expiresAt, daysOffset);
 
     const originalPos = original.freeformPos || {
       xRatio: 0.1,
@@ -992,15 +1061,10 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       title: original.title ? `${original.title} (Copy)` : undefined,
       content: original.content,
       isChecklist: original.isChecklist,
-      checklistItems: original.checklistItems
-        ? original.checklistItems.map((item) => ({
-            ...item,
-            id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-          }))
-        : undefined,
+      checklistItems: clonedChecklist,
       bgColor: original.bgColor,
       fontSize: original.fontSize,
-      expiresAt: original.expiresAt,
+      expiresAt: nextExpiresAt,
       freeformPos: offsetPos,
       isPinnedToCanvas: true,
     });
@@ -2499,36 +2563,86 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             </button>
           )}
 
-          {contextMenu.type === 'note' && (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  const n = notes.find((x) => x.id === contextMenu.id);
-                  if (n) {
-                    openNoteEditorForExisting(n);
-                  }
-                  setContextMenu(null);
-                }}
-                className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-300 hover:text-white transition-colors cursor-pointer text-left"
-              >
-                <Edit2 className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                <span>Edit Note</span>
-              </button>
+          {contextMenu.type === 'note' && (() => {
+            const activeNote = notes.find((x) => x.id === contextMenu.id);
+            const hasExpiry = Boolean(activeNote?.expiresAt);
+            return (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (activeNote) {
+                      openNoteEditorForExisting(activeNote);
+                    }
+                    setContextMenu(null);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-300 hover:text-white transition-colors cursor-pointer text-left"
+                >
+                  <Edit2 className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                  <span>Edit Note</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  handleDuplicateNote(contextMenu.id);
-                  setContextMenu(null);
-                }}
-                className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-300 hover:text-white transition-colors cursor-pointer text-left"
-              >
-                <Copy className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                <span>Duplicate Note</span>
-              </button>
-            </>
-          )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleDuplicateNote(contextMenu.id, 'plus1d');
+                    setContextMenu(null);
+                  }}
+                  className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-300 hover:text-white transition-colors cursor-pointer text-left"
+                  title={
+                    hasExpiry
+                      ? 'Duplicate note and increment expiration date by +1 day'
+                      : 'Duplicate note'
+                  }
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Copy className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                    <span>Duplicate Note</span>
+                  </div>
+                  {hasExpiry && (
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                      +1d
+                    </span>
+                  )}
+                </button>
+
+                {hasExpiry && (
+                  <div className="px-2 pb-1 pt-0.5 flex flex-col gap-1">
+                    <div className="text-[9px] uppercase tracking-wider text-gray-500 font-semibold px-0.5">
+                      Duplicate Time Shift
+                    </div>
+                    <div className="grid grid-cols-4 gap-1">
+                      {(
+                        [
+                          { mode: 'plus1d', label: '+1d', title: 'Increment by 1 day' },
+                          { mode: 'plus1w', label: '+1w', title: 'Increment by 1 week' },
+                          { mode: 'same', label: 'Same', title: 'Keep exact same date/time' },
+                          { mode: 'edit', label: 'Edit', title: 'Open note modal with +1d to customize' },
+                        ] as const
+                      ).map((opt) => (
+                        <button
+                          key={opt.mode}
+                          type="button"
+                          title={opt.title}
+                          onClick={() => {
+                            handleDuplicateNote(contextMenu.id, opt.mode);
+                            setContextMenu(null);
+                          }}
+                          className={`px-1.5 py-1 rounded-lg text-[10px] font-semibold transition-all cursor-pointer text-center border ${
+                            opt.mode === 'plus1d'
+                              ? 'bg-blue-600/20 hover:bg-blue-600/35 text-blue-300 border-blue-500/40'
+                              : 'bg-gray-900/90 hover:bg-gray-800 text-gray-300 hover:text-white border-gray-800'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
 
           <button
             type="button"
