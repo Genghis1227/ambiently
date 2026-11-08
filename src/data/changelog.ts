@@ -11,6 +11,19 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.28",
+    date: "November 8, 2026",
+    title: "Full-Viewport Kiosk Blocker Curtain & PIN-Protected Windowed Mode",
+    highlights: [
+      "Full-Viewport Kiosk Blocker Curtain: Replaced the small top banner with an unbypassable full-screen backdrop curtain when Kid Lock is active and the browser exits fullscreen.",
+      "Instant Fullscreen Re-entry: Tapping anywhere on the screen immediately re-enters fullscreen display mode.",
+      "PIN-Protected Windowed Mode: Parents can enter their PIN to unlock windowed mode without being blocked or trapped in an auto-fullscreen loop.",
+      "Automatic Security Re-Arming: Kiosk protection immediately re-arms as soon as the display returns to fullscreen.",
+      "Escape & F11 Key Lock Interception: Activated Chromium Keyboard Lock for Escape and F11 and intercepted both keys to require parent PIN authentication.",
+      "Window Closure Guard: Added a beforeunload confirmation guard to prevent 1-click window closure from the OS taskbar while kiosk mode is locked.",
+    ],
+  },
+  {
     version: "v0.3.27",
     date: "November 8, 2026",
     title: "PIN Security Hardening, Offline PWA Caching & Cloud Sync Leak Fixes",
