@@ -11,6 +11,17 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.25",
+    date: "November 8, 2026",
+    title: "Sync Refusal Alerts, Zero-Payload Tombstones & Priority Deletions",
+    highlights: [
+      "User-Facing Sync Refusal Alerts: Added SyncRefusedBanner to notify users when cloud saves are refused due to board size limits, with a 1-click 'Try again' retry and mobile companion status badge.",
+      "Zero-Payload Deletions: Stripped heavy configs and note bodies from soft-deleted cloud payloads, allowing deleted items to immediately free up board space.",
+      "Priority Cloud Deletions: Cloud synchronization now pushes deletions before new additions and modifications so space is reclaimed first.",
+      "Fault-Tolerant Upsert Fallbacks: Batched upserts now fall back to single-row pushes upon refusal so valid items continue syncing without getting blocked by oversized rows.",
+    ],
+  },
+  {
     version: "v0.3.24",
     date: "November 8, 2026",
     title: "Smart Timed Note Duplication & Quick Time-Shift Pills",

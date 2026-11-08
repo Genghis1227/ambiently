@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.25] - 2026-11-08
+
+### Added
+* **User-Facing Sync Refusal Alerts (`src/components/common/SyncRefusedBanner.tsx`, `src/services/syncRefusal.ts`, `src/hooks/useSyncRefusal.ts`):**
+  * Added `SyncRefusedBanner` that appears at the bottom of the screen (dock-aware and hidden during night mode) whenever the cloud refuses writes due to board size limits (`board_full`).
+  * Provides an inline 1-click **"Try again"** button and informs users that changes remain safely saved locally on their device.
+  * Updated `MobileCompanion` to switch its sync pill badge from `"Synced"` to `"Not syncing"` while changes are refused.
+
+### Improved
+* **Zero-Payload Cloud Tombstones & Priority Deletions (`src/services/supabase.ts`):**
+  * Soft-deleted widgets and notes are now sent with empty configurations (`{}`) and empty contents (`""`), immediately releasing database quota rather than holding stored space for 30 days.
+  * Reordered cloud synchronization to push deletions first before additions and edits, ensuring capacity is reclaimed on full boards first.
+  * Expanded chunked upsert retry logic to fall back to single-row pushes across tabs, widgets, and notes, skipping refused items while letting all other changes sync cleanly.
+
+---
+
 ## [0.3.24] - 2026-11-08
 
 ### Added
