@@ -40,8 +40,19 @@ export const CountdownWidget: React.FC<CountdownWidgetProps> = ({
     };
 
     calculate();
-    const timer = setInterval(calculate, 1000);
-    return () => clearInterval(timer);
+    const tick = () => {
+      if (document.visibilityState === 'hidden') return;
+      calculate();
+    };
+    const timer = setInterval(tick, 1000);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') calculate();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [targetDate]);
 
   const targetDateFormatted = new Date(targetDate).toLocaleDateString([], {

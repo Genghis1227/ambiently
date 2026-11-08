@@ -5,9 +5,9 @@ export interface ReleaseEntry {
   highlights: string[];
 }
 
-import packageJson from '../../package.json';
+import { APP_VERSION } from './version';
 
-export const APP_VERSION = packageJson.version;
+export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {

@@ -60,7 +60,7 @@ import {
   pushToCloud,
   pullFromCloud,
 } from '../../services/supabase';
-import { APP_VERSION } from '../../data/changelog';
+import { APP_VERSION } from '../../data/version';
 import { CANVAS_ICONS } from '../../data/canvasIcons';
 import { CANVAS_THEMES } from '../../data/canvasThemes';
 import { MAX_CANVASES } from '../../types/dashboard';
@@ -70,10 +70,14 @@ import {
 } from '../../utils/imageUpload';
 import type { CanvasBackgroundTheme } from '../../types/dashboard';
 import { CreateCanvasModal } from '../dock/CreateCanvasModal';
-import { ChangelogModal } from '../changelog/ChangelogModal';
 import { SupportPanel } from './SupportPanel';
-import { ShareBoardModal } from './ShareBoardModal';
 
+const ChangelogModal = React.lazy(() =>
+  import('../changelog/ChangelogModal').then((m) => ({ default: m.ChangelogModal }))
+);
+const ShareBoardModal = React.lazy(() =>
+  import('./ShareBoardModal').then((m) => ({ default: m.ShareBoardModal }))
+);
 const PhotoSourcesModal = React.lazy(() =>
   import('../photos/PhotoSourcesModal').then((m) => ({ default: m.PhotoSourcesModal }))
 );
@@ -2055,15 +2059,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
         }}
       />
 
-      {/* Dedicated Changelog Modal */}
-      <ChangelogModal
-        isOpen={isChangelogOpen}
-        onClose={() => setIsChangelogOpen(false)}
-      />
-      <ShareBoardModal
-        isOpen={isShareOpen}
-        onClose={() => setIsShareOpen(false)}
-      />
+      <React.Suspense fallback={null}>
+        {/* Dedicated Changelog Modal */}
+        {isChangelogOpen && (
+          <ChangelogModal
+            isOpen={isChangelogOpen}
+            onClose={() => setIsChangelogOpen(false)}
+          />
+        )}
+        {isShareOpen && (
+          <ShareBoardModal
+            isOpen={isShareOpen}
+            onClose={() => setIsShareOpen(false)}
+          />
+        )}
+      </React.Suspense>
 
       {/* Common Photo Sources Hub */}
       {isCommonPhotoModalOpen && (

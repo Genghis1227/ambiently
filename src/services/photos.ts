@@ -87,6 +87,26 @@ export async function cachePhotosLocally(photos: PhotoItem[]): Promise<void> {
   }
 }
 
+const activeLocalBlobUrls: string[] = [];
+
+function createTrackedBlobUrl(file: File): string {
+  const url = URL.createObjectURL(file);
+  activeLocalBlobUrls.push(url);
+  return url;
+}
+
+export function revokePreviousLocalBlobUrls(): void {
+  if (activeLocalBlobUrls.length === 0) return;
+  for (let i = 0; i < activeLocalBlobUrls.length; i++) {
+    try {
+      URL.revokeObjectURL(activeLocalBlobUrls[i]);
+    } catch {
+      // ignore
+    }
+  }
+  activeLocalBlobUrls.length = 0;
+}
+
 export async function scanDirectoryHandle(
   dirHandle: any,
   photos: PhotoItem[],
@@ -106,7 +126,7 @@ export async function scanDirectoryHandle(
       if (isImgExt) {
         try {
           const file = await entry.getFile();
-          const url = URL.createObjectURL(file);
+          const url = createTrackedBlobUrl(file);
           photos.push({
             id: `local-${entry.name}-${file.lastModified}-${Math.random().toString(36).slice(2, 7)}`,
             url,
@@ -125,7 +145,7 @@ export async function scanDirectoryHandle(
         try {
           const file = await entry.getFile();
           if (file.type && file.type.startsWith('image/')) {
-            const url = URL.createObjectURL(file);
+            const url = createTrackedBlobUrl(file);
             photos.push({
               id: `local-${entry.name}-${file.lastModified}-${Math.random().toString(36).slice(2, 7)}`,
               url,
@@ -319,6 +339,7 @@ export async function scanSelectedSubfolders(
   };
 
   if (signal?.aborted) return { folderEntries, totalPhotos };
+  revokePreviousLocalBlobUrls();
 
   if (inspection.dirHandle) {
     if (includeRootPhotos && inspection.hasDirectPhotos) {
@@ -329,7 +350,7 @@ export async function scanSelectedSubfolders(
         if (entry.kind === 'file' && IMAGE_EXT_REGEX.test(entry.name)) {
           try {
             const file = await entry.getFile();
-            const url = URL.createObjectURL(file);
+            const url = createTrackedBlobUrl(file);
             const p: PhotoItem = {
               id: `local-${entry.name}-${file.lastModified}-${Math.random().toString(36).slice(2, 7)}`,
               url,
@@ -443,6 +464,7 @@ export async function pickLocalPhotoDirectory(
 
     const dirHandle = promptRes.dirHandle;
     const folderName = dirHandle.name || 'Selected Folder';
+    revokePreviousLocalBlobUrls();
     const localPhotos: PhotoItem[] = [];
     await scanDirectoryHandle(dirHandle, localPhotos, maxPhotos, 0, 12, onProgress);
 
@@ -481,7 +503,7 @@ export function parseFileListToPhotos(
     }
 
     if (IMAGE_EXT_REGEX.test(file.name) || (file.type && file.type.startsWith('image/'))) {
-      const url = URL.createObjectURL(file);
+      const url = createTrackedBlobUrl(file);
       photos.push({
         id: `local-${file.name}-${file.lastModified}-${Math.random().toString(36).slice(2, 7)}`,
         url,
