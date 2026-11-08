@@ -1,0 +1,13 @@
+# Response headers for every page and file Cloudflare Pages serves (Pages Functions set their own).
+#
+# Content-Security-Policy: only this site's own scripts can run, so an injected script tag won't.
+# Photos, Plex servers, calendars, Supabase and embeds come from anywhere a user points them, so images,
+# media and connections stay open, and frames allow any https:// page (the Media Embed widget).
+# Framing this site isn't blocked, so it can still be shown inside a home dashboard. A framed copy
+# gets its own separate storage in current browsers, so it isn't signed in.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src * data: blob:; font-src 'self' data:; connect-src * wss: data: blob:; frame-src https:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'
+  Strict-Transport-Security: max-age=31536000
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin

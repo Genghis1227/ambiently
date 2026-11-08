@@ -2,6 +2,7 @@
 // Proxies and parses XML RSS / Atom feeds into normalized JSON articles
 
 import { XMLParser } from 'fast-xml-parser';
+import { fetchExternal, externalFetchErrorResponse, refuseOtherSites } from '../_shared/fetchExternal';
 
 interface PagesContext {
   request: Request;
@@ -34,34 +35,10 @@ function textOf(value: any): string {
   return String(typeof value === 'object' ? value['#text'] ?? '' : value);
 }
 
-function isSafeExternalHttpsUrl(rawUrl: string): { valid: boolean; reason?: string } {
-  try {
-    const parsed = new URL(rawUrl);
-    if (parsed.protocol !== 'https:') {
-      return { valid: false, reason: 'Only HTTPS feed URLs are permitted.' };
-    }
-    const host = parsed.hostname.toLowerCase();
-    if (
-      host === 'localhost' ||
-      host.endsWith('.local') ||
-      host.endsWith('.internal') ||
-      host === '0.0.0.0' ||
-      host === '[::1]' ||
-      /^127\./.test(host) ||
-      /^10\./.test(host) ||
-      /^192\.168\./.test(host) ||
-      /^169\.254\./.test(host) ||
-      /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
-    ) {
-      return { valid: false, reason: 'Private or internal network addresses are forbidden.' };
-    }
-    return { valid: true };
-  } catch {
-    return { valid: false, reason: 'Malformed URL.' };
-  }
-}
-
 export async function onRequestGet(context: PagesContext): Promise<Response> {
+  const refused = refuseOtherSites(context.request);
+  if (refused) return refused;
+
   const url = new URL(context.request.url);
   const feedUrl = url.searchParams.get('url');
 
@@ -78,17 +55,10 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     normalizedUrl = 'https://' + normalizedUrl.slice(7);
   }
 
-  const safetyCheck = isSafeExternalHttpsUrl(normalizedUrl);
-  if (!safetyCheck.valid) {
-    return new Response(JSON.stringify({ error: safetyCheck.reason || 'Invalid RSS URL' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
   try {
-    const fetchRes = await fetch(normalizedUrl, {
-      redirect: 'follow',
+    // Checks the address and every redirect, waits at most 10 seconds and reads at most 5 MB
+    const fetchRes = await fetchExternal(normalizedUrl, {
+      maxBytes: 5 * 1024 * 1024,
       headers: {
         'User-Agent': 'Ambiently-Display/1.0 (+https://dashboard.trinhism.com)',
         Accept: 'application/rss+xml, application/xml, text/xml, */*',
@@ -102,7 +72,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       );
     }
 
-    const xmlText = await fetchRes.text();
+    const xmlText = fetchRes.text;
     const parser = new XMLParser({
       ignoreAttributes: false,
       attributeNamePrefix: '@_',
@@ -147,13 +117,14 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       headers: {
         'Content-Type': 'application/json',
         'Cache-Control': 'public, max-age=600', // 10-minute edge cache
-        'Access-Control-Allow-Origin': '*',
       },
     });
   } catch (err: any) {
+    const fetchError = externalFetchErrorResponse(err);
+    if (fetchError) return fetchError;
     return new Response(
       JSON.stringify({ error: `RSS parsing error: ${err.message}` }),
-      { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
 }
