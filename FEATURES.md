@@ -56,8 +56,9 @@
 * **Close Floating Sticky Notes & Smart Canvas Placement (`Corkboard.tsx`, `App.tsx`):**
   * **1-Click Close (`✕`)**: Every floating note on the corkboard features a close button in its header. Closing a note unpins it from the canvas (`isPinnedToCanvas: false`) without deleting it, keeping it active and safe in the Notes Tile.
   * **Pin to Board with Collision Avoidance**: Click `[ 📌 Pin to Board ]` in the Notes Tile to pop notes back onto the corkboard. Ambiently automatically unhides notes, elevates `zIndex`, detects widget coverage, auto-positions into open space, and displays a 2.5s visual pop-out ring.
-* **Note Expiration & Auto-Cleanup Engine:**
+* **Note Expiration, Smart Duplication & Auto-Cleanup Engine:**
   * Assign notes as **Permanent**, **Expire in 24 Hours**, **Expire in 3 Days**, or pick a **Custom Date/Time**.
+  * **Smart Timed Note Duplication:** Duplicating a timed note automatically increments its date by **+1 day** (`+1d` badge) while preserving its local time of day, and exposes an inline **Duplicate Time Shift** bar (`+1d`, `+1w`, `Same`, `Edit`) in the context menu.
   * Notes expiring within 12 hours display an amber warning border and badge.
   * Expired or deleted notes automatically move to the **Trash / Archive Drawer** for 1-click restoration or permanent deletion.
 * **Dedicated Sticky Notes Tile (`StickyNotesWidget.tsx`):** In addition to freeform notes pinned directly to the canvas, users can add a compact Sticky Notes list & Trash drawer tile from `+ Add Tile`.

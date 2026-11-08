@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.24] - 2026-11-08
+
+### Added
+* **Smart Timed Note Duplication & Quick Time-Shift Pills (`src/components/layout/Corkboard.tsx`, `src/components/widgets/StickyNotesWidget.tsx`):**
+  * Clicking **Duplicate Note** on a note with an expiration/reminder timestamp now defaults to incrementing the duplicated note's date by **+1 day** (`+1d` badge) while preserving its exact local time of day.
+  * Added an inline **Duplicate Time Shift** pill bar (`+1d`, `+1w`, `Same`, `Edit`) directly in the note context menu whenever a note has a timestamp, allowing 1-click shifts or opening the Note Modal pre-filled with the copy (`Edit`).
+  * Added a 1-click **Duplicate (`Copy`)** button to note cards inside the `StickyNotesWidget` tile.
+
+---
+
 ## [0.3.23] - 2026-11-07
 
 ### Performance
