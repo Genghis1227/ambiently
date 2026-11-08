@@ -22,6 +22,7 @@ import { saveSnapshotToFile, hasActiveLocalFile } from '../services/fileSync';
 import { computeNonOverlappingLayout, findOpenCanvasSpot } from '../utils/autoLayout';
 import type { PhotoItem } from '../services/photos';
 import { getSupabase, getCurrentUser, pushToCloud } from '../services/supabase';
+import { CANVAS_LOOK_FIELDS, keepLocalNoteFields, keepLocalTabFields, keepLocalWidgetFields } from '../services/syncMerge';
 
 let backupDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 let cloudAutoSyncTimer: ReturnType<typeof setTimeout> | null = null;
@@ -43,6 +44,15 @@ async function scheduleCloudAutoPush(get: () => DashboardState) {
   } catch (err) {
     console.warn('Cloud auto-push skipped:', err);
   }
+}
+
+// A canvas's look (theme, wallpaper, dimming, hidden notes, home canvas) syncs inside the board settings
+// (canvasThemes in pushToCloud), and settings are only sent when they've changed. So a change to a look
+// marks the settings as changed too, or it would never reach other devices.
+async function markCanvasLooksChanged(get: () => DashboardState, set: (partial: Partial<DashboardState>) => void) {
+  const settings: AppSettings = { ...get().settings, updated_at: new Date().toISOString() };
+  await db.settings.put(settings);
+  set({ settings });
 }
 
 export interface PhotoSyncState {
@@ -317,6 +327,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       tabs: [...get().tabs, newTab],
       activeTabId: newId,
     });
+    await markCanvasLooksChanged(get, set);
     get().saveLocalBackup();
     return newId;
   },
@@ -333,6 +344,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     set({
       tabs: get().tabs.map((t) => (t.id === tabId ? updated : t)),
     });
+    if (CANVAS_LOOK_FIELDS.some((field) => field in updates)) {
+      await markCanvasLooksChanged(get, set);
+    }
     get().saveLocalBackup();
   },
 
@@ -346,6 +360,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     }));
     await db.tabs.bulkPut(updatedTabs);
     set({ tabs: updatedTabs });
+    await markCanvasLooksChanged(get, set);
     get().saveLocalBackup();
   },
 
@@ -376,6 +391,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       tabs: updatedRemainingTabs,
       activeTabId: nextActiveTabId,
     });
+    if (tab.isHome) {
+      await markCanvasLooksChanged(get, set);
+    }
     get().saveLocalBackup();
   },
 
@@ -645,10 +663,11 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
 
   unlockKiosk: async (enteredPin) => {
     const { settings } = get();
-    if (!settings.pinLockEnabled || !settings.pinHash || enteredPin === '') {
+    if (!settings.pinLockEnabled || !settings.pinHash) {
       set({ isUnlocked: true });
       return true;
     }
+    if (!enteredPin) return false;
     const hash = await hashPin(enteredPin);
     if (hash === settings.pinHash) {
       set({ isUnlocked: true });
@@ -844,8 +863,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     get().saveLocalBackup();
   },
 
-  syncRemoteNoteChange: (remoteNote, eventType) => {
-    const existing = get().notes.find((n) => n.id === remoteNote.id);
+  syncRemoteNoteChange: (incomingNote, eventType) => {
+    const existing = get().notes.find((n) => n.id === incomingNote.id);
+    const remoteNote = keepLocalNoteFields(incomingNote, existing);
     if (existing) {
       const localTime = new Date(existing.updated_at || 0).getTime();
       const remoteTime = new Date(remoteNote.updated_at || 0).getTime();
@@ -880,8 +900,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     }
   },
 
-  syncRemoteWidgetChange: (remoteWidget, eventType) => {
-    const existing = get().widgets.find((w) => w.id === remoteWidget.id);
+  syncRemoteWidgetChange: (incomingWidget, eventType) => {
+    const existing = get().widgets.find((w) => w.id === incomingWidget.id);
+    const remoteWidget = keepLocalWidgetFields(incomingWidget, existing);
     if (existing) {
       const localTime = new Date(existing.updated_at || 0).getTime();
       const remoteTime = new Date(remoteWidget.updated_at || 0).getTime();
@@ -916,8 +937,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     }
   },
 
-  syncRemoteTabChange: (remoteTab, eventType) => {
-    const existing = get().tabs.find((t) => t.id === remoteTab.id);
+  syncRemoteTabChange: (incomingTab, eventType) => {
+    const existing = get().tabs.find((t) => t.id === incomingTab.id);
+    const remoteTab = keepLocalTabFields(incomingTab, existing);
     if (existing) {
       const localTime = new Date(existing.updated_at || 0).getTime();
       const remoteTime = new Date(remoteTab.updated_at || 0).getTime();

@@ -63,6 +63,8 @@ interface NavigationDockProps {
   isLocked: boolean;
   onSelectTab: (tabId: string) => void;
   onOpenSettings: () => void;
+  /** Opens household sharing, asking for the PIN first when settings need it */
+  onOpenShare: () => void;
   onToggleNightMode: () => void;
   onToggleFullscreen: () => void;
   isFullscreen: boolean;
@@ -123,6 +125,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
   isLocked,
   onSelectTab,
   onOpenSettings,
+  onOpenShare,
   onToggleNightMode,
   onToggleFullscreen,
   isFullscreen,
@@ -335,6 +338,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
               onSelectTab(tabId);
             }}
             onOpenSettings={onOpenSettings}
+            onOpenShare={onOpenShare}
             onToggleFullscreen={onToggleFullscreen}
             isFullscreen={isFullscreen}
             onToggleMobileCompanion={onToggleMobileCompanion}

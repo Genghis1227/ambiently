@@ -1793,7 +1793,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                 ) : (
                   <div className="flex items-center justify-between pt-1">
                     <span className="text-[11px] text-gray-400">
-                      Emergency override: press and hold the PIN pad shield for 4 seconds.
+                      Forgot it? Choose Forgot PIN on the PIN pad to get a code by email (needs cloud sign-in).
                     </span>
                     <button
                       onClick={() => {

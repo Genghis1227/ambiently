@@ -1,17 +1,35 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ShieldAlert, RotateCcw, X } from 'lucide-react';
+import { ShieldAlert, Mail, X } from 'lucide-react';
+import { getCurrentUser, sendPinResetCode, verifyOtpCode } from '../../services/supabase';
+import { useDashboardStore } from '../../store/dashboardStore';
 
 interface PinOverlayProps {
   onUnlock: (pin: string) => boolean | Promise<boolean>;
-  onForgotChallenge: () => void;
+  /** Called after a forgotten PIN was removed with a code sent to the account's email */
+  onPinRemoved: () => void;
   title?: string;
   subtitle?: string;
   onCancel?: () => void;
 }
 
+// A forgotten PIN is removed with a code emailed to the account this screen is signed in to, so only
+// someone who can read that inbox can get past it. Without cloud sign-in there's no way around it here.
+type Recovery =
+  | { step: 'closed' }
+  | { step: 'checking' }
+  | { step: 'no-account' }
+  | { step: 'send'; email: string }
+  | { step: 'code'; email: string };
+
+function maskEmail(email: string): string {
+  const [name, domain] = email.split('@');
+  if (!domain) return email;
+  return `${name.slice(0, 1)}${'•'.repeat(Math.max(1, Math.min(name.length - 1, 6)))}@${domain}`;
+}
+
 export const PinOverlay: React.FC<PinOverlayProps> = ({
   onUnlock,
-  onForgotChallenge,
+  onPinRemoved,
   title = 'Kiosk Locked',
   subtitle = 'Enter parent PIN to proceed',
   onCancel,
@@ -19,8 +37,10 @@ export const PinOverlay: React.FC<PinOverlayProps> = ({
   const [pin, setPin] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [holdTimer, setHoldTimer] = useState<number | null>(null);
-  const [holdProgress, setHoldProgress] = useState(0);
+  const [recovery, setRecovery] = useState<Recovery>({ step: 'closed' });
+  const [resetCode, setResetCode] = useState('');
+  const [recoveryMessage, setRecoveryMessage] = useState('');
+  const [isRecoveryBusy, setIsRecoveryBusy] = useState(false);
 
   const checkPin = useCallback(async (currentPin: string) => {
     setIsVerifying(true);
@@ -66,6 +86,7 @@ export const PinOverlay: React.FC<PinOverlayProps> = ({
 
   // Keyboard number listener for desktop / connected keyboards
   useEffect(() => {
+    if (recovery.step !== 'closed') return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key >= '0' && e.key <= '9') {
         e.preventDefault();
@@ -80,31 +101,46 @@ export const PinOverlay: React.FC<PinOverlayProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleDigit, handleBackspace, onCancel]);
+  }, [handleDigit, handleBackspace, onCancel, recovery.step]);
 
-  // 4-second hold for parent emergency override / reset
-  const startHold = () => {
-    const startTime = Date.now();
-    const interval = window.setInterval(() => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(100, (elapsed / 4000) * 100);
-      setHoldProgress(progress);
-      if (elapsed >= 4000) {
-        clearInterval(interval);
-        setHoldTimer(null);
-        setHoldProgress(0);
-        onForgotChallenge();
-      }
-    }, 50);
-    setHoldTimer(interval);
+  const openRecovery = async () => {
+    setRecoveryMessage('');
+    setResetCode('');
+    setRecovery({ step: 'checking' });
+    const user = await getCurrentUser().catch(() => null);
+    setRecovery(user?.email ? { step: 'send', email: user.email } : { step: 'no-account' });
   };
 
-  const stopHold = () => {
-    if (holdTimer) {
-      clearInterval(holdTimer);
-      setHoldTimer(null);
-      setHoldProgress(0);
+  const sendCode = async (email: string) => {
+    setIsRecoveryBusy(true);
+    setRecoveryMessage('');
+    const res = await sendPinResetCode(email);
+    setIsRecoveryBusy(false);
+    if (res.success) {
+      setRecovery({ step: 'code', email });
+    } else {
+      setRecoveryMessage(res.error || 'Could not send the code. Try again.');
     }
+  };
+
+  const confirmCode = async (email: string) => {
+    const code = resetCode.replace(/\D/g, '');
+    if (code.length < 6) {
+      setRecoveryMessage('Enter the 6-digit code from the email.');
+      return;
+    }
+    setIsRecoveryBusy(true);
+    setRecoveryMessage('');
+    const res = await verifyOtpCode(email, code);
+    if (!res.success) {
+      setIsRecoveryBusy(false);
+      setRecoveryMessage(res.error || 'That code is wrong or has expired.');
+      return;
+    }
+    // Removes the PIN and the kiosk locks; a new PIN can be set in Settings
+    await useDashboardStore.getState().setPinLock(null);
+    setIsRecoveryBusy(false);
+    onPinRemoved();
   };
 
   return (
@@ -202,28 +238,76 @@ export const PinOverlay: React.FC<PinOverlayProps> = ({
           </button>
         </div>
 
-        {/* Parent Override Hold Button */}
-        <div className="w-full pt-4 border-t border-gray-800/80 flex flex-col items-center gap-2">
-          <button
-            type="button"
-            onMouseDown={startHold}
-            onMouseUp={stopHold}
-            onMouseLeave={stopHold}
-            onTouchStart={startHold}
-            onTouchEnd={stopHold}
-            className="relative overflow-hidden w-full py-2.5 px-4 rounded-xl bg-gray-800/90 hover:bg-gray-750 text-xs text-gray-400 hover:text-gray-300 font-medium transition-all cursor-pointer"
-          >
-            {holdProgress > 0 && (
-              <div
-                className="absolute inset-0 bg-blue-600/30 transition-all duration-75"
-                style={{ width: `${holdProgress}%` }}
-              />
-            )}
-            <span className="relative z-10 flex items-center justify-center gap-1.5">
-              <RotateCcw className="w-3.5 h-3.5" />
-              Hold 4s for Parent Override / Reset
-            </span>
-          </button>
+        {/* Forgotten PIN: removed with a code emailed to the signed-in account */}
+        <div className="w-full pt-4 border-t border-gray-800/80 flex flex-col items-center gap-2 text-left">
+          {recovery.step === 'closed' && (
+            <button
+              type="button"
+              onClick={openRecovery}
+              className="w-full py-2.5 px-4 rounded-xl bg-gray-800/90 hover:bg-gray-800 text-xs text-gray-400 hover:text-gray-300 font-medium transition-all cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <Mail className="w-3.5 h-3.5" />
+              Forgot PIN?
+            </button>
+          )}
+
+          {recovery.step === 'checking' && <span className="text-xs text-gray-400">Checking this screen's account...</span>}
+
+          {recovery.step === 'no-account' && (
+            <p className="text-xs text-gray-400">
+              This screen isn't signed in to cloud sync, so its PIN can't be reset here. Clearing this site's data in
+              the browser's settings removes the PIN, along with the board saved on this screen.
+            </p>
+          )}
+
+          {recovery.step === 'send' && (
+            <>
+              <p className="text-xs text-gray-400 w-full">
+                We'll email a 6-digit code to {maskEmail(recovery.email)}, the account this screen is signed in to.
+                Entering it removes the PIN and the kiosk locks.
+              </p>
+              <button
+                type="button"
+                disabled={isRecoveryBusy}
+                onClick={() => sendCode(recovery.email)}
+                className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-xs text-white font-semibold transition-all cursor-pointer"
+              >
+                {isRecoveryBusy ? 'Sending...' : 'Email me a code'}
+              </button>
+            </>
+          )}
+
+          {recovery.step === 'code' && (
+            <>
+              <p className="text-xs text-gray-400 w-full">Enter the 6-digit code sent to {maskEmail(recovery.email)}.</p>
+              <div className="flex gap-2 w-full">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={8}
+                  value={resetCode}
+                  onChange={(e) => setResetCode(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') confirmCode(recovery.email);
+                  }}
+                  placeholder="123456"
+                  aria-label="Code from the email"
+                  className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-gray-950 border border-gray-700 text-sm text-white tracking-widest focus:outline-none focus:border-blue-500"
+                />
+                <button
+                  type="button"
+                  disabled={isRecoveryBusy}
+                  onClick={() => confirmCode(recovery.email)}
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-xs text-white font-semibold transition-all cursor-pointer"
+                >
+                  {isRecoveryBusy ? 'Checking...' : 'Remove PIN'}
+                </button>
+              </div>
+            </>
+          )}
+
+          {recoveryMessage && <span className="text-xs text-red-400 w-full">{recoveryMessage}</span>}
         </div>
       </div>
     </div>

@@ -43,7 +43,7 @@
 * **🔒 Kiosk Security & Hardware Polish:**
   * Screen Wake Lock API & Fullscreen Mode.
   * Scheduled Night Mode with low-glow, pixel-shifting OLED clock to prevent screen burn-in.
-  * Kid-Proof PIN lock with a 4-second hold parent challenge.
+  * Kid-Proof PIN lock. A forgotten PIN is removed with a code emailed to the signed-in account.
   * Isolated Canvas Display Density scaler (`75%` to `150%`) for 1080p, 1440p, and 4K displays.
 
 ---

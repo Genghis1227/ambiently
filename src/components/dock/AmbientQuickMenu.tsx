@@ -24,9 +24,6 @@ import { APP_VERSION } from '../../data/version';
 const ChangelogModal = React.lazy(() =>
   import('../changelog/ChangelogModal').then((m) => ({ default: m.ChangelogModal }))
 );
-const ShareBoardModal = React.lazy(() =>
-  import('../settings/ShareBoardModal').then((m) => ({ default: m.ShareBoardModal }))
-);
 
 interface AmbientQuickMenuProps {
   dockPosition: DockPosition;
@@ -34,6 +31,8 @@ interface AmbientQuickMenuProps {
   onClose: () => void;
   onSelectTab: (tabId: string) => void;
   onOpenSettings: () => void;
+  /** Opens household sharing through App, which asks for the PIN when settings need it */
+  onOpenShare: () => void;
   onToggleFullscreen: () => void;
   isFullscreen: boolean;
   onToggleMobileCompanion?: () => void;
@@ -45,12 +44,12 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
   onClose,
   onSelectTab,
   onOpenSettings,
+  onOpenShare,
   onToggleFullscreen,
   isFullscreen,
   onToggleMobileCompanion,
 }) => {
   const [isChangelogOpen, setIsChangelogOpen] = useState(false);
-  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState('');
 
   const settings = useDashboardStore((s) => s.settings);
@@ -318,7 +317,8 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
           <button
             type="button"
             onClick={() => {
-              setIsShareModalOpen(true);
+              onClose();
+              onOpenShare();
             }}
             className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-gray-900/80 hover:bg-gray-800/90 border border-gray-800 text-xs font-medium text-gray-200 transition-all cursor-pointer"
           >
@@ -369,17 +369,6 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
             isOpen={isChangelogOpen}
             onClose={() => {
               setIsChangelogOpen(false);
-              onClose();
-            }}
-          />
-        )}
-
-        {/* Share / Mobile Companion QR Modal */}
-        {isShareModalOpen && (
-          <ShareBoardModal
-            isOpen={isShareModalOpen}
-            onClose={() => {
-              setIsShareModalOpen(false);
               onClose();
             }}
           />

@@ -27,7 +27,9 @@ import {
   getCurrentUser,
   sendMagicLink,
   verifyOtpCode,
+  pushToCloud,
 } from '../../services/supabase';
+import { useDashboardStore } from '../../store/dashboardStore';
 
 interface ShareBoardModalProps {
   isOpen: boolean;
@@ -149,9 +151,17 @@ export const ShareBoardModal: React.FC<ShareBoardModalProps> = ({ isOpen, onClos
     }
   };
 
+  // After a switch this device holds only the other board, so its unsent changes go to the current
+  // board first
+  const sendPendingChanges = async () => {
+    const { settings, tabs, widgets, notes } = useDashboardStore.getState();
+    await pushToCloud(settings, tabs, widgets, notes).catch(() => {});
+  };
+
   // Reload after either change so the whole app moves to the right board
   const handleAcceptInvitation = async (id: string) => {
     setInvitationError('');
+    await sendPendingChanges();
     if (await acceptInvitation(id)) {
       window.location.reload();
     } else {
@@ -161,6 +171,7 @@ export const ShareBoardModal: React.FC<ShareBoardModalProps> = ({ isOpen, onClos
 
   const handleLeaveBoard = async (invitation: BoardInvitation) => {
     setInvitationError('');
+    if (invitation.accepted_at) await sendPendingChanges();
     if (!(await leaveBoard(invitation.id))) {
       setInvitationError('Could not update this invitation. Please try again.');
     } else if (invitation.accepted_at) {

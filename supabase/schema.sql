@@ -447,15 +447,24 @@ begin
   end loop;
 end $$;
 
--- 8c. Automatic Dashboard Revision Touch Trigger
--- Automatically updates public.dashboards.updated_at whenever tabs, widgets, or notes change,
--- enabling clients to verify board revisions with a single 1-row index check instead of polling full tables.
+-- 8c. Board Revision Touch
+-- Moves public.dashboards.updated_at whenever tabs, widgets or notes change, so devices can tell the
+-- board changed with one small read instead of downloading every table. Once per statement, not per
+-- row: a sync that saves 25 notes updates the board's row once, not 25 times. Each event has its own
+-- trigger because a trigger with transition tables can only handle one.
 create or replace function private.touch_dashboard_updated_at() returns trigger
 language plpgsql security definer set search_path = '' as $$
 begin
-  update public.dashboards
-  set updated_at = timezone('utc'::text, now())
-  where id = coalesce(new.dashboard_id, old.dashboard_id);
+  if tg_op = 'INSERT' then
+    update public.dashboards d set updated_at = timezone('utc'::text, now())
+    where d.id in (select n.dashboard_id from new_rows n);
+  elsif tg_op = 'UPDATE' then
+    update public.dashboards d set updated_at = timezone('utc'::text, now())
+    where d.id in (select n.dashboard_id from new_rows n union select o.dashboard_id from old_rows o);
+  else
+    update public.dashboards d set updated_at = timezone('utc'::text, now())
+    where d.id in (select o.dashboard_id from old_rows o);
+  end if;
   return null;
 end $$;
 
@@ -466,10 +475,22 @@ declare
   t text;
 begin
   foreach t in array array['tabs', 'widgets', 'notes'] loop
-    execute format('drop trigger if exists touch_dashboard_on_%I_change on public.%I', t, t);
+    execute format('drop trigger if exists touch_dashboard_on_%1$I_change on public.%1$I', t);
+    execute format('drop trigger if exists touch_dashboard_on_%1$I_insert on public.%1$I', t);
+    execute format('drop trigger if exists touch_dashboard_on_%1$I_update on public.%1$I', t);
+    execute format('drop trigger if exists touch_dashboard_on_%1$I_delete on public.%1$I', t);
     execute format(
-      'create trigger touch_dashboard_on_%1$I_change after insert or update or delete on public.%1$I
-       for each row execute function private.touch_dashboard_updated_at()', t);
+      'create trigger touch_dashboard_on_%1$I_insert after insert on public.%1$I
+       referencing new table as new_rows
+       for each statement execute function private.touch_dashboard_updated_at()', t);
+    execute format(
+      'create trigger touch_dashboard_on_%1$I_update after update on public.%1$I
+       referencing old table as old_rows new table as new_rows
+       for each statement execute function private.touch_dashboard_updated_at()', t);
+    execute format(
+      'create trigger touch_dashboard_on_%1$I_delete after delete on public.%1$I
+       referencing old table as old_rows
+       for each statement execute function private.touch_dashboard_updated_at()', t);
   end loop;
 end $$;
 
