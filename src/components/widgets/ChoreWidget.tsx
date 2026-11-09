@@ -4,12 +4,15 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
+  Inbox,
   Lock,
   Maximize2,
   Palmtree,
+  Plus,
   RotateCcw,
   Shield,
   Sparkles,
+  Trophy,
   Users,
 } from 'lucide-react';
 import { useChoreStore, getPendingParentActionCounts } from '../../store/choreStore';
@@ -26,6 +29,9 @@ import {
 import { localDateKey } from '../../utils/timePrefs';
 import { HouseholdAvatar } from '../common/HouseholdAvatar';
 import { PointSplitModal } from '../chores/PointSplitModal';
+import { ProposeRewardModal } from '../chores/ProposeRewardModal';
+import { ProposalsTrayModal } from '../chores/ProposalsTrayModal';
+import { TrophyCaseModal } from '../chores/TrophyCaseModal';
 import { triggerChoreCelebration } from '../../utils/confetti';
 
 export interface ChoreWidgetProps {
@@ -55,8 +61,13 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
   const snapshot = useChoreStore((s) => s.snapshot);
   const completeChore = useChoreStore((s) => s.completeChore);
   const revertChoreSameDay = useChoreStore((s) => s.revertChoreSameDay);
+  const proposeWishlistReward = useChoreStore((s) => s.proposeWishlistReward);
   const setFullScreenOpen = useChoreStore((s) => s.setFullScreenOpen);
   const setParentDrawerOpen = useChoreStore((s) => s.setParentDrawerOpen);
+
+  const [isProposeModalOpen, setIsProposeModalOpen] = useState(false);
+  const [isProposalsTrayOpen, setIsProposalsTrayOpen] = useState(false);
+  const [isTrophyCaseOpen, setIsTrophyCaseOpen] = useState(false);
 
   const configuredScope = config?.scope || 'household';
   const [activeScope, setActiveScope] = useState<string>(configuredScope);
@@ -823,6 +834,59 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
         })}
       </div>
 
+      {/* Compact Footer Strip: + Wish, Proposals Tray, Trophy Case */}
+      <div
+        className={`pt-2 mt-2 border-t flex items-center justify-between gap-1.5 shrink-0 ${
+          isLight ? 'border-slate-200/80' : 'border-slate-800/80'
+        }`}
+      >
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsProposalsTrayOpen(true);
+            }}
+            className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium border transition-colors cursor-pointer ${
+              isLight
+                ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                : 'bg-slate-900/70 hover:bg-slate-800 text-slate-300 border-slate-800'
+            }`}
+          >
+            <Inbox className="w-3 h-3 text-amber-400" />
+            <span>Proposals ({pendingCounts.needsPricingCount})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsTrophyCaseOpen(true);
+            }}
+            className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium border transition-colors cursor-pointer ${
+              isLight
+                ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                : 'bg-slate-900/70 hover:bg-slate-800 text-slate-300 border-slate-800'
+            }`}
+          >
+            <Trophy className="w-3 h-3 text-amber-400" />
+            <span>Trophies ({snapshot.trophies.length})</span>
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsProposeModalOpen(true);
+          }}
+          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-emerald-600/90 hover:bg-emerald-500 text-white shadow-sm transition-colors cursor-pointer"
+        >
+          <Plus className="w-3 h-3" />
+          <span>Wish</span>
+        </button>
+      </div>
+
       {/* Interactive Shared Chore Point Split Modal */}
       {splitTarget && (
         <PointSplitModal
@@ -843,6 +907,43 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
               });
             }
           }}
+        />
+      )}
+
+      {/* Kid Wishlist Proposal Modal */}
+      {isProposeModalOpen && (
+        <ProposeRewardModal
+          isOpen={isProposeModalOpen}
+          profiles={snapshot.profiles}
+          defaultProfileId={activeScope}
+          onClose={() => setIsProposeModalOpen(false)}
+          onSubmitProposal={async (proposal) => {
+            await proposeWishlistReward(proposal);
+          }}
+        />
+      )}
+
+      {/* Proposals Tray Modal */}
+      {isProposalsTrayOpen && (
+        <ProposalsTrayModal
+          isOpen={isProposalsTrayOpen}
+          profiles={snapshot.profiles}
+          rewards={snapshot.rewards}
+          activeScope={activeScope}
+          onClose={() => setIsProposalsTrayOpen(false)}
+          onOpenProposeModal={() => setIsProposeModalOpen(true)}
+          onOpenParentPricing={() => setParentDrawerOpen(true, 'pricing')}
+        />
+      )}
+
+      {/* Trophy Case Modal */}
+      {isTrophyCaseOpen && (
+        <TrophyCaseModal
+          isOpen={isTrophyCaseOpen}
+          profiles={snapshot.profiles}
+          trophies={snapshot.trophies}
+          defaultScope={activeScope}
+          onClose={() => setIsTrophyCaseOpen(false)}
         />
       )}
     </div>
