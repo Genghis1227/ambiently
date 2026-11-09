@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback, lazy, Suspense } from 'react';
 import { ShieldAlert, Maximize2, KeyRound } from 'lucide-react';
 import { useDashboardStore } from './store/dashboardStore';
+import { useChoreStore } from './store/choreStore';
 import { NavigationDock } from './components/dock/NavigationDock';
 import { Corkboard } from './components/layout/Corkboard';
 import { PinOverlay } from './components/kiosk/PinOverlay';
@@ -46,6 +47,9 @@ const MobileCompanion = lazy(() =>
 );
 const InAppWebViewerModal = lazy(() =>
   import('./components/common/InAppWebViewerModal').then((m) => ({ default: m.InAppWebViewerModal }))
+);
+const ChoreDashboardView = lazy(() =>
+  import('./components/chores/ChoreDashboardView').then((m) => ({ default: m.ChoreDashboardView }))
 );
 
 export function App() {
@@ -103,6 +107,8 @@ export function App() {
   const syncRemoteWidgetChange = useDashboardStore((s) => s.syncRemoteWidgetChange);
   const syncRemoteTabChange = useDashboardStore((s) => s.syncRemoteTabChange);
   const applyCommonPhotosToAllWidgets = useDashboardStore((s) => s.applyCommonPhotosToAllWidgets);
+  const isChoreFullScreenOpen = useChoreStore((s) => s.isFullScreenOpen);
+  const setChoreFullScreenOpen = useChoreStore((s) => s.setFullScreenOpen);
 
   // Initialize and check persistent PC Auto-Sync file binding
   useEffect(() => {
@@ -683,7 +689,7 @@ export function App() {
   // Tab auto-carousel rotation (pauses automatically when user interacts)
   useEffect(() => {
     const tabIds = visibleTabIds.split('\n');
-    if (!settings.carouselEnabled || isCarouselPaused || tabIds.length <= 1) return;
+    if (!settings.carouselEnabled || isCarouselPaused || isChoreFullScreenOpen || tabIds.length <= 1) return;
 
     const interval = setInterval(() => {
       const nextIndex = (tabIds.indexOf(activeTabId) + 1) % tabIds.length;
@@ -691,7 +697,7 @@ export function App() {
     }, rotateDurationSec * 1000);
 
     return () => clearInterval(interval);
-  }, [settings.carouselEnabled, isCarouselPaused, rotateDurationSec, visibleTabIds, activeTabId, rotateToTab]);
+  }, [settings.carouselEnabled, isCarouselPaused, isChoreFullScreenOpen, rotateDurationSec, visibleTabIds, activeTabId, rotateToTab]);
 
   if (!isInitialized) {
     return (
@@ -715,21 +721,27 @@ export function App() {
       <>
         <Suspense fallback={null}>
           <MobileCompanion
-          tabs={visibleTabs}
-          activeTabId={activeTabIdResolved}
-          notes={notes}
-          widgets={tabWidgets}
-          onSelectTab={setActiveTabId}
-          onAddNote={addNote}
-          onUpdateNote={updateNote}
-          onDeleteNote={deleteNote}
-          onUpdateWidget={updateWidget}
-          onRemoveWidget={removeWidget}
-          onAddWidget={addWidget}
-          onToggleDesktopView={() => setForceDesktopMode(true)}
-          onOpenSettings={handleOpenSettings}
-        />
-      </Suspense>
+            tabs={visibleTabs}
+            activeTabId={activeTabIdResolved}
+            notes={notes}
+            widgets={tabWidgets}
+            onSelectTab={setActiveTabId}
+            onAddNote={addNote}
+            onUpdateNote={updateNote}
+            onDeleteNote={deleteNote}
+            onUpdateWidget={updateWidget}
+            onRemoveWidget={removeWidget}
+            onAddWidget={addWidget}
+            onToggleDesktopView={() => setForceDesktopMode(true)}
+            onOpenSettings={handleOpenSettings}
+          />
+          {isChoreFullScreenOpen && (
+            <ChoreDashboardView
+              isOpen={isChoreFullScreenOpen}
+              onClose={() => setChoreFullScreenOpen(false)}
+            />
+          )}
+        </Suspense>
         <SyncRefusedBanner withDock={false} />
         {isSettingsOpen && (
           <Suspense fallback={null}>
@@ -1003,6 +1015,14 @@ export function App() {
             url={activeWebModal.url}
             title={activeWebModal.title}
             onClose={() => setActiveWebModal(null)}
+          />
+        )}
+
+        {/* Full-Screen Chore & Reward Hub View */}
+        {isChoreFullScreenOpen && (
+          <ChoreDashboardView
+            isOpen={isChoreFullScreenOpen}
+            onClose={() => setChoreFullScreenOpen(false)}
           />
         )}
       </Suspense>

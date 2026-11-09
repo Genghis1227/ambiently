@@ -55,6 +55,7 @@ import type {
 import { MAX_CANVASES } from '../../types/dashboard';
 import { AmbientQuickMenu } from './AmbientQuickMenu';
 import { useUpdateChecker } from '../../services/updateChecker';
+import { useChoreStore, getPendingParentActionCounts } from '../../store/choreStore';
 
 interface NavigationDockProps {
   tabs: DashboardTab[];
@@ -150,6 +151,10 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
   const [isPeekOpen, setIsPeekOpen] = useState(false);
   const navRef = useRef<HTMLElement>(null);
   const { isUpdateAvailable, latestVersion, applyUpdate } = useUpdateChecker();
+  const choreSnapshot = useChoreStore((s) => s.snapshot);
+  const isChoreFullScreenOpen = useChoreStore((s) => s.isFullScreenOpen);
+  const setChoreFullScreenOpen = useChoreStore((s) => s.setFullScreenOpen);
+  const pendingChoreCounts = getPendingParentActionCounts(choreSnapshot);
 
   useEffect(() => {
     if (!showOrganizeMenu) return;
@@ -421,6 +426,35 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
               <Plus className="w-4 h-4" />
             </button>
           )}
+
+          {/* Dedicated Top-Level Chores & Rewards Hub Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsQuickMenuOpen(false);
+              setChoreFullScreenOpen(!isChoreFullScreenOpen);
+            }}
+            title={
+              pendingChoreCounts.totalPendingCount > 0
+                ? `Family Chores & Rewards Hub (${pendingChoreCounts.totalPendingCount} awaiting parent review)`
+                : 'Family Chores & Rewards Hub'
+            }
+            className={`relative flex items-center justify-center w-11 h-11 rounded-xl transition-all cursor-pointer border ${
+              isChoreFullScreenOpen
+                ? 'bg-emerald-600 text-white border-emerald-400/60 shadow-lg shadow-emerald-500/30'
+                : 'bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/30'
+            }`}
+          >
+            <CheckSquare className="w-5 h-5" />
+            {pendingChoreCounts.totalPendingCount > 0 && (
+              <span
+                className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 text-gray-950 font-mono font-bold text-[10px] flex items-center justify-center shadow-md ring-1.5 ring-gray-950"
+                title={`${pendingChoreCounts.totalPendingCount} pending parent actions`}
+              >
+                {pendingChoreCounts.totalPendingCount}
+              </span>
+            )}
+          </button>
         </div>
 
         <div
