@@ -11,6 +11,17 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.4.1",
+    date: "November 9, 2026",
+    title: "12/24-Hour Time Format, Week Start Preferences & Tile Error Boundaries",
+    highlights: [
+      "Clock Format Setting: Toggle between Auto (device language), 12-hour (with AM/PM), and 24-hour military clock across all widgets, night clock, and calendars.",
+      "Week Starts On Setting: Configure calendar week and month views to start on Sunday or Monday.",
+      "Synchronized Calendar Grids: Week and month column headers, timeline gutters, and day offsets dynamically align with your preferred start day.",
+      "Per-Tile Error Boundary: Canvas tiles are isolated with individual React error boundaries and auto-recovery, preventing malformed external feeds from crashing the dashboard.",
+    ],
+  },
+  {
     version: "v0.4.0",
     date: "November 8, 2026",
     title: "In-App Web Viewer Window Frame & Safe Kiosk Link Browsing",

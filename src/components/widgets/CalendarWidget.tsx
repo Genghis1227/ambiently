@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { formatHourLabel, startOfWeek, useTimePrefs, weekdayLabels } from '../../utils/timePrefs';
 import {
   Calendar as CalendarIcon,
   Clock,
@@ -27,11 +28,8 @@ interface CalendarWidgetProps {
 const HOUR_HEIGHT = 58; // pixels per hour for vertical timeline grid
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
-function formatHourGutter(hour: number): string {
-  if (hour === 0) return '12 AM';
-  if (hour < 12) return `${hour} AM`;
-  if (hour === 12) return '12 PM';
-  return `${hour - 12} PM`;
+function formatHourGutter(hour: number, hour12: boolean): string {
+  return formatHourLabel(hour, { hour12 });
 }
 
 interface TimedEventLayout {
@@ -106,8 +104,8 @@ const DEFAULT_SOURCES: CalendarSource[] = [
   },
 ];
 
-function formatTimeShort(date: Date): string {
-  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(' ', '');
+function formatTimeShort(date: Date, hour12: boolean = true): string {
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hourCycle: hour12 ? 'h12' : 'h23' }).replace(' ', '');
 }
 
 function parseEventLocalDate(dateStr: string, isAllDay?: boolean): Date {
@@ -120,10 +118,10 @@ function parseEventLocalDate(dateStr: string, isAllDay?: boolean): Date {
   return new Date(dateStr);
 }
 
-function formatEventTime(evt: CalendarEvent): string {
+function formatEventTime(evt: CalendarEvent, hour12: boolean = true): string {
   if (evt.isAllDay) return 'All Day';
   const start = new Date(evt.start);
-  return start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(' ', '');
+  return start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hourCycle: hour12 ? 'h12' : 'h23' }).replace(' ', '');
 }
 
 function isEventOnDate(evt: CalendarEvent, targetDate: Date): boolean {
@@ -170,8 +168,9 @@ const TimelineGridView: React.FC<{
   timeGridRef: React.RefObject<HTMLDivElement | null>;
   isLight: boolean;
   now: Date;
+  hour12: boolean;
   onSelectDay: (detail: { date: Date; events: CalendarEvent[] }) => void;
-}> = ({ days, colCount, hasAllDay, timeGridRef, isLight, now, onSelectDay }) => {
+}> = ({ days, colCount, hasAllDay, timeGridRef, isLight, now, hour12, onSelectDay }) => {
   return (
     <div
       className={`flex-1 flex flex-col justify-between overflow-hidden border rounded-2xl ${
@@ -299,7 +298,7 @@ const TimelineGridView: React.FC<{
                   isLight ? 'text-slate-500' : 'text-gray-500'
                 } ${hour === 0 ? '' : '-translate-y-1/2'}`}
               >
-                {formatHourGutter(hour)}
+                {formatHourGutter(hour, hour12)}
               </div>
             ))}
           </div>
@@ -348,8 +347,8 @@ const TimelineGridView: React.FC<{
                         <div
                           key={item.event.uid}
                           onClick={() => onSelectDay({ date: col.date, events: col.events })}
-                          title={`${item.event.summary} (${formatTimeShort(new Date(item.event.start))}${
-                            item.event.end ? ` - ${formatTimeShort(new Date(item.event.end))}` : ''
+                          title={`${item.event.summary} (${formatTimeShort(new Date(item.event.start), hour12)}${
+                            item.event.end ? ` - ${formatTimeShort(new Date(item.event.end), hour12)}` : ''
                           })${item.event.location ? ` • ${item.event.location}` : ''}`}
                           style={{
                             top: `${item.top}px`,
@@ -371,8 +370,8 @@ const TimelineGridView: React.FC<{
                         >
                           <div className="flex items-center justify-between gap-1 leading-none">
                             <span className="text-[9.5px] md:text-[10px] font-mono font-bold text-blue-500 truncate">
-                              {formatTimeShort(new Date(item.event.start))}
-                              {item.event.end && ` - ${formatTimeShort(new Date(item.event.end))}`}
+                              {formatTimeShort(new Date(item.event.start), hour12)}
+                              {item.event.end && ` - ${formatTimeShort(new Date(item.event.end), hour12)}`}
                             </span>
                           </div>
                           <div
@@ -413,6 +412,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
   onUpdateConfig,
   isLight = false,
 }) => {
+  const { hour12, weekStartsOn } = useTimePrefs();
   const [view, setView] = useState<CalendarViewMode>(defaultView);
   const [multiDayLayout, setMultiDayLayout] = useState<MultiDayLayout>(multiDayLayoutProp);
   const timeGridRef = useRef<HTMLDivElement>(null);
@@ -535,7 +535,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
   // Month View calculations
   const startOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
   const endOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
-  const startDayOfWeek = startOfMonth.getDay();
+  const startDayOfWeek = (startOfMonth.getDay() - weekStartsOn + 7) % 7;
   const totalDaysInMonth = endOfMonth.getDate();
 
   // 3-Day View calculations (baseDate + 0, +1, +2)
@@ -548,10 +548,8 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
     };
   });
 
-  // Week View calculations (Sunday to Saturday)
-  const weekStart = new Date(baseDate);
-  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-  weekStart.setHours(0, 0, 0, 0);
+  // Week View calculations
+  const weekStart = startOfWeek(baseDate, weekStartsOn);
 
   const weekDays = [0, 1, 2, 3, 4, 5, 6].map((offset) => {
     const d = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + offset);
@@ -826,8 +824,8 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                         <Clock className="w-3.5 h-3.5 text-blue-500 shrink-0" />
                         {evt.isAllDay
                           ? 'All Day'
-                          : startDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                        {evt.end && !evt.isAllDay && ` – ${new Date(evt.end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
+                          : startDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hourCycle: hour12 ? 'h12' : 'h23' })}
+                        {evt.end && !evt.isAllDay && ` – ${new Date(evt.end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hourCycle: hour12 ? 'h12' : 'h23' })}`}
                       </span>
                       {evt.location && (
                         <span className={`flex items-center gap-1 truncate max-w-[200px] ${isLight ? 'text-slate-600' : 'text-gray-400'}`}>
@@ -860,6 +858,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
             timeGridRef={timeGridRef}
             isLight={isLight}
             now={now}
+            hour12={hour12}
             onSelectDay={setSelectedDayDetail}
           />
         ) : (
@@ -978,8 +977,8 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                                 <Clock className="w-3 h-3 shrink-0" />
                                 {evt.isAllDay
                                   ? 'All Day'
-                                  : startDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                                {evt.end && !evt.isAllDay && ` – ${new Date(evt.end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
+                                  : startDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hourCycle: hour12 ? 'h12' : 'h23' })}
+                                {evt.end && !evt.isAllDay && ` – ${new Date(evt.end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hourCycle: hour12 ? 'h12' : 'h23' })}`}
                               </span>
                               {evt.calendarName && (
                                 <span className={`text-[9px] px-1 py-0.5 rounded truncate max-w-[80px] hidden md:inline ${
@@ -1025,6 +1024,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
             timeGridRef={timeGridRef}
             isLight={isLight}
             now={now}
+            hour12={hour12}
             onSelectDay={setSelectedDayDetail}
           />
         ) : (
@@ -1113,10 +1113,10 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                                 ? 'border-slate-200/90 bg-white/90 hover:bg-white'
                                 : 'border-gray-800/80 bg-gray-900/60 hover:bg-gray-900/90'
                             }`}
-                            title={`${evt.summary} (${evt.isAllDay ? 'All Day' : formatTimeShort(startDate)})${evt.location ? ` • ${evt.location}` : ''}`}
+                            title={`${evt.summary} (${evt.isAllDay ? 'All Day' : formatTimeShort(startDate, hour12)})${evt.location ? ` • ${evt.location}` : ''}`}
                           >
                             <div className="text-[9.5px] font-mono font-bold text-blue-400 truncate leading-none mb-0.5">
-                              {evt.isAllDay ? 'All Day' : formatTimeShort(startDate)}
+                              {evt.isAllDay ? 'All Day' : formatTimeShort(startDate, hour12)}
                             </div>
                             <div className={`text-[11px] font-bold truncate leading-tight ${
                               isLight ? 'text-slate-900' : 'text-white'
@@ -1148,8 +1148,8 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
           <div className={`grid grid-cols-7 gap-1 text-center text-xs font-black pb-1.5 border-b shrink-0 ${
             isLight ? 'text-slate-600 border-slate-200' : 'text-gray-400 border-gray-800'
           }`}>
-            {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((d) => (
-              <span key={d}>{d}</span>
+            {weekdayLabels(weekStartsOn, 'short').map((d) => (
+              <span key={d}>{d.toUpperCase()}</span>
             ))}
           </div>
 
@@ -1209,7 +1209,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                     {dayEvents.slice(0, 3).map((de) => (
                       <div
                         key={de.uid}
-                        title={`${de.summary} (${formatEventTime(de)})${de.location ? ` - ${de.location}` : ''}`}
+                        title={`${de.summary} (${formatEventTime(de, hour12)})${de.location ? ` - ${de.location}` : ''}`}
                         style={{
                           backgroundColor: de.isAllDay
                             ? (de.color || '#3b82f6')
@@ -1223,7 +1223,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                       >
                         {!de.isAllDay ? (
                           <span className="font-mono text-[10px] md:text-[11px] opacity-80 shrink-0">
-                            {formatTimeShort(new Date(de.start))}
+                            {formatTimeShort(new Date(de.start), hour12)}
                           </span>
                         ) : (
                           <span className="text-[9px] uppercase font-bold tracking-wider px-1 py-0.2 rounded bg-black/25 shrink-0">
@@ -1292,8 +1292,8 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                 <div className="flex items-center justify-between text-xs font-mono">
                   <span className={`flex items-center gap-1.5 font-semibold ${isLight ? 'text-blue-600' : 'text-blue-300'}`}>
                     <Clock className="w-3.5 h-3.5 text-blue-500" />
-                    {formatEventTime(evt)}
-                    {evt.end && !evt.isAllDay && ` – ${new Date(evt.end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
+                    {formatEventTime(evt, hour12)}
+                    {evt.end && !evt.isAllDay && ` – ${new Date(evt.end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hourCycle: hour12 ? 'h12' : 'h23' })}`}
                   </span>
                   {evt.calendarName && (
                     <span className={`text-[10px] px-2 py-0.5 rounded border ${

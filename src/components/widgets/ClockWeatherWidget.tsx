@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTimePrefs } from '../../utils/timePrefs';
 import {
   Sun,
   Cloud,
@@ -51,6 +52,7 @@ export const ClockWeatherWidget: React.FC<ClockWeatherWidgetProps> = ({
   clockAlign = 'center',
   isLight = false,
 }) => {
+  const { hour12 } = useTimePrefs();
   const [time, setTime] = useState(new Date());
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -104,7 +106,7 @@ export const ClockWeatherWidget: React.FC<ClockWeatherWidgetProps> = ({
     return () => clearInterval(interval);
   }, [latitude, longitude, locationName, unit]);
 
-  const zt = getFormattedTimeForZone(time, timezone);
+  const zt = getFormattedTimeForZone(time, timezone, hour12);
 
   return (
     <div className="w-full h-full flex flex-col justify-between select-none">

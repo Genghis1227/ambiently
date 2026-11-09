@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTimePrefs } from '../../utils/timePrefs';
 import { Moon } from 'lucide-react';
 
 interface NightModeProps {
@@ -14,6 +15,7 @@ export const NightMode: React.FC<NightModeProps> = ({
   dimOpacity,
   onWake,
 }) => {
+  const { hour12 } = useTimePrefs();
   const [time, setTime] = useState(new Date());
   // Pixel shift offset to avoid OLED burn-in
   const [pixelShift, setPixelShift] = useState({ x: 0, y: 0 });
@@ -55,7 +57,7 @@ export const NightMode: React.FC<NightModeProps> = ({
           }}
         >
           <div className="text-6xl md:text-8xl font-thin tracking-widest text-red-700/60 font-mono">
-            {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: hour12 ? 'h12' : 'h23' })}
           </div>
           <div className="text-sm md:text-base font-light text-red-900/60 mt-2 tracking-wide uppercase">
             {time.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })}

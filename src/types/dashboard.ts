@@ -131,6 +131,8 @@ export interface AppSettings {
   carouselEnabled: boolean;
   defaultRotateDurationSec: number;
   displayDensity: 0.75 | 1.0 | 1.25 | 1.5; // per-device UI density
+  timeFormat?: 'auto' | '12h' | '24h'; // 'auto' (or unset) follows the device's language
+  weekStartsOn?: 'sunday' | 'monday'; // unset = Sunday
   wakeLockEnabled: boolean;
   
   // Night Mode
