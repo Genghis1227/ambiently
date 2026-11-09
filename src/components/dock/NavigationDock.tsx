@@ -281,7 +281,11 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
           title="Peek Navigation Toolbar (Shortcut: \)"
-          className={`fixed z-[65] flex items-center justify-center p-2.5 bg-gray-900/90 hover:bg-gray-800 text-gray-300 hover:text-white backdrop-blur-xl border border-gray-700/80 shadow-2xl transition-all cursor-pointer group active:scale-95 ${
+          className={`fixed z-[65] flex items-center justify-center p-2.5 backdrop-blur-xl transition-all cursor-pointer group active:scale-95 ${
+            isNightMode
+              ? 'bg-gray-950/40 hover:bg-gray-900/80 text-gray-600 hover:text-gray-300 border border-gray-900/60 opacity-30 hover:opacity-100 shadow-none'
+              : 'bg-gray-900/90 hover:bg-gray-800 text-gray-300 hover:text-white border border-gray-700/80 shadow-2xl'
+          } ${
             dockPosition === 'left'
               ? 'left-0 bottom-24 rounded-r-2xl border-l-0 shadow-[4px_0_15px_rgba(0,0,0,0.5)]'
               : dockPosition === 'right'
@@ -291,10 +295,10 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
               : 'bottom-0 right-24 rounded-t-2xl border-b-0 shadow-[0_-4px_15px_rgba(0,0,0,0.5)]'
           }`}
         >
-          {dockPosition === 'left' && <ChevronRight className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" />}
-          {dockPosition === 'right' && <ChevronLeft className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" />}
-          {dockPosition === 'top' && <ChevronDown className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" />}
-          {dockPosition === 'bottom' && <ChevronUp className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" />}
+          {dockPosition === 'left' && <ChevronRight className={`w-5 h-5 ${isNightMode ? 'text-blue-500/30 group-hover:text-blue-400' : 'text-blue-400'} group-hover:scale-110 transition-transform`} />}
+          {dockPosition === 'right' && <ChevronLeft className={`w-5 h-5 ${isNightMode ? 'text-blue-500/30 group-hover:text-blue-400' : 'text-blue-400'} group-hover:scale-110 transition-transform`} />}
+          {dockPosition === 'top' && <ChevronDown className={`w-5 h-5 ${isNightMode ? 'text-blue-500/30 group-hover:text-blue-400' : 'text-blue-400'} group-hover:scale-110 transition-transform`} />}
+          {dockPosition === 'bottom' && <ChevronUp className={`w-5 h-5 ${isNightMode ? 'text-blue-500/30 group-hover:text-blue-400' : 'text-blue-400'} group-hover:scale-110 transition-transform`} />}
         </button>
       )}
 
