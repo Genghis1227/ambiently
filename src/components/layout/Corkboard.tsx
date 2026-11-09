@@ -1002,14 +1002,20 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       ? original.checklistItems.map((item) => ({
           ...item,
           id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          done: false, // Reset checked items on duplicate
         }))
       : undefined;
+
+    const clonedContent =
+      original.isChecklist && original.content
+        ? original.content.replace(/\[x\]/gi, '[ ]')
+        : original.content || '';
 
     if (mode === 'edit') {
       if (isCanvasLocked) return;
       setEditingNoteId(null); // New note (duplicate)
       setNewTitle(original.title ? `${original.title} (Copy)` : '');
-      setNewContent(original.content || '');
+      setNewContent(clonedContent);
       setIsChecklist(Boolean(original.isChecklist));
       setChecklistItems(clonedChecklist ? [...clonedChecklist] : []);
       setSelectedColor(original.bgColor || COLOR_PALETTE[0]);
@@ -1059,7 +1065,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     onAddNote({
       tabId: original.tabId || activeTabId,
       title: original.title ? `${original.title} (Copy)` : undefined,
-      content: original.content,
+      content: clonedContent,
       isChecklist: original.isChecklist,
       checklistItems: clonedChecklist,
       bgColor: original.bgColor,
