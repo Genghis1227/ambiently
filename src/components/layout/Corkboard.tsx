@@ -40,6 +40,7 @@ import { CountdownWidget } from '../widgets/CountdownWidget';
 import { QuotesWidget } from '../widgets/QuotesWidget';
 import { TextBoxWidget } from '../widgets/TextBoxWidget';
 import { CalendarWidget } from '../widgets/CalendarWidget';
+import { TileErrorBoundary } from '../common/TileErrorBoundary';
 import { RssWidget } from '../widgets/RssWidget';
 import { PhotoFrameWidget } from '../widgets/PhotoFrameWidget';
 import { StickyNotesWidget } from '../widgets/StickyNotesWidget';
@@ -1490,6 +1491,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
             {/* Widget Inner Renderers */}
             <div className="w-full h-full flex flex-col justify-between overflow-hidden">
+              <TileErrorBoundary label={widget.title} resetKey={widget.updated_at}>
               {widget.type === 'weather' ? (
                 <WeatherWidget
                   locationName={widget.config?.locationName}
@@ -1656,6 +1658,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   isLight={isWidgetLight}
                 />
               ) : null}
+              </TileErrorBoundary>
             </div>
           </div>
         );

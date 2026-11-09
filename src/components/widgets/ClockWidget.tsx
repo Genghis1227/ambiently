@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTimePrefs } from '../../utils/timePrefs';
 import { getFormattedTimeForZone } from './WorldClockWidget';
 
 interface ClockWidgetProps {
@@ -18,6 +19,7 @@ export const ClockWidget: React.FC<ClockWidgetProps> = ({
   locationName,
   isLight = false,
 }) => {
+  const { hour12 } = useTimePrefs();
   const [time, setTime] = useState(new Date());
 
   useEffect(() => {
@@ -46,7 +48,7 @@ export const ClockWidget: React.FC<ClockWidgetProps> = ({
     };
   }, [showSeconds]);
 
-  const zt = getFormattedTimeForZone(time, timezone);
+  const zt = getFormattedTimeForZone(time, timezone, hour12);
 
   return (
     <div className="w-full h-full flex flex-col justify-between select-none p-1">

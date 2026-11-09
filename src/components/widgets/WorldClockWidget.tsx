@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTimePrefs } from '../../utils/timePrefs';
 import { Globe, Sun, Moon, GripVertical } from 'lucide-react';
 
 export interface WorldClockCity {
@@ -84,7 +85,8 @@ export interface FormattedZoneTime {
 
 export function getFormattedTimeForZone(
   now: Date,
-  timezone?: string
+  timezone?: string,
+  hour12: boolean = true
 ): FormattedZoneTime {
   const safeZone = getSafeTimezone(timezone);
   const cacheKey = safeZone || '__local__';
@@ -115,8 +117,8 @@ export function getFormattedTimeForZone(
   const tzShort = getPart('timeZoneName') || 'Local';
 
   const hour12Num = hour24 % 12 === 0 ? 12 : hour24 % 12;
-  const hoursMinutes = `${String(hour12Num).padStart(2, '0')}:${String(minuteNum).padStart(2, '0')}`;
-  const ampm = hour24 >= 12 ? 'PM' : 'AM';
+  const hoursMinutes = `${String(hour12 ? hour12Num : hour24).padStart(2, '0')}:${String(minuteNum).padStart(2, '0')}`;
+  const ampm = hour12 ? (hour24 >= 12 ? 'PM' : 'AM') : '';
   const seconds = String(secondNum).padStart(2, '0');
 
   let dateFormatter = dateFormatterCache.get(cacheKey);
@@ -194,6 +196,7 @@ export const WorldClockWidget: React.FC<WorldClockWidgetProps> = ({
   onUpdateCities,
   onUpdateConfig,
 }) => {
+  const { hour12 } = useTimePrefs();
   const [now, setNow] = useState(new Date());
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -256,7 +259,7 @@ export const WorldClockWidget: React.FC<WorldClockWidgetProps> = ({
   // Single-City Focus Mode
   if (activeCities.length === 1) {
     const city = activeCities[0];
-    const zt = getFormattedTimeForZone(now, city.timezone);
+    const zt = getFormattedTimeForZone(now, city.timezone, hour12);
 
     return (
       <div className="w-full h-full flex flex-col justify-between select-none p-1">
@@ -417,7 +420,7 @@ export const WorldClockWidget: React.FC<WorldClockWidgetProps> = ({
 
       <div className="flex-1 overflow-y-auto space-y-2 pr-0.5 min-h-0">
         {activeCities.map((city, idx) => {
-          const zt = getFormattedTimeForZone(now, city.timezone);
+          const zt = getFormattedTimeForZone(now, city.timezone, hour12);
           const isDraggingThis = draggedIndex === idx;
           const isDragOverThis = dragOverIndex === idx && draggedIndex !== idx;
 
