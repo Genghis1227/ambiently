@@ -11,6 +11,18 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.4.2",
+    date: "November 9, 2026",
+    title: "Calendar Trustworthiness, Timezones & Live Feed Verification",
+    highlights: [
+      "Fallback IANA Timezone Resolution: Accurate instant calculation for feeds lacking VTIMEZONE definitions, preventing Cloudflare UTC server offsets from shifting event times.",
+      "Ongoing Event Retention: Multi-day events and trips in progress now remain visible throughout their duration instead of disappearing before they conclude.",
+      "Pasted Webpage URL Detection: Clear guidance and error messaging when an HTML calendar webpage URL is pasted rather than its .ics feed link.",
+      "Feed Pre-Flight Verification: Tests calendar links before adding, showing live event counts and connection diagnostics.",
+      "Feed Health Badges: Surfaced status alerts detailing connection failures and time since last successful sync.",
+    ],
+  },
+  {
     version: "v0.4.1",
     date: "November 9, 2026",
     title: "12/24-Hour Time Format, Week Start Preferences & Tile Error Boundaries",
