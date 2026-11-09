@@ -111,6 +111,24 @@ create table if not exists public.notes (
 
 alter table public.notes add column if not exists dashboard_id text references public.dashboards(id) on delete cascade;
 
+-- 5b. Household Profiles Table (Global Household Profile & Avatar Engine)
+create table if not exists public.household_profiles (
+  id text not null,
+  dashboard_id text references public.dashboards(id) on delete cascade not null,
+  user_id uuid references auth.users(id) on delete cascade not null,
+  name text not null,
+  role text check (role in ('parent', 'kid')) not null default 'kid',
+  color text not null default '#6B8E7B',
+  avatar_data_url text,
+  emoji text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  deleted_at timestamp with time zone,
+  primary key (dashboard_id, id)
+);
+
+create index if not exists household_profiles_dashboard_updated_idx on public.household_profiles (dashboard_id, updated_at desc);
+
 -- Every account starts with the same default ids (such as tab-corkboard), so a row is identified by
 -- board and id together. With id alone, the second account to sync was refused.
 do $$
@@ -220,6 +238,7 @@ alter table public.dashboard_members enable row level security;
 alter table public.tabs enable row level security;
 alter table public.widgets enable row level security;
 alter table public.notes enable row level security;
+alter table public.household_profiles enable row level security;
 
 -- Clear any legacy public invite codes so no board is exposed
 update public.dashboards set invite_code = null where invite_code is not null;
@@ -233,7 +252,7 @@ begin
   for p in
     select policyname, tablename from pg_policies
     where schemaname = 'public'
-    and tablename in ('dashboards', 'dashboard_members', 'tabs', 'widgets', 'notes')
+    and tablename in ('dashboards', 'dashboard_members', 'tabs', 'widgets', 'notes', 'household_profiles')
   loop
     execute format('drop policy %I on public.%I', p.policyname, p.tablename);
   end loop;
@@ -284,7 +303,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['tabs', 'widgets', 'notes'] loop
+  foreach t in array array['tabs', 'widgets', 'notes', 'household_profiles'] loop
     execute format(
       'create policy "Members read %1$s" on public.%1$I
        for select to authenticated
@@ -342,7 +361,7 @@ declare
   part bigint;
 begin
   bytes := 0;
-  foreach t in array array['dashboards', 'dashboard_members', 'tabs', 'widgets', 'notes'] loop
+  foreach t in array array['dashboards', 'dashboard_members', 'tabs', 'widgets', 'notes', 'household_profiles'] loop
     execute format('select sum(%s) from public.%I r where r.%I = $1',
       private.row_size_expression(t, 'r'), t, case when t = 'dashboards' then 'id' else 'dashboard_id' end)
       into part using target;
@@ -433,7 +452,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['dashboards', 'dashboard_members', 'tabs', 'widgets', 'notes'] loop
+  foreach t in array array['dashboards', 'dashboard_members', 'tabs', 'widgets', 'notes', 'household_profiles'] loop
     execute format('drop trigger if exists check_board_limits_insert on public.%I', t);
     execute format('drop trigger if exists check_board_limits_update on public.%I', t);
     execute format(
@@ -474,7 +493,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['tabs', 'widgets', 'notes'] loop
+  foreach t in array array['tabs', 'widgets', 'notes', 'household_profiles'] loop
     execute format('drop trigger if exists touch_dashboard_on_%1$I_change on public.%1$I', t);
     execute format('drop trigger if exists touch_dashboard_on_%1$I_insert on public.%1$I', t);
     execute format('drop trigger if exists touch_dashboard_on_%1$I_update on public.%1$I', t);
@@ -497,15 +516,15 @@ end $$;
 -- 9. Table Permissions
 -- Supabase grants every table to anon and authenticated by default, TRUNCATE included, and RLS doesn't
 -- apply to TRUNCATE. Grant only what the app uses. Members can change accepted_at and nothing else.
-revoke all on public.dashboards, public.dashboard_members, public.tabs, public.widgets, public.notes
+revoke all on public.dashboards, public.dashboard_members, public.tabs, public.widgets, public.notes, public.household_profiles
   from public, anon, authenticated;
-grant select, insert, update, delete on public.dashboards, public.tabs, public.widgets, public.notes
+grant select, insert, update, delete on public.dashboards, public.tabs, public.widgets, public.notes, public.household_profiles
   to authenticated;
 grant select, insert, delete on public.dashboard_members to authenticated;
 grant update (accepted_at) on public.dashboard_members to authenticated;
 
 -- 10. Realtime Publications (Idempotent)
--- The app only listens to these three tables, so the others stay out of the change feed
+-- The app only listens to these tables, so the others stay out of the change feed
 do $$
 declare
   t text;
@@ -514,7 +533,7 @@ begin
     return;
   end if;
 
-  foreach t in array array['tabs', 'widgets', 'notes'] loop
+  foreach t in array array['tabs', 'widgets', 'notes', 'household_profiles'] loop
     if not exists (
       select 1 from pg_publication_tables
       where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t

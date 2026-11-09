@@ -1,11 +1,15 @@
+import type { HouseholdRole } from './profiles';
+
 export type CadenceType = 'daily' | 'weekdays' | 'weekends' | 'weekly' | 'interval' | 'bounty';
 export type OverduePolicy = 'zero' | 'half' | 'full' | 'custom';
 
 export interface Profile {
   id: string;
   name: string;
+  role?: HouseholdRole;
   color: string;
   avatarUrl?: string;
+  avatarDataUrl?: string;
   emoji?: string;
   balance: number;        // Spendable points
   lifetimePoints: number; // Cumulative all-time points

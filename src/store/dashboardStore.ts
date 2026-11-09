@@ -25,8 +25,11 @@ import { getSupabase, getCurrentUser, pushToCloud } from '../services/supabase';
 import { CANVAS_LOOK_FIELDS, keepLocalNoteFields, keepLocalTabFields, keepLocalWidgetFields } from '../services/syncMerge';
 import { useChoreStore, registerChorePersistListener } from './choreStore';
 import type { ChoreEngineSnapshot } from '../types/chores';
+import { useProfileStore } from '../stores/useProfileStore';
+import type { HouseholdProfile } from '../types/profiles';
 
 const CHORE_ENGINE_CLOUD_ROW_ID = '__ambiently_chore_engine__';
+const HOUSEHOLD_PROFILES_CLOUD_ROW_ID = '__ambiently_household_profiles__';
 
 let backupDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 let cloudAutoSyncTimer: ReturnType<typeof setTimeout> | null = null;
@@ -262,11 +265,15 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       .filter((t: DashboardTab) => !t.deleted_at)
       .sort((a: DashboardTab, b: DashboardTab) => a.order - b.order);
     const loadedWidgets = (await db.widgets.toArray()).filter(
-      (w) => !w.deleted_at && w.id !== CHORE_ENGINE_CLOUD_ROW_ID
+      (w) =>
+        !w.deleted_at &&
+        w.id !== CHORE_ENGINE_CLOUD_ROW_ID &&
+        w.id !== HOUSEHOLD_PROFILES_CLOUD_ROW_ID
     );
     const loadedNotes = (await db.notes.toArray()).filter((n) => !n.deleted_at);
 
-    // Initialize local-first Chore & Reward Engine store
+    // Initialize Global Household Profile Store & Chore Engine Store
+    await useProfileStore.getState().initProfileStore();
     await useChoreStore.getState().initChoreStore();
 
     const tabsToUse = loadedTabs.length > 0 ? loadedTabs : DEFAULT_TABS;
@@ -706,6 +713,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         tabs: state.tabs,
         widgets: state.widgets,
         notes: state.notes,
+        profiles: useProfileStore.getState().profiles,
         chores: useChoreStore.getState().snapshot,
       });
     }, 400);
@@ -726,6 +734,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       tabs: state.tabs,
       widgets: state.widgets,
       notes: state.notes,
+      profiles: useProfileStore.getState().profiles,
       chores: useChoreStore.getState().snapshot,
     });
   },
@@ -912,6 +921,20 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   syncRemoteWidgetChange: (incomingWidget, eventType) => {
+    if (incomingWidget.id === HOUSEHOLD_PROFILES_CLOUD_ROW_ID) {
+      if (
+        eventType !== 'DELETE' &&
+        !incomingWidget.deleted_at &&
+        Array.isArray(incomingWidget.config?.profiles)
+      ) {
+        useProfileStore
+          .getState()
+          .applyRemoteProfiles(incomingWidget.config.profiles as HouseholdProfile[])
+          .catch(() => {});
+      }
+      return;
+    }
+
     if (incomingWidget.id === CHORE_ENGINE_CLOUD_ROW_ID) {
       if (
         eventType !== 'DELETE' &&

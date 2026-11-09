@@ -7,6 +7,7 @@ import type {
   LocalDeviceVaultItem,
 } from '../types/dashboard';
 import type { ChoreEngineSnapshot } from '../types/chores';
+import type { HouseholdProfile } from '../types/profiles';
 import { CHORE_PROFILE_COLORS } from '../utils/choreEngine';
 
 export class AmbientlyDatabase extends Dexie {
@@ -16,6 +17,7 @@ export class AmbientlyDatabase extends Dexie {
   settings!: EntityTable<AppSettings, 'id'>;
   vault!: EntityTable<LocalDeviceVaultItem, 'key'>;
   chores!: EntityTable<ChoreEngineSnapshot, 'id'>;
+  profiles!: EntityTable<HouseholdProfile, 'id'>;
 
   constructor() {
     super('AmbientlyDB');
@@ -33,6 +35,7 @@ export class AmbientlyDatabase extends Dexie {
       settings: 'id, updated_at',
       vault: 'key, updated_at',
       chores: 'id, updated_at',
+      profiles: 'id, role, updatedAt, deletedAt',
     });
   }
 }
@@ -160,21 +163,62 @@ export const DEFAULT_NOTES: StickyNoteItem[] = [
   },
 ];
 
+export const DEFAULT_HOUSEHOLD_PROFILES: HouseholdProfile[] = [
+  {
+    id: 'p_tony',
+    name: 'Tony',
+    role: 'parent',
+    color: CHORE_PROFILE_COLORS[1], // Slate Blue
+    emoji: '🛡️',
+    createdAt: '1970-01-01T00:00:00.000Z',
+    updatedAt: '1970-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'p_anh',
+    name: 'Anh',
+    role: 'parent',
+    color: CHORE_PROFILE_COLORS[2], // Dusty Rose
+    emoji: '🌸',
+    createdAt: '1970-01-01T00:00:00.000Z',
+    updatedAt: '1970-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'p_olivia',
+    name: 'Olivia',
+    role: 'kid',
+    color: CHORE_PROFILE_COLORS[0], // Sage Green
+    emoji: '🌿',
+    createdAt: '1970-01-01T00:00:00.000Z',
+    updatedAt: '1970-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'p_alyssa',
+    name: 'Alyssa',
+    role: 'kid',
+    color: CHORE_PROFILE_COLORS[4], // Lavender-Gray
+    emoji: '🦋',
+    createdAt: '1970-01-01T00:00:00.000Z',
+    updatedAt: '1970-01-01T00:00:00.000Z',
+  },
+];
+
 export const DEFAULT_CHORE_SNAPSHOT: ChoreEngineSnapshot = {
   id: 'household_chores',
   profiles: [
     {
-      id: 'profile-1',
+      id: 'p_olivia',
       name: 'Olivia',
+      role: 'kid',
       color: CHORE_PROFILE_COLORS[0], // Sage Green
       emoji: '🌿',
       balance: 0,
       lifetimePoints: 0,
     },
     {
-      id: 'profile-2',
+      id: 'p_alyssa',
       name: 'Alyssa',
-      color: CHORE_PROFILE_COLORS[1], // Slate Blue
+      role: 'kid',
+      color: CHORE_PROFILE_COLORS[4], // Lavender-Gray
       emoji: '🦋',
       balance: 0,
       lifetimePoints: 0,
@@ -185,7 +229,7 @@ export const DEFAULT_CHORE_SNAPSHOT: ChoreEngineSnapshot = {
       id: 'chore-tpl-bed-1',
       title: 'Make Bed & Tidy Room',
       points: 10,
-      assignedTo: 'profile-1',
+      assignedTo: 'p_olivia',
       cadence: 'daily',
       requiresApproval: false,
       rolloverUntilDone: false,
@@ -196,7 +240,7 @@ export const DEFAULT_CHORE_SNAPSHOT: ChoreEngineSnapshot = {
       id: 'chore-tpl-bed-2',
       title: 'Make Bed & Tidy Room',
       points: 10,
-      assignedTo: 'profile-2',
+      assignedTo: 'p_alyssa',
       cadence: 'daily',
       requiresApproval: false,
       rolloverUntilDone: false,
@@ -207,7 +251,7 @@ export const DEFAULT_CHORE_SNAPSHOT: ChoreEngineSnapshot = {
       id: 'chore-tpl-backpack-1',
       title: 'Unpack School Backpack & Lunchbox',
       points: 15,
-      assignedTo: 'profile-1',
+      assignedTo: 'p_olivia',
       cadence: 'weekdays',
       requiresApproval: false,
       rolloverUntilDone: true,
@@ -218,7 +262,7 @@ export const DEFAULT_CHORE_SNAPSHOT: ChoreEngineSnapshot = {
       id: 'chore-tpl-backpack-2',
       title: 'Unpack School Backpack & Lunchbox',
       points: 15,
-      assignedTo: 'profile-2',
+      assignedTo: 'p_alyssa',
       cadence: 'weekdays',
       requiresApproval: false,
       rolloverUntilDone: true,
@@ -252,7 +296,7 @@ export const DEFAULT_CHORE_SNAPSHOT: ChoreEngineSnapshot = {
   rewards: [
     {
       id: 'reward-1',
-      profileId: 'profile-1',
+      profileId: 'p_olivia',
       title: 'Pick Friday Family Movie & Popcorn',
       pointsCost: 100,
       status: 'active_goal',
@@ -261,7 +305,7 @@ export const DEFAULT_CHORE_SNAPSHOT: ChoreEngineSnapshot = {
     },
     {
       id: 'reward-2',
-      profileId: 'profile-2',
+      profileId: 'p_alyssa',
       title: 'Ice Cream Outing',
       pointsCost: 100,
       status: 'active_goal',

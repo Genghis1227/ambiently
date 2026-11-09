@@ -3,7 +3,9 @@ import { useState, useEffect } from 'react';
 import { db } from './db';
 import type { AppSettings, DashboardTab, DashboardWidget, StickyNoteItem } from '../types/dashboard';
 import type { ChoreEngineSnapshot } from '../types/chores';
+import type { HouseholdProfile } from '../types/profiles';
 import { useChoreStore } from '../store/choreStore';
+import { useProfileStore } from '../stores/useProfileStore';
 
 export interface LocalExportPayload {
   version: 1;
@@ -12,6 +14,7 @@ export interface LocalExportPayload {
   tabs: DashboardTab[];
   widgets: DashboardWidget[];
   notes: StickyNoteItem[];
+  profiles?: HouseholdProfile[];
   chores?: ChoreEngineSnapshot;
 }
 
@@ -140,6 +143,7 @@ export function downloadBackupFile(
     tabs,
     widgets,
     notes,
+    profiles: useProfileStore.getState().profiles,
     chores: useChoreStore.getState().snapshot,
   };
 
@@ -220,7 +224,14 @@ export async function restoreBackupToDatabase(
       await db.notes.bulkAdd(payload.notes);
     }
 
-    // 5. Restore Chores if present
+    // 5. Restore Global Household Profiles if present
+    if (Array.isArray(payload.profiles) && payload.profiles.length > 0) {
+      await db.profiles.clear();
+      await db.profiles.bulkPut(payload.profiles);
+      await useProfileStore.getState().initProfileStore();
+    }
+
+    // 6. Restore Chores if present
     if (payload.chores && payload.chores.id === 'household_chores') {
       await db.chores.put(payload.chores);
       await useChoreStore.getState().initChoreStore();

@@ -18,6 +18,28 @@ import {
   syncRewardUnlockStates,
 } from '../utils/choreEngine';
 import { localDateKey } from '../utils/timePrefs';
+import { useProfileStore, registerProfileSyncListener } from '../stores/useProfileStore';
+import type { HouseholdProfile } from '../types/profiles';
+
+function mapHouseholdToChoreProfiles(
+  householdProfiles: HouseholdProfile[],
+  ledger: LedgerEntry[]
+): Profile[] {
+  const kidProfiles: Profile[] = householdProfiles
+    .filter((hp) => hp.role === 'kid' && !hp.deletedAt)
+    .map((hp) => ({
+      id: hp.id,
+      name: hp.name,
+      role: hp.role,
+      color: hp.color,
+      avatarDataUrl: hp.avatarDataUrl,
+      avatarUrl: hp.avatarDataUrl,
+      emoji: hp.emoji,
+      balance: 0,
+      lifetimePoints: 0,
+    }));
+  return recalculateProfilesFromLedger(kidProfiles, ledger);
+}
 
 let rolloverIntervalId: ReturnType<typeof setInterval> | null = null;
 let midnightTimeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -164,8 +186,15 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => ({
 
   initChoreStore: async () => {
     try {
+      await useProfileStore.getState().initProfileStore();
+      const householdProfiles = useProfileStore.getState().profiles;
       const stored = await db.chores.get('household_chores');
-      const initial = stored || DEFAULT_CHORE_SNAPSHOT;
+      const base = stored || DEFAULT_CHORE_SNAPSHOT;
+      const syncedProfiles = mapHouseholdToChoreProfiles(householdProfiles, base.ledger);
+      const initial: ChoreEngineSnapshot = {
+        ...base,
+        profiles: syncedProfiles.length > 0 ? syncedProfiles : base.profiles,
+      };
       const { snapshot: rolled, changed } = evaluateChoreRollover(initial, new Date());
 
       if (!stored || changed) {
@@ -865,40 +894,46 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => ({
   },
 
   upsertProfile: async (profileInput) => {
+    const saved = await useProfileStore.getState().upsertHouseholdProfile({
+      id: profileInput.id,
+      name: profileInput.name,
+      role: profileInput.role || 'kid',
+      color: profileInput.color,
+      avatarDataUrl: profileInput.avatarDataUrl || profileInput.avatarUrl,
+      emoji: profileInput.emoji,
+    });
+
     const current = get().snapshot;
     const nowIso = new Date().toISOString();
-    const id = profileInput.id || generateId('profile');
+    const householdProfiles = useProfileStore.getState().profiles;
+    const nextProfiles = mapHouseholdToChoreProfiles(householdProfiles, current.ledger);
 
-    const exists = current.profiles.some((p) => p.id === id);
-    const rawProfiles: Profile[] = exists
-      ? current.profiles.map((p) =>
-          p.id === id
-            ? {
-                ...p,
-                name: profileInput.name.trim(),
-                color: profileInput.color,
-                avatarUrl: profileInput.avatarUrl,
-                emoji: profileInput.emoji,
-              }
-            : p
-        )
-      : [
-          ...current.profiles,
-          {
-            id,
-            name: profileInput.name.trim(),
-            color: profileInput.color,
-            avatarUrl: profileInput.avatarUrl,
-            emoji: profileInput.emoji,
-            balance: 0,
-            lifetimePoints: 0,
-          },
-        ];
+    // Ensure if it was a kid profile, it appears in nextProfiles
+    const hasSaved = nextProfiles.some((p) => p.id === saved.id);
+    const mergedProfiles =
+      !hasSaved && saved.role === 'kid'
+        ? recalculateProfilesFromLedger(
+            [
+              ...nextProfiles,
+              {
+                id: saved.id,
+                name: saved.name,
+                role: saved.role,
+                color: saved.color,
+                avatarDataUrl: saved.avatarDataUrl,
+                avatarUrl: saved.avatarDataUrl,
+                emoji: saved.emoji,
+                balance: 0,
+                lifetimePoints: 0,
+              },
+            ],
+            current.ledger
+          )
+        : nextProfiles;
 
-    const nextProfiles = recalculateProfilesFromLedger(rawProfiles, current.ledger);
     const nextSnapshot: ChoreEngineSnapshot = {
       ...current,
-      profiles: nextProfiles,
+      profiles: mergedProfiles,
       lastParentActionAt: nowIso,
       updated_at: nowIso,
     };
@@ -908,6 +943,7 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => ({
   },
 
   deleteProfile: async (profileId) => {
+    await useProfileStore.getState().deleteHouseholdProfile(profileId);
     const current = get().snapshot;
     const nowIso = new Date().toISOString();
     const nextProfiles = current.profiles.filter((p) => p.id !== profileId);
@@ -1041,3 +1077,21 @@ export function getPendingParentActionCounts(snapshot: ChoreEngineSnapshot): {
       awaitingApprovalCount + needsPricingCount + pendingFulfillmentCount,
   };
 }
+
+registerProfileSyncListener((householdProfiles) => {
+  const state = useChoreStore.getState();
+  if (!state.isInitialized) return;
+  const current = state.snapshot;
+  const nextProfiles = mapHouseholdToChoreProfiles(householdProfiles, current.ledger);
+  const nextRewards = syncRewardUnlockStates(current.rewards, nextProfiles);
+  const nowIso = new Date().toISOString();
+  const nextSnapshot: ChoreEngineSnapshot = {
+    ...current,
+    profiles: nextProfiles,
+    rewards: nextRewards,
+    updated_at: nowIso,
+  };
+  useChoreStore.setState({ snapshot: nextSnapshot });
+  persistSnapshot(nextSnapshot).catch(() => {});
+});
+
