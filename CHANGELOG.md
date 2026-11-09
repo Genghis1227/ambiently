@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.0] - 2026-11-08
+
+### Kiosk Display & Window Management
+* **In-App Web Viewer Window Frame (`src/components/common/InAppWebViewerModal.tsx`, `src/utils/linkHandler.ts`):**
+  * When clicking external links (RSS articles, image banner URLs, guides) while in kiosk mode, Ambiently opens an in-app window frame modal instead of allowing the browser to spawn an uncloseable fullscreen window.
+  * Features a touch-friendly **✕ Close** button, window title bar, domain badge, and keyboard `Escape` closing.
+  * Includes a **Pop-out Window** button that opens pages with `popup=yes,width=1150,height=850` to force Edge into a floating window with native window chrome when an external window is desired.
+* **Global Smart Link Interceptor (`src/App.tsx`):**
+  * Automatically catches external HTTP/HTTPS link clicks anywhere across all widgets and modals without requiring widget-by-widget rewrites.
+  * Bypasses internal routes, file downloads, and hash anchors.
+
+---
+
 ## [0.3.29] - 2026-11-08
 
 ### Notes & Checklists

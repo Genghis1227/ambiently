@@ -44,6 +44,9 @@ const ShareBoardModal = lazy(() =>
 const MobileCompanion = lazy(() =>
   import('./components/mobile/MobileCompanion').then((m) => ({ default: m.MobileCompanion }))
 );
+const InAppWebViewerModal = lazy(() =>
+  import('./components/common/InAppWebViewerModal').then((m) => ({ default: m.InAppWebViewerModal }))
+);
 
 export function App() {
   const {
@@ -221,6 +224,9 @@ export function App() {
   );
   const [forceDesktopMode, setForceDesktopMode] = useState(false);
 
+  // In-App Web Viewer Modal for external links (prevents full-screen kiosk escape in Edge/PWA)
+  const [activeWebModal, setActiveWebModal] = useState<{ url: string; title?: string } | null>(null);
+
   useEffect(() => {
     initStore();
   }, [initStore]);
@@ -262,6 +268,14 @@ export function App() {
         return;
       }
 
+      if (activeWebModal) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setActiveWebModal(null);
+        }
+        return;
+      }
+
       if ((e.key === 'Escape' || e.key === 'F11') && isFullscreenKioskLocked) {
         e.preventDefault();
         setPinChallenge({
@@ -294,7 +308,7 @@ export function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleDockHidden, tabs, setActiveTabId, isFullscreenKioskLocked]);
+  }, [toggleDockHidden, tabs, setActiveTabId, isFullscreenKioskLocked, activeWebModal]);
 
   // Fullscreen state listener + Keyboard Lock API (Chromium / Edge / Chrome Kiosk)
   useEffect(() => {
@@ -352,14 +366,71 @@ export function App() {
       const target = e.target as HTMLElement | null;
       if (target?.closest('[role="dialog"], input, button')) return;
 
-      if (!document.fullscreenElement && !pinChallenge && !isSettingsOpen) {
+      if (!document.fullscreenElement && !pinChallenge && !isSettingsOpen && !activeWebModal) {
         document.documentElement.requestFullscreen().catch(() => {});
       }
     };
 
     window.addEventListener('pointerdown', handlePointerDown);
     return () => window.removeEventListener('pointerdown', handlePointerDown);
-  }, [isFullscreenKioskLocked, pinChallenge, isSettingsOpen]);
+  }, [isFullscreenKioskLocked, pinChallenge, isSettingsOpen, activeWebModal]);
+
+  // Global click interception for external links (RSS news, widget embeds, etc.)
+  // Opens in an In-App Window Frame with a dedicated Close button rather than escaping fullscreen in Edge kiosk
+  useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      const anchor = (e.target as HTMLElement)?.closest('a');
+      if (!anchor) return;
+
+      if (anchor.dataset.nativeLink === 'true' || anchor.hasAttribute('download')) {
+        return;
+      }
+
+      const href = anchor.getAttribute('href');
+      if (!href || href === '#' || href.startsWith('javascript:')) return;
+
+      const isHttp = href.startsWith('http://') || href.startsWith('https://');
+      if (!isHttp) return;
+
+      // Allow internal same-origin routes without target="_blank"
+      if (typeof window !== 'undefined' && href.startsWith(window.location.origin) && !anchor.target) {
+        return;
+      }
+
+      // External link clicked: intercept and open in the in-app web window frame
+      e.preventDefault();
+      e.stopPropagation();
+
+      const linkTitle =
+        anchor.getAttribute('title') ||
+        anchor.innerText?.trim() ||
+        anchor.getAttribute('aria-label') ||
+        undefined;
+
+      setActiveWebModal({
+        url: href,
+        title: linkTitle,
+      });
+    };
+
+    const handleOpenInAppWeb = (e: Event) => {
+      const custom = e as CustomEvent<{ url: string; title?: string }>;
+      if (custom.detail?.url) {
+        setActiveWebModal({
+          url: custom.detail.url,
+          title: custom.detail.title,
+        });
+      }
+    };
+
+    document.addEventListener('click', handleGlobalClick, { capture: true });
+    window.addEventListener('open_in_app_web_viewer', handleOpenInAppWeb);
+
+    return () => {
+      document.removeEventListener('click', handleGlobalClick, { capture: true });
+      window.removeEventListener('open_in_app_web_viewer', handleOpenInAppWeb);
+    };
+  }, []);
 
   const handleToggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -922,6 +993,16 @@ export function App() {
           <SettingsModal
             isOpen={isSettingsOpen}
             onClose={() => setIsSettingsOpen(false)}
+          />
+        )}
+
+        {/* In-App Web Viewer Modal Frame for External Links */}
+        {activeWebModal && (
+          <InAppWebViewerModal
+            isOpen={Boolean(activeWebModal)}
+            url={activeWebModal.url}
+            title={activeWebModal.title}
+            onClose={() => setActiveWebModal(null)}
           />
         )}
       </Suspense>
