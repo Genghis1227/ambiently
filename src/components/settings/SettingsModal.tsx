@@ -63,6 +63,7 @@ import {
   pullFromCloud,
 } from '../../services/supabase';
 import { APP_VERSION } from '../../data/version';
+import { HouseholdProfileManager } from '../common/HouseholdProfileManager';
 import { CANVAS_ICONS } from '../../data/canvasIcons';
 import { CANVAS_THEMES } from '../../data/canvasThemes';
 import { MAX_CANVASES } from '../../types/dashboard';
@@ -431,7 +432,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
               { id: 'display' as const, label: 'Display & Kiosk', shortLabel: 'Display', icon: <Sliders className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> },
               { id: 'photos' as const, label: 'Shared Photos', shortLabel: 'Photos', icon: <ImageIcon className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> },
               { id: 'sync' as const, label: 'Sync & Backup', shortLabel: 'Sync', icon: <FolderSync className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> },
-              { id: 'system' as const, label: 'Security & System', shortLabel: 'Security', icon: <Shield className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> },
+              { id: 'system' as const, label: 'Household & System', shortLabel: 'System', icon: <Shield className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -946,9 +947,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
               )}
             </div>
 
-            {/* Night Mode & Kiosk Hardware Section */}
-            <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800 space-y-4">
-              <div className="flex items-center justify-between">
+            {/* Night Mode & Kiosk Display (Simplified) */}
+            <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800 space-y-3.5">
+              <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <Moon className="w-4 h-4 text-indigo-400" />
                   <div>
@@ -956,55 +957,136 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                       Night Mode & Kiosk Display
                     </span>
                     <span className="text-[11px] text-gray-400">
-                      OLED burn-in protection, scheduled dimming & screen wake lock
+                      Scheduled overnight sleep, screen wake lock & cursor auto-hide
                     </span>
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={() => updateSettings({ nightModeEnabled: !settings.nightModeEnabled })}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer shrink-0 ${
                     settings.nightModeEnabled
                       ? 'bg-indigo-600/30 border-indigo-500 text-indigo-300'
                       : 'bg-gray-900 border-gray-700 text-gray-400 hover:text-white'
                   }`}
                 >
-                  {settings.nightModeEnabled ? 'Night Mode Active' : 'Activate Now'}
+                  {settings.nightModeEnabled ? 'Night Mode Active' : 'Test Night Mode'}
                 </button>
               </div>
 
-              {/* Screen Wake Lock Toggle */}
-              <div className="flex items-center justify-between pt-2 border-t border-gray-800/60">
-                <div className="flex items-center gap-2">
-                  <Sun className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="text-xs text-gray-300">Keep Screen Awake 24/7 (Wake Lock API)</span>
-                </div>
+              {/* Night Mode Style + Optional Dim Slider */}
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-800/60">
                 <button
-                  onClick={() => updateSettings({ wakeLockEnabled: !settings.wakeLockEnabled })}
-                  className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
-                    settings.wakeLockEnabled ? 'bg-emerald-600' : 'bg-gray-700'
+                  type="button"
+                  onClick={() => updateSettings({ nightModeStyle: 'oled_clock' })}
+                  className={`py-2 px-3 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                    settings.nightModeStyle === 'oled_clock'
+                      ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
+                      : 'bg-gray-900 border-gray-800 text-gray-400 hover:text-white'
                   }`}
                 >
-                  <div
-                    className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                      settings.wakeLockEnabled ? 'translate-x-5' : 'translate-x-0'
-                    }`}
-                  />
+                  OLED Pixel-Shift Clock
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateSettings({ nightModeStyle: 'dim' })}
+                  className={`py-2 px-3 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                    settings.nightModeStyle === 'dim'
+                      ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
+                      : 'bg-gray-900 border-gray-800 text-gray-400 hover:text-white'
+                  }`}
+                >
+                  Dim Screen Overlay
                 </button>
               </div>
 
-              {/* Auto-Hide Inactive Cursor Toggle (Kiosk Mode) */}
-              <div className="space-y-2 pt-2 border-t border-gray-800/60">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <MousePointer className="w-3.5 h-3.5 text-cyan-400" />
-                    <div>
-                      <span className="text-xs text-gray-300 block">Auto-Hide Mouse Cursor (Kiosk Mode)</span>
-                      <span className="text-[10px] text-gray-500">Hides cursor when idle (1.2s in Night Mode)</span>
-                    </div>
+              {settings.nightModeStyle === 'dim' && (
+                <div className="flex items-center gap-3 px-1">
+                  <span className="text-xs text-gray-400 shrink-0">Darkness:</span>
+                  <input
+                    type="range"
+                    min="0.4"
+                    max="0.95"
+                    step="0.05"
+                    value={settings.nightDimOpacity ?? 0.85}
+                    onChange={(e) => updateSettings({ nightDimOpacity: parseFloat(e.target.value) })}
+                    className="flex-1 accent-indigo-500 cursor-pointer"
+                  />
+                  <span className="font-mono text-xs text-indigo-300 w-10 text-right">
+                    {Math.round((settings.nightDimOpacity ?? 0.85) * 100)}%
+                  </span>
+                </div>
+              )}
+
+              {/* Automatic Night Schedule (Single Compact Row) */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-gray-800/60">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => updateSettings({ nightScheduleEnabled: settings.nightScheduleEnabled === false })}
+                    className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
+                      settings.nightScheduleEnabled !== false ? 'bg-emerald-600' : 'bg-gray-700'
+                    }`}
+                  >
+                    <div
+                      className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                        settings.nightScheduleEnabled !== false ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                  <span className="text-xs font-medium text-gray-300">Auto Night Schedule</span>
+                </div>
+
+                {settings.nightScheduleEnabled !== false && (
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <input
+                      type="time"
+                      value={settings.nightModeStart || '22:00'}
+                      onChange={(e) => updateSettings({ nightModeStart: e.target.value })}
+                      className="rounded-lg bg-gray-900 border border-gray-800 px-2 py-1 text-xs text-white"
+                    />
+                    <span className="text-gray-500">to</span>
+                    <input
+                      type="time"
+                      value={settings.nightModeEnd || '07:00'}
+                      onChange={(e) => updateSettings({ nightModeEnd: e.target.value })}
+                      className="rounded-lg bg-gray-900 border border-gray-800 px-2 py-1 text-xs text-white"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Screen Wake Lock + Auto-Hide Cursor (2 Side-by-Side Toggles) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2.5 border-t border-gray-800/60">
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-gray-900/60 border border-gray-800">
+                  <div className="flex items-center gap-2 pr-2">
+                    <Sun className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span className="text-xs text-gray-300">Keep Screen Awake 24/7</span>
                   </div>
                   <button
+                    type="button"
+                    onClick={() => updateSettings({ wakeLockEnabled: !settings.wakeLockEnabled })}
+                    className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
+                      settings.wakeLockEnabled ? 'bg-emerald-600' : 'bg-gray-700'
+                    }`}
+                  >
+                    <div
+                      className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                        settings.wakeLockEnabled ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-gray-900/60 border border-gray-800">
+                  <div className="flex items-center gap-2 pr-2">
+                    <MousePointer className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                    <span className="text-xs text-gray-300">Auto-Hide Idle Cursor</span>
+                  </div>
+                  <button
+                    type="button"
                     onClick={() => updateSettings({ autoHideCursor: settings.autoHideCursor === false })}
-                    className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                    className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
                       settings.autoHideCursor !== false ? 'bg-emerald-600' : 'bg-gray-700'
                     }`}
                   >
@@ -1014,161 +1096,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                       }`}
                     />
                   </button>
-                </div>
-
-                {settings.autoHideCursor !== false && (
-                  <div className="flex items-center justify-between pl-5">
-                    <span className="text-[11px] text-gray-400">Idle timeout:</span>
-                    <div className="flex gap-1.5">
-                      {[2, 3, 5, 10].map((sec) => (
-                        <button
-                          key={sec}
-                          type="button"
-                          onClick={() => updateSettings({ cursorIdleTimeoutSec: sec })}
-                          className={`px-2 py-0.5 rounded text-[10px] font-mono transition-all cursor-pointer ${
-                            (settings.cursorIdleTimeoutSec || 3) === sec
-                              ? 'bg-cyan-600/30 border border-cyan-500 text-cyan-300 font-bold'
-                              : 'bg-gray-800/80 text-gray-400 hover:text-white border border-transparent'
-                          }`}
-                        >
-                          {sec}s
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Night Mode Style Selector */}
-              <div className="space-y-1.5 pt-2 border-t border-gray-800/60">
-                <span className="text-xs text-gray-400 block">Night Mode Visual Style:</span>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => updateSettings({ nightModeStyle: 'oled_clock' })}
-                    className={`py-2 px-3 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
-                      settings.nightModeStyle === 'oled_clock'
-                        ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
-                        : 'bg-gray-900 border-gray-800 text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    OLED Pixel-Shift Clock
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => updateSettings({ nightModeStyle: 'dim' })}
-                    className={`py-2 px-3 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
-                      settings.nightModeStyle === 'dim'
-                        ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
-                        : 'bg-gray-900 border-gray-800 text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    Dim Screen Overlay
-                  </button>
-                </div>
-              </div>
-
-              {/* Automatic Night Schedule Toggle */}
-              <div className="flex items-center justify-between pt-2 border-t border-gray-800/60">
-                <span className="text-xs text-gray-300">Automatic Night Schedule</span>
-                <button
-                  onClick={() => updateSettings({ nightScheduleEnabled: settings.nightScheduleEnabled === false })}
-                  className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
-                    settings.nightScheduleEnabled !== false ? 'bg-emerald-600' : 'bg-gray-700'
-                  }`}
-                >
-                  <div
-                    className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                      settings.nightScheduleEnabled !== false ? 'translate-x-5' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-              </div>
-
-              {/* Night Schedule Start / End & Dim Opacity */}
-              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-800/60">
-                <div>
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 block mb-1">
-                    Auto-Start Time
-                  </label>
-                  <input
-                    type="time"
-                    value={settings.nightModeStart || '22:00'}
-                    disabled={settings.nightScheduleEnabled === false}
-                    onChange={(e) => updateSettings({ nightModeStart: e.target.value })}
-                    className="w-full rounded-lg bg-gray-900 border border-gray-800 p-1.5 text-xs text-white disabled:opacity-50"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 block mb-1">
-                    Morning Wake Time
-                  </label>
-                  <input
-                    type="time"
-                    value={settings.nightModeEnd || '07:00'}
-                    disabled={settings.nightScheduleEnabled === false}
-                    onChange={(e) => updateSettings({ nightModeEnd: e.target.value })}
-                    className="w-full rounded-lg bg-gray-900 border border-gray-800 p-1.5 text-xs text-white disabled:opacity-50"
-                  />
-                </div>
-              </div>
-
-              {settings.nightModeStyle === 'dim' && (
-                <div className="pt-1">
-                  <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
-                    <span>Dim Overlay Darkness:</span>
-                    <span className="font-mono text-indigo-300">
-                      {Math.round((settings.nightDimOpacity ?? 0.85) * 100)}%
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0.4"
-                    max="0.95"
-                    step="0.05"
-                    value={settings.nightDimOpacity ?? 0.85}
-                    onChange={(e) => updateSettings({ nightDimOpacity: parseFloat(e.target.value) })}
-                    className="w-full accent-indigo-500 cursor-pointer"
-                  />
-                </div>
-              )}
-
-              {/* Wake Inactivity Timeout */}
-              <div className="pt-2 border-t border-gray-800/60">
-                <div className="flex items-center justify-between mb-1.5">
-                  <div>
-                    <span className="text-xs text-gray-300 block font-medium">Wake Inactivity Timeout</span>
-                    <span className="text-[11px] text-gray-500">
-                      When awakened during the night, auto-return to Night Mode after idle:
-                    </span>
-                  </div>
-                  <span className="text-xs font-mono text-indigo-400">
-                    {(settings.nightModeWakeTimeoutMin ?? 2) === 0
-                      ? 'Until morning'
-                      : `${settings.nightModeWakeTimeoutMin ?? 2} min${(settings.nightModeWakeTimeoutMin ?? 2) > 1 ? 's' : ''}`}
-                  </span>
-                </div>
-                <div className="grid grid-cols-5 gap-1.5">
-                  {[
-                    { label: '1 min', value: 1 },
-                    { label: '2 mins (Default)', value: 2 },
-                    { label: '5 mins', value: 5 },
-                    { label: '10 mins', value: 10 },
-                    { label: 'Until Morning', value: 0 },
-                  ].map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => updateSettings({ nightModeWakeTimeoutMin: opt.value })}
-                      className={`py-1.5 px-1.5 rounded-lg text-[11px] font-medium border text-center transition-all cursor-pointer ${
-                        (settings.nightModeWakeTimeoutMin ?? 2) === opt.value
-                          ? 'bg-indigo-600/30 border-indigo-500 text-indigo-300 font-semibold shadow-sm'
-                          : 'bg-gray-900 border-gray-800 text-gray-400 hover:text-white'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
                 </div>
               </div>
             </div>
@@ -1793,9 +1720,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
             </>
             )}
 
-            {/* TAB 5: Security & System Settings */}
+            {/* TAB 5: Household & System Settings */}
             {activeTab === 'system' && (
               <>
+            {/* Global Household Members & Avatars */}
+            <HouseholdProfileManager />
+
             {/* Kid Protection & Kiosk Security */}
             <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800 space-y-4">
               <div className="flex items-center justify-between">
@@ -1909,34 +1839,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                   </button>
                 </div>
 
-                {/* 2. Lock Fullscreen Kiosk */}
-                <div className="flex items-center justify-between p-3 rounded-lg bg-gray-900/60 border border-gray-800">
-                  <div className="space-y-0.5 pr-4">
+                {/* 2. Windows OS Kiosk Account Setup Guide */}
+                <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-gray-900/60 border border-gray-800">
+                  <div className="space-y-0.5 pr-2">
                     <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
                       <Shield className="w-3.5 h-3.5 text-blue-400" />
-                      <span>Lock Fullscreen Kiosk Mode</span>
+                      <span>Windows Fullscreen Kiosk Mode (Assigned Access)</span>
                     </div>
                     <span className="text-[11px] text-gray-400 block leading-tight">
-                      Traps Escape key, disables browser context menus, and auto-returns to fullscreen on touch. Requires parent PIN to exit.
+                      To prevent kids from exiting fullscreen or closing the browser on Windows, set up a dedicated Windows Kiosk account.
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updateSettings({
-                        lockFullscreenKiosk: settings.lockFullscreenKiosk === false ? true : false,
-                      })
-                    }
-                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                      settings.lockFullscreenKiosk !== false ? 'bg-blue-600' : 'bg-gray-700'
-                    }`}
+                  <a
+                    href="https://youtu.be/Z8alME1nRmQ?si=pVA-x4f0n25gTy1C"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-native-link="true"
+                    className="px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 text-xs font-semibold shrink-0 transition-colors cursor-pointer"
                   >
-                    <span
-                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                        settings.lockFullscreenKiosk !== false ? 'translate-x-5' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
+                    Watch Setup Video ↗
+                  </a>
                 </div>
 
                 {/* 3. Require PIN for Settings */}

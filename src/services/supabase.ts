@@ -1,9 +1,16 @@
 import { createClient, type SupabaseClient, type User, type RealtimeChannel } from '@supabase/supabase-js';
-import { db, DEFAULT_SETTINGS, DEFAULT_TABS, DEFAULT_WIDGETS, DEFAULT_NOTES } from './db';
+import { db, DEFAULT_SETTINGS, DEFAULT_TABS, DEFAULT_WIDGETS, DEFAULT_NOTES, DEFAULT_CHORE_SNAPSHOT, DEFAULT_HOUSEHOLD_PROFILES } from './db';
 import { stripPlexTokens } from './plexLinks';
 import { isBoardFullError, setSyncRefusal } from './syncRefusal';
 import { keepLocalNoteFields, keepLocalTabFields, keepLocalWidgetFields } from './syncMerge';
 import type { DashboardTab, DashboardWidget, StickyNoteItem, AppSettings } from '../types/dashboard';
+import type { ChoreEngineSnapshot } from '../types/chores';
+import type { HouseholdProfile } from '../types/profiles';
+import { useChoreStore } from '../store/choreStore';
+import { useProfileStore } from '../stores/useProfileStore';
+
+const CHORE_ENGINE_CLOUD_ROW_ID = '__ambiently_chore_engine__';
+const HOUSEHOLD_PROFILES_CLOUD_ROW_ID = '__ambiently_household_profiles__';
 
 let supabaseClient: SupabaseClient | null = null;
 let realtimeChannel: RealtimeChannel | null = null;
@@ -76,12 +83,14 @@ function deviceOwnSettings(settings?: AppSettings): Partial<AppSettings> {
   };
 }
 
-// Removes the previous board's tabs, widgets, notes, settings and photo catalog from this device
+// Removes the previous board's tabs, widgets, notes, settings, chores, profiles and photo catalog from this device
 async function clearLocalBoard(): Promise<void> {
   const current = await db.settings.get('global');
-  await db.transaction('rw', db.tabs, db.widgets, db.notes, db.settings, async () => {
-    await Promise.all([db.tabs.clear(), db.widgets.clear(), db.notes.clear()]);
+  await db.transaction('rw', [db.tabs, db.widgets, db.notes, db.settings, db.chores, db.profiles], async () => {
+    await Promise.all([db.tabs.clear(), db.widgets.clear(), db.notes.clear(), db.chores.clear(), db.profiles.clear()]);
     await db.settings.put({ ...DEFAULT_SETTINGS, ...deviceOwnSettings(current) });
+    await db.chores.put(DEFAULT_CHORE_SNAPSHOT);
+    await db.profiles.bulkPut(DEFAULT_HOUSEHOLD_PROFILES);
   });
 }
 
@@ -320,6 +329,37 @@ export function subscribeToRealtimeBoard(
         };
 
         tabHandler(tab, eventType);
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'household_profiles',
+        filter: `dashboard_id=eq.${boardId}`,
+      },
+      (payload) => {
+        const raw = (payload.new || payload.old) as any;
+        if (!raw) return;
+        if (raw.dashboard_id && raw.dashboard_id !== boardId) return;
+
+        const profile: HouseholdProfile = {
+          id: raw.id,
+          name: raw.name,
+          role: raw.role === 'parent' ? 'parent' : 'kid',
+          color: raw.color || '#6B8E7B',
+          avatarDataUrl: raw.avatar_data_url || undefined,
+          emoji: raw.emoji || undefined,
+          createdAt: raw.created_at || new Date().toISOString(),
+          updatedAt: raw.updated_at || new Date().toISOString(),
+          deletedAt: raw.deleted_at || undefined,
+        };
+
+        useProfileStore
+          .getState()
+          .applyRemoteProfiles([profile])
+          .catch(() => {});
       }
     )
     .subscribe((status) => {
@@ -593,10 +633,12 @@ export async function pushToCloud(
     }
 
     // 1. Query Dexie to include all active and soft-deleted records so remote devices sync additions and deletions
-    const [dbTabs, dbWidgets, dbNotes] = await Promise.all([
+    const [dbTabs, dbWidgets, dbNotes, dbChoreSnapshot, dbProfiles] = await Promise.all([
       db.tabs.toArray(),
       db.widgets.toArray(),
       db.notes.toArray(),
+      db.chores.get('household_chores'),
+      db.profiles.toArray(),
     ]);
 
     const tabsToPush = dbTabs.length > 0 ? dbTabs : tabs;
@@ -693,6 +735,64 @@ export async function pushToCloud(
         if (remoteTime === undefined) return true;
         return new Date(w.updated_at || 0).getTime() > remoteTime;
       });
+    }
+
+    // Sync household Chore Engine snapshot via reserved system row in widgets table
+    const activeChoreSnapshot = dbChoreSnapshot || useChoreStore.getState().snapshot;
+    if (activeChoreSnapshot && activeChoreSnapshot.id === 'household_chores') {
+      const localChoreTime = new Date(activeChoreSnapshot.updated_at || 0).getTime();
+      const remoteChoreTime = remoteWidgetsMap.get(CHORE_ENGINE_CLOUD_ROW_ID);
+      const shouldPushChores =
+        remoteChoreTime === undefined
+          ? localChoreTime > 0
+          : localChoreTime > remoteChoreTime;
+
+      if (shouldPushChores) {
+        widgetsToUpsert.push({
+          id: CHORE_ENGINE_CLOUD_ROW_ID,
+          dashboard_id: dashboardId,
+          tab_id: null,
+          user_id: ownerId,
+          type: 'chores_engine_store',
+          title: 'Household Chore Engine Store',
+          grid_pos: {},
+          freeform_pos: {},
+          config: activeChoreSnapshot,
+          updated_at: activeChoreSnapshot.updated_at,
+          deleted_at: null,
+        });
+      }
+    }
+
+    // Sync Global Household Profiles & Avatars via reserved system row + household_profiles table
+    const profilesToPush = dbProfiles.length > 0 ? dbProfiles : useProfileStore.getState().profiles;
+    if (profilesToPush.length > 0) {
+      const latestProfileTime = profilesToPush.reduce(
+        (max, p) => Math.max(max, new Date(p.updatedAt || 0).getTime()),
+        0
+      );
+      const remoteProfilesRowTime = remoteWidgetsMap.get(HOUSEHOLD_PROFILES_CLOUD_ROW_ID);
+      const shouldPushProfilesRow =
+        remoteProfilesRowTime === undefined
+          ? latestProfileTime > 0
+          : latestProfileTime > remoteProfilesRowTime;
+
+      if (shouldPushProfilesRow) {
+        const latestIso = new Date(latestProfileTime || Date.now()).toISOString();
+        widgetsToUpsert.push({
+          id: HOUSEHOLD_PROFILES_CLOUD_ROW_ID,
+          dashboard_id: dashboardId,
+          tab_id: null,
+          user_id: ownerId,
+          type: 'household_profiles_store',
+          title: 'Household Profiles Store',
+          grid_pos: {},
+          freeform_pos: {},
+          config: { profiles: profilesToPush, updated_at: latestIso },
+          updated_at: latestIso,
+          deleted_at: null,
+        });
+      }
     }
 
     // Upsert Notes: only send notes with genuinely newer timestamps or new records
@@ -809,6 +909,26 @@ export async function pushToCloud(
     // Widgets go in small batches to avoid statement timeouts
     await upsertRows('widgets', widgetsToUpsert.filter(isNotDeletion), 5);
     await upsertRows('notes', notesToUpsert.filter(isNotDeletion), 25);
+
+    // Best-effort sync to dedicated public.household_profiles table if schema has been applied
+    if (profilesToPush.length > 0) {
+      const formattedHouseholdRows = profilesToPush.map((p) => ({
+        id: p.id,
+        dashboard_id: dashboardId,
+        user_id: ownerId,
+        name: p.name,
+        role: p.role,
+        color: p.color,
+        avatar_data_url: p.avatarDataUrl || null,
+        emoji: p.emoji || null,
+        created_at: p.createdAt || nowIso,
+        updated_at: p.updatedAt || nowIso,
+        deleted_at: p.deletedAt || null,
+      }));
+      sb.from('household_profiles')
+        .upsert(formattedHouseholdRows)
+        .then(() => {});
+    }
 
     // Non-blocking purge of expired tombstones (> 30 days old) in cloud database
     const thirtyDaysAgoIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -1000,12 +1120,33 @@ async function pullFromCloudOnce(options?: { force?: boolean }): Promise<PullRes
     }
 
     if (widgetsRes.data && widgetsRes.data.length > 0) {
+      // Extract the Global Household Profiles system row if present
+      const householdProfilesRow = widgetsRes.data.find((w: any) => w.id === HOUSEHOLD_PROFILES_CLOUD_ROW_ID);
+      if (
+        householdProfilesRow &&
+        !householdProfilesRow.deleted_at &&
+        Array.isArray(householdProfilesRow.config?.profiles)
+      ) {
+        await useProfileStore
+          .getState()
+          .applyRemoteProfiles(householdProfilesRow.config.profiles as HouseholdProfile[]);
+      }
+
+      // Extract the household Chore Engine system row if present
+      const choreEngineRow = widgetsRes.data.find((w: any) => w.id === CHORE_ENGINE_CLOUD_ROW_ID);
+      if (choreEngineRow && !choreEngineRow.deleted_at && choreEngineRow.config?.id === 'household_chores') {
+        await useChoreStore.getState().applyRemoteSnapshot(choreEngineRow.config as ChoreEngineSnapshot);
+      }
+
+      const canvasWidgetRows = widgetsRes.data.filter(
+        (w: any) => w.id !== CHORE_ENGINE_CLOUD_ROW_ID && w.id !== HOUSEHOLD_PROFILES_CLOUD_ROW_ID
+      );
       const localWidgets = await db.widgets.toArray();
       const localMap = new Map(localWidgets.map((w) => [w.id, w]));
-      const cloudWidgetIds = new Set(widgetsRes.data.map((w: any) => w.id));
+      const cloudWidgetIds = new Set(canvasWidgetRows.map((w: any) => w.id));
 
       const widgetsToPut: DashboardWidget[] = [];
-      for (const w of widgetsRes.data) {
+      for (const w of canvasWidgetRows) {
         const local = localMap.get(w.id);
         const config = {
           ...(w.config || {}),

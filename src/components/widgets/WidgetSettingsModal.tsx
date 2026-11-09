@@ -39,6 +39,8 @@ import type { TextBoxConfig } from './TextBoxWidget';
 import { CURATED_RSS_FEEDS } from '../../data/curatedFeeds';
 import { MediaSearchModal } from './MediaSearchModal';
 import { Sparkles } from 'lucide-react';
+import { useChoreStore } from '../../store/choreStore';
+import { HouseholdAvatar } from '../common/HouseholdAvatar';
 
 interface WidgetSettingsModalProps {
   isOpen: boolean;
@@ -172,6 +174,16 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const [imageLinkUrl, setImageLinkUrl] = useState('');
   const [isMediaSearchOpen, setIsMediaSearchOpen] = useState(false);
 
+  // Chores widget states
+  const choreProfiles = useChoreStore((s) => s.snapshot.profiles);
+  const setChoreFullScreenOpen = useChoreStore((s) => s.setFullScreenOpen);
+  const setChoreParentDrawerOpen = useChoreStore((s) => s.setParentDrawerOpen);
+  const [choreScope, setChoreScope] = useState<string>('household');
+  const [choreExpandedSections, setChoreExpandedSections] = useState<('today' | 'review' | 'completed')[]>([
+    'today',
+    'review',
+  ]);
+
   // Prevents re-renders or background photo syncs from resetting active form edits while modal is open
   const lastOpenedWidgetIdRef = useRef<string | null>(null);
 
@@ -288,6 +300,13 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setImageCaption(widget.config?.caption || '');
       setImageTransparentBg(Boolean(widget.config?.transparentBg));
       setImageLinkUrl(widget.config?.linkUrl || '');
+    } else if (widget.type === 'chores') {
+      setChoreScope(widget.config?.scope || 'household');
+      setChoreExpandedSections(
+        Array.isArray(widget.config?.defaultExpandedSections)
+          ? widget.config.defaultExpandedSections
+          : ['today', 'review']
+      );
     }
   }, [widget, isOpen, settings.commonPhotos]);
 
@@ -514,6 +533,9 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.caption = imageCaption.trim();
       configUpdates.transparentBg = imageTransparentBg;
       configUpdates.linkUrl = imageLinkUrl.trim();
+    } else if (widget.type === 'chores') {
+      configUpdates.scope = choreScope;
+      configUpdates.defaultExpandedSections = choreExpandedSections;
     }
 
     onSave(widget.id, {
@@ -2645,6 +2667,125 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                   placeholder="https://..."
                   className="w-full rounded-xl bg-gray-950 border border-gray-800 p-2.5 text-xs text-white focus:outline-none focus:border-blue-500 font-mono"
                 />
+              </div>
+            </div>
+          )}
+
+          {/* Chores & Rewards Settings */}
+          {widget.type === 'chores' && (
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-gray-300 block mb-1.5">
+                  Widget View Scope
+                </label>
+                <p className="text-[11px] text-gray-400 mb-2.5">
+                  Show all children grouped together (Household View) or pin this Bento tile to a single child profile.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setChoreScope('household')}
+                    className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                      choreScope === 'household'
+                        ? 'bg-emerald-600/20 border-emerald-500 text-emerald-300 font-semibold'
+                        : 'bg-gray-950 border-gray-800 text-gray-300 hover:border-gray-700'
+                    }`}
+                  >
+                    <div className="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-sm shrink-0">
+                      🏠
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-xs block font-semibold">Household View</span>
+                      <span className="text-[10px] text-gray-400 font-normal">
+                        All children sub-grouped
+                      </span>
+                    </div>
+                  </button>
+
+                  {choreProfiles.map((profile) => (
+                    <button
+                      key={profile.id}
+                      type="button"
+                      onClick={() => setChoreScope(profile.id)}
+                      className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                        choreScope === profile.id
+                          ? 'bg-emerald-600/20 border-emerald-500 text-emerald-300 font-semibold'
+                          : 'bg-gray-950 border-gray-800 text-gray-300 hover:border-gray-700'
+                      }`}
+                    >
+                      <HouseholdAvatar profile={profile} size="sm" />
+                      <div className="min-w-0">
+                        <span className="text-xs block font-semibold truncate">{profile.name}</span>
+                        <span className="text-[10px] text-gray-400 font-normal">
+                          Pinned single profile ({profile.balance} pts)
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-300 block mb-1.5">
+                  Default Expanded Accordion Sections
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'today' as const, label: "Today's Chores" },
+                    { id: 'review' as const, label: 'Parent Review' },
+                    { id: 'completed' as const, label: 'Completed Today' },
+                  ].map((sec) => {
+                    const isChecked = choreExpandedSections.includes(sec.id);
+                    return (
+                      <button
+                        key={sec.id}
+                        type="button"
+                        onClick={() => {
+                          setChoreExpandedSections((prev) =>
+                            prev.includes(sec.id)
+                              ? prev.filter((s) => s !== sec.id)
+                              : [...prev, sec.id]
+                          );
+                        }}
+                        className={`p-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                          isChecked
+                            ? 'bg-emerald-600/20 border-emerald-500 text-emerald-300'
+                            : 'bg-gray-950 border-gray-800 text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        {sec.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-gray-800/80 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[11px] text-gray-400">
+                  Manage chore templates, profiles, avatars, and point pricing in the Parent Drawer.
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      setChoreFullScreenOpen(true);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-medium text-gray-200 border border-gray-700 transition-colors cursor-pointer"
+                  >
+                    Open Full-Screen Hub
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      setChoreParentDrawerOpen(true, 'templates');
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-xs font-semibold text-emerald-300 border border-emerald-500/40 transition-colors cursor-pointer"
+                  >
+                    Manage Chores & Profiles
+                  </button>
+                </div>
               </div>
             </div>
           )}

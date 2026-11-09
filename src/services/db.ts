@@ -6,6 +6,9 @@ import type {
   AppSettings,
   LocalDeviceVaultItem,
 } from '../types/dashboard';
+import type { ChoreEngineSnapshot } from '../types/chores';
+import type { HouseholdProfile } from '../types/profiles';
+import { CHORE_PROFILE_COLORS } from '../utils/choreEngine';
 
 export class AmbientlyDatabase extends Dexie {
   tabs!: EntityTable<DashboardTab, 'id'>;
@@ -13,6 +16,8 @@ export class AmbientlyDatabase extends Dexie {
   notes!: EntityTable<StickyNoteItem, 'id'>;
   settings!: EntityTable<AppSettings, 'id'>;
   vault!: EntityTable<LocalDeviceVaultItem, 'key'>;
+  chores!: EntityTable<ChoreEngineSnapshot, 'id'>;
+  profiles!: EntityTable<HouseholdProfile, 'id'>;
 
   constructor() {
     super('AmbientlyDB');
@@ -22,6 +27,15 @@ export class AmbientlyDatabase extends Dexie {
       notes: 'id, tabId, widgetId, expiresAt, archivedAt, updated_at, deleted_at',
       settings: 'id, updated_at',
       vault: 'key, updated_at', // Not synced externally
+    });
+    this.version(2).stores({
+      tabs: 'id, order, updated_at, deleted_at',
+      widgets: 'id, tabId, type, updated_at, deleted_at',
+      notes: 'id, tabId, widgetId, expiresAt, archivedAt, updated_at, deleted_at',
+      settings: 'id, updated_at',
+      vault: 'key, updated_at',
+      chores: 'id, updated_at',
+      profiles: 'id, role, updatedAt, deletedAt',
     });
   }
 }
@@ -148,6 +162,166 @@ export const DEFAULT_NOTES: StickyNoteItem[] = [
     updated_at: '1970-01-01T00:00:00.000Z',
   },
 ];
+
+export const DEFAULT_HOUSEHOLD_PROFILES: HouseholdProfile[] = [
+  {
+    id: 'p_tony',
+    name: 'Tony',
+    role: 'parent',
+    color: CHORE_PROFILE_COLORS[1], // Slate Blue
+    emoji: '🛡️',
+    createdAt: '1970-01-01T00:00:00.000Z',
+    updatedAt: '1970-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'p_anh',
+    name: 'Anh',
+    role: 'parent',
+    color: CHORE_PROFILE_COLORS[2], // Dusty Rose
+    emoji: '🌸',
+    createdAt: '1970-01-01T00:00:00.000Z',
+    updatedAt: '1970-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'p_olivia',
+    name: 'Olivia',
+    role: 'kid',
+    color: CHORE_PROFILE_COLORS[0], // Sage Green
+    emoji: '🌿',
+    createdAt: '1970-01-01T00:00:00.000Z',
+    updatedAt: '1970-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'p_alyssa',
+    name: 'Alyssa',
+    role: 'kid',
+    color: CHORE_PROFILE_COLORS[4], // Lavender-Gray
+    emoji: '🦋',
+    createdAt: '1970-01-01T00:00:00.000Z',
+    updatedAt: '1970-01-01T00:00:00.000Z',
+  },
+];
+
+export const DEFAULT_CHORE_SNAPSHOT: ChoreEngineSnapshot = {
+  id: 'household_chores',
+  profiles: [
+    {
+      id: 'p_olivia',
+      name: 'Olivia',
+      role: 'kid',
+      color: CHORE_PROFILE_COLORS[0], // Sage Green
+      emoji: '🌿',
+      balance: 0,
+      lifetimePoints: 0,
+    },
+    {
+      id: 'p_alyssa',
+      name: 'Alyssa',
+      role: 'kid',
+      color: CHORE_PROFILE_COLORS[4], // Lavender-Gray
+      emoji: '🦋',
+      balance: 0,
+      lifetimePoints: 0,
+    },
+  ],
+  templates: [
+    {
+      id: 'chore-tpl-bed-1',
+      title: 'Make Bed & Tidy Room',
+      points: 10,
+      assignedTo: 'p_olivia',
+      cadence: 'daily',
+      requiresApproval: false,
+      rolloverUntilDone: false,
+      overduePolicy: 'half',
+      icon: '🛏️',
+    },
+    {
+      id: 'chore-tpl-bed-2',
+      title: 'Make Bed & Tidy Room',
+      points: 10,
+      assignedTo: 'p_alyssa',
+      cadence: 'daily',
+      requiresApproval: false,
+      rolloverUntilDone: false,
+      overduePolicy: 'half',
+      icon: '🛏️',
+    },
+    {
+      id: 'chore-tpl-backpack-1',
+      title: 'Unpack School Backpack & Lunchbox',
+      points: 15,
+      assignedTo: 'p_olivia',
+      cadence: 'weekdays',
+      requiresApproval: false,
+      rolloverUntilDone: true,
+      overduePolicy: 'half',
+      icon: '🎒',
+    },
+    {
+      id: 'chore-tpl-backpack-2',
+      title: 'Unpack School Backpack & Lunchbox',
+      points: 15,
+      assignedTo: 'p_alyssa',
+      cadence: 'weekdays',
+      requiresApproval: false,
+      rolloverUntilDone: true,
+      overduePolicy: 'half',
+      icon: '🎒',
+    },
+    {
+      id: 'chore-tpl-table',
+      title: 'Clear & Wipe Dinner Table',
+      points: 20,
+      assignedTo: 'shared',
+      cadence: 'daily',
+      requiresApproval: true,
+      rolloverUntilDone: false,
+      overduePolicy: 'zero',
+      icon: '🍽️',
+    },
+    {
+      id: 'chore-tpl-playroom',
+      title: 'Organize Bookshelf & Play Area',
+      points: 30,
+      assignedTo: 'shared',
+      cadence: 'weekends',
+      requiresApproval: true,
+      rolloverUntilDone: true,
+      overduePolicy: 'full',
+      icon: '📚',
+    },
+  ],
+  instances: [],
+  rewards: [
+    {
+      id: 'reward-1',
+      profileId: 'p_olivia',
+      title: 'Pick Friday Family Movie & Popcorn',
+      pointsCost: 100,
+      status: 'active_goal',
+      createdAt: '1970-01-01T00:00:00.000Z',
+      pricedAt: '1970-01-01T00:00:00.000Z',
+    },
+    {
+      id: 'reward-2',
+      profileId: 'p_alyssa',
+      title: 'Ice Cream Outing',
+      pointsCost: 100,
+      status: 'active_goal',
+      createdAt: '1970-01-01T00:00:00.000Z',
+      pricedAt: '1970-01-01T00:00:00.000Z',
+    },
+  ],
+  trophies: [],
+  ledger: [],
+  householdSettings: {
+    vacationMode: false,
+    pointsPerDollar: 10,
+    soundEffectsEnabled: false,
+  },
+  updated_at: '1970-01-01T00:00:00.000Z',
+};
 
 /**
  * Permanently purges soft-deleted records older than 30 days from local IndexedDB

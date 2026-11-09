@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback, lazy, Suspense } from 'react';
-import { ShieldAlert, Maximize2, KeyRound } from 'lucide-react';
 import { useDashboardStore } from './store/dashboardStore';
+import { useChoreStore } from './store/choreStore';
 import { NavigationDock } from './components/dock/NavigationDock';
 import { Corkboard } from './components/layout/Corkboard';
 import { PinOverlay } from './components/kiosk/PinOverlay';
@@ -47,6 +47,12 @@ const MobileCompanion = lazy(() =>
 const InAppWebViewerModal = lazy(() =>
   import('./components/common/InAppWebViewerModal').then((m) => ({ default: m.InAppWebViewerModal }))
 );
+const ChoreDashboardView = lazy(() =>
+  import('./components/chores/ChoreDashboardView').then((m) => ({ default: m.ChoreDashboardView }))
+);
+const ParentChoreDrawer = lazy(() =>
+  import('./components/chores/ParentChoreDrawer').then((m) => ({ default: m.ParentChoreDrawer }))
+);
 
 export function App() {
   const {
@@ -61,7 +67,6 @@ export function App() {
     rotateToTab,
     isUnlocked,
     unlockKiosk,
-    lockKiosk,
     isCarouselPaused,
     pauseCarouselTemporarily,
     toggleNightModeManual,
@@ -86,7 +91,7 @@ export function App() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [pinChallenge, setPinChallenge] = useState<{
-    action: 'exit_fullscreen' | 'open_settings' | 'open_share' | 'open_plex_pairing';
+    action: 'open_settings' | 'open_share' | 'open_plex_pairing';
     title?: string;
     subtitle?: string;
   } | null>(null);
@@ -103,6 +108,9 @@ export function App() {
   const syncRemoteWidgetChange = useDashboardStore((s) => s.syncRemoteWidgetChange);
   const syncRemoteTabChange = useDashboardStore((s) => s.syncRemoteTabChange);
   const applyCommonPhotosToAllWidgets = useDashboardStore((s) => s.applyCommonPhotosToAllWidgets);
+  const isChoreFullScreenOpen = useChoreStore((s) => s.isFullScreenOpen);
+  const setChoreFullScreenOpen = useChoreStore((s) => s.setFullScreenOpen);
+  const isParentDrawerOpen = useChoreStore((s) => s.isParentDrawerOpen);
 
   // Initialize and check persistent PC Auto-Sync file binding
   useEffect(() => {
@@ -247,15 +255,13 @@ export function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Granular kiosk & protection controls (active only when PIN protection is configured and kiosk is not unlocked)
-  const isFullscreenKioskLocked = Boolean(settings.pinLockEnabled && settings.lockFullscreenKiosk !== false && !isUnlocked);
+  // Granular protection controls (active only when PIN protection is configured and session is not unlocked)
   const isSettingsLocked = Boolean(settings.pinLockEnabled && settings.lockSettingsAccess !== false && !isUnlocked);
   const isCanvasLocked = Boolean(settings.pinLockEnabled && settings.lockCanvasEditing && !isUnlocked);
 
   // Keyboard shortcuts:
   // '\' (backslash) to toggle toolbar visibility
   // '1'-'9' and '0' (for 10) to switch between canvases
-  // Escape or F11 to prompt PIN if kiosk fullscreen lock is enabled
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -273,16 +279,6 @@ export function App() {
           e.preventDefault();
           setActiveWebModal(null);
         }
-        return;
-      }
-
-      if ((e.key === 'Escape' || e.key === 'F11') && isFullscreenKioskLocked) {
-        e.preventDefault();
-        setPinChallenge({
-          action: 'exit_fullscreen',
-          title: 'Exit Fullscreen Kiosk',
-          subtitle: 'Enter parent PIN to exit fullscreen',
-        });
         return;
       }
 
@@ -308,72 +304,17 @@ export function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleDockHidden, tabs, setActiveTabId, isFullscreenKioskLocked, activeWebModal]);
+  }, [toggleDockHidden, tabs, setActiveTabId, activeWebModal]);
 
-  // Fullscreen state listener + Keyboard Lock API (Chromium / Edge / Chrome Kiosk)
+  // Fullscreen state listener
   useEffect(() => {
     const onFullscreenChange = () => {
-      const isNowFullscreen = Boolean(document.fullscreenElement);
-      setIsFullscreen(isNowFullscreen);
-
-      if (isNowFullscreen) {
-        // Re-lock kiosk security as soon as display returns to fullscreen
-        if (settings.pinLockEnabled) {
-          lockKiosk();
-        }
-        if ('keyboard' in navigator && (navigator as any).keyboard?.lock) {
-          (navigator as any).keyboard.lock(['Escape', 'F11']).catch(() => {});
-        }
-      } else if (!isNowFullscreen && 'keyboard' in navigator && (navigator as any).keyboard?.unlock) {
-        (navigator as any).keyboard.unlock();
-      }
+      setIsFullscreen(Boolean(document.fullscreenElement));
     };
 
     document.addEventListener('fullscreenchange', onFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
-  }, [settings.pinLockEnabled, lockKiosk]);
-
-  // Prevent accidental window closure or taskbar exit when kiosk mode is locked
-  useEffect(() => {
-    if (!isFullscreenKioskLocked) return;
-
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
-      return '';
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [isFullscreenKioskLocked]);
-
-  // Prevent context menu (right click / long press) when kiosk fullscreen lock is enabled to prevent kids accessing browser menu
-  useEffect(() => {
-    if (!isFullscreenKioskLocked) return;
-    const handleContextMenu = (e: MouseEvent) => {
-      e.preventDefault();
-    };
-    window.addEventListener('contextmenu', handleContextMenu);
-    return () => window.removeEventListener('contextmenu', handleContextMenu);
-  }, [isFullscreenKioskLocked]);
-
-  // Auto return to fullscreen on next tap/touch if kiosk fullscreen lock is active and screen is not in fullscreen
-  useEffect(() => {
-    if (!isFullscreenKioskLocked) return;
-
-    const handlePointerDown = (e: PointerEvent) => {
-      // Don't auto-fullscreen if interacting with dialog or modal inputs
-      const target = e.target as HTMLElement | null;
-      if (target?.closest('[role="dialog"], input, button')) return;
-
-      if (!document.fullscreenElement && !pinChallenge && !isSettingsOpen && !activeWebModal) {
-        document.documentElement.requestFullscreen().catch(() => {});
-      }
-    };
-
-    window.addEventListener('pointerdown', handlePointerDown);
-    return () => window.removeEventListener('pointerdown', handlePointerDown);
-  }, [isFullscreenKioskLocked, pinChallenge, isSettingsOpen, activeWebModal]);
+  }, []);
 
   // Global click interception for external links (RSS news, widget embeds, etc.)
   // Opens in an In-App Window Frame with a dedicated Close button rather than escaping fullscreen in Edge kiosk
@@ -438,20 +379,9 @@ export function App() {
         console.warn('Error attempting to enable fullscreen:', err.message);
       });
       setIsFullscreen(true);
-    } else {
-      // If kid-proof kiosk fullscreen lock is enabled, exiting fullscreen requires the parent PIN!
-      if (isFullscreenKioskLocked) {
-        setPinChallenge({
-          action: 'exit_fullscreen',
-          title: 'Exit Fullscreen Kiosk',
-          subtitle: 'Enter parent PIN to exit fullscreen',
-        });
-        return;
-      }
-      if (document.exitFullscreen) {
-        document.exitFullscreen().catch(() => {});
-        setIsFullscreen(false);
-      }
+    } else if (document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+      setIsFullscreen(false);
     }
   };
 
@@ -494,12 +424,7 @@ export function App() {
 
   // Does what the PIN pad was opened for, once the PIN is entered or removed
   const finishPinChallenge = () => {
-    if (pinChallenge?.action === 'exit_fullscreen') {
-      if (document.exitFullscreen) {
-        document.exitFullscreen().catch(() => {});
-        setIsFullscreen(false);
-      }
-    } else if (pinChallenge?.action === 'open_settings') {
+    if (pinChallenge?.action === 'open_settings') {
       setIsSettingsOpen(true);
     } else if (pinChallenge?.action === 'open_share') {
       setIsShareOpen(true);
@@ -683,7 +608,7 @@ export function App() {
   // Tab auto-carousel rotation (pauses automatically when user interacts)
   useEffect(() => {
     const tabIds = visibleTabIds.split('\n');
-    if (!settings.carouselEnabled || isCarouselPaused || tabIds.length <= 1) return;
+    if (!settings.carouselEnabled || isCarouselPaused || isChoreFullScreenOpen || tabIds.length <= 1) return;
 
     const interval = setInterval(() => {
       const nextIndex = (tabIds.indexOf(activeTabId) + 1) % tabIds.length;
@@ -691,7 +616,7 @@ export function App() {
     }, rotateDurationSec * 1000);
 
     return () => clearInterval(interval);
-  }, [settings.carouselEnabled, isCarouselPaused, rotateDurationSec, visibleTabIds, activeTabId, rotateToTab]);
+  }, [settings.carouselEnabled, isCarouselPaused, isChoreFullScreenOpen, rotateDurationSec, visibleTabIds, activeTabId, rotateToTab]);
 
   if (!isInitialized) {
     return (
@@ -715,21 +640,28 @@ export function App() {
       <>
         <Suspense fallback={null}>
           <MobileCompanion
-          tabs={visibleTabs}
-          activeTabId={activeTabIdResolved}
-          notes={notes}
-          widgets={tabWidgets}
-          onSelectTab={setActiveTabId}
-          onAddNote={addNote}
-          onUpdateNote={updateNote}
-          onDeleteNote={deleteNote}
-          onUpdateWidget={updateWidget}
-          onRemoveWidget={removeWidget}
-          onAddWidget={addWidget}
-          onToggleDesktopView={() => setForceDesktopMode(true)}
-          onOpenSettings={handleOpenSettings}
-        />
-      </Suspense>
+            tabs={visibleTabs}
+            activeTabId={activeTabIdResolved}
+            notes={notes}
+            widgets={tabWidgets}
+            onSelectTab={setActiveTabId}
+            onAddNote={addNote}
+            onUpdateNote={updateNote}
+            onDeleteNote={deleteNote}
+            onUpdateWidget={updateWidget}
+            onRemoveWidget={removeWidget}
+            onAddWidget={addWidget}
+            onToggleDesktopView={() => setForceDesktopMode(true)}
+            onOpenSettings={handleOpenSettings}
+          />
+          {isChoreFullScreenOpen && (
+            <ChoreDashboardView
+              isOpen={isChoreFullScreenOpen}
+              onClose={() => setChoreFullScreenOpen(false)}
+            />
+          )}
+          {isParentDrawerOpen && <ParentChoreDrawer />}
+        </Suspense>
         <SyncRefusedBanner withDock={false} />
         {isSettingsOpen && (
           <Suspense fallback={null}>
@@ -884,65 +816,7 @@ export function App() {
         </Suspense>
       )}
 
-      {/* Full-Viewport Kiosk Blocker Curtain when Kid Lock is active but screen dropped out of fullscreen */}
-      {isFullscreenKioskLocked && !isFullscreen && !pinChallenge && (
-        <div
-          onClick={() => {
-            document.documentElement.requestFullscreen().catch(() => {});
-          }}
-          className="fixed inset-0 z-[9990] bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-6 text-center select-none cursor-pointer"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md p-6 rounded-3xl bg-gray-900/90 border border-amber-500/40 shadow-2xl shadow-amber-950/50 flex flex-col items-center text-white space-y-4 animate-in fade-in zoom-in-95 duration-200"
-          >
-            <div className="w-16 h-16 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center shadow-lg shadow-amber-500/20">
-              <ShieldAlert className="w-8 h-8" />
-            </div>
-
-            <div className="space-y-1">
-              <h2 className="text-xl font-bold tracking-tight text-white">Kiosk Mode Protected</h2>
-              <p className="text-xs text-gray-400 leading-relaxed max-w-sm">
-                This display is locked in kiosk mode to prevent closing or leaving the dashboard.
-              </p>
-            </div>
-
-            <div className="w-full space-y-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  document.documentElement.requestFullscreen().catch(() => {});
-                }}
-                className="w-full py-3.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-bold text-sm shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition-all cursor-pointer"
-              >
-                <Maximize2 className="w-4 h-4" />
-                <span>Return to Fullscreen Display</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setPinChallenge({
-                    action: 'exit_fullscreen',
-                    title: 'Unlock Windowed Mode',
-                    subtitle: 'Enter parent PIN to allow windowed mode',
-                  });
-                }}
-                className="w-full py-2.5 px-4 rounded-xl bg-gray-800 hover:bg-gray-700 active:scale-95 text-gray-300 hover:text-white font-semibold text-xs border border-gray-700 transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <KeyRound className="w-3.5 h-3.5 text-amber-400" />
-                <span>Enter Parent PIN to Unlock</span>
-              </button>
-            </div>
-
-            <p className="text-[11px] text-gray-500 pt-1">
-              Tap anywhere outside this card to immediately resume fullscreen.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Kid-Proof Kiosk PIN Challenge Overlay */}
+      {/* Parent PIN Challenge Overlay */}
       {pinChallenge && (
         <PinOverlay
           title={pinChallenge.title}
@@ -1005,6 +879,17 @@ export function App() {
             onClose={() => setActiveWebModal(null)}
           />
         )}
+
+        {/* Full-Screen Chore & Reward Hub View */}
+        {isChoreFullScreenOpen && (
+          <ChoreDashboardView
+            isOpen={isChoreFullScreenOpen}
+            onClose={() => setChoreFullScreenOpen(false)}
+          />
+        )}
+
+        {/* Unified 4-Digit Parent PIN Chore & Reward Drawer */}
+        {isParentDrawerOpen && <ParentChoreDrawer />}
       </Suspense>
     </div>
   );

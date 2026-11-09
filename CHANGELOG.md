@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.6] - 2026-11-09
+
+### Ambiently Chore & Reward Engine & Global Household Profiles
+* **Global Household Profile & Avatar Engine (`src/stores/useProfileStore.ts`, `src/utils/avatarCompressor.ts`, `src/components/common/HouseholdProfileManager.tsx`):**
+  * Promoted family profiles (`parent` and `kid` roles, calming low-arousal palette colors, and fallback icons) to a global system store shared across Chores and upcoming planners.
+  * Added zero-dependency client-side avatar processing that center-crops and compresses uploaded photos to `256×256` WebP Data URLs synced via IndexedDB and Supabase Realtime.
+* **Polymorphic Dual-View Chore & Reward UI (`src/components/widgets/ChoreWidget.tsx`, `src/components/chores/ChoreDashboardView.tsx`):**
+  * **Compact Bento Tile (`variant="tile"`):** Household or Single-Profile scope, three collapsible accordions (`Today's Chores`, `Awaiting Parent Review`, `Completed Today`) with child sub-grouping, and a maximize button.
+  * **Full-Screen Chore & Reward Hub (`variant="view"`):** 3-column dashboard accessible from the Navigation Dock with live pending-parent-action badges, profile point banks, daily/overdue/bounty chores, and the visual Reward Store.
+* **Append-Only Audit Ledger, Midnight Rollover & Interactive Point Splitting (`src/store/choreStore.ts`, `src/utils/choreEngine.ts`, `src/components/chores/PointSplitModal.tsx`):**
+  * Derives spendable `balance` and `lifetimePoints` from an immutable transaction ledger (`chore_completion`, `reward_redemption`, `manual_adjustment`, `reversion`).
+  * Evaluates day boundaries automatically at `00:00:00` local time, locking past-day chores and applying per-chore overdue point policies (`full`, `half`, `zero`, `custom` %).
+  * Supports interactive integer point splitting across kids for shared chores and Night-Mode-aware confetti celebrations.
+* **Wishlist Pipeline, `/api/metadata` Scraper & Trophy Case (`functions/api/metadata.ts`, `src/components/chores/ProposeRewardModal.tsx`, `src/components/chores/TrophyCaseModal.tsx`):**
+  * Extracts `og:title`, `og:image`, and `product:price:amount` from product URLs into a dedicated Proposals Tray (`needs_pricing`).
+  * Archives fulfilled rewards into the child's Trophy Case with automatic annual pruning on calendar year rollover.
+* **Unified 4-Digit Parent PIN Drawer & Kiosk Polish (`src/components/chores/ParentChoreDrawer.tsx`, `src/hooks/useIdleCursor.ts`, `src/components/settings/SettingsModal.tsx`):**
+  * Added 5-tab parent drawer (Approvals with split rebalancing & *Approve All*, Wishlist Pricing Calculator, Redemptions, Audit Ledger & Bonus, and Chore Templates / Vacation Mode).
+  * Fixed stationary mouse cursor visibility during Night Mode and simplified the Display & Kiosk settings panel.
+
+---
+
 ## [0.4.5] - 2026-11-09
 
 ### Reader Mode & RSS Feed Full-Article Extraction Fixes

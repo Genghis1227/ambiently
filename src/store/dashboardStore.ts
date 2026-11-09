@@ -23,6 +23,13 @@ import { computeNonOverlappingLayout, findOpenCanvasSpot } from '../utils/autoLa
 import type { PhotoItem } from '../services/photos';
 import { getSupabase, getCurrentUser, pushToCloud } from '../services/supabase';
 import { CANVAS_LOOK_FIELDS, keepLocalNoteFields, keepLocalTabFields, keepLocalWidgetFields } from '../services/syncMerge';
+import { useChoreStore, registerChorePersistListener } from './choreStore';
+import type { ChoreEngineSnapshot } from '../types/chores';
+import { useProfileStore } from '../stores/useProfileStore';
+import type { HouseholdProfile } from '../types/profiles';
+
+const CHORE_ENGINE_CLOUD_ROW_ID = '__ambiently_chore_engine__';
+const HOUSEHOLD_PROFILES_CLOUD_ROW_ID = '__ambiently_household_profiles__';
 
 let backupDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 let cloudAutoSyncTimer: ReturnType<typeof setTimeout> | null = null;
@@ -257,8 +264,17 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const loadedTabs = allTabs
       .filter((t: DashboardTab) => !t.deleted_at)
       .sort((a: DashboardTab, b: DashboardTab) => a.order - b.order);
-    const loadedWidgets = (await db.widgets.toArray()).filter((w) => !w.deleted_at);
+    const loadedWidgets = (await db.widgets.toArray()).filter(
+      (w) =>
+        !w.deleted_at &&
+        w.id !== CHORE_ENGINE_CLOUD_ROW_ID &&
+        w.id !== HOUSEHOLD_PROFILES_CLOUD_ROW_ID
+    );
     const loadedNotes = (await db.notes.toArray()).filter((n) => !n.deleted_at);
+
+    // Initialize Global Household Profile Store & Chore Engine Store
+    await useProfileStore.getState().initProfileStore();
+    await useChoreStore.getState().initChoreStore();
 
     const tabsToUse = loadedTabs.length > 0 ? loadedTabs : DEFAULT_TABS;
     const explicitHome = tabsToUse.find((t) => t.isHome && (t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false));
@@ -697,6 +713,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         tabs: state.tabs,
         widgets: state.widgets,
         notes: state.notes,
+        profiles: useProfileStore.getState().profiles,
+        chores: useChoreStore.getState().snapshot,
       });
     }, 400);
   },
@@ -716,6 +734,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       tabs: state.tabs,
       widgets: state.widgets,
       notes: state.notes,
+      profiles: useProfileStore.getState().profiles,
+      chores: useChoreStore.getState().snapshot,
     });
   },
 
@@ -901,6 +921,34 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   syncRemoteWidgetChange: (incomingWidget, eventType) => {
+    if (incomingWidget.id === HOUSEHOLD_PROFILES_CLOUD_ROW_ID) {
+      if (
+        eventType !== 'DELETE' &&
+        !incomingWidget.deleted_at &&
+        Array.isArray(incomingWidget.config?.profiles)
+      ) {
+        useProfileStore
+          .getState()
+          .applyRemoteProfiles(incomingWidget.config.profiles as HouseholdProfile[])
+          .catch(() => {});
+      }
+      return;
+    }
+
+    if (incomingWidget.id === CHORE_ENGINE_CLOUD_ROW_ID) {
+      if (
+        eventType !== 'DELETE' &&
+        !incomingWidget.deleted_at &&
+        incomingWidget.config?.id === 'household_chores'
+      ) {
+        useChoreStore
+          .getState()
+          .applyRemoteSnapshot(incomingWidget.config as ChoreEngineSnapshot)
+          .catch(() => {});
+      }
+      return;
+    }
+
     const existing = get().widgets.find((w) => w.id === incomingWidget.id);
     const remoteWidget = keepLocalWidgetFields(incomingWidget, existing);
     if (existing) {
@@ -1114,3 +1162,10 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     get().saveLocalBackup();
   },
 }));
+
+registerChorePersistListener(() => {
+  const dashState = useDashboardStore.getState();
+  if (dashState.isInitialized) {
+    dashState.saveLocalBackup();
+  }
+});

@@ -12,19 +12,24 @@ interface UseIdleCursorOptions {
  *
  * Automatically hides the mouse cursor across the entire viewport after a period
  * of user inactivity, designed specifically for wall-mounted smart displays and ambient kiosks.
- * In Night Mode, the cursor hides much faster (or immediately) to prevent distraction
- * and protect dark OLED screens.
+ *
+ * - In Night Mode, the cursor hides immediately and stays hidden even during OLED pixel-shifts
+ *   or background widget DOM refreshes.
+ * - Filters out synthetic Chromium `mousemove`/`pointermove` events where the pointer coordinates
+ *   have not physically moved (preventing clock ticks or layout updates from waking the cursor).
  */
 export function useIdleCursor({
   enabled = true,
-  timeoutMs = 3500,
-  nightModeTimeoutMs = 1200,
+  timeoutMs = 3000,
+  nightModeTimeoutMs = 800,
   isNightMode = false,
 }: UseIdleCursorOptions = {}) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
-    if (!enabled) {
+    const active = enabled || isNightMode;
+    if (!active) {
       document.documentElement.classList.remove('idle-cursor-hidden');
       return;
     }
@@ -43,41 +48,50 @@ export function useIdleCursor({
       }, currentTimeout);
     };
 
-    // If night mode turns on, immediately trigger or shorten timer
+    // When Night Mode engages, hide cursor immediately without waiting for mouse movement
     if (isNightMode) {
       if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => {
-        document.documentElement.classList.add('idle-cursor-hidden');
-      }, nightModeTimeoutMs);
+      document.documentElement.classList.add('idle-cursor-hidden');
     } else {
       resetTimer();
     }
 
-    const events = [
-      'mousemove',
-      'mousedown',
-      'pointermove',
-      'pointerdown',
-      'touchstart',
-      'wheel',
-      'keydown',
-    ];
-
-    const handleActivity = () => {
+    const handleMove = (e: MouseEvent | PointerEvent) => {
+      const prev = lastMousePosRef.current;
+      if (prev) {
+        const dist = Math.hypot(e.clientX - prev.x, e.clientY - prev.y);
+        // Ignore synthetic browser hit-test move events caused by DOM re-renders / pixel shifts
+        if (dist < 4) {
+          return;
+        }
+      }
+      lastMousePosRef.current = { x: e.clientX, y: e.clientY };
       resetTimer();
     };
 
-    events.forEach((evt) => {
-      window.addEventListener(evt, handleActivity, { passive: true });
-    });
+    const handleDiscreteActivity = () => {
+      resetTimer();
+    };
+
+    window.addEventListener('mousemove', handleMove, { passive: true });
+    window.addEventListener('pointermove', handleMove, { passive: true });
+    window.addEventListener('mousedown', handleDiscreteActivity, { passive: true });
+    window.addEventListener('pointerdown', handleDiscreteActivity, { passive: true });
+    window.addEventListener('touchstart', handleDiscreteActivity, { passive: true });
+    window.addEventListener('wheel', handleDiscreteActivity, { passive: true });
+    window.addEventListener('keydown', handleDiscreteActivity, { passive: true });
 
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
       }
-      events.forEach((evt) => {
-        window.removeEventListener(evt, handleActivity);
-      });
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('mousedown', handleDiscreteActivity);
+      window.removeEventListener('pointerdown', handleDiscreteActivity);
+      window.removeEventListener('touchstart', handleDiscreteActivity);
+      window.removeEventListener('wheel', handleDiscreteActivity);
+      window.removeEventListener('keydown', handleDiscreteActivity);
       document.documentElement.classList.remove('idle-cursor-hidden');
     };
   }, [enabled, timeoutMs, nightModeTimeoutMs, isNightMode]);

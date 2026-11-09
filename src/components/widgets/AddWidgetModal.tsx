@@ -15,6 +15,7 @@ import {
   Plus,
   Type,
   Sparkles,
+  CheckSquare,
 } from 'lucide-react';
 import type { WidgetType, DashboardWidget } from '../../types/dashboard';
 
@@ -95,6 +96,15 @@ const WIDGET_TEMPLATES: WidgetTemplate[] = [
     defaultGridPos: { w: 4, h: 4 },
     defaultConfig: { preset: 'lofi', muted: true, customUrl: '' },
     color: 'from-pink-500/20 to-rose-500/20 text-pink-400 border-pink-500/30',
+  },
+  {
+    type: 'chores',
+    title: 'Family Chores & Rewards',
+    description: 'Interactive kid chore checklist grouped by child, point banks, parent approvals, and full-screen reward hub.',
+    icon: CheckSquare,
+    defaultGridPos: { w: 4, h: 8 },
+    defaultConfig: { scope: 'household', defaultExpandedSections: ['today', 'review'] },
+    color: 'from-emerald-500/20 to-teal-500/20 text-emerald-400 border-emerald-500/30',
   },
   {
     type: 'calendar',
