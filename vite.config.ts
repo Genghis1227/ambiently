@@ -14,7 +14,7 @@ export default defineConfig({
       name: 'cloudflare-dev-functions',
       configureServer(server) {
         server.middlewares.use(async (req, res, next) => {
-          const match = (req.url || '').match(/^(?:\/functions)?\/api\/(ical|rss|gphotos|gdrive)(?:\?|$)/);
+          const match = (req.url || '').match(/^(?:\/functions)?\/api\/(ical|rss|gphotos|gdrive|reader|web-proxy)(?:\?|$)/);
           if (!match || req.method !== 'GET') return next();
           try {
             const mod = await server.ssrLoadModule(`/functions/api/${match[1]}.ts`);
