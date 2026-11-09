@@ -11,6 +11,18 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.4.6",
+    date: "November 9, 2026",
+    title: "Ambiently Chore & Reward Engine, Global Household Profiles & Kiosk Polish",
+    highlights: [
+      "Global Household Profile & Avatar Engine: Manage family members (parent and kid roles, calming palette colors, and client-side 256×256 WebP avatar compression) directly from System Settings and the Parent Drawer.",
+      "Polymorphic Chore & Reward Engine: Dual-view architecture featuring a compact Bento tile with child sub-grouping and a full-screen 3-column Chore & Reward Hub accessible from the Navigation Dock.",
+      "Anti-Exploit Guardrails & Append-Only Audit Ledger: Immutable point transaction ledger, midnight rollover engine with configurable overdue point policies, same-day self-revert, and interactive multi-kid point splitting.",
+      "Wishlist OpenGraph Scraper, Reward Store & Trophy Case: Kids propose wishlist items via /api/metadata URL extraction; parents appraise items with a Points-per-Dollar calculator and fulfill unlocked rewards into the Trophy Case.",
+      "Night Mode Cursor Fix & Simplified Display Settings: Fixed stationary cursor visibility during Night Mode and streamlined the Display & Kiosk settings panel.",
+    ],
+  },
+  {
     version: "v0.4.5",
     date: "November 9, 2026",
     title: "Reader Mode Full-Article Preservation & RSS Feed Proxy Fixes",
