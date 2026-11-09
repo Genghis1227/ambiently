@@ -1921,13 +1921,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                     </span>
                   </div>
                   <a
-                    href="https://support.microsoft.com/en-us/windows/set-up-a-kiosk-on-windows-pc-46be6230-0f04-9c4b-1b8a-3832b76e5a07"
+                    href="https://youtu.be/Z8alME1nRmQ?si=pVA-x4f0n25gTy1C"
                     target="_blank"
                     rel="noopener noreferrer"
                     data-native-link="true"
                     className="px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 text-xs font-semibold shrink-0 transition-colors cursor-pointer"
                   >
-                    Microsoft Guide ↗
+                    Watch Setup Video ↗
                   </a>
                 </div>
 
