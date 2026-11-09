@@ -1909,34 +1909,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                   </button>
                 </div>
 
-                {/* 2. Lock Fullscreen Kiosk */}
-                <div className="flex items-center justify-between p-3 rounded-lg bg-gray-900/60 border border-gray-800">
-                  <div className="space-y-0.5 pr-4">
+                {/* 2. Windows OS Kiosk Account Setup Guide */}
+                <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-gray-900/60 border border-gray-800">
+                  <div className="space-y-0.5 pr-2">
                     <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
                       <Shield className="w-3.5 h-3.5 text-blue-400" />
-                      <span>Lock Fullscreen Kiosk Mode</span>
+                      <span>Windows Fullscreen Kiosk Mode (Assigned Access)</span>
                     </div>
                     <span className="text-[11px] text-gray-400 block leading-tight">
-                      Traps Escape key, disables browser context menus, and auto-returns to fullscreen on touch. Requires parent PIN to exit.
+                      To prevent kids from exiting fullscreen or closing the browser on Windows, set up a dedicated Windows Kiosk account.
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updateSettings({
-                        lockFullscreenKiosk: settings.lockFullscreenKiosk === false ? true : false,
-                      })
-                    }
-                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                      settings.lockFullscreenKiosk !== false ? 'bg-blue-600' : 'bg-gray-700'
-                    }`}
+                  <a
+                    href="https://support.microsoft.com/en-us/windows/set-up-a-kiosk-on-windows-pc-46be6230-0f04-9c4b-1b8a-3832b76e5a07"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-native-link="true"
+                    className="px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 text-xs font-semibold shrink-0 transition-colors cursor-pointer"
                   >
-                    <span
-                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                        settings.lockFullscreenKiosk !== false ? 'translate-x-5' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
+                    Microsoft Guide ↗
+                  </a>
                 </div>
 
                 {/* 3. Require PIN for Settings */}
