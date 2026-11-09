@@ -3,10 +3,46 @@
 
 import { parseHTML } from 'linkedom';
 import { Readability } from '@mozilla/readability';
-import { fetchExternal, externalFetchErrorResponse, refuseOtherSites } from '../_shared/fetchExternal';
+import { fetchExternal, externalFetchErrorResponse, refuseOtherSites, ExternalFetchError, type ExternalFetchResult } from '../_shared/fetchExternal';
 
 interface PagesContext {
   request: Request;
+}
+
+// Major news outlets (NYTimes, WSJ, Bloomberg) block generic datacenter / custom user-agents with 403,
+// but explicitly whitelist recognized social link preview bots (Facebook, Slack, Twitter) for unrolling.
+const FALLBACK_USER_AGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.html)',
+  'Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)',
+];
+
+async function fetchPageWithFallback(normalizedUrl: string): Promise<ExternalFetchResult> {
+  let lastRes: ExternalFetchResult | null = null;
+  for (const ua of FALLBACK_USER_AGENTS) {
+    try {
+      const res = await fetchExternal(normalizedUrl, {
+        maxBytes: 10 * 1024 * 1024, // 10 MB cap
+        timeoutMs: 12_000,
+        headers: {
+          'User-Agent': ua,
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+      });
+      if (res.ok) return res;
+      lastRes = res;
+      if (res.status !== 403 && res.status !== 401 && res.status !== 429) {
+        break;
+      }
+    } catch (err) {
+      if (err instanceof ExternalFetchError && err.status !== 403 && err.status !== 401) {
+        throw err;
+      }
+    }
+  }
+  if (lastRes) return lastRes;
+  throw new Error('Failed to fetch article from destination server.');
 }
 
 export async function onRequestGet(context: PagesContext): Promise<Response> {
@@ -29,16 +65,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
   }
 
   try {
-    const fetchRes = await fetchExternal(normalizedUrl, {
-      maxBytes: 10 * 1024 * 1024, // 10 MB cap
-      timeoutMs: 15_000,
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Ambiently-Reader/1.0',
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
-    });
+    const fetchRes = await fetchPageWithFallback(normalizedUrl);
 
     if (!fetchRes.ok) {
       return new Response(
