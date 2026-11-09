@@ -11,6 +11,18 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.3.29",
+    date: "November 8, 2026",
+    title: "Unchecked Duplicate Checklists & Dimmed Night Mode UI",
+    highlights: [
+      "Uncheck Duplicate Checklists: Duplicated notes and checklist items automatically clear checkmarks so repeated routines and lists start fresh.",
+      "Pre-Filled Unchecked Duplicate Editor: Selecting 'Edit' on duplicate opens the Note Creator pre-populated with unchecked items and shifted expiry.",
+      "Elevated Night Mode Overlay: Night Mode overlay elevated to z-[70], ensuring it covers the toolbar edge handle and dock so tapping anywhere wakes the dashboard.",
+      "Dimmed Tap-to-Wake Badge: Toned down the 'Night Mode (Tap to wake)' badge to ambient opacity-35 with muted colors to eliminate OLED light bleed.",
+      "Dimmed Toolbar Peek Caret: The hidden dock edge caret dims to opacity-30 with muted colors during Night Mode.",
+    ],
+  },
+  {
     version: "v0.3.28",
     date: "November 8, 2026",
     title: "Full-Viewport Kiosk Blocker Curtain & PIN-Protected Windowed Mode",
