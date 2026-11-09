@@ -137,15 +137,21 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
       }
     }
 
+    const clonedContent =
+      note.isChecklist && note.content
+        ? note.content.replace(/\[x\]/gi, '[ ]')
+        : note.content;
+
     onAddNote({
       tabId: note.tabId,
       title: note.title ? `${note.title} (Copy)` : undefined,
-      content: note.content,
+      content: clonedContent,
       isChecklist: note.isChecklist,
       checklistItems: note.checklistItems
         ? note.checklistItems.map((item) => ({
             ...item,
             id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            done: false, // Reset checked items on duplicate
           }))
         : undefined,
       bgColor: note.bgColor,

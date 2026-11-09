@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.29] - 2026-11-08
+
+### Notes & Checklists
+* **Uncheck Items on Duplicate Checklist Notes (`src/components/layout/Corkboard.tsx`, `src/components/widgets/StickyNotesWidget.tsx`):**
+  * Duplicated notes now automatically reset all checklist item checkboxes to unchecked (`done: false`).
+  * When choosing the "Edit" duplicate action, the Note Creator modal opens pre-populated with unchecked items.
+  * Reset any markdown checkboxes (`- [x]`) in note content to unchecked (`- [ ]`).
+
+### UI & Night Mode
+* **Elevated Night Mode Overlay (`src/components/kiosk/NightMode.tsx`):**
+  * Elevated the Night Mode dim overlay and OLED clock to layer `z-[70]`, covering the navigation dock and edge caret handle (`z-[65]`).
+  * Tapping anywhere on the screen (including over the dock or caret) now wakes the dashboard cleanly without triggering navigation drawer peeks.
+* **Muted Tap-to-Wake Badge & Edge Caret (`src/components/kiosk/NightMode.tsx`, `src/components/dock/NavigationDock.tsx`):**
+  * Dimmed the "Night Mode (Tap to wake)" badge to ambient `opacity-35` with muted tones (`text-gray-500/80`, `text-blue-400/40`, `bg-black/60`).
+  * Dimmed the hidden toolbar peek caret button to `opacity-30` with muted border and icon styling when Night Mode is active, preventing light bleed in dark rooms.
+
+---
+
 ## [0.3.28] - 2026-11-08
 
 ### Security & Kiosk Lockdown
