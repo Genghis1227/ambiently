@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.4] - 2026-11-09
+
+### Reader Mode & News Site Compatibility
+* **Link Preview Fallback for Paywalled & Bot-Protected News Sites (`functions/api/reader.ts`, `functions/api/web-proxy.ts`):**
+  * Added automated crawler fallback using whitelisted social link-preview headers (`facebookexternalhit/1.1`, `Slackbot-LinkExpanding 1.0`).
+  * Resolves `403 Forbidden` anti-bot blocks on major news outlets (The New York Times, The Wall Street Journal, Bloomberg, etc.), allowing clean Reader Mode article extraction and web previews.
+
+---
+
 ## [0.4.3] - 2026-11-09
 
 ### Kiosk In-App Web Viewing & Article Reader
