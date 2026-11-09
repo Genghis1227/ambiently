@@ -63,6 +63,7 @@ import {
   pullFromCloud,
 } from '../../services/supabase';
 import { APP_VERSION } from '../../data/version';
+import { HouseholdProfileManager } from '../common/HouseholdProfileManager';
 import { CANVAS_ICONS } from '../../data/canvasIcons';
 import { CANVAS_THEMES } from '../../data/canvasThemes';
 import { MAX_CANVASES } from '../../types/dashboard';
@@ -431,7 +432,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
               { id: 'display' as const, label: 'Display & Kiosk', shortLabel: 'Display', icon: <Sliders className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> },
               { id: 'photos' as const, label: 'Shared Photos', shortLabel: 'Photos', icon: <ImageIcon className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> },
               { id: 'sync' as const, label: 'Sync & Backup', shortLabel: 'Sync', icon: <FolderSync className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> },
-              { id: 'system' as const, label: 'Security & System', shortLabel: 'Security', icon: <Shield className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> },
+              { id: 'system' as const, label: 'Household & System', shortLabel: 'System', icon: <Shield className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -1793,9 +1794,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
             </>
             )}
 
-            {/* TAB 5: Security & System Settings */}
+            {/* TAB 5: Household & System Settings */}
             {activeTab === 'system' && (
               <>
+            {/* Global Household Members & Avatars */}
+            <HouseholdProfileManager />
+
             {/* Kid Protection & Kiosk Security */}
             <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800 space-y-4">
               <div className="flex items-center justify-between">
