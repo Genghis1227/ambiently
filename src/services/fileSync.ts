@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import { db } from './db';
 import type { AppSettings, DashboardTab, DashboardWidget, StickyNoteItem } from '../types/dashboard';
+import type { ChoreEngineSnapshot } from '../types/chores';
+import { useChoreStore } from '../store/choreStore';
 
 export interface LocalExportPayload {
   version: 1;
@@ -10,6 +12,7 @@ export interface LocalExportPayload {
   tabs: DashboardTab[];
   widgets: DashboardWidget[];
   notes: StickyNoteItem[];
+  chores?: ChoreEngineSnapshot;
 }
 
 export type FileSyncStatus = 'connected' | 'needs_permission' | 'unbound' | 'unsupported';
@@ -137,6 +140,7 @@ export function downloadBackupFile(
     tabs,
     widgets,
     notes,
+    chores: useChoreStore.getState().snapshot,
   };
 
   const jsonStr = JSON.stringify(payload, null, 2);
@@ -214,6 +218,12 @@ export async function restoreBackupToDatabase(
     await db.notes.clear();
     if (payload.notes.length > 0) {
       await db.notes.bulkAdd(payload.notes);
+    }
+
+    // 5. Restore Chores if present
+    if (payload.chores && payload.chores.id === 'household_chores') {
+      await db.chores.put(payload.chores);
+      await useChoreStore.getState().initChoreStore();
     }
 
     return { success: true };
