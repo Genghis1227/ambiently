@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import { useDashboardStore } from '../../store/dashboardStore';
 import type { DashboardWidget, WidgetThemeMode } from '../../types/dashboard';
-import { type CalendarSource, normalizeCalendarUrl } from '../../services/feeds';
+import { type CalendarSource, normalizeCalendarUrl, testCalendarFeed } from '../../services/feeds';
 import { CalendarUrlGuideModal } from '../calendar/CalendarUrlGuideModal';
 import type { QuoteItem } from '../../services/quotes';
 import { EMBED_PRESETS, type EmbedPresetId } from './MediaEmbedWidget';
@@ -134,6 +134,9 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const [calendarSources, setCalendarSources] = useState<CalendarSource[]>(DEFAULT_CALENDAR_SOURCES);
   const [newCalName, setNewCalName] = useState('');
   const [newCalUrl, setNewCalUrl] = useState('');
+  const [calCheck, setCalCheck] = useState<{ status: 'idle' | 'checking' | 'ok' | 'error'; message?: string }>({
+    status: 'idle',
+  });
   const [newCalColor, setNewCalColor] = useState(CALENDAR_COLORS[0]);
   const [isCalendarGuideOpen, setIsCalendarGuideOpen] = useState(false);
 
@@ -257,6 +260,9 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
           ? widget.config.sources
           : DEFAULT_CALENDAR_SOURCES
       );
+      setNewCalName('');
+      setNewCalUrl('');
+      setCalCheck({ status: 'idle' });
     } else if (widget.type === 'embed') {
       setEmbedPreset(widget.config?.preset || 'lofi');
       setEmbedCustomUrl(widget.config?.customUrl || '');
@@ -336,9 +342,25 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     }
   };
 
-  const handleAddCalendarSource = () => {
+  // Reads the calendar once before adding it, so a wrong or private link is caught here rather than
+  // showing up later as an empty calendar
+  const handleAddCalendarSource = async (skipCheck: boolean = false) => {
     if (!newCalUrl.trim()) return;
     const normalized = normalizeCalendarUrl(newCalUrl);
+    if (skipCheck) {
+      setCalCheck({ status: 'idle' });
+    } else {
+      setCalCheck({ status: 'checking' });
+      const result = await testCalendarFeed(normalized.url);
+      if (!result.ok) {
+        setCalCheck({ status: 'error', message: result.error });
+        return;
+      }
+      setCalCheck({
+        status: 'ok',
+        message: `Added. It has ${result.count} event${result.count === 1 ? '' : 's'} between 2 months ago and 3 months from now.`,
+      });
+    }
     const added: CalendarSource = {
       id: `cal-${Date.now()}`,
       name: newCalName.trim() || 'Custom Calendar',
@@ -1975,7 +1997,10 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                 <input
                   type="url"
                   value={newCalUrl}
-                  onChange={(e) => setNewCalUrl(e.target.value)}
+                  onChange={(e) => {
+                    setNewCalUrl(e.target.value);
+                    setCalCheck({ status: 'idle' });
+                  }}
                   placeholder="https://calendar.google.com/calendar/ical/.../basic.ics"
                   className="w-full rounded-lg bg-gray-900 border border-gray-800 p-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
                 />
@@ -2034,14 +2059,32 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={handleAddCalendarSource}
-                    disabled={!newCalUrl.trim()}
+                    onClick={() => handleAddCalendarSource()}
+                    disabled={!newCalUrl.trim() || calCheck.status === 'checking'}
                     className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-xs font-bold text-white flex items-center gap-1 cursor-pointer transition-all"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>Add Feed</span>
+                    <span>{calCheck.status === 'checking' ? 'Checking...' : 'Add Feed'}</span>
                   </button>
                 </div>
+                {calCheck.status === 'ok' && (
+                  <p className="text-[11px] text-emerald-400 flex items-center gap-1" role="status">
+                    <Check className="w-3 h-3" /> {calCheck.message}
+                  </p>
+                )}
+                {calCheck.status === 'error' && (
+                  <div className="p-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-200 text-[11px] leading-relaxed" role="alert">
+                    <AlertTriangle className="w-3.5 h-3.5 inline mr-1 text-red-400" />
+                    Couldn't read this calendar: {calCheck.message}{' '}
+                    <button
+                      type="button"
+                      onClick={() => handleAddCalendarSource(true)}
+                      className="underline font-bold text-red-100 cursor-pointer"
+                    >
+                      Add anyway
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}

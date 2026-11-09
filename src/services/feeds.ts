@@ -143,6 +143,90 @@ export function setCachedCalendarEvents(sources: CalendarSource[], events: Calen
   }
 }
 
+/** How the last attempt to read each calendar went, so the tile can say when one can't be read. */
+export interface CalendarFeedStatus {
+  id: string;
+  name: string;
+  ok: boolean;
+  error?: string;
+  /** The site has no calendar service at /api/ical (for example a plain static copy) */
+  noService?: boolean;
+  lastSuccessAt?: number;
+}
+
+const feedStatuses = new Map<string, CalendarFeedStatus>();
+const FEED_OK_KEY = 'ambiently_cal_ok_';
+
+function readLastSuccess(sourceId: string): number | undefined {
+  try {
+    const raw = localStorage.getItem(FEED_OK_KEY + sourceId);
+    const n = raw ? Number(raw) : NaN;
+    return Number.isFinite(n) ? n : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function recordFeedStatus(src: CalendarSource, result: { ok: true } | { ok: false; error: string; noService?: boolean }) {
+  if (result.ok) {
+    const now = Date.now();
+    feedStatuses.set(src.id, { id: src.id, name: src.name, ok: true, lastSuccessAt: now });
+    try {
+      localStorage.setItem(FEED_OK_KEY + src.id, String(now));
+    } catch {
+      // Storage full or blocked
+    }
+  } else {
+    feedStatuses.set(src.id, {
+      id: src.id,
+      name: src.name,
+      ok: false,
+      error: result.error,
+      noService: result.noService,
+      lastSuccessAt: feedStatuses.get(src.id)?.lastSuccessAt ?? readLastSuccess(src.id),
+    });
+  }
+}
+
+export function getCalendarFeedStatuses(sources: CalendarSource[]): CalendarFeedStatus[] {
+  return sources
+    .filter((s) => s.enabled && s.url.trim())
+    .map((s) => feedStatuses.get(s.id))
+    .filter((s): s is CalendarFeedStatus => Boolean(s));
+}
+
+const NO_SERVICE_MESSAGE =
+  "This copy of Ambiently has no calendar service, so it can't read calendars. Host it on Cloudflare Pages or with the Docker image (see the README).";
+
+/** Reads one calendar now, for checking a link before it's added. */
+export async function testCalendarFeed(url: string): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
+  const result = await requestCalendar(url);
+  return result.ok ? { ok: true, count: result.events.length } : { ok: false, error: result.error };
+}
+
+async function requestCalendar(
+  url: string
+): Promise<{ ok: true; events: any[] } | { ok: false; error: string; noService?: boolean }> {
+  try {
+    let res = await fetch(`/api/ical?url=${encodeURIComponent(url.trim())}`);
+    if (res.status === 404) {
+      res = await fetch(`/functions/api/ical?url=${encodeURIComponent(url.trim())}`);
+    }
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      // A static host answers every unknown path with the app's own page
+      return { ok: false, error: NO_SERVICE_MESSAGE, noService: true };
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { ok: false, error: typeof data?.error === 'string' ? data.error : `The calendar service answered ${res.status}.` };
+    }
+    return { ok: true, events: Array.isArray(data?.events) ? data.events : [] };
+  } catch {
+    return { ok: false, error: "Couldn't reach the calendar service. Check this screen's internet connection." };
+  }
+}
+
 export async function fetchCalendarEvents(sources: CalendarSource[], forceRefresh: boolean = false): Promise<CalendarEvent[]> {
   const enabledSources = sources.filter((s) => s.enabled && s.url.trim());
   if (enabledSources.length === 0) return [];
@@ -164,28 +248,21 @@ export async function fetchCalendarEvents(sources: CalendarSource[], forceRefres
       events: previousEvents.filter((e) => e.calendarId === src.id),
     });
 
-    try {
-      let res = await fetch(`/api/ical?url=${encodeURIComponent(src.url.trim())}`);
-      if (res.status === 404) {
-        res = await fetch(`/functions/api/ical?url=${encodeURIComponent(src.url.trim())}`);
-      }
-      if (!res.ok) return lastKnown();
-      const ct = res.headers.get('content-type') || '';
-      if (!ct.includes('application/json')) return lastKnown();
-      const data = await res.json();
-      return {
-        fetched: true,
-        events: (data.events || []).map((e: any) => ({
-          ...e,
-          calendarId: src.id,
-          calendarName: src.name,
-          color: src.color,
-        })) as CalendarEvent[],
-      };
-    } catch (err) {
-      console.warn(`Failed to fetch calendar ${src.name}:`, err);
+    const result = await requestCalendar(src.url);
+    recordFeedStatus(src, result);
+    if (!result.ok) {
+      console.warn(`Failed to fetch calendar ${src.name}: ${result.error}`);
       return lastKnown();
     }
+    return {
+      fetched: true,
+      events: result.events.map((e: any) => ({
+        ...e,
+        calendarId: src.id,
+        calendarName: src.name,
+        color: src.color,
+      })) as CalendarEvent[],
+    };
   });
 
   const results = await Promise.all(promises);

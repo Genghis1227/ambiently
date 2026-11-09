@@ -11,7 +11,7 @@ import {
   X,
   HelpCircle,
 } from 'lucide-react';
-import { fetchCalendarEvents, getCachedCalendarEvents, type CalendarEvent, type CalendarSource } from '../../services/feeds';
+import { fetchCalendarEvents, getCachedCalendarEvents, type CalendarEvent, type CalendarSource, getCalendarFeedStatuses, type CalendarFeedStatus } from '../../services/feeds';
 import { CalendarUrlGuideModal } from '../calendar/CalendarUrlGuideModal';
 
 export type CalendarViewMode = 'agenda' | '3day' | 'week' | 'month';
@@ -103,6 +103,15 @@ const DEFAULT_SOURCES: CalendarSource[] = [
     enabled: true,
   },
 ];
+
+function formatAge(ms: number): string {
+  const minutes = Math.round((Date.now() - ms) / 60000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours} h ago`;
+  return `${Math.round(hours / 24)} days ago`;
+}
 
 function formatTimeShort(date: Date, hour12: boolean = true): string {
   return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hourCycle: hour12 ? 'h12' : 'h23' }).replace(' ', '');
@@ -421,6 +430,9 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
   const [loading, setLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<number | null>(() => getCachedCalendarEvents(sources)?.lastFetched || null);
+  const [feedProblems, setFeedProblems] = useState<CalendarFeedStatus[]>(() =>
+    getCalendarFeedStatuses(sources).filter((f) => !f.ok)
+  );
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [baseDate, setBaseDate] = useState(new Date());
   const [selectedDayDetail, setSelectedDayDetail] = useState<{ date: Date; events: CalendarEvent[] } | null>(null);
@@ -458,6 +470,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
     try {
       const data = await fetchCalendarEvents(sources, force);
       setEvents(data);
+      setFeedProblems(getCalendarFeedStatuses(sources).filter((f) => !f.ok));
       setLastUpdated(getCachedCalendarEvents(sources)?.lastFetched ?? Date.now());
     } catch (err) {
       console.warn('Failed to load events:', err);
@@ -471,6 +484,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
     const cached = getCachedCalendarEvents(sources);
     if (cached) {
       setEvents(cached.events);
+      setFeedProblems(getCalendarFeedStatuses(sources).filter((f) => !f.ok));
       setLastUpdated(cached.lastFetched);
       if (cached.isStale) {
         // Silently revalidate in background if older than 15 minutes
@@ -530,7 +544,13 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
 
   // Agenda view events (filtered from baseDate)
   const agendaStartMs = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate()).getTime() - 24 * 60 * 60 * 1000;
-  const agendaEvents = events.filter((e) => parseEventLocalDate(e.start, e.isAllDay).getTime() >= agendaStartMs);
+  // Also keeps events that started earlier and are still going on (a week-long trip, a holiday)
+  const baseDayStartMs = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate()).getTime();
+  const agendaEvents = events.filter(
+    (e) =>
+      parseEventLocalDate(e.start, e.isAllDay).getTime() >= agendaStartMs ||
+      (e.end ? parseEventLocalDate(e.end, e.isAllDay).getTime() > baseDayStartMs : false)
+  );
 
   // Month View calculations
   const startOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
@@ -728,7 +748,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
             disabled={isSyncing}
             title={
               lastUpdated
-                ? `Last updated: ${new Date(lastUpdated).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} (Click to refresh on-demand)`
+                ? `Last updated: ${new Date(lastUpdated).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hourCycle: hour12 ? 'h12' : 'h23' })} (Click to refresh on-demand)`
                 : 'Refresh calendar feeds (Auto-refreshes every 15 min)'
             }
             className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
@@ -741,6 +761,29 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
           </button>
         </div>
       </div>
+
+      {/* A calendar that can't be read says so, instead of quietly showing old or no events */}
+      {feedProblems.length > 0 && (
+        <div
+          role="status"
+          className={`mb-2 shrink-0 rounded-xl border px-3 py-2 text-xs leading-snug ${
+            isLight ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-amber-500/30 bg-amber-500/10 text-amber-200'
+          }`}
+        >
+          {feedProblems.some((f) => f.noService) ? (
+            <span>⚠️ {feedProblems.find((f) => f.noService)?.error}</span>
+          ) : (
+            feedProblems.map((f) => (
+              <div key={f.id}>
+                ⚠️ <strong>{f.name}</strong>: {f.error}{' '}
+                {f.lastSuccessAt
+                  ? `Showing what it had ${formatAge(f.lastSuccessAt)}.`
+                  : 'No events from it yet.'}
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
       {/* Main Content Area */}
       {view === 'agenda' ? (
