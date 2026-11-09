@@ -11,6 +11,17 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.4.3",
+    date: "November 9, 2026",
+    title: "In-App Reader Mode, Edge Web Proxy & Pinned Kiosk Controls",
+    highlights: [
+      "Clean 'Reader Mode' Article Extractor: Automatically extracts ad-free, readable article content with headlines, bylines, reading time, and lead images using Mozilla Readability.",
+      "Edge Web Proxy Fallback: Bypasses X-Frame-Options and CSP frame-ancestors iframe blocking on news websites (like today.com and NYTimes) while defending against frame-busting scripts.",
+      "In-Article Link Interception: Reading related links stays seamlessly inside the in-app viewer without exiting kiosk mode or opening unmanaged browser windows.",
+      "Always-Pinned Header Bar: View mode toggle (Reader vs Web Preview), reload button, and prominent Close button remain accessible at all times so kiosk users are never trapped.",
+    ],
+  },
+  {
     version: "v0.4.2",
     date: "November 9, 2026",
     title: "Calendar Trustworthiness, Timezones & Live Feed Verification",

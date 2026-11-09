@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.3] - 2026-11-09
+
+### Kiosk In-App Web Viewing & Article Reader
+* **Clean 'Reader Mode' Article Extractor (`functions/api/reader.ts`, `src/components/common/InAppWebViewerModal.tsx`):**
+  * Added edge-powered article extraction powered by Mozilla Readability (`@mozilla/readability`) and DOM parsing (`linkedom`).
+  * Formats clean headlines, byline/author, publication date, lead hero images, and formatted article text while stripping ads, scripts, and trackers.
+  * Captures in-article link clicks to browse related articles directly inside reader mode without escaping kiosk mode.
+* **Edge Web Proxy Fallback (`functions/api/web-proxy.ts`):**
+  * Proxies target web pages server-side, stripping `X-Frame-Options` and `CSP frame-ancestors` headers that trigger browser iframe blocking (🚫) on sites like today.com, NYTimes, and CNN.
+  * Injects `<base href="...">` for relative asset and stylesheet resolution, plus anti-frame-busting guards to protect kiosk display state.
+* **Always-Pinned Chrome Controls (`src/components/common/InAppWebViewerModal.tsx`):**
+  * Pinned top header bar with one-touch toggle pills (**📖 Reader View** / **🌐 Web Preview**), a reload button, and a prominent touch-friendly **✕ Close** button (with Esc shortcut) ensuring kiosk users are never locked out.
+
+---
+
 ## [0.4.2] - 2026-11-09
 
 ### Calendar Trustworthiness & Feed Health
