@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.5] - 2026-11-09
+
+### Reader Mode & RSS Feed Full-Article Extraction Fixes
+* **Full Article Preservation Against Readability Layout Pruning (`functions/api/reader.ts`):**
+  * Fixed an issue where `@mozilla/readability` deleted `<article>` containers nested inside layout wrappers with `sidebar` modifier classes (such as Hugo Primer's `Layout--sidebarPosition-end` on *Tony's Tipbits*), which previously caused Reader Mode to show only the summary and copyright footer.
+  * Added semantic `<article>` / `[itemprop="articleBody"]` and JSON-LD `articleBody` extraction fallbacks alongside Readability.
+* **Restored Primary Reader & Web Proxy User-Agents (`functions/api/reader.ts`, `functions/api/web-proxy.ts`):**
+  * Restored `Ambiently-Reader/1.0` and `Ambiently-Display/1.0` as the primary User-Agents and removed social crawler User-Agents from `web-proxy.ts` so feeds like BBC News and Today.com return full pages rather than link-preview stubs.
+* **Direct Iframe Embedding & Rich Typography (`functions/_shared/fetchExternal.ts`, `src/components/common/InAppWebViewerModal.tsx`):**
+  * Automatically detects when destination sites permit direct iframe embedding (no `X-Frame-Options` or `CSP frame-ancestors`) so **Web Preview** loads natively without proxy overhead, and added Reader Mode styles for Markdown tables, code blocks, and dividers.
+
+---
+
 ## [0.4.4] - 2026-11-09
 
 ### Reader Mode & News Site Compatibility
