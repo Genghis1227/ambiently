@@ -11,6 +11,17 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.4.0",
+    date: "November 8, 2026",
+    title: "In-App Web Viewer Window Frame & Safe Kiosk Link Browsing",
+    highlights: [
+      "In-App Web Viewer Frame: External links (RSS articles, image banner URLs, guides) now open in a sandboxed in-app window frame rather than spawning an uncloseable fullscreen Edge window.",
+      "Dedicated Touch Close Button: Equipped with a prominent Close button, Esc key shortcut, and backdrop dismiss, returning you straight to your dashboard without losing fullscreen kiosk state.",
+      "Floating Pop-out Window Fallback: Includes a 'Pop-out Window' action that forces Edge into a centered floating popup window with native Windows window chrome when external browsing is needed.",
+      "Global Smart Link Interception: Automatically intercepts external HTTP/HTTPS links across all widgets, markdown notes, and modal dialogs.",
+    ],
+  },
+  {
     version: "v0.3.29",
     date: "November 8, 2026",
     title: "Unchecked Duplicate Checklists & Dimmed Night Mode UI",
