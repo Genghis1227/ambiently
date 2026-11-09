@@ -59,6 +59,7 @@ const AddWidgetModal = React.lazy(() =>
 );
 import { TextBoxWidget } from '../widgets/TextBoxWidget';
 import { ImageWidget } from '../widgets/ImageWidget';
+import { ChoreWidget } from '../widgets/ChoreWidget';
 
 interface MobileCompanionProps {
   tabs: DashboardTab[];
@@ -259,6 +260,8 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return Sparkles;
       case 'sticky_notes':
         return StickyNote;
+      case 'chores':
+        return CheckSquare;
       default:
         return LayoutGrid;
     }
@@ -290,6 +293,8 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return 'Image / GIF';
       case 'sticky_notes':
         return 'Notes Tile';
+      case 'chores':
+        return 'Chores & Rewards';
       default:
         return 'Widget';
     }
@@ -441,6 +446,20 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return (
           <div className="p-3 text-xs text-gray-400 bg-gray-950/60 rounded-xl text-center">
             Notes Collection Tile ({activeNotes.length} notes active on this board).
+          </div>
+        );
+      case 'chores':
+        return (
+          <div className="max-h-96 overflow-y-auto">
+            <ChoreWidget
+              title={widget.title}
+              config={widget.config}
+              isLight={isLight}
+              variant="tile"
+              onUpdateConfig={(updates) =>
+                onUpdateWidget?.(widget.id, { config: { ...widget.config, ...updates } })
+              }
+            />
           </div>
         );
       default:

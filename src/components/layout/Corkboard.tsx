@@ -46,6 +46,7 @@ import { PhotoFrameWidget } from '../widgets/PhotoFrameWidget';
 import { StickyNotesWidget } from '../widgets/StickyNotesWidget';
 import { MediaEmbedWidget } from '../widgets/MediaEmbedWidget';
 import { ImageWidget } from '../widgets/ImageWidget';
+import { ChoreWidget } from '../widgets/ChoreWidget';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { CANVAS_THEMES, isCanvasThemeLight } from '../../data/canvasThemes';
 import { findOpenCanvasSpot } from '../../utils/autoLayout';
@@ -1656,6 +1657,20 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   onPinNoteToCanvas={handlePinNoteToCanvas}
                   onUnpinNoteFromCanvas={handleUnpinNoteFromCanvas}
                   isLight={isWidgetLight}
+                />
+              ) : widget.type === 'chores' ? (
+                <ChoreWidget
+                  title={widget.title}
+                  config={widget.config}
+                  isLight={isWidgetLight}
+                  variant="tile"
+                  onUpdateConfig={(updates) => {
+                    if (onUpdateWidget) {
+                      onUpdateWidget(widget.id, {
+                        config: { ...widget.config, ...updates },
+                      });
+                    }
+                  }}
                 />
               ) : null}
               </TileErrorBoundary>
