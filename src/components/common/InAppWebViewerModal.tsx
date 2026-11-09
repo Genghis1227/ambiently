@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, ExternalLink, RotateCw, Globe, Loader2 } from 'lucide-react';
-import { openPopoutWindow } from '../../utils/linkHandler';
+import { X, RotateCw, Globe, Loader2 } from 'lucide-react';
 
 export interface InAppWebViewerModalProps {
   isOpen: boolean;
@@ -49,10 +48,6 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
     setIframeKey((prev) => prev + 1);
   };
 
-  const handlePopout = () => {
-    openPopoutWindow(url);
-  };
-
   return (
     <div
       onClick={onClose}
@@ -79,18 +74,8 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
             </div>
           </div>
 
-          {/* Right: Actions (Pop-out, Reload, Close) */}
+          {/* Right: Actions (Reload, Close) */}
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={handlePopout}
-              title="Open in a floating pop-up window"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-800/90 hover:bg-gray-700 active:scale-95 text-gray-300 hover:text-white text-xs font-semibold border border-gray-700/60 transition-all cursor-pointer"
-            >
-              <ExternalLink className="w-3.5 h-3.5 text-blue-400" />
-              <span className="hidden sm:inline">Pop-out Window</span>
-            </button>
-
             <button
               type="button"
               onClick={handleReload}
@@ -130,20 +115,6 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
             onLoad={() => setIsLoading(false)}
           />
-        </div>
-
-        {/* Bottom Helper Footer */}
-        <div className="py-2 px-4 bg-gray-900/95 border-t border-gray-800/80 flex items-center justify-between text-[11px] text-gray-400 shrink-0">
-          <span className="truncate">
-            If this website restricts embedded viewing, use <strong>Pop-out Window</strong>.
-          </span>
-          <button
-            type="button"
-            onClick={handlePopout}
-            className="text-blue-400 hover:text-blue-300 font-semibold underline ml-2 shrink-0 cursor-pointer"
-          >
-            Open in Window ↗
-          </button>
         </div>
       </div>
     </div>
