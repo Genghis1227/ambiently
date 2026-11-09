@@ -18,6 +18,8 @@ export interface ReaderArticle {
   contentHtml: string;
   textContent?: string;
   readingTimeMinutes?: number;
+  isSummaryOnly?: boolean;
+  canEmbedDirectly?: boolean;
   url: string;
 }
 
@@ -145,7 +147,11 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
     }
   };
 
-  const proxiedIframeSrc = `/api/web-proxy?url=${encodeURIComponent(currentUrl)}`;
+  // If the destination server does not block iframes (no X-Frame-Options or CSP frame-ancestors),
+  // load it directly for 100% native styles and interactivity; otherwise route through /api/web-proxy.
+  const webIframeSrc = article?.canEmbedDirectly
+    ? currentUrl
+    : `/api/web-proxy?url=${encodeURIComponent(currentUrl)}`;
 
   return (
     <div
@@ -227,6 +233,51 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
         }
         .ambiently-reader-body a:hover {
           color: #93c5fd;
+        }
+        .ambiently-reader-body table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 1.5rem 0;
+          font-size: 0.9rem;
+        }
+        .ambiently-reader-body th,
+        .ambiently-reader-body td {
+          border: 1px solid #1e293b;
+          padding: 0.6rem 0.75rem;
+          text-align: left;
+          color: #cbd5e1;
+        }
+        .ambiently-reader-body th {
+          background: rgba(30, 41, 59, 0.6);
+          color: #f8fafc;
+          font-weight: 600;
+        }
+        .ambiently-reader-body pre {
+          background: #0f172a;
+          border: 1px solid #1e293b;
+          border-radius: 0.75rem;
+          padding: 1rem;
+          overflow-x: auto;
+          margin: 1.25rem 0;
+          font-size: 0.85rem;
+          color: #e2e8f0;
+        }
+        .ambiently-reader-body code {
+          background: rgba(30, 41, 59, 0.7);
+          padding: 0.15rem 0.35rem;
+          border-radius: 0.35rem;
+          font-size: 0.875em;
+          color: #93c5fd;
+        }
+        .ambiently-reader-body pre code {
+          background: transparent;
+          padding: 0;
+          color: inherit;
+        }
+        .ambiently-reader-body hr {
+          border: 0;
+          border-top: 1px solid #1e293b;
+          margin: 2rem 0;
         }
       `}</style>
 
@@ -395,36 +446,67 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
                     </div>
                   )}
 
-                  {/* Excerpt / Summary Box */}
-                  {article.excerpt && article.excerpt.length > 20 && (
-                    <div className="p-4 rounded-xl bg-blue-500/5 border-l-4 border-blue-500 mb-8 text-sm sm:text-base text-gray-300 italic leading-relaxed">
-                      {article.excerpt}
-                    </div>
-                  )}
+                  {/* Excerpt / Summary Box (shown when article body doesn't already start with it) */}
+                  {article.excerpt &&
+                    article.excerpt.length > 20 &&
+                    (!article.textContent ||
+                      !article.textContent
+                        .slice(0, 240)
+                        .toLowerCase()
+                        .includes(article.excerpt.slice(0, 60).toLowerCase())) && (
+                      <div className="p-4 rounded-xl bg-blue-500/5 border-l-4 border-blue-500 mb-8 text-sm sm:text-base text-gray-300 italic leading-relaxed">
+                        {article.excerpt}
+                      </div>
+                    )}
 
                   {/* Main Formatted Article HTML */}
-                  <div
-                    onClick={handleReaderContentClick}
-                    className="ambiently-reader-body text-base sm:text-lg"
-                    dangerouslySetInnerHTML={{ __html: article.contentHtml }}
-                  />
+                  {article.contentHtml ? (
+                    <div
+                      onClick={handleReaderContentClick}
+                      className="ambiently-reader-body text-base sm:text-lg"
+                      dangerouslySetInnerHTML={{ __html: article.contentHtml }}
+                    />
+                  ) : null}
+
+                  {/* Summary-only notice when publisher blocks full body scraping */}
+                  {article.isSummaryOnly && (
+                    <div className="mt-8 p-5 rounded-2xl bg-gray-900/80 border border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+                      <div className="text-xs sm:text-sm text-gray-400">
+                        <span className="font-semibold text-gray-200 block mb-0.5">
+                          Summary preview only
+                        </span>
+                        This publisher restricts full-text extraction or serves multimedia content.
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setViewMode('web');
+                          setIsWebLoading(true);
+                        }}
+                        className="shrink-0 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white flex items-center gap-2 transition-all cursor-pointer shadow-md"
+                      >
+                        <Globe className="w-4 h-4" />
+                        <span>Open Web Preview</span>
+                      </button>
+                    </div>
+                  )}
                 </article>
               )}
             </div>
           ) : (
-            /* Web View (Proxied Iframe) */
+            /* Web View (Direct Iframe when permitted, or Proxied Iframe) */
             <div className="flex-1 w-full h-full relative">
               {isWebLoading && (
                 <div className="absolute inset-0 z-10 bg-gray-950/80 backdrop-blur-xs flex flex-col items-center justify-center gap-2 text-gray-400">
                   <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
-                  <span className="text-xs">Loading page preview via edge proxy...</span>
+                  <span className="text-xs">Loading webpage preview...</span>
                 </div>
               )}
 
               <iframe
                 key={`${currentUrl}-${iframeKey}`}
                 ref={iframeRef}
-                src={proxiedIframeSrc}
+                src={webIframeSrc}
                 title={currentTitle || 'Web Preview'}
                 className="w-full h-full border-0 bg-white"
                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups"

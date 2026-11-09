@@ -2,28 +2,33 @@
 // Proxies web pages for kiosk iframe viewing, stripping X-Frame-Options & CSP frame-ancestors,
 // injecting <base href="..."> for asset resolution, and securing against frame busting.
 
-import { fetchExternal, externalFetchErrorResponse, refuseOtherSites, ExternalFetchError, type ExternalFetchResult } from '../_shared/fetchExternal';
+import {
+  fetchExternal,
+  externalFetchErrorResponse,
+  refuseOtherSites,
+  ExternalFetchError,
+  type ExternalFetchResult,
+} from '../_shared/fetchExternal';
 
 interface PagesContext {
   request: Request;
 }
 
-const FALLBACK_USER_AGENTS = [
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-  'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.html)',
-  'Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)',
+const WEB_PROXY_USER_AGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Ambiently-WebProxy/1.0 (+https://dashboard.trinhism.com)',
+  'Ambiently-Display/1.0 (+https://dashboard.trinhism.com)',
 ];
 
 async function fetchPageWithFallback(normalizedUrl: string): Promise<ExternalFetchResult> {
   let lastRes: ExternalFetchResult | null = null;
-  for (const ua of FALLBACK_USER_AGENTS) {
+  for (const ua of WEB_PROXY_USER_AGENTS) {
     try {
       const res = await fetchExternal(normalizedUrl, {
         maxBytes: 15 * 1024 * 1024, // 15 MB cap
         timeoutMs: 12_000,
         headers: {
           'User-Agent': ua,
-          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Accept-Language': 'en-US,en;q=0.9',
         },
       });
@@ -88,7 +93,10 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
 </html>`,
         {
           status: fetchRes.status >= 400 && fetchRes.status < 600 ? fetchRes.status : 502,
-          headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'private, no-store' },
+          headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'private, no-store',
+          },
         }
       );
     }
@@ -145,7 +153,10 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     if (errorRes) {
       return new Response(
         `<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem;background:#090d16;color:#f87171;">${err instanceof Error ? err.message : 'Error fetching page'}</body></html>`,
-        { status: (err as any).status || 500, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+        {
+          status: (err as any).status || 500,
+          headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        }
       );
     }
     return new Response(

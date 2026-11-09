@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.4.5",
+    date: "November 9, 2026",
+    title: "Reader Mode Full-Article Preservation & RSS Feed Proxy Fixes",
+    highlights: [
+      "Full Article Extraction for Hugo & Modern Blogs: Prevents Readability from pruning <article> elements inside layout wrappers with sidebar modifier classes (fixing Tony's Tipbits full-post rendering).",
+      "Restored Primary Reader & Proxy User-Agents: Fixes 403 blocks and link-preview stub responses on BBC News, Today.com, and other curated RSS feeds.",
+      "Direct Iframe Detection & Rich Reader Tables: Automatically loads iframe-friendly sites directly in Web Preview and styles Markdown tables and code blocks in Reader Mode.",
+    ],
+  },
+  {
     version: "v0.4.4",
     date: "November 9, 2026",
     title: "Link Preview Bot Fallback & 403 Forbidden News Bypass",
