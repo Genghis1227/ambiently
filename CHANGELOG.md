@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.1] - 2026-11-09
+
+### Settings & Time Preferences
+* **Clock Format (12h/24h) & Week Starts On (`src/utils/timePrefs.ts`, `src/components/settings/SettingsModal.tsx`):**
+  * Added **Clock Format** (*Auto*, *12-hour*, *24-hour*) and **Week Starts On** (*Sunday*, *Monday*) options in Settings → Display & Kiosk.
+  * Synchronized across all clock widgets, weather clock, world clock, and OLED night mode clock.
+  * Synchronized across Calendar timeline hour gutter, agenda event timestamps, week grid header, and month view column alignment.
+* **Per-Tile Error Boundary (`src/components/common/TileErrorBoundary.tsx`, `src/components/layout/Corkboard.tsx`):**
+  * Wrapped canvas widgets in a React error boundary with auto-retry and manual retry button, preventing single-widget crashes from taking down the entire dashboard.
+
+---
+
 ## [0.4.0] - 2026-11-08
 
 ### Kiosk Display & Window Management
