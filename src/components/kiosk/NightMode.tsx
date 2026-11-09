@@ -48,10 +48,10 @@ export const NightMode: React.FC<NightModeProps> = ({
     return (
       <div
         onClick={onWake}
-        className="fixed inset-0 z-[70] bg-black cursor-pointer flex flex-col items-center justify-center select-none"
+        className="night-mode-cursor-none fixed inset-0 z-[70] bg-black cursor-none flex flex-col items-center justify-center select-none"
       >
         <div
-          className="transition-transform duration-1000 ease-out flex flex-col items-center"
+          className="transition-transform duration-1000 ease-out flex flex-col items-center pointer-events-none"
           style={{
             transform: `translate(${pixelShift.x}px, ${pixelShift.y}px)`,
           }}
@@ -72,7 +72,7 @@ export const NightMode: React.FC<NightModeProps> = ({
   return (
     <div
       onClick={onWake}
-      className="fixed inset-0 z-[70] pointer-events-auto cursor-pointer transition-opacity duration-700 flex items-end justify-end p-6 select-none"
+      className="night-mode-cursor-none fixed inset-0 z-[70] pointer-events-auto cursor-none transition-opacity duration-700 flex items-end justify-end p-6 select-none"
       style={{ backgroundColor: `rgba(0, 0, 0, ${dimOpacity})` }}
     >
       <div className="flex items-center gap-2 text-xs text-gray-500/80 bg-black/60 px-3 py-1.5 rounded-full border border-gray-900/80 shadow-2xl opacity-35 hover:opacity-90 transition-opacity pointer-events-none">
