@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.4.4",
+    date: "November 9, 2026",
+    title: "Link Preview Bot Fallback & 403 Forbidden News Bypass",
+    highlights: [
+      "Bypass 403 Forbidden Anti-Bot Shields: Automatically retries news article requests using recognized social preview crawlers when publishers block custom scrapers.",
+      "Full NYTimes & Paywalled News Compatibility: Successfully extracts clean article text, headlines, and lead images from sites protected by Akamai and DataDome.",
+      "Dual Reader & Web Preview Resilience: Both the clean reader mode and proxied web preview benefit from the multi-tier request fallback.",
+    ],
+  },
+  {
     version: "v0.4.3",
     date: "November 9, 2026",
     title: "In-App Reader Mode, Edge Web Proxy & Pinned Kiosk Controls",
