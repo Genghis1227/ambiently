@@ -83,6 +83,29 @@ export default defineConfig({
         // The app's own scripts and styles are built into assets/, so they must be cached for the app to
         // open offline. Only the donation pictures from public/assets are left out.
         globIgnores: ['**/og-banner.png', 'assets/{paypal,venmo,zelle}.*'],
+        runtimeCaching: [
+          {
+            // Photos from other sites load from the network as usual. Only when that fails (the
+            // screen is offline) is the copy the photo frame saved in ambiently-photo-cache-v1 used.
+            urlPattern: ({ request, url }) =>
+              request.destination === 'image' &&
+              url.protocol === 'https:' &&
+              url.origin !== (globalThis as unknown as { location: { origin: string } }).location.origin,
+            handler: async ({ request }) => {
+              try {
+                return await fetch(request);
+              } catch (err) {
+                // Written out in full: this function is copied into the service worker as text
+                const storage = (globalThis as unknown as {
+                  caches: { open(name: string): Promise<{ match(url: string): Promise<Response | undefined> }> };
+                }).caches;
+                const saved = await (await storage.open('ambiently-photo-cache-v1')).match(request.url);
+                if (saved) return saved;
+                throw err;
+              }
+            },
+          },
+        ],
       },
     }),
   ],

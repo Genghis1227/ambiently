@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import { useDashboardStore } from '../../store/dashboardStore';
 import type { DashboardWidget, WidgetThemeMode } from '../../types/dashboard';
-import { type CalendarSource, normalizeCalendarUrl } from '../../services/feeds';
+import { type CalendarSource, normalizeCalendarUrl, testCalendarFeed } from '../../services/feeds';
 import { CalendarUrlGuideModal } from '../calendar/CalendarUrlGuideModal';
 import type { QuoteItem } from '../../services/quotes';
 import { EMBED_PRESETS, type EmbedPresetId } from './MediaEmbedWidget';
@@ -38,6 +38,9 @@ import { DEFAULT_WORLD_CITIES, type WorldClockCity, getZoneOffsetMinutes } from 
 import type { TextBoxConfig } from './TextBoxWidget';
 import { CURATED_RSS_FEEDS } from '../../data/curatedFeeds';
 import { MediaSearchModal } from './MediaSearchModal';
+import { ChoresSettings, type ChoresDraft } from './ChoresSettings';
+import { ALL_MEAL_SLOTS, MEAL_SLOT_LABELS } from '../../utils/mealPlan';
+import type { MealSlot } from '../../types/dashboard';
 import { Sparkles } from 'lucide-react';
 
 interface WidgetSettingsModalProps {
@@ -90,6 +93,10 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const [themeMode, setThemeMode] = useState<WidgetThemeMode>('auto');
 
   // Countdown states
+  const [choresDraft, setChoresDraft] = useState<ChoresDraft>({ people: [], chores: [], rewards: [], resetStars: false });
+  const [mealSlots, setMealSlots] = useState<MealSlot[]>(['dinner']);
+  const [mealListNoteId, setMealListNoteId] = useState('');
+  const boardNotes = useDashboardStore((state) => state.notes);
   const [countdownDate, setCountdownDate] = useState('');
   const [countdownTime, setCountdownTime] = useState('00:00');
 
@@ -134,6 +141,9 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const [calendarSources, setCalendarSources] = useState<CalendarSource[]>(DEFAULT_CALENDAR_SOURCES);
   const [newCalName, setNewCalName] = useState('');
   const [newCalUrl, setNewCalUrl] = useState('');
+  const [calCheck, setCalCheck] = useState<{ status: 'idle' | 'checking' | 'ok' | 'error'; message?: string }>({
+    status: 'idle',
+  });
   const [newCalColor, setNewCalColor] = useState(CALENDAR_COLORS[0]);
   const [isCalendarGuideOpen, setIsCalendarGuideOpen] = useState(false);
 
@@ -189,6 +199,18 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     setThemeMode((widget.config?.themeMode as WidgetThemeMode) || 'auto');
     setGeoStatus('');
     setGeoHits([]);
+
+    if (widget.type === 'chores') {
+      setChoresDraft({
+        people: widget.config?.people || [],
+        chores: widget.config?.chores || [],
+        rewards: widget.config?.rewards || [],
+        resetStars: false,
+      });
+    } else if (widget.type === 'meal_plan') {
+      setMealSlots(widget.config?.slots?.length ? widget.config.slots : ['dinner']);
+      setMealListNoteId(widget.config?.listNoteId || '');
+    }
 
     if (widget.type === 'countdown') {
       const targetStr = widget.config?.targetDate || '2026-12-25T00:00:00Z';
@@ -336,9 +358,25 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     }
   };
 
-  const handleAddCalendarSource = () => {
+  // Reads the calendar once before adding it, so a wrong or private link is caught here rather than
+  // showing up later as an empty calendar
+  const handleAddCalendarSource = async (skipCheck: boolean = false) => {
     if (!newCalUrl.trim()) return;
     const normalized = normalizeCalendarUrl(newCalUrl);
+    if (skipCheck) {
+      setCalCheck({ status: 'idle' });
+    } else {
+      setCalCheck({ status: 'checking' });
+      const result = await testCalendarFeed(normalized.url);
+      if (!result.ok) {
+        setCalCheck({ status: 'error', message: result.error });
+        return;
+      }
+      setCalCheck({
+        status: 'ok',
+        message: `Added. It has ${result.count} event${result.count === 1 ? '' : 's'} between 2 months ago and 3 months from now.`,
+      });
+    }
     const added: CalendarSource = {
       id: `cal-${Date.now()}`,
       name: newCalName.trim() || 'Custom Calendar',
@@ -421,6 +459,26 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       ...widget.config,
       themeMode,
     };
+
+    if (widget.type === 'chores') {
+      // Done chores and star balances change on the board while this is open, so only the edited
+      // lists are saved and the rest of the stored config is kept
+      delete configUpdates.done;
+      delete configUpdates.stars;
+      configUpdates.people = choresDraft.people.map((p) => ({ ...p, name: p.name.trim() || 'Someone' }));
+      configUpdates.chores = choresDraft.chores
+        .filter((c) => c.title.trim())
+        .map((c) => ({ ...c, title: c.title.trim() }));
+      configUpdates.rewards = choresDraft.rewards
+        .filter((r) => r.title.trim())
+        .map((r) => ({ ...r, title: r.title.trim() }));
+      if (choresDraft.resetStars) configUpdates.stars = {};
+    } else if (widget.type === 'meal_plan') {
+      delete configUpdates.meals;
+      delete configUpdates.library;
+      configUpdates.slots = mealSlots.length > 0 ? mealSlots : ['dinner'];
+      configUpdates.listNoteId = mealListNoteId || undefined;
+    }
 
     if (widget.type === 'countdown') {
       const dtString = `${countdownDate || '2026-12-25'}T${countdownTime || '00:00'}:00`;
@@ -601,6 +659,56 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
           </div>
 
           {/* Countdown Settings */}
+          {widget.type === 'chores' && <ChoresSettings value={choresDraft} onChange={setChoresDraft} />}
+
+          {widget.type === 'meal_plan' && (
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">Meals to plan</label>
+                <div className="flex gap-2">
+                  {ALL_MEAL_SLOTS.map((slot) => {
+                    const on = mealSlots.includes(slot);
+                    return (
+                      <button
+                        key={slot}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() =>
+                          setMealSlots(on ? mealSlots.filter((s) => s !== slot) : ALL_MEAL_SLOTS.filter((s) => s === slot || mealSlots.includes(s)))
+                        }
+                        className={`flex-1 rounded-xl border px-3 py-2 text-xs font-semibold cursor-pointer ${
+                          on ? 'border-blue-500 bg-blue-500/10 text-blue-300' : 'border-gray-800 text-gray-400 hover:border-gray-700'
+                        }`}
+                      >
+                        {MEAL_SLOT_LABELS[slot]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">Shopping list</label>
+                <select
+                  value={mealListNoteId}
+                  onChange={(e) => setMealListNoteId(e.target.value)}
+                  className="w-full rounded-xl bg-gray-950 border border-gray-800 p-2.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                >
+                  <option value="">Find it for me (a checklist named Shopping, Grocery or Essentials, or a new one)</option>
+                  {boardNotes
+                    .filter((n) => n.isChecklist && !n.deleted_at && !n.archivedAt)
+                    .map((n) => (
+                      <option key={n.id} value={n.id}>
+                        {n.title || 'Untitled checklist'}
+                      </option>
+                    ))}
+                </select>
+                <p className="text-[11px] text-gray-500 mt-1.5">
+                  Ingredients go into this checklist note, which everyone can tick off from their phone.
+                </p>
+              </div>
+            </div>
+          )}
+
           {widget.type === 'countdown' && (
             <div className="space-y-4 pt-2 border-t border-gray-800">
               <div>
@@ -1975,7 +2083,10 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                 <input
                   type="url"
                   value={newCalUrl}
-                  onChange={(e) => setNewCalUrl(e.target.value)}
+                  onChange={(e) => {
+                    setNewCalUrl(e.target.value);
+                    setCalCheck({ status: 'idle' });
+                  }}
                   placeholder="https://calendar.google.com/calendar/ical/.../basic.ics"
                   className="w-full rounded-lg bg-gray-900 border border-gray-800 p-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
                 />
@@ -2034,14 +2145,32 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={handleAddCalendarSource}
-                    disabled={!newCalUrl.trim()}
+                    onClick={() => handleAddCalendarSource()}
+                    disabled={!newCalUrl.trim() || calCheck.status === 'checking'}
                     className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-xs font-bold text-white flex items-center gap-1 cursor-pointer transition-all"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>Add Feed</span>
+                    <span>{calCheck.status === 'checking' ? 'Checking...' : 'Add Feed'}</span>
                   </button>
                 </div>
+                {calCheck.status === 'ok' && (
+                  <p className="text-[11px] text-emerald-400 flex items-center gap-1" role="status">
+                    <Check className="w-3 h-3" /> {calCheck.message}
+                  </p>
+                )}
+                {calCheck.status === 'error' && (
+                  <div className="p-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-200 text-[11px] leading-relaxed" role="alert">
+                    <AlertTriangle className="w-3.5 h-3.5 inline mr-1 text-red-400" />
+                    Couldn't read this calendar: {calCheck.message}{' '}
+                    <button
+                      type="button"
+                      onClick={() => handleAddCalendarSource(true)}
+                      className="underline font-bold text-red-100 cursor-pointer"
+                    >
+                      Add anyway
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}

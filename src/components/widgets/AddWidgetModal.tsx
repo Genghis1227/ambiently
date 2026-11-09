@@ -15,8 +15,11 @@ import {
   Plus,
   Type,
   Sparkles,
+  ListChecks,
+  UtensilsCrossed,
 } from 'lucide-react';
 import type { WidgetType, DashboardWidget } from '../../types/dashboard';
+import { starterChores } from '../../utils/chores';
 
 interface AddWidgetModalProps {
   isOpen: boolean;
@@ -33,6 +36,7 @@ interface WidgetTemplate {
   defaultGridPos: { w: number; h: number };
   defaultConfig?: Record<string, any>;
   color: string;
+  isNew?: boolean;
 }
 
 const WIDGET_TEMPLATES: WidgetTemplate[] = [
@@ -104,6 +108,26 @@ const WIDGET_TEMPLATES: WidgetTemplate[] = [
     defaultGridPos: { w: 4, h: 8 },
     defaultConfig: { defaultView: 'agenda' },
     color: 'from-emerald-500/20 to-teal-500/20 text-emerald-400 border-emerald-500/30',
+  },
+  {
+    type: 'chores',
+    title: 'Chores & Rewards',
+    description: 'Daily and weekly chores for each family member. Kids tap to check off, earn stars and trade them for rewards.',
+    icon: ListChecks,
+    defaultGridPos: { w: 6, h: 6 },
+    defaultConfig: starterChores(),
+    color: 'from-lime-500/20 to-green-500/20 text-lime-400 border-lime-500/30',
+    isNew: true,
+  },
+  {
+    type: 'meal_plan',
+    title: 'Meal Plan',
+    description: "Plan the week's meals and send their ingredients to a shopping list checklist with one tap.",
+    icon: UtensilsCrossed,
+    defaultGridPos: { w: 4, h: 7 },
+    defaultConfig: { slots: ['dinner'] },
+    color: 'from-orange-500/20 to-amber-500/20 text-orange-300 border-orange-500/30',
+    isNew: true,
   },
   {
     type: 'rss',
@@ -195,7 +219,7 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
       type: tpl.type,
       title: tpl.title,
       gridPos: { x: 0, y: 0, w: tpl.defaultGridPos.w, h: tpl.defaultGridPos.h },
-      config: tpl.defaultConfig || {},
+      config: JSON.parse(JSON.stringify(tpl.defaultConfig || {})),
     });
     onClose();
   };
@@ -250,6 +274,11 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
                     <span className="text-sm font-bold text-white group-hover:text-blue-400 transition-colors">
                       {tpl.title}
                     </span>
+                    {tpl.isNew && (
+                      <span className="ml-2 shrink-0 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-300">
+                        New
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-gray-400 mt-1 leading-relaxed">
                     {tpl.description}

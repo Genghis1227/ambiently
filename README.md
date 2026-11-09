@@ -39,7 +39,10 @@
   * **Local / NAS Multi-Folder Stacking (Up to 5,000+ Photos):** Multi-folder selection with live thumbnails, 8-level recursive directory scanning, and real-time scanning feedback for local disks and mapped network drives.
   * **Plex Media Server:** 1-scan QR code 4-digit PIN authentication to discover and stream private libraries from Synology/TrueNAS/QNAP servers.
   * **Curated Photography:** Instant scenic presets with browser `CacheStorage` resilience for offline playback.
-* **📅 Multi-Calendar Feeds:** Unified chronological agenda & monthly grid parsing multiple `webcal://` and `.ics` feeds with per-calendar color tags via Cloudflare edge workers.
+* **📅 Multi-Calendar Feeds:** Unified chronological agenda & monthly grid parsing multiple `webcal://` and `.ics` feeds with per-calendar color tags via Cloudflare edge workers. Each link is checked when it's added, and a calendar that can't be read says so on the tile.
+* **✅ Chores & Rewards (free):** Daily, weekly, some-days and one-time chores for each family member. Kids tap to tick them off and earn stars, and spending stars on a reward asks for the board PIN. Chores reset on their own, with nothing to do at midnight.
+* **🍽️ Meal Plan (free):** Plan the week's breakfasts, lunches or dinners, reuse past meals, and send their ingredients to a shopping-list checklist that everyone can tick off from their phone.
+* **🕐 12/24-hour clock and Monday weeks:** One setting for every clock, calendar, meal plan and weekly chore.
 * **🔒 Kiosk Security & Hardware Polish:**
   * Screen Wake Lock API & Fullscreen Mode.
   * Scheduled Night Mode with low-glow, pixel-shifting OLED clock to prevent screen burn-in.
@@ -93,6 +96,36 @@ Ambiently is built on an **offline-first local architecture**:
    * **Session Persistence & 1-Click Reconnect:** Ambiently stores the file handle securely inside IndexedDB. When reopening or reloading the app, Ambiently attempts silent permission verification (`queryPermission()`), or displays a 1-click **Reconnect Auto-Sync** button so you never have to re-browse your folder tree.
    * **Cloud Sync via Local Folders:** If you place `ambiently-data.json` inside a local **Dropbox, Google Drive, OneDrive, Nextcloud, or Synology Drive** folder, desktop sync clients will automatically detect updates and replicate your dashboard state across all your devices without routing data through third-party servers.
 3. **Universal 1-Click Export & Restore:** For non-Chromium browsers (Safari, Firefox, iOS, Android), 1-click **Download .json** and **Upload & Restore** provide complete standalone backup files that can be imported onto any device in seconds.
+
+---
+
+## 🏠 Self-Hosting (Docker or Node)
+
+Ambiently also runs without Cloudflare: on a home server, a NAS, or any machine with Docker or Node (the image is built for x86-64 and 64-bit ARM, such as a Raspberry Pi 4 or 5 with a 64-bit OS). A small Node server (`server/index.ts`) serves the app and the same calendar, RSS and photo-album services, with the same security headers.
+
+**Docker** (run in the folder you cloned):
+
+```bash
+docker compose up -d
+```
+
+Then open `http://<that machine>:8080`. To use cloud sync, pass your Supabase project when building (the publishable key is public by design; never use the `service_role` key):
+
+```bash
+docker build --build-arg VITE_SUPABASE_URL=https://xyz.supabase.co --build-arg VITE_SUPABASE_ANON_KEY=your-publishable-key -t ambiently .
+```
+
+**Without Docker** (Node 20 or newer):
+
+```bash
+npm ci && npm run build && npm run build:server && npm start
+```
+
+`PORT` and `HOST` change where it listens (default `0.0.0.0:8080`).
+
+**Use HTTPS for the screens.** Browsers only allow the PIN lock, keep-awake (Wake Lock), installing the app and offline mode on `https://` pages or `localhost`. Over plain `http://192.168.x.x` the board shows, but those four are switched off. Put the server behind a reverse proxy with a certificate (Caddy, Nginx Proxy Manager, Traefik), or use Tailscale Serve or a Cloudflare Tunnel.
+
+Plain static hosting (copying `dist/` to any web server) also works, except calendars, RSS and Google Photos albums, which need the services. The calendar tile says so when they're missing.
 
 ---
 

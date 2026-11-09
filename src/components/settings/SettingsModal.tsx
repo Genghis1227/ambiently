@@ -38,6 +38,8 @@ import {
   RotateCw,
   Sparkles,
   Loader2,
+  Clock,
+  CalendarDays,
 } from 'lucide-react';
 import { useUpdateChecker } from '../../services/updateChecker';
 import { db } from '../../services/db';
@@ -1168,6 +1170,61 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                     </button>
                   ))}
                 </div>
+              </div>
+            </div>
+
+            {/* Clock format and first day of the week, used by every clock, calendar and planner tile */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-2 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-blue-400" />
+                  Clock Format
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    ['auto', 'Auto'],
+                    ['12h', '12-hour'],
+                    ['24h', '24-hour'],
+                  ] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      onClick={() => updateSettings({ timeFormat: value })}
+                      className={`py-2 px-2 rounded-xl border text-xs font-medium transition-all ${
+                        (settings.timeFormat || 'auto') === value
+                          ? 'bg-blue-600/20 border-blue-500 text-blue-300'
+                          : 'border-gray-800 text-gray-400 hover:bg-gray-800'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-gray-500 mt-1.5">Auto follows this device's language settings.</p>
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-2 flex items-center gap-1.5">
+                  <CalendarDays className="w-3.5 h-3.5 text-blue-400" />
+                  Week Starts On
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    ['sunday', 'Sunday'],
+                    ['monday', 'Monday'],
+                  ] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      onClick={() => updateSettings({ weekStartsOn: value })}
+                      className={`py-2 px-2 rounded-xl border text-xs font-medium transition-all ${
+                        (settings.weekStartsOn || 'sunday') === value
+                          ? 'bg-blue-600/20 border-blue-500 text-blue-300'
+                          : 'border-gray-800 text-gray-400 hover:bg-gray-800'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-gray-500 mt-1.5">Used by the calendar, meal plan and weekly chores.</p>
               </div>
             </div>
 

@@ -106,6 +106,19 @@ Every widget features a top-right **Tile Settings (`⚙️`)** button to customi
 * **Milestone Countdown (`CountdownWidget.tsx`):**
   * Live days/hours/minutes/seconds countdown timer to upcoming vacations, birthdays, or milestones.
 
+* **Chores & Rewards (`ChoresWidget.tsx`):**
+  * Family members with a name, emoji and color, each with their own column, and an **Anyone** column for shared chores. Tapping an Anyone chore asks who did it.
+  * Chores repeat **every day**, on **some days** (e.g. weekdays), **once a week** or **one time**. They reset by comparing the day or week they were done with today, so nothing is written at midnight. The week follows the **Week Starts On** setting.
+  * Each chore earns stars. Rewards (e.g. *Ice cream, 10★*) are spent from a person's stars, and on a PIN-protected board spending needs the PIN, so a parent approves.
+  * An **All done!** banner per person, big tap targets, and text that grows with the tile.
+  * Works in the phone view too. Quick taps are saved one after another so none are lost.
+* **Meal Plan (`MealPlanWidget.tsx`):**
+  * A week of breakfasts, lunches and/or dinners, with previous/next week. Tap a day to plan a meal, with suggestions from recent meals.
+  * Ingredients per meal. **Add ingredients to the shopping list** puts the rest of the week's ingredients into a checklist note: one you pick, one named Shopping, Grocery or Essentials, or a new **🛒 Shopping List**. Items already on the list aren't repeated, and ticked-off ones are unticked.
+* **Clock Format & Week Start (Settings → Display & Kiosk):** 12-hour, 24-hour, or follow the device's language; week starts on Sunday or Monday. Used by every clock, the night clock, the calendar views, the meal plan and weekly chores.
+* **Calendar feed health:** links are read once before they're added, and a calendar that can't be read shows why on the tile (for example *the calendar's server answered 404*) and how old its last good copy is. A copy of the site with no calendar service says so.
+* **Tile isolation:** if one tile hits an error, only that tile shows a message and retries; the rest of the board keeps running.
+
 ---
 
 ## 5. Mobile Companion Mode & Hybrid Sync (Phase 5)
@@ -133,8 +146,6 @@ Every widget features a top-right **Tile Settings (`⚙️`)** button to customi
 
 ---
 
-## 6. Upcoming Roadmap (`v0.3.0` Next Up)
+## 6. Upcoming Roadmap
 
-* **Family Chore & Habit Tracker Widget (`ChoreTrackerWidget.tsx`):**
-  * Dedicated recurring routine & chore board widget with **Daily Auto-Reset** (automatically unchecks daily routines at midnight while preserving streak counts) or **Manual Reset**.
-  * **Family Member Avatar / Color Tags** (e.g., *Kids*, *Morning*, *Evening*, or custom names) and an animated circular completion ring when all daily tasks are finished.
+* The chore tracker that was listed here is now the **Chores & Rewards** tile (§4). Streak counts are not built yet.

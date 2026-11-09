@@ -1,0 +1,9 @@
+# docker compose up -d   then open http://<this machine>:8080
+# Put it behind HTTPS (see "Self-hosting" in the README) so the PIN lock, keep-awake and offline mode work.
+services:
+  ambiently:
+    build: .
+    image: ambiently
+    ports:
+      - "8080:8080"
+    restart: unless-stopped

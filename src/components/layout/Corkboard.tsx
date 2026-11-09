@@ -40,6 +40,9 @@ import { CountdownWidget } from '../widgets/CountdownWidget';
 import { QuotesWidget } from '../widgets/QuotesWidget';
 import { TextBoxWidget } from '../widgets/TextBoxWidget';
 import { CalendarWidget } from '../widgets/CalendarWidget';
+import { ChoresWidget } from '../widgets/ChoresWidget';
+import { TileErrorBoundary } from '../common/TileErrorBoundary';
+import { MealPlanWidget } from '../widgets/MealPlanWidget';
 import { RssWidget } from '../widgets/RssWidget';
 import { PhotoFrameWidget } from '../widgets/PhotoFrameWidget';
 import { StickyNotesWidget } from '../widgets/StickyNotesWidget';
@@ -1484,7 +1487,12 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
             {/* Widget Inner Renderers */}
             <div className="w-full h-full flex flex-col justify-between overflow-hidden">
-              {widget.type === 'weather' ? (
+              <TileErrorBoundary label={widget.title} resetKey={widget.updated_at}>
+              {widget.type === 'chores' ? (
+                <ChoresWidget widgetId={widget.id} config={widget.config || {}} isLight={isWidgetLight} />
+              ) : widget.type === 'meal_plan' ? (
+                <MealPlanWidget widgetId={widget.id} tabId={widget.tabId} config={widget.config || {}} isLight={isWidgetLight} />
+              ) : widget.type === 'weather' ? (
                 <WeatherWidget
                   locationName={widget.config?.locationName}
                   latitude={widget.config?.latitude}
@@ -1650,6 +1658,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   isLight={isWidgetLight}
                 />
               ) : null}
+              </TileErrorBoundary>
             </div>
           </div>
         );

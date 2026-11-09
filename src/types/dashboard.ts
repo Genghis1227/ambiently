@@ -32,7 +32,64 @@ export type WidgetType =
   | 'quotes'
   | 'embed'
   | 'textbox'
-  | 'image';
+  | 'image'
+  | 'chores'
+  | 'meal_plan';
+
+/** A family member on a chores tile. */
+export interface ChorePerson {
+  id: string;
+  name: string;
+  color: string; // hex
+  emoji?: string;
+}
+
+export interface ChoreItem {
+  id: string;
+  title: string;
+  emoji?: string;
+  personId: string | null; // null = anyone can do it
+  repeat: 'daily' | 'weekly' | 'once';
+  days?: number[]; // daily chores only: weekdays it's due (0 = Sunday); empty or missing = every day
+  stars: number;
+}
+
+export interface ChoreReward {
+  id: string;
+  title: string;
+  emoji?: string;
+  cost: number;
+}
+
+/** Who finished a chore, in which period (a day, a week, or 'once'), and the stars it gave. */
+export interface ChoreDone {
+  period: string;
+  by?: string;
+  stars: number;
+  on: string; // local date it was finished, YYYY-MM-DD
+}
+
+export interface ChoresWidgetConfig {
+  people?: ChorePerson[];
+  chores?: ChoreItem[];
+  rewards?: ChoreReward[];
+  done?: Record<string, ChoreDone>;
+  stars?: Record<string, number>; // star balance per person
+}
+
+export type MealSlot = 'breakfast' | 'lunch' | 'dinner';
+
+export interface MealEntry {
+  title: string;
+  ingredients?: string[];
+}
+
+export interface MealPlanWidgetConfig {
+  slots?: MealSlot[]; // default: dinner only
+  meals?: Record<string, Partial<Record<MealSlot, MealEntry>>>; // keyed by local date YYYY-MM-DD
+  library?: MealEntry[]; // recently planned meals, newest first
+  listNoteId?: string; // the checklist note ingredients are added to
+}
 
 export interface RssWidgetConfig {
   feedUrl?: string;
@@ -131,6 +188,8 @@ export interface AppSettings {
   carouselEnabled: boolean;
   defaultRotateDurationSec: number;
   displayDensity: 0.75 | 1.0 | 1.25 | 1.5; // per-device UI density
+  timeFormat?: 'auto' | '12h' | '24h'; // 'auto' (or unset) follows the device's language
+  weekStartsOn?: 'sunday' | 'monday'; // unset = Sunday
   wakeLockEnabled: boolean;
   
   // Night Mode

@@ -26,6 +26,8 @@ import {
   Sparkles,
   Cloud,
   Smartphone,
+  ListChecks,
+  UtensilsCrossed,
 } from 'lucide-react';
 import type { DashboardTab, DashboardWidget, StickyNoteItem, WidgetThemeMode } from '../../types/dashboard';
 import { getCurrentUser } from '../../services/supabase';
@@ -38,6 +40,9 @@ const ChangelogModal = React.lazy(() =>
   import('../changelog/ChangelogModal').then((m) => ({ default: m.ChangelogModal }))
 );
 import { CalendarWidget } from '../widgets/CalendarWidget';
+import { ChoresWidget } from '../widgets/ChoresWidget';
+import { TileErrorBoundary } from '../common/TileErrorBoundary';
+import { MealPlanWidget } from '../widgets/MealPlanWidget';
 import { ClockWeatherWidget } from '../widgets/ClockWeatherWidget';
 import { ClockWidget } from '../widgets/ClockWidget';
 import { WorldClockWidget } from '../widgets/WorldClockWidget';
@@ -259,6 +264,10 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return Sparkles;
       case 'sticky_notes':
         return StickyNote;
+      case 'chores':
+        return ListChecks;
+      case 'meal_plan':
+        return UtensilsCrossed;
       default:
         return LayoutGrid;
     }
@@ -290,6 +299,10 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return 'Image / GIF';
       case 'sticky_notes':
         return 'Notes Tile';
+      case 'chores':
+        return 'Chores & Rewards';
+      case 'meal_plan':
+        return 'Meal Plan';
       default:
         return 'Widget';
     }
@@ -297,6 +310,18 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
 
   const renderWidgetContent = (widget: DashboardWidget, isLight: boolean = false) => {
     switch (widget.type) {
+      case 'chores':
+        return (
+          <div className="min-h-[18rem] max-h-[32rem] h-[60vh] w-full">
+            <ChoresWidget widgetId={widget.id} config={widget.config || {}} isLight={isLight} />
+          </div>
+        );
+      case 'meal_plan':
+        return (
+          <div className="min-h-[24rem] max-h-[36rem] h-[70vh] w-full">
+            <MealPlanWidget widgetId={widget.id} tabId={widget.tabId} config={widget.config || {}} isLight={isLight} />
+          </div>
+        );
       case 'clock_weather':
         return (
           <ClockWeatherWidget
@@ -741,7 +766,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
                           ? 'bg-slate-50/90 border-slate-200'
                           : 'bg-gray-950/60 border-gray-800/40'
                       }`}>
-                        {renderWidgetContent(widget, isWidgetLight)}
+                        <TileErrorBoundary label={widget.title} resetKey={widget.updated_at}>{renderWidgetContent(widget, isWidgetLight)}</TileErrorBoundary>
                       </div>
                     </div>
                   );

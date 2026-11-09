@@ -22,6 +22,8 @@ interface LayoutBox {
 
 const WIDGET_PRIORITY: Record<string, number> = {
   calendar: 1,
+  chores: 2,
+  meal_plan: 3,
   photo_frame: 2,
   embed: 3,
   clock_weather: 4,

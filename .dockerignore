@@ -1,0 +1,12 @@
+node_modules
+dist
+dist-server
+.git
+.github
+.wrangler
+.mf
+*.log
+.env
+.env.*
+ambiently-data.json
+*.bak
