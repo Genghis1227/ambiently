@@ -16,6 +16,64 @@ function isCancelled(component: any): boolean {
   return String(component.getFirstPropertyValue('status') || '').toUpperCase() === 'CANCELLED';
 }
 
+// A feed should define every time zone it names (VTIMEZONE), but some don't. ical.js then treats
+// "09:00 in Europe/Berlin" as 09:00 in the server's own zone (UTC on Cloudflare), so the event moves
+// by the zone's offset. When the name is a standard IANA zone, work out the real moment instead.
+const ianaZoneCache = new Map<string, Intl.DateTimeFormat | null>();
+
+function zoneFormatter(tzid: string): Intl.DateTimeFormat | null {
+  if (!ianaZoneCache.has(tzid)) {
+    try {
+      ianaZoneCache.set(
+        tzid,
+        new Intl.DateTimeFormat('en-US', {
+          timeZone: tzid,
+          hourCycle: 'h23',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        })
+      );
+    } catch {
+      ianaZoneCache.set(tzid, null);
+    }
+  }
+  return ianaZoneCache.get(tzid) ?? null;
+}
+
+function zoneOffsetMs(instantMs: number, fmt: Intl.DateTimeFormat): number {
+  const parts = fmt.formatToParts(new Date(instantMs));
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  const wall = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour') % 24, get('minute'), get('second'));
+  return wall - instantMs;
+}
+
+function wallTimeInZoneToDate(time: any, fmt: Intl.DateTimeFormat): Date {
+  const wall = Date.UTC(time.year, time.month - 1, time.day, time.hour, time.minute, time.second);
+  let instant = wall - zoneOffsetMs(wall, fmt);
+  // Near a daylight-saving change the offset at the first guess can be the other one
+  const second = wall - zoneOffsetMs(instant, fmt);
+  if (second !== instant) instant = second;
+  return new Date(instant);
+}
+
+function tzidOf(component: any, propName: 'dtstart' | 'dtend'): string | null {
+  const prop = component?.getFirstProperty?.(propName);
+  const tzid = prop?.getParameter?.('tzid');
+  return typeof tzid === 'string' && tzid ? tzid : null;
+}
+
+function toInstant(time: any, tzid: string | null): Date {
+  if (tzid && !time.isDate && time.zone === ICAL.Timezone.localTimezone) {
+    const fmt = zoneFormatter(tzid);
+    if (fmt) return wallTimeInZoneToDate(time, fmt);
+  }
+  return time.toJSDate();
+}
+
 export async function onRequestGet(context: PagesContext): Promise<Response> {
   const refused = refuseOtherSites(context.request);
   if (refused) return refused;
@@ -51,12 +109,21 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
 
     if (!fetchRes.ok) {
       return new Response(
-        JSON.stringify({ error: `Failed to fetch calendar feed: ${fetchRes.statusText}` }),
+        JSON.stringify({
+          error: `The calendar's server answered ${fetchRes.status}${fetchRes.statusText ? ` ${fetchRes.statusText}` : ''}. Check the link is still the calendar's secret or public iCal address.`,
+        }),
         { status: fetchRes.status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' } }
       );
     }
 
     const icsText = fetchRes.text;
+    if (!/BEGIN:VCALENDAR/i.test(icsText.slice(0, 4096))) {
+      // Usually a calendar's web page pasted instead of its iCal (.ics) address
+      return new Response(
+        JSON.stringify({ error: "That link didn't return a calendar file. Use the calendar's iCal (.ics) address." }),
+        { status: 422, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' } }
+      );
+    }
     const jcalData = ICAL.parse(icsText);
     const comp = new ICAL.Component(jcalData);
     const vevents = comp.getAllSubcomponents('vevent');
@@ -113,10 +180,14 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
             const occ = event.getOccurrenceDetails(nextTime);
             if (isCancelled(occ.item.component)) continue;
 
-            const occStart = occ.startDate.toJSDate();
+            const startTzid = tzidOf(occ.item.component, 'dtstart') || tzidOf(v, 'dtstart');
+            const endTzid = tzidOf(occ.item.component, 'dtend') || startTzid;
+            const occStart = toInstant(occ.startDate, startTzid);
+            const occEnd = occ.endDate ? toInstant(occ.endDate, endTzid) : occStart;
             const occIsAllDay = Boolean(occ.startDate.isDate);
 
-            if (occStart >= rangeStart && occStart <= rangeEnd) {
+            // Kept while any part of it is in the window, so a long event that's still going on shows
+            if (occEnd >= rangeStart && occStart <= rangeEnd) {
               let startStr: string;
               let endStr: string | null = null;
 
@@ -127,7 +198,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
                 }
               } else {
                 startStr = occStart.toISOString();
-                endStr = occ.endDate ? occ.endDate.toJSDate().toISOString() : null;
+                endStr = occ.endDate ? occEnd.toISOString() : null;
               }
 
               parsedEvents.push({
@@ -143,8 +214,10 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
           }
         } else {
           // Single (non-recurring) event
-          const evtDate = event.startDate.toJSDate();
-          if (evtDate >= rangeStart && evtDate <= rangeEnd) {
+          const startTzid = tzidOf(v, 'dtstart');
+          const evtDate = toInstant(event.startDate, startTzid);
+          const evtEnd = event.endDate ? toInstant(event.endDate, tzidOf(v, 'dtend') || startTzid) : evtDate;
+          if (evtEnd >= rangeStart && evtDate <= rangeEnd) {
             let startStr: string;
             let endStr: string | null = null;
 
@@ -155,7 +228,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
               }
             } else {
               startStr = evtDate.toISOString();
-              endStr = event.endDate ? event.endDate.toJSDate().toISOString() : null;
+              endStr = event.endDate ? evtEnd.toISOString() : null;
             }
 
             parsedEvents.push({

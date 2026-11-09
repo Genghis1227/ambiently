@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.2] - 2026-11-09
+
+### Calendar Trustworthiness & Feed Health
+* **Fallback IANA Timezone Offset Resolution (`functions/api/ical.ts`):**
+  * When third-party or school calendar feeds omit explicit `VTIMEZONE` blocks, standard IANA zone names are resolved via `Intl.DateTimeFormat` (`zoneFormatter`, `wallTimeInZoneToDate`).
+  * Prevents events from being wrongly interpreted in server local time (UTC on Cloudflare Pages) and shifting on the display.
+* **Ongoing & Multi-Day Event Retention (`functions/api/ical.ts`, `src/components/widgets/CalendarWidget.tsx`):**
+  * Multi-day events and ongoing activities (vacations, conferences, week-long trips) remain visible while in progress across agenda and multi-day views until their actual end date.
+* **Pasted Webpage URL Detection (`functions/api/ical.ts`):**
+  * Checks for `BEGIN:VCALENDAR` in response payloads, returning a descriptive 422 HTTP response when an HTML calendar webpage URL was pasted instead of an `.ics` feed URL.
+* **Live Feed Pre-Flight Testing (`src/services/feeds.ts`, `src/components/widgets/WidgetSettingsModal.tsx`):**
+  * Testing newly entered calendar links verifies access and shows event count feedback before saving, with an "Add anyway" bypass if a feed is temporarily unreachable.
+* **Feed Health Warning Banners (`src/services/feeds.ts`, `src/components/widgets/CalendarWidget.tsx`):**
+  * Displays a non-intrusive warning banner at the top of the calendar widget if a feed fails to refresh, showing the error and how long ago it last succeeded.
+
+---
+
 ## [0.4.1] - 2026-11-09
 
 ### Settings & Time Preferences
