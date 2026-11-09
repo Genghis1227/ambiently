@@ -91,6 +91,7 @@ export interface ExternalFetchResult {
   statusText: string;
   url: string; // the address the answer finally came from
   text: string; // empty unless ok
+  canEmbedDirectly?: boolean; // true if no X-Frame-Options or CSP frame-ancestors header blocks iframes
 }
 
 async function readCapped(res: Response, maxBytes: number, signal: AbortSignal): Promise<string> {
@@ -175,8 +176,18 @@ export async function fetchExternal(rawUrl: string, options: ExternalFetchOption
         await res.body?.cancel();
         return { ok: false, status: res.status, statusText: res.statusText, url: url.toString(), text: '' };
       }
+      const xfo = (res.headers.get('x-frame-options') || '').trim();
+      const csp = (res.headers.get('content-security-policy') || '').trim();
+      const hasFrameBlock = Boolean(xfo) || /frame-ancestors/i.test(csp);
       const text = await readCapped(res, maxBytes, controller.signal);
-      return { ok: true, status: res.status, statusText: res.statusText, url: url.toString(), text };
+      return {
+        ok: true,
+        status: res.status,
+        statusText: res.statusText,
+        url: url.toString(),
+        text,
+        canEmbedDirectly: !hasFrameBlock,
+      };
     }
   } catch (err) {
     if (err instanceof ExternalFetchError) throw err;

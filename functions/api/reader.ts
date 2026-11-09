@@ -1,32 +1,50 @@
 // Cloudflare Pages Function: /functions/api/reader.ts
-// Extracts clean article content, title, byline, lead image, and formatted body using Readability & DOM parsing
+// Extracts clean article content, title, byline, lead image, and formatted body using Readability & semantic DOM parsing
 
 import { parseHTML } from 'linkedom';
 import { Readability } from '@mozilla/readability';
-import { fetchExternal, externalFetchErrorResponse, refuseOtherSites, ExternalFetchError, type ExternalFetchResult } from '../_shared/fetchExternal';
+import {
+  fetchExternal,
+  externalFetchErrorResponse,
+  refuseOtherSites,
+  ExternalFetchError,
+  type ExternalFetchResult,
+} from '../_shared/fetchExternal';
 
 interface PagesContext {
   request: Request;
 }
 
-// Major news outlets (NYTimes, WSJ, Bloomberg) block generic datacenter / custom user-agents with 403,
-// but explicitly whitelist recognized social link preview bots (Facebook, Slack, Twitter) for unrolling.
-const FALLBACK_USER_AGENTS = [
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+const PRIMARY_READER_USER_AGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Ambiently-Reader/1.0 (+https://dashboard.trinhism.com)',
+  'Ambiently-Display/1.0 (+https://dashboard.trinhism.com)',
+  'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
   'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.html)',
-  'Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)',
 ];
+
+const BOILERPLATE_STUB_PATTERNS = [
+  /New York Times content is made available for your personal, non-commercial\s+use subject to our Terms of Service/i,
+  /Use of any device, tool, or process designed to data mine or scrape the content/i,
+  /Please enable JS and disable any ad blocker/i,
+  /You have been blocked/i,
+];
+
+function isBoilerplateStub(text: string): boolean {
+  const trimmed = (text || '').trim();
+  if (!trimmed) return true;
+  return BOILERPLATE_STUB_PATTERNS.some((re) => re.test(trimmed)) && trimmed.length < 1200;
+}
 
 async function fetchPageWithFallback(normalizedUrl: string): Promise<ExternalFetchResult> {
   let lastRes: ExternalFetchResult | null = null;
-  for (const ua of FALLBACK_USER_AGENTS) {
+  for (const ua of PRIMARY_READER_USER_AGENTS) {
     try {
       const res = await fetchExternal(normalizedUrl, {
         maxBytes: 10 * 1024 * 1024, // 10 MB cap
         timeoutMs: 12_000,
         headers: {
           'User-Agent': ua,
-          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Accept-Language': 'en-US,en;q=0.9',
         },
       });
@@ -43,6 +61,14 @@ async function fetchPageWithFallback(normalizedUrl: string): Promise<ExternalFet
   }
   if (lastRes) return lastRes;
   throw new Error('Failed to fetch article from destination server.');
+}
+
+function sanitizeArticleHtml(rawHtml: string): string {
+  return rawHtml
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+    .replace(/\s+on[a-z]+="[^"]*"/gi, '')
+    .replace(/\s+on[a-z]+='[^']*'/gi, '');
 }
 
 export async function onRequestGet(context: PagesContext): Promise<Response> {
@@ -83,7 +109,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     const finalUrl = fetchRes.url || normalizedUrl;
     const { document } = parseHTML(htmlText);
 
-    // Extract OpenGraph / Meta tag fallbacks before modifying document
+    // 1. Extract OpenGraph / Meta tag metadata before mutating the DOM
     const getMeta = (selectors: string[]): string | null => {
       for (const sel of selectors) {
         const el = document.querySelector(sel);
@@ -95,14 +121,22 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
 
     const ogTitle = getMeta(['meta[property="og:title"]', 'meta[name="twitter:title"]']);
     const ogSiteName = getMeta(['meta[property="og:site_name"]']);
-    const ogAuthor = getMeta(['meta[name="author"]', 'meta[property="article:author"]', 'meta[name="twitter:creator"]']);
+    const ogAuthor = getMeta([
+      'meta[name="author"]',
+      'meta[property="article:author"]',
+      'meta[name="twitter:creator"]',
+    ]);
     const ogPublishedTime = getMeta([
       'meta[property="article:published_time"]',
       'meta[name="date"]',
       'meta[name="publish-date"]',
       'meta[name="sailthru.date"]',
     ]);
-    const ogDescription = getMeta(['meta[property="og:description"]', 'meta[name="description"]', 'meta[name="twitter:description"]']);
+    const ogDescription = getMeta([
+      'meta[property="og:description"]',
+      'meta[name="description"]',
+      'meta[name="twitter:description"]',
+    ]);
     const ogImage = getMeta(['meta[property="og:image"]', 'meta[name="twitter:image"]']);
 
     let absoluteLeadImage: string | null = null;
@@ -114,10 +148,40 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       }
     }
 
-    // Resolve relative image URLs and clean image attributes
+    // 2. Extract JSON-LD articleBody if embedded in structured data
+    let jsonLdBody = '';
+    const ldScripts = Array.from(
+      document.querySelectorAll('script[type="application/ld+json"]')
+    ) as any[];
+    for (const s of ldScripts) {
+      try {
+        const parsedLd = JSON.parse(s.textContent || '');
+        const items = Array.isArray(parsedLd)
+          ? parsedLd
+          : parsedLd?.['@graph']
+            ? parsedLd['@graph']
+            : [parsedLd];
+        for (const item of items) {
+          if (
+            item &&
+            typeof item.articleBody === 'string' &&
+            item.articleBody.trim().length > jsonLdBody.length
+          ) {
+            jsonLdBody = item.articleBody.trim();
+          }
+        }
+      } catch {
+        // Ignore malformed JSON-LD blocks
+      }
+    }
+
+    // 3. Resolve relative image URLs and links across the document first
     const images = Array.from(document.querySelectorAll('img')) as any[];
     for (const img of images) {
-      const src = img.getAttribute('src') || img.getAttribute('data-src') || img.getAttribute('data-original');
+      const src =
+        img.getAttribute('src') ||
+        img.getAttribute('data-src') ||
+        img.getAttribute('data-original');
       if (src) {
         try {
           img.setAttribute('src', new URL(src, finalUrl).href);
@@ -132,7 +196,6 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       img.removeAttribute('onload');
     }
 
-    // Resolve relative links
     const anchors = Array.from(document.querySelectorAll('a')) as any[];
     for (const a of anchors) {
       const href = a.getAttribute('href');
@@ -145,7 +208,69 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       }
     }
 
-    // Run Mozilla Readability
+    // 4. Capture semantic <article> / articleBody container BEFORE Readability mutates the DOM
+    const semanticTarget =
+      document.querySelector('[itemprop="articleBody"]') ||
+      document.querySelector('article .markdown-body') ||
+      document.querySelector('article .post-content') ||
+      document.querySelector('article .entry-content') ||
+      document.querySelector('article .article-body') ||
+      document.querySelector('article') ||
+      document.querySelector('main [role="main"]');
+
+    let semanticHtml = '';
+    let semanticText = '';
+    if (semanticTarget) {
+      const { document: cloneDoc } = parseHTML(
+        `<div id="semantic-root">${semanticTarget.innerHTML}</div>`
+      );
+      const root = cloneDoc.getElementById('semantic-root');
+      if (root) {
+        const junkSelectors = [
+          'script',
+          'style',
+          'iframe',
+          'nav',
+          'footer',
+          'aside',
+          'form',
+          'noscript',
+          'svg',
+          '.sidebar',
+          '.Layout-sidebar',
+          '.related',
+          '.comments',
+          '.share',
+          '.social',
+          '[aria-label="Footer navigation"]',
+          '[role="navigation"]',
+          '[role="complementary"]',
+        ].join(', ');
+        for (const el of Array.from(root.querySelectorAll(junkSelectors)) as any[]) {
+          el.remove();
+        }
+        semanticHtml = root.innerHTML.trim();
+        semanticText = (root.textContent || '').trim();
+      }
+    }
+
+    // 5. Protect ancestors of <article> and <main> so Readability's UNLIKELY_CANDIDATES regex
+    // (which matches "sidebar" in classes like "Layout--sidebarPosition-end") never deletes the article wrapper!
+    const coreNodes = Array.from(
+      document.querySelectorAll('article, main, [role="main"], [itemprop="articleBody"]')
+    ) as any[];
+    for (const core of coreNodes) {
+      let el = core;
+      while (el && el.tagName !== 'BODY' && el.tagName !== 'HTML') {
+        if (typeof el.removeAttribute === 'function') {
+          el.removeAttribute('class');
+          el.removeAttribute('id');
+        }
+        el = el.parentElement;
+      }
+    }
+
+    // 6. Run Mozilla Readability
     const reader = new Readability(document as any, {
       charThreshold: 80,
       keepClasses: false,
@@ -154,41 +279,44 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
 
     const title = parsed?.title || ogTitle || document.title || 'Untitled Article';
     const byline = parsed?.byline || ogAuthor || null;
-    const siteName = parsed?.siteName || ogSiteName || new URL(finalUrl).hostname.replace(/^www\./, '');
+    const siteName =
+      parsed?.siteName || ogSiteName || new URL(finalUrl).hostname.replace(/^www\./, '');
     const publishedTime = parsed?.publishedTime || ogPublishedTime || null;
-    const excerpt = parsed?.excerpt || ogDescription || null;
+    const excerpt = ogDescription || parsed?.excerpt || null;
+
     let contentHtml = parsed?.content || '';
-    const textContent = parsed?.textContent || '';
+    let textContent = (parsed?.textContent || '').trim();
 
-    // If Readability didn't extract content (e.g. non-standard structure), fallback to main/article text
-    if (!contentHtml.trim() || textContent.trim().length < 50) {
-      const fallbackContainer =
-        document.querySelector('article') ||
-        document.querySelector('main') ||
-        document.querySelector('[role="main"]') ||
-        document.querySelector('.content') ||
-        document.body;
-
-      if (fallbackContainer) {
-        // Strip scripts, styles, forms, navs
-        const toRemove = Array.from(
-          fallbackContainer.querySelectorAll('script, style, iframe, nav, header, footer, form, noscript, svg')
-        ) as any[];
-        for (const el of toRemove) {
-          el.remove();
-        }
-        contentHtml = fallbackContainer.innerHTML || '';
-      }
+    if (isBoilerplateStub(textContent)) {
+      contentHtml = '';
+      textContent = '';
     }
 
-    // Clean up contentHtml (remove any scripts, on* handlers)
-    contentHtml = contentHtml
-      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-      .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
-      .replace(/\s+on[a-z]+="[^"]*"/gi, '')
-      .replace(/\s+on[a-z]+='[^']*'/gi, '');
+    // 7. If semantic <article> extracted substantially more content than Readability, prefer semantic <article>
+    if (
+      semanticText.length > 250 &&
+      !isBoilerplateStub(semanticText) &&
+      (textContent.length < 250 || semanticText.length > textContent.length * 1.35)
+    ) {
+      contentHtml = semanticHtml;
+      textContent = semanticText;
+    }
 
-    const wordCount = textContent.trim().split(/\s+/).filter(Boolean).length;
+    // 8. If still empty/short and JSON-LD articleBody is present, format paragraphs from JSON-LD
+    if (textContent.length < 200 && jsonLdBody.length > 200 && !isBoilerplateStub(jsonLdBody)) {
+      contentHtml = jsonLdBody
+        .split(/\n\n+/)
+        .map((p) => `<p>${p.trim()}</p>`)
+        .join('\n');
+      textContent = jsonLdBody;
+    }
+
+    contentHtml = sanitizeArticleHtml(contentHtml);
+
+    const isSummaryOnly = textContent.length < 120;
+    const wordCount = textContent
+      ? textContent.split(/\s+/).filter(Boolean).length
+      : (excerpt || '').split(/\s+/).filter(Boolean).length;
     const readingTimeMinutes = Math.max(1, Math.ceil(wordCount / 200));
 
     return new Response(
@@ -204,11 +332,13 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
         contentHtml,
         textContent: textContent.slice(0, 500),
         readingTimeMinutes,
+        isSummaryOnly,
+        canEmbedDirectly: Boolean(fetchRes.canEmbedDirectly),
       }),
       {
         headers: {
           'Content-Type': 'application/json',
-          'Cache-Control': 'public, max-age=300',
+          'Cache-Control': 'public, max-age=180',
         },
       }
     );
@@ -220,7 +350,10 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       JSON.stringify({
         error: err instanceof Error ? err.message : 'Failed to extract article content.',
       }),
-      { status: 500, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' } }
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' },
+      }
     );
   }
 }
