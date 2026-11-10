@@ -158,11 +158,29 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
   applyRemoteProfiles: async (remoteProfiles) => {
     if (!Array.isArray(remoteProfiles) || remoteProfiles.length === 0) return;
 
+    const LEGACY_SAMPLE_IDS = new Set(['p_tony', 'p_anh', 'p_olivia', 'p_alyssa']);
+    const isUntouchedLegacyProfile = (p: HouseholdProfile) =>
+      LEGACY_SAMPLE_IDS.has(p.id) && p.updatedAt === '1970-01-01T00:00:00.000Z';
+
     const localAll = await db.profiles.toArray();
-    const localMap = new Map(localAll.map((p) => [p.id, p]));
+    const legacyIdsToDelete: string[] = [];
+    for (const p of localAll) {
+      if (isUntouchedLegacyProfile(p)) {
+        legacyIdsToDelete.push(p.id);
+      }
+    }
+    if (legacyIdsToDelete.length > 0) {
+      await db.profiles.bulkDelete(legacyIdsToDelete);
+    }
+
+    const cleanedLocal = localAll.filter((p) => !isUntouchedLegacyProfile(p));
+    const localMap = new Map(cleanedLocal.map((p) => [p.id, p]));
     const toPut: HouseholdProfile[] = [];
 
     for (const remote of remoteProfiles) {
+      if (isUntouchedLegacyProfile(remote)) {
+        continue;
+      }
       const local = localMap.get(remote.id);
       if (!local) {
         toPut.push(remote);
@@ -177,11 +195,21 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
       }
     }
 
+    if (localMap.size === 0) {
+      await db.profiles.bulkPut(DEFAULT_HOUSEHOLD_PROFILES);
+      set({ profiles: DEFAULT_HOUSEHOLD_PROFILES });
+      profilePersistListener?.(DEFAULT_HOUSEHOLD_PROFILES);
+      return;
+    }
+
     if (toPut.length > 0) {
       await db.profiles.bulkPut(toPut);
     }
 
     const active = Array.from(localMap.values()).filter((p) => !p.deletedAt);
     set({ profiles: active });
+    if (legacyIdsToDelete.length > 0 || remoteProfiles.some(isUntouchedLegacyProfile)) {
+      profilePersistListener?.(active);
+    }
   },
 }));
