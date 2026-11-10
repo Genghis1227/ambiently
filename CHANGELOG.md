@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.11] - 2026-11-10
+
+### Toolbar Horizontal Pop-Out Panels & Flexible Weekly (1× / Any Day) Chores
+* **Compact Toolbar Horizontal Pop-Out Panels (`src/components/dock/NavigationDock.tsx`):**
+  * Grouped the **Family Hub** (`Chores & Rewards` + `Meal Planner` preview), the **`+` Add Menu** (`New Sticky Note`, `Add Widget Tile`, `Create New Canvas`), and **Quick Utilities** (`Night Mode`, `Fullscreen`, `Refresh / Apply Update`, `Hide Toolbar`) into horizontal pop-out bars so all canvas buttons fit comfortably on smaller screens without clipping.
+* **Weekly — Any Day (`1× / Week`) Chore Schedule (`src/types/chores.ts`, `src/utils/choreEngine.ts`, `src/components/chores/ParentChoreDrawer.tsx`, `src/components/chores/ChoreDashboardView.tsx`, `src/components/widgets/ChoreWidget.tsx`):**
+  * Added a flexible `Weekly — Any Day (1× / Week)` cadence option (`weeklyAnyDay: true`) allowing weekly chores to be completed on any day from Sunday to Saturday for full points without becoming overdue mid-week, and automatically completing for the rest of the week once checked off.
+
+---
+
+## [0.4.10] - 2026-11-10
+
+### iOS 18 HEIC Decoder Upgrade, Active Reward Store Management & 24h Overdue Auto-Dismiss
+* **Upgraded HEIC/HEIF Decoder (`libheif-js` v1.23.5) (`src/utils/avatarCompressor.ts`, `src/types/libheif-js.d.ts`, `vite.config.ts`):**
+  * Upgraded client-side HEIC/HEIF decoding to `libheif-js` v1.23.5 to decode modern iOS 17/18 HDR Gain Map (`tmap` / `MiHB`) `.heic` photos cleanly without Web Worker or CSP `script-src` restrictions.
+* **Active Reward Store Goal Management (`src/components/chores/ParentChoreDrawer.tsx`):**
+  * Added an **Active Reward Store Goals** section inside **Parent Settings (PIN) → Wishlist Pricing** so parents can remove (`Trash2`) or re-price live rewards in the Reward Store at any time.
+* **24-Hour Overdue Grace Window & Manual Dismiss (`src/utils/choreEngine.ts`, `src/store/choreStore.ts`, `src/components/chores/ChoreDashboardView.tsx`, `src/components/widgets/ChoreWidget.tsx`):**
+  * Overdue tasks remain actionable for a 24-hour grace window (`daysLate === 1`) and automatically transition to `expired` once past 24 hours (`daysLate > 1`), accompanied by a manual **Dismiss** button on overdue chore cards.
+
+---
+
+## [0.4.9] - 2026-11-09
+
+### HEIC Avatar Cropper, Multi-Kid Chores, Web Preview Fix & Toolbar Hub Polish
+* **Universal `.HEIC` / `.HEIF` Photo Upload & Interactive Avatar Cropper (`src/components/common/AvatarCropModal.tsx`, `src/utils/avatarCompressor.ts`, `src/components/common/HouseholdProfileManager.tsx`):**
+  * Added an interactive circular avatar placement modal supporting drag-to-pan, zoom (`1×`–`3×`), and `90°` rotation before exporting a `256×256` WebP avatar.
+* **Multi-Kid Chore Checkboxes, One-Click Duplicate & Weekly Day Badges (`src/components/chores/ParentChoreDrawer.tsx`):**
+  * Added multi-kid assignment checkboxes (`Select All Kids`) to create individual chores for multiple kids in one save, a one-click **Duplicate (`Copy`)** action on existing templates, and scheduled day-of-week labels (`weekly • Sat`) on weekly chore badges.
+* **Custom Keyboard Emoji Entry & Expanded Icon Presets (`src/components/chores/ParentChoreDrawer.tsx`, `src/components/common/HouseholdProfileManager.tsx`):**
+  * Expanded preset icons to 36 chore icons and 24 profile icons, plus a custom emoji input supporting native OS emoji keyboards (`Win + .` / `Ctrl + Cmd + Space` / mobile emoji keyboard).
+* **RSS Web Preview Service Worker Exclusion (`vite.config.ts`, `src/components/common/InAppWebViewerModal.tsx`):**
+  * Added `navigateFallbackDenylist: [/^\/api\//, /^\/functions\//]` to Workbox PWA configuration and automatic stale Service Worker recovery so **Web Preview** loads the proxied article page instead of the dashboard shell.
+* **Dedicated Middle Toolbar Hub & PIN Keyboard Fix (`src/components/dock/NavigationDock.tsx`, `src/components/kiosk/PinOverlay.tsx`, `src/App.tsx`):**
+  * Isolated the Chores & Rewards Hub into a dedicated middle section of the Navigation Dock and fixed keyboard digit entry on the 4-digit PIN pad when multiple canvases are present.
+
+---
+
 ## [0.4.8] - 2026-11-09
 
 ### RSS Reader Mode Image & SVG Fixes + Expanded 26-Feed Curated Directory
