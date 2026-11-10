@@ -264,12 +264,13 @@ export function App() {
   // '1'-'9' and '0' (for 10) to switch between canvases
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
+      const target = e.target as HTMLElement | null;
       if (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.isContentEditable ||
-        target.closest('input, textarea, [contenteditable="true"], [role="dialog"]')
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable ||
+          target.closest('input, textarea, [contenteditable="true"], [role="dialog"]'))
       ) {
         return;
       }
@@ -279,6 +280,23 @@ export function App() {
           e.preventDefault();
           setActiveWebModal(null);
         }
+        return;
+      }
+
+      // Never trigger background canvas hotkeys when any modal, PIN pad, or full-screen hub is open
+      if (
+        pinChallenge ||
+        isParentDrawerOpen ||
+        isChoreFullScreenOpen ||
+        isSettingsOpen ||
+        isShareOpen ||
+        isAddWidgetOpen ||
+        isCreateCanvasOpen ||
+        isBackupModalOpen ||
+        isNoteCreatorOpen ||
+        isTrashOpen ||
+        document.querySelector('[role="dialog"]')
+      ) {
         return;
       }
 
@@ -304,7 +322,22 @@ export function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleDockHidden, tabs, setActiveTabId, activeWebModal]);
+  }, [
+    toggleDockHidden,
+    tabs,
+    setActiveTabId,
+    activeWebModal,
+    pinChallenge,
+    isParentDrawerOpen,
+    isChoreFullScreenOpen,
+    isSettingsOpen,
+    isShareOpen,
+    isAddWidgetOpen,
+    isCreateCanvasOpen,
+    isBackupModalOpen,
+    isNoteCreatorOpen,
+    isTrashOpen,
+  ]);
 
   // Fullscreen state listener
   useEffect(() => {

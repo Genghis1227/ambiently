@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ShieldAlert, Mail, X } from 'lucide-react';
 import { getCurrentUser, sendPinResetCode, verifyOtpCode } from '../../services/supabase';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -41,12 +41,24 @@ export const PinOverlay: React.FC<PinOverlayProps> = ({
   const [resetCode, setResetCode] = useState('');
   const [recoveryMessage, setRecoveryMessage] = useState('');
   const [isRecoveryBusy, setIsRecoveryBusy] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const onUnlockRef = useRef(onUnlock);
+  const onCancelRef = useRef(onCancel);
+
+  useEffect(() => {
+    onUnlockRef.current = onUnlock;
+    onCancelRef.current = onCancel;
+  }, [onUnlock, onCancel]);
+
+  useEffect(() => {
+    dialogRef.current?.focus();
+  }, []);
 
   const checkPin = useCallback(async (currentPin: string) => {
     setIsVerifying(true);
     setErrorMsg('');
     try {
-      const success = await onUnlock(currentPin);
+      const success = await onUnlockRef.current(currentPin);
       if (!success) {
         setErrorMsg('Incorrect PIN. Try again.');
         setPin('');
@@ -57,7 +69,7 @@ export const PinOverlay: React.FC<PinOverlayProps> = ({
     } finally {
       setIsVerifying(false);
     }
-  }, [onUnlock]);
+  }, []);
 
   const handleDigit = useCallback((digit: string) => {
     if (isVerifying) return;
@@ -88,20 +100,30 @@ export const PinOverlay: React.FC<PinOverlayProps> = ({
   useEffect(() => {
     if (recovery.step !== 'closed') return;
     const handleKeyDown = (e: KeyboardEvent) => {
+      let digit: string | null = null;
       if (e.key >= '0' && e.key <= '9') {
+        digit = e.key;
+      } else if (e.code && /^Numpad[0-9]$/.test(e.code)) {
+        digit = e.code.replace('Numpad', '');
+      }
+
+      if (digit !== null) {
         e.preventDefault();
-        handleDigit(e.key);
+        e.stopPropagation();
+        handleDigit(digit);
       } else if (e.key === 'Backspace') {
         e.preventDefault();
+        e.stopPropagation();
         handleBackspace();
-      } else if (e.key === 'Escape' && onCancel) {
+      } else if (e.key === 'Escape' && onCancelRef.current) {
         e.preventDefault();
-        onCancel();
+        e.stopPropagation();
+        onCancelRef.current();
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleDigit, handleBackspace, onCancel, recovery.step]);
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
+  }, [handleDigit, handleBackspace, recovery.step]);
 
   const openRecovery = async () => {
     setRecoveryMessage('');
@@ -145,12 +167,16 @@ export const PinOverlay: React.FC<PinOverlayProps> = ({
 
   return (
     <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      tabIndex={-1}
       onClick={(e) => {
         if (e.target === e.currentTarget && onCancel) {
           onCancel();
         }
       }}
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 select-none"
+      className="fixed inset-0 z-[9500] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 select-none focus:outline-none"
     >
       <div
         onClick={(e) => e.stopPropagation()}
