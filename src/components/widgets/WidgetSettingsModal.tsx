@@ -36,7 +36,7 @@ import type { QuoteItem } from '../../services/quotes';
 import { EMBED_PRESETS, type EmbedPresetId } from './MediaEmbedWidget';
 import { DEFAULT_WORLD_CITIES, type WorldClockCity, getZoneOffsetMinutes } from './WorldClockWidget';
 import type { TextBoxConfig } from './TextBoxWidget';
-import { CURATED_RSS_FEEDS } from '../../data/curatedFeeds';
+import { CURATED_RSS_FEEDS, RSS_FEED_CATEGORIES, type RssFeedCategory } from '../../data/curatedFeeds';
 import { MediaSearchModal } from './MediaSearchModal';
 import { Sparkles } from 'lucide-react';
 import { useChoreStore } from '../../store/choreStore';
@@ -183,6 +183,8 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     'today',
     'review',
   ]);
+  const [rssCategoryFilter, setRssCategoryFilter] = useState<'All' | RssFeedCategory>('All');
+  const [rssSearchQuery, setRssSearchQuery] = useState('');
 
   // Prevents re-renders or background photo syncs from resetting active form edits while modal is open
   const lastOpenedWidgetIdRef = useRef<string | null>(null);
@@ -2116,11 +2118,62 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
             <div className="space-y-4 pt-2 border-t border-gray-800">
               {/* Curated Feeds Picker */}
               <div>
-                <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-2">
-                  Featured & Recommended Feeds
-                </label>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                    Curated RSS Directory ({CURATED_RSS_FEEDS.length} Feeds)
+                  </label>
+                  <div className="relative w-44">
+                    <Search className="w-3 h-3 text-gray-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={rssSearchQuery}
+                      onChange={(e) => setRssSearchQuery(e.target.value)}
+                      placeholder="Filter feeds..."
+                      className="w-full rounded-lg bg-gray-950 border border-gray-800 pl-7 pr-2 py-1 text-[11px] text-white placeholder-gray-500 focus:outline-none focus:border-orange-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Category Filter Pills */}
+                <div className="flex flex-wrap items-center gap-1 mb-2.5">
+                  {RSS_FEED_CATEGORIES.map((cat) => {
+                    const isActive = rssCategoryFilter === cat;
+                    const count =
+                      cat === 'All'
+                        ? CURATED_RSS_FEEDS.length
+                        : CURATED_RSS_FEEDS.filter((f) => f.category === cat).length;
+                    return (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setRssCategoryFilter(cat)}
+                        className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer border ${
+                          isActive
+                            ? 'bg-orange-500/20 border-orange-500/70 text-orange-300'
+                            : 'bg-gray-950/70 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'
+                        }`}
+                      >
+                        {cat} <span className="opacity-60 font-mono">({count})</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[260px] overflow-y-auto pr-1">
-                  {CURATED_RSS_FEEDS.map((feed) => {
+                  {CURATED_RSS_FEEDS.filter((feed) => {
+                    if (rssCategoryFilter !== 'All' && feed.category !== rssCategoryFilter) {
+                      return false;
+                    }
+                    if (rssSearchQuery.trim()) {
+                      const q = rssSearchQuery.trim().toLowerCase();
+                      return (
+                        feed.name.toLowerCase().includes(q) ||
+                        feed.description.toLowerCase().includes(q) ||
+                        feed.category.toLowerCase().includes(q)
+                      );
+                    }
+                    return true;
+                  }).map((feed) => {
                     const isSelected = rssFeedUrl.trim().toLowerCase() === feed.url.toLowerCase();
                     return (
                       <button
