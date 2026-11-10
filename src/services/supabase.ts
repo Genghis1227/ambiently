@@ -318,7 +318,7 @@ export function subscribeToRealtimeBoard(
           id: raw.id,
           name: raw.name,
           icon: raw.icon,
-          order: raw.order_index,
+          order: Number.isFinite(raw.order_index) ? raw.order_index : 0,
           layoutMode: raw.layout_mode,
           autoRotateDurationSec: raw.auto_rotate_duration_sec,
           backgroundTheme: raw.background_theme,
@@ -329,37 +329,6 @@ export function subscribeToRealtimeBoard(
         };
 
         tabHandler(tab, eventType);
-      }
-    )
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'household_profiles',
-        filter: `dashboard_id=eq.${boardId}`,
-      },
-      (payload) => {
-        const raw = (payload.new || payload.old) as any;
-        if (!raw) return;
-        if (raw.dashboard_id && raw.dashboard_id !== boardId) return;
-
-        const profile: HouseholdProfile = {
-          id: raw.id,
-          name: raw.name,
-          role: raw.role === 'parent' ? 'parent' : 'kid',
-          color: raw.color || '#6B8E7B',
-          avatarDataUrl: raw.avatar_data_url || undefined,
-          emoji: raw.emoji || undefined,
-          createdAt: raw.created_at || new Date().toISOString(),
-          updatedAt: raw.updated_at || new Date().toISOString(),
-          deletedAt: raw.deleted_at || undefined,
-        };
-
-        useProfileStore
-          .getState()
-          .applyRemoteProfiles([profile])
-          .catch(() => {});
       }
     )
     .subscribe((status) => {
@@ -683,14 +652,14 @@ export async function pushToCloud(
     // Upsert Tabs: only send tabs with genuinely newer timestamps or new records
     let tabsToUpsert: any[] = [];
     if (tabsToPush.length > 0) {
-      const formattedTabs = tabsToPush.map((t) => ({
+      const formattedTabs = tabsToPush.map((t, idx) => ({
         id: t.id,
         dashboard_id: dashboardId,
         user_id: ownerId,
         name: t.name,
         icon: t.icon,
         layout_mode: t.layoutMode,
-        order_index: t.order,
+        order_index: Number.isFinite(t.order) ? t.order : idx,
         auto_rotate_duration_sec: t.autoRotateDurationSec,
         updated_at: t.updated_at,
         deleted_at: t.deleted_at || null,
@@ -910,26 +879,6 @@ export async function pushToCloud(
     await upsertRows('widgets', widgetsToUpsert.filter(isNotDeletion), 5);
     await upsertRows('notes', notesToUpsert.filter(isNotDeletion), 25);
 
-    // Best-effort sync to dedicated public.household_profiles table if schema has been applied
-    if (profilesToPush.length > 0) {
-      const formattedHouseholdRows = profilesToPush.map((p) => ({
-        id: p.id,
-        dashboard_id: dashboardId,
-        user_id: ownerId,
-        name: p.name,
-        role: p.role,
-        color: p.color,
-        avatar_data_url: p.avatarDataUrl || null,
-        emoji: p.emoji || null,
-        created_at: p.createdAt || nowIso,
-        updated_at: p.updatedAt || nowIso,
-        deleted_at: p.deletedAt || null,
-      }));
-      sb.from('household_profiles')
-        .upsert(formattedHouseholdRows)
-        .then(() => {});
-    }
-
     // Non-blocking purge of expired tombstones (> 30 days old) in cloud database
     const thirtyDaysAgoIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     Promise.all([
@@ -1074,12 +1023,13 @@ async function pullFromCloudOnce(options?: { force?: boolean }): Promise<PullRes
       const cloudTabIds = new Set(tabsRes.data.map((t: any) => t.id));
 
       const tabsToPut: DashboardTab[] = [];
-      for (const t of tabsRes.data) {
+      for (let idx = 0; idx < tabsRes.data.length; idx++) {
+        const t = tabsRes.data[idx];
         const mapped: DashboardTab = {
           id: t.id,
           name: t.name,
           icon: t.icon,
-          order: t.order_index,
+          order: Number.isFinite(t.order_index) ? t.order_index : idx,
           layoutMode: t.layout_mode,
           autoRotateDurationSec: t.auto_rotate_duration_sec,
           backgroundTheme: canvasThemes[t.id]?.backgroundTheme || t.background_theme || 'midnight_dots',
@@ -1087,6 +1037,7 @@ async function pullFromCloudOnce(options?: { force?: boolean }): Promise<PullRes
           backgroundDimLevel: canvasThemes[t.id]?.backgroundDimLevel ?? t.background_dim_level ?? 45,
           hideNotes: canvasThemes[t.id]?.hideNotes ?? t.hide_notes ?? false,
           isHome: canvasThemes[t.id]?.isHome ?? t.is_home ?? false,
+          enabled: t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false,
           updated_at: t.updated_at,
           deleted_at: t.deleted_at,
         };

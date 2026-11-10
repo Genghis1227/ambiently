@@ -60,12 +60,13 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
         await db.profiles.clear();
         await db.profiles.bulkPut(DEFAULT_HOUSEHOLD_PROFILES);
         set({ profiles: DEFAULT_HOUSEHOLD_PROFILES, isInitialized: true });
-        profilePersistListener?.(DEFAULT_HOUSEHOLD_PROFILES);
+        if (isUntouchedLegacySeed) {
+          profilePersistListener?.(DEFAULT_HOUSEHOLD_PROFILES);
+        }
         return;
       }
       const list = active.length > 0 ? active : DEFAULT_HOUSEHOLD_PROFILES;
       set({ profiles: list, isInitialized: true });
-      profilePersistListener?.(list);
     } catch (err) {
       console.warn('Failed to initialize profile store from IndexedDB:', err);
       set({ profiles: DEFAULT_HOUSEHOLD_PROFILES, isInitialized: true });

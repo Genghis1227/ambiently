@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.4.14",
+    date: "November 10, 2026",
+    title: "Canvas Carousel Rotation Fix, Order Self-Healing & Realtime Sync Reliability",
+    highlights: [
+      "Canvas Order Self-Healing: Guarded tab order calculations against null/undefined values when creating or syncing canvases so newly added Chores canvases never receive NaN order indices and auto-repair in IndexedDB.",
+      "Resolved-Tab Carousel Progression & Pause Timing: Updated auto-rotation to advance from the resolved active canvas, pause cleanly while modals or drawers are open, and reset the active interval on tap without stacking an extra 20-second delay.",
+      "Realtime WebSocket & Cloud Sync Reliability: Removed optional household_profiles channel binding that could block tabs/widgets Realtime updates and eliminated redundant background cloud pushes during store initialization.",
+    ],
+  },
+  {
     version: "v0.4.13",
     date: "November 10, 2026",
     title: "Chore Widget Canvas Drag Fix, Schedule-Aware Overdue Cleanup & Header Polish",
