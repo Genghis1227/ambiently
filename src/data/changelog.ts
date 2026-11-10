@@ -11,6 +11,27 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.4.9",
+    date: "November 9, 2026",
+    title: "HEIC Avatar Cropper, Multi-Kid Chores, Web Preview Fix & Toolbar Hub Polish",
+    highlights: [
+      "Universal .HEIC / .HEIF Photo Upload & Interactive Avatar Cropper: Upload iPhone HEIC/HEIF photos directly on any browser with an interactive circular drag, zoom, and rotate placement modal.",
+      "Multi-Kid Chore Checkboxes & One-Click Duplicate: Assign new chores to multiple kids at once, duplicate existing chores in one click, and view scheduled days of the week on weekly chore badges.",
+      "Custom Keyboard Emoji Entry & Expanded Icon Presets: Choose from 36 chore icons and 24 profile icons, or type/paste any emoji directly from your device keyboard.",
+      "RSS Web Preview Service Worker Exclusion: Prevents the PWA Service Worker from intercepting /api/web-proxy iframe navigations so Web Preview loads the article webpage instead of the dashboard.",
+      "Dedicated Middle Toolbar Hub & PIN Keyboard Fix: Separated the Chores & Rewards Hub into its own middle toolbar section and fixed keyboard number entry on the 4-digit PIN pad.",
+    ],
+  },
+  {
+    version: "v0.4.8",
+    date: "November 9, 2026",
+    title: "Expanded Curated RSS Directory & Reader Mode Image Layout Fix",
+    highlights: [
+      "26 Curated RSS & Atom Feeds Across 6 Categories: Browse and search Featured, News, Tech, Science, Lifestyle, and Sports & Finance feeds right inside RSS Widget Settings.",
+      "Reader Mode Inline Image & SVG Sanitization: Fixes full-screen overlapping images on Next.js publishers (The Verge, NASA, GitHub Blog, Ars Technica, NBC News).",
+    ],
+  },
+  {
     version: "v0.4.6",
     date: "November 9, 2026",
     title: "Ambiently Chore & Reward Engine, Global Household Profiles & Kiosk Polish",
