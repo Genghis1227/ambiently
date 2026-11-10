@@ -67,6 +67,8 @@ function sanitizeArticleHtml(rawHtml: string): string {
   return rawHtml
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+    .replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, '')
+    .replace(/<source\b[^>]*>/gi, '')
     .replace(/\s+style="[^"]*"/gi, '')
     .replace(/\s+style='[^']*'/gi, '')
     .replace(/\s+on[a-z]+="[^"]*"/gi, '')
@@ -177,15 +179,18 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       }
     }
 
-    // 3. Remove non-article UI chrome (popovers, follow buttons, author bio headers, recirculation)
+    // 3. Remove non-article UI chrome (popovers, follow buttons, author bio headers, recirculation, SVGs, video playlists)
     const preCleanSelectors = [
       'script',
       'style',
       'noscript',
+      'svg',
+      'source',
       'aside',
       'nav',
       'footer',
       'form',
+      'button',
       '[aria-hidden="true"]',
       '[id^="popover-"]',
       '[id^="follow-"]',
@@ -197,6 +202,10 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       '.duet--cta--newsletter',
       '.duet--layout--article-recirc-color-container',
       '.duet--layout--rail',
+      '.video-page__drawer',
+      '.video-page__carousel',
+      '.best-of-playlist',
+      '[class*="playlist-drawer"]',
     ].join(', ');
     for (const el of Array.from(document.querySelectorAll(preCleanSelectors)) as any[]) {
       el.remove();

@@ -197,6 +197,12 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
           display: block;
           border: 1px solid #1e293b;
         }
+        .ambiently-reader-body svg {
+          max-width: 1.25rem;
+          max-height: 1.25rem;
+          display: inline-block;
+          vertical-align: middle;
+        }
         .ambiently-reader-body figure {
           margin: 1.5rem 0;
         }
