@@ -86,16 +86,27 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({ isOpen, onClose 
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-gray-800/80 bg-gray-950/60 flex items-center justify-between">
-          <a
-            href="https://github.com/Genghis1227/ambiently/blob/main/CHANGELOG.md"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-cyan-400 hover:text-cyan-300 hover:underline flex items-center gap-1 transition-colors"
-          >
-            <span>View full CHANGELOG.md on GitHub</span>
-            <ExternalLink className="w-3.5 h-3.5" />
-          </a>
+        <div className="p-4 border-t border-gray-800/80 bg-gray-950/60 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-xs text-gray-400">
+            <a
+              href="https://trinhism.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-gray-300 hover:text-white hover:underline transition-colors font-medium"
+            >
+              trinhism.com
+            </a>
+            <span className="text-gray-600">•</span>
+            <a
+              href="https://github.com/Genghis1227/ambiently/blob/main/CHANGELOG.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-cyan-400 hover:text-cyan-300 hover:underline flex items-center gap-1 transition-colors"
+            >
+              <span>Source & Full Changelog (AGPLv3)</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          </div>
           <button
             onClick={onClose}
             className="px-4 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs font-semibold text-white transition-all shadow-sm"

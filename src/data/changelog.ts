@@ -11,6 +11,15 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.4.12",
+    date: "November 10, 2026",
+    title: "Self-Hosting AGPLv3 Attribution & Comprehensive Documentation Refresh",
+    highlights: [
+      "Unobtrusive AGPLv3 Attribution Touchpoints: Added subtle 'Powered by Ambiently • trinhism.com • Source (AGPLv3)' credit links inside the Ambiently Quick Hub popover and Settings/Changelog modal footers while keeping the live display canvas 100% watermark-free.",
+      "Project Documentation Refresh: Updated README.md, FEATURES.md, ARCHITECTURE.md, and CHANGELOG.md covering the Chore & Reward Engine, Global Household Profiles, iOS 17/18 HEIC avatar decoder, Reader Mode, and horizontal toolbar pop-outs.",
+    ],
+  },
+  {
     version: "v0.4.11",
     date: "November 10, 2026",
     title: "Toolbar Horizontal Pop-Out Panels & Flexible Weekly (1x / Any Day) Chores",

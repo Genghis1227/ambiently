@@ -25,7 +25,12 @@
 * **Custom Canvases & Icon Picker:** Create unlimited boards via the `+` button in the Navigation Dock or Settings, choosing from 16 curated Lucide icons and reorder tabs with 1-click `▲` / `▼` controls.
 
 ### Multi-Tab Navigation Dock & Automated Carousel
-* **4-Edge Dock Placement & Zero-Overlap Canvas Actions:** Position the glassmorphic navigation dock on the **Left, Right, Top, or Bottom** of the screen. Canvas actions (`Pin New Sticky Note`, `Add Widget Tile`, `Auto-Organize / Auto-Tile`, and `Archived & Expired Notes` with live badge count) live directly in the dock so top-right and fullscreen tiles have 100% unobstructed access to their hover controls.
+* **4-Edge Dock Placement & Compact Horizontal Pop-Out Panels (`NavigationDock.tsx`):**
+  * Position the glassmorphic navigation dock on the **Left, Right, Top, or Bottom** of the screen.
+  * All Canvas board buttons (`1`–`0` hotkeys) stay directly accessible on the main toolbar while secondary actions expand into sleek **horizontal pop-out bars** so controls never clip on smaller screens:
+    * **Family Hub Pop-Out (`ClipboardList`):** Opens **Chores & Rewards** (with live pending parent review badge) and **Meal Planner** (`Soon`).
+    * **`+` Add Menu Pop-Out (`Plus`):** Opens **New Sticky Note**, **Add Widget Tile**, and **Create New Canvas** (while keeping **Auto-Organize (`Wand2`)** and **Archived & Expired Notes (`Archive`)** directly on the toolbar).
+    * **Quick Utilities Pop-Out (`SlidersHorizontal`):** Opens **Night Mode**, **Fullscreen**, **Refresh / Apply Update** (with cyan live-update pulse badge), and **Hide Toolbar** right above the 1-click **Settings / Lock** button.
 * **Automated Tab Carousel:** Enable auto-rotation (`15s`, `30s`, `45s`, `1m`, `2m`) to cycle across your canvases automatically. Touching or clicking anywhere on the screen temporarily pauses the carousel for 20 seconds.
 
 ### Kiosk Hardware & Screen Polish
@@ -101,14 +106,34 @@ Every widget features a top-right **Tile Settings (`⚙️`)** button to customi
 * **Daily Quotes & Custom Family Affirmations (`QuotesWidget.tsx`):**
   * Add custom family affirmations, house rules, or personal mantras in Tile Settings, choose between **Curated Only**, **Custom Only**, or **Mix Both**.
   * **Configurable Update Intervals:** Choose auto-rotation speed (`30s`, `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `Daily`, `Manual`) with smooth cross-fade opacity transitions and dynamic header badges (`Thought of the Day`, `Thought of the Hour`, `⏱ 1h`).
-* **RSS News Ticker (`RssWidget.tsx`):**
-  * Displays rotating headlines and relative timestamps from any RSS 2.0 or Atom feed via `/api/rss`.
+* **RSS News Ticker, 26 Curated Feeds & In-App Reader Mode (`RssWidget.tsx`, `curatedFeeds.ts`, `InAppWebViewerModal.tsx`):**
+  * Browse **26 live-verified curated feeds** across 6 categories (*Featured*, *News*, *Tech*, *Science*, *Lifestyle*, *Sports & Finance*) with category filter pills and instant search, or paste any custom RSS 2.0 / Atom XML URL.
+  * Clicking any headline opens the **In-App Kiosk Article Reader (`/api/reader`)** powered by Mozilla Readability and Linkedom, with 1-click switching to **Web Preview (`/api/web-proxy`)** so users never get trapped in an uncloseable fullscreen browser window.
 * **Milestone Countdown (`CountdownWidget.tsx`):**
   * Live days/hours/minutes/seconds countdown timer to upcoming vacations, birthdays, or milestones.
 
 ---
 
-## 5. Mobile Companion Mode & Hybrid Sync (Phase 5)
+## 5. Ambiently Family Chore & Reward Engine (`v0.4.6` – `v0.4.11`)
+
+* **Global Household Profile & Avatar Engine (`useProfileStore.ts`, `HouseholdProfileManager.tsx`, `AvatarCropModal.tsx`, `avatarCompressor.ts`):**
+  * Shared family profiles (`Parent` and `Kid` roles) with a calming low-arousal color palette, 24 preset icons, or custom keyboard emoji entry.
+  * **Universal Photo Upload (including iOS 17/18 `.HEIC` / `.HEIF`):** Client-side decoding via `libheif-js` paired with an interactive circular **Avatar Cropper** (drag-to-pan, `1×`–`3×` zoom, and `90°` rotation) that exports lightweight `256×256` WebP avatars synced via IndexedDB and Supabase Realtime.
+* **Polymorphic Dual-View Chore & Reward UI (`ChoreWidget.tsx`, `ChoreDashboardView.tsx`):**
+  * **Compact Bento Tile (`variant="tile"`):** Filter by *Whole Household* or a specific child, with collapsible accordions for *Today's Chores*, *Awaiting Parent Review*, and *Completed Today*.
+  * **Full-Screen Chore & Reward Hub (`variant="view"`):** 3-column dashboard launched from the Navigation Dock featuring profile point banks, daily/weekly/bounty tasks, and the visual **Reward Store**.
+* **Flexible Scheduling Cadences, Multi-Kid Creation & Overdue Policies (`choreEngine.ts`, `ParentChoreDrawer.tsx`):**
+  * **Cadences:** *Daily*, *Weekdays (Mon–Fri)*, *Weekends (Sat–Sun)*, *Weekly — Any Day (1× / Week)*, *Weekly (Specific Days)*, *Interval (Every N Days)*, and *One-Off Bounty*.
+  * **Multi-Kid Assignment & Duplication:** Check multiple kids when creating a chore to generate individual tasks for each child in one click, or duplicate any existing chore via the `Copy` button.
+  * **Shared Chores & Interactive Point Splitting (`PointSplitModal.tsx`):** Shared chores can be claimed by a single child or split across multiple siblings using whole-number point sliders.
+  * **24-Hour Overdue Grace Window & Vacation Mode:** Unfinished tasks roll over for 24 hours with configurable point policies (*Full 100%*, *Half 50%*, *Zero 0%*, or *Custom %*), include a manual **Dismiss** button, and automatically expire after 24 hours so stale tasks never pile up. Enabling **Vacation Mode** freezes midnight rollovers and penalties while away.
+* **Append-Only Audit Ledger, Wishlist Store & Trophy Case (`choreStore.ts`, `ProposeRewardModal.tsx`, `TrophyCaseModal.tsx`):**
+  * **Immutable Audit Ledger:** Spendable `balance` and `lifetimePoints` are strictly computed from an append-only transaction log (`chore_completion`, `reward_redemption`, `manual_adjustment`, `reversion`).
+  * **Wishlist URL Scraper (`/api/metadata`) & Parent Pricing Calculator:** Kids can propose rewards or paste a product link to auto-extract title, image, and price. Parents price proposals using the `Points per $1.00` ratio, manage or remove active store goals, and fulfill redeemed rewards into each child's permanent **Trophy Case** (with automatic prior-year image pruning on New Year's rollover).
+
+---
+
+## 6. Mobile Companion Mode & Hybrid Sync (Phase 5)
 
 * **Vertical Tile Stream (`MobileCompanion.tsx`):**
   * Automatically serves a structured single-column vertical feed of the active canvas when opened on a smartphone (`< 768px`).
@@ -133,8 +158,11 @@ Every widget features a top-right **Tile Settings (`⚙️`)** button to customi
 
 ---
 
-## 6. Upcoming Roadmap (`v0.3.0` Next Up)
+## 7. Upcoming Roadmap
 
-* **Family Chore & Habit Tracker Widget (`ChoreTrackerWidget.tsx`):**
-  * Dedicated recurring routine & chore board widget with **Daily Auto-Reset** (automatically unchecks daily routines at midnight while preserving streak counts) or **Manual Reset**.
-  * **Family Member Avatar / Color Tags** (e.g., *Kids*, *Morning*, *Evening*, or custom names) and an animated circular completion ring when all daily tasks are finished.
+* **Phase 4 — Weekly Meal Planner:**
+  * Dedicated household meal planning view & canvas widget accessible from the Family Hub pop-out bar alongside Chores & Rewards.
+* **Phase 5 — Live Cloud Grocery List & Google Keep Export:**
+  * Shared family grocery & shopping checklist with 1-click Google Keep-friendly copy/export.
+* **Phase 6 — Docker & Self-Hosting (`server/index.ts`, `Dockerfile`, `compose.yaml`):**
+  * Standalone Node/Hono container bundling static PWA assets and `/api/*` proxy routes for home-lab deployments (Synology, Unraid, Proxmox, Raspberry Pi).

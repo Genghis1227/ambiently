@@ -23,11 +23,20 @@
 * **⚡ 0ms Offline-First Boot:** Runs entirely out of client-side browser storage (IndexedDB via Dexie.js). Never shows a blank screen if home Wi-Fi drops.
 * **💾 Local File Auto-Sync & JSON Snapshots:** Direct integration with the browser File System Access API to auto-save and mirror state directly to a local `ambiently-data.json` file, plus 1-click JSON export/restore.
 * **📌 Pure Freeform Corkboard Multi-Canvas Engine:**
-  * **Unlimited Custom Canvases & Default Home Board:** Create as many dedicated boards as you want (e.g., *Family Board*, *Photo Gallery*, *Morning Briefing*) with 16 custom icons, 1-click tab reordering (`▲`/`▼`), and selectable default Home Board indicator.
+  * **Custom Canvases & Default Home Board:** Create up to 10 dedicated boards (e.g., *Family Board*, *Photo Gallery*, *Morning Briefing*) with 30 custom Lucide icons, 1-click tab reordering (`▲`/`▼`), and selectable default Home Board indicator.
+  * **Compact Toolbar Horizontal Pop-Out Panels:** Keep all canvas buttons accessible even on smaller screens with horizontal pop-out bars for the **Family Hub** (*Chores & Rewards* + upcoming *Meal Planner*), **`+` Add Menu** (*New Note*, *Add Widget*, *New Canvas*), and **Quick Utilities** (*Night Mode*, *Fullscreen*, *Refresh/Update*, *Hide Toolbar*).
   * **Interactive Freeform Pinboard:** Drag, tilt (`↺`/`↻`), layer (`z-index`), resize via bottom-right corner handles (`↘`), or toggle any widget to **100% Fullscreen Canvas** with one click.
   * **Smart Pinned Notes:** Pop floating notes onto the canvas from the Notes Tile with automatic collision avoidance, open-space positioning, and 1-click header close buttons (`✕`).
+* **🏆 Family Chore & Reward Engine + Global Household Profiles:**
+  * **Global Household Profiles & HEIC/WebP Avatars:** Manage `Parent` and `Kid` profiles with client-side iOS 17/18 `.HEIC`/`.HEIF` photo decoding (`libheif-js`), an interactive circular zoom/pan/rotate cropper (`256×256` WebP), or custom keyboard emojis.
+  * **Dual-View Kiosk Experience:** Use the compact Bento **Chore Tile** on any canvas or open the 3-column **Full-Screen Chore & Reward Hub** directly from the Navigation Dock.
+  * **Flexible Cadences & Shared Splits:** Schedule chores as *Daily*, *Weekdays*, *Weekends*, *Weekly — Any Day (1× / Week)*, *Weekly (Specific Days)*, *Interval (Every N Days)*, or *One-Off Bounty*. Assign to individual kids (with multi-kid checkboxes & 1-click duplication) or as a *Shared Pool* task with interactive integer point splitting.
+  * **24-Hour Overdue Grace Window & Vacation Mode:** Unfinished tasks roll over for a 24-hour grace window (with configurable `100%`, `50%`, `0%`, or custom % overdue point policies and manual/auto dismissal after 24 hours) and pause automatically when **Vacation Mode** is active.
+  * **Append-Only Audit Ledger, Wishlist Store & Trophy Case:** Every point transaction is recorded in an immutable audit ledger. Kids can propose wishlist rewards (with automatic URL title/image/price scraping via `/api/metadata`), parents price and approve redemptions behind a 4-digit PIN, and fulfilled prizes are archived into each child's **Trophy Case**.
+* **📰 In-App Kiosk Reader Mode, Web Preview & 26 Curated RSS Feeds:**
+  * **Distraction-Free Article Reader (`/api/reader`):** Powered by Mozilla Readability and Linkedom to extract clean article text, hero images, and tables without leaving kiosk mode, paired with an edge **Web Preview (`/api/web-proxy`)** fallback and a 26-feed curated directory across 6 categories.
 * **📱 Mobile Companion Remote & Vertical Tile Stream:**
-  * **Full Canvas Live Stream:** Seamless single-column vertical feed rendering live preview cards for all widgets (Clock, Weather, Countdown, Photos, RSS, Quotes, Media, Notes).
+  * **Full Canvas Live Stream:** Seamless single-column vertical feed rendering live preview cards for all widgets (Clock, Weather, Countdown, Photos, RSS, Quotes, Media, Notes, Chores).
   * **Persistent View Options:** 3-way segmented filter pills (`All Tiles` | `Widgets` | `Notes & Tasks`) automatically persisted in `localStorage`.
   * **Independent Mobile Reordering (`▲` / `▼`):** Reorder mobile cards on the fly without impacting non-mobile desktop or kiosk coordinates.
   * **Mobile Tile Customizer & Creation:** 1-tap `⚙️` button opens full tile settings on mobile, with `+ Add Tile` creation directly from smartphones.
@@ -54,7 +63,8 @@
 * **PWA Engine:** `vite-plugin-pwa` (Workbox)
 * **Styling & Animation:** [Tailwind CSS v4](https://tailwindcss.com/), [Framer Motion](https://www.framer.com/motion/), [Lucide React](https://lucide.dev/)
 * **Local-First State:** [Dexie.js](https://dexie.org/) (IndexedDB) + [Zustand](https://github.com/pmndrs/zustand)
-* **Edge Proxy Functions:** Cloudflare Pages Functions (`/api/ical`, `/api/rss`, `/api/gphotos`, `/api/gdrive`) for CORS-free feeds and media resolvers.
+* **Media & Document Processing:** `libheif-js` (client-side iOS HEIC/HEIF decoding), `@mozilla/readability` + `linkedom` (article extraction), `ical.js` (RFC 5545 calendar recurrence & timezone parsing)
+* **Edge Proxy Functions:** Cloudflare Pages Functions (`/api/ical`, `/api/rss`, `/api/reader`, `/api/web-proxy`, `/api/metadata`, `/api/gphotos`, `/api/gdrive`) for CORS-free feeds, reader extraction, and media resolvers.
 * **Cloud Sync (Optional SaaS):** Supabase Auth & Realtime Postgres.
 
 ---
@@ -112,6 +122,13 @@ To enable multi-device sync across phones and displays:
 
 ---
 
-## 📄 License
+## 📄 License & Self-Hosting Attribution (AGPLv3)
 
 This project is licensed under the terms of the **GNU Affero General Public License v3.0 (AGPLv3)**. See the [LICENSE](LICENSE) file for full details.
+
+### Self-Hosting & Attribution Policy
+Ambiently keeps the live ambient display canvas 100% free of watermarks to prevent OLED burn-in and visual clutter. Instead, attribution and source links live unobtrusively inside the **Ambiently Quick Hub popover** (top-left logo menu) and the **Settings & Changelog modal footers** (`Powered by Ambiently • trinhism.com • Source (AGPLv3)`).
+
+In accordance with **AGPLv3 Sections 7(b) and 13** (Remote Network Interaction & Preservation of Legal/Author Notices):
+* If you self-host, fork, or deploy a modified version of Ambiently over a network, you **must preserve** the interactive attribution notices and source code links in the Quick Hub menu and Settings/Changelog modal footers.
+* Any modified network deployment must also make its complete corresponding source code available under the AGPLv3.

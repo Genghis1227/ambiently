@@ -347,18 +347,41 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="pt-2 border-t border-gray-800/80 flex items-center justify-between text-[11px] text-gray-500">
-          <div className="flex items-center gap-1">
-            <Layers className="w-3 h-3 text-gray-400" />
-            <span>{tabs.length} Canvases</span>
+        <div className="pt-2.5 border-t border-gray-800/80 space-y-1.5 text-[11px] text-gray-500">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1">
+              <Layers className="w-3 h-3 text-gray-400" />
+              <span>{tabs.length} Canvases</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsChangelogOpen(true)}
+              className="text-blue-400 hover:underline cursor-pointer"
+            >
+              Release Notes
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setIsChangelogOpen(true)}
-            className="text-blue-400 hover:underline cursor-pointer"
-          >
-            Release Notes
-          </button>
+          <div className="flex items-center justify-between text-[10px] text-gray-500/90">
+            <span>
+              By{' '}
+              <a
+                href="https://trinhism.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-400 hover:text-gray-200 hover:underline transition-colors"
+              >
+                Trinhism
+              </a>
+            </span>
+            <a
+              href="https://github.com/Genghis1227/ambiently"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-gray-400 hover:text-gray-200 hover:underline transition-colors"
+            >
+              Open Source (AGPLv3)
+            </a>
+          </div>
         </div>
       </div>
 
