@@ -706,7 +706,6 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
 
   return (
     <div
-      data-no-drag="true"
       className={`w-full h-full flex flex-col overflow-hidden select-none ${
         isLight ? 'text-slate-800' : 'text-slate-100'
       }`}
