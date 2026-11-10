@@ -414,6 +414,18 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
                   Shared
                 </span>
               )}
+
+              {template.cadence === 'weekly' && template.weeklyAnyDay && (
+                <span
+                  className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium border ${
+                    isLight
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300/60'
+                      : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                  }`}
+                >
+                  1× / wk
+                </span>
+              )}
             </div>
           </div>
         </div>

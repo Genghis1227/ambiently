@@ -119,6 +119,7 @@ export const ParentChoreDrawer: React.FC = () => {
   const [tplAssignees, setTplAssignees] = useState<string[]>(['shared']);
   const [tplCadence, setTplCadence] = useState<CadenceType>('daily');
   const [tplDaysOfWeek, setTplDaysOfWeek] = useState<number[]>([1, 3, 5]);
+  const [tplWeeklyAnyDay, setTplWeeklyAnyDay] = useState<boolean>(false);
   const [tplIntervalDays, setTplIntervalDays] = useState('3');
   const [tplRequiresApproval, setTplRequiresApproval] = useState(false);
   const [tplRolloverUntilDone, setTplRolloverUntilDone] = useState(true);
@@ -306,7 +307,8 @@ export const ParentChoreDrawer: React.FC = () => {
     setTplPoints(String(tpl.points));
     setTplAssignees([tpl.assignedTo]);
     setTplCadence(tpl.cadence);
-    setTplDaysOfWeek(tpl.daysOfWeek || [1, 3, 5]);
+    setTplDaysOfWeek(tpl.daysOfWeek && tpl.daysOfWeek.length > 0 ? tpl.daysOfWeek : [1, 3, 5]);
+    setTplWeeklyAnyDay(Boolean(tpl.weeklyAnyDay));
     setTplIntervalDays(String(tpl.intervalDays || 3));
     setTplRequiresApproval(tpl.requiresApproval);
     setTplRolloverUntilDone(tpl.rolloverUntilDone);
@@ -331,7 +333,8 @@ export const ParentChoreDrawer: React.FC = () => {
       .map((p) => p.id);
     setTplAssignees(unassignedKids.length > 0 ? unassignedKids : [tpl.assignedTo]);
     setTplCadence(tpl.cadence);
-    setTplDaysOfWeek(tpl.daysOfWeek || [1, 3, 5]);
+    setTplDaysOfWeek(tpl.daysOfWeek && tpl.daysOfWeek.length > 0 ? tpl.daysOfWeek : [1, 3, 5]);
+    setTplWeeklyAnyDay(Boolean(tpl.weeklyAnyDay));
     setTplIntervalDays(String(tpl.intervalDays || 3));
     setTplRequiresApproval(tpl.requiresApproval);
     setTplRolloverUntilDone(tpl.rolloverUntilDone);
@@ -348,6 +351,7 @@ export const ParentChoreDrawer: React.FC = () => {
     setTplAssignees(['shared']);
     setTplCadence('daily');
     setTplDaysOfWeek([1, 3, 5]);
+    setTplWeeklyAnyDay(false);
     setTplIntervalDays('3');
     setTplRequiresApproval(false);
     setTplRolloverUntilDone(true);
@@ -379,7 +383,13 @@ export const ParentChoreDrawer: React.FC = () => {
       icon: tplIcon || '🧹',
       points: Math.max(1, Math.round(Number(tplPoints) || 10)),
       cadence: tplCadence,
-      daysOfWeek: tplCadence === 'weekly' ? tplDaysOfWeek : undefined,
+      daysOfWeek:
+        tplCadence === 'weekly' && !tplWeeklyAnyDay
+          ? tplDaysOfWeek.length > 0
+            ? tplDaysOfWeek
+            : [0]
+          : undefined,
+      weeklyAnyDay: tplCadence === 'weekly' ? tplWeeklyAnyDay : undefined,
       intervalDays:
         tplCadence === 'interval' ? Math.max(1, Math.round(Number(tplIntervalDays) || 2)) : undefined,
       requiresApproval: tplRequiresApproval,
@@ -1620,13 +1630,23 @@ export const ParentChoreDrawer: React.FC = () => {
                       <div>
                         <label className="block text-[11px] text-slate-400 mb-1">Cadence</label>
                         <select
-                          value={tplCadence}
-                          onChange={(e) => setTplCadence(e.target.value as CadenceType)}
+                          value={tplCadence === 'weekly' && tplWeeklyAnyDay ? 'weekly_any' : tplCadence}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === 'weekly_any') {
+                              setTplCadence('weekly');
+                              setTplWeeklyAnyDay(true);
+                            } else {
+                              setTplCadence(val as CadenceType);
+                              setTplWeeklyAnyDay(false);
+                            }
+                          }}
                           className="w-full px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white"
                         >
                           <option value="daily">Daily (Every Day)</option>
                           <option value="weekdays">Weekdays (Mon–Fri)</option>
                           <option value="weekends">Weekends (Sat–Sun)</option>
+                          <option value="weekly_any">Weekly — Any Day (1× / Week)</option>
                           <option value="weekly">Weekly (Specific Days)</option>
                           <option value="interval">Interval (Every N Days)</option>
                           <option value="bounty">One-Off Bounty</option>
@@ -1638,26 +1658,43 @@ export const ParentChoreDrawer: React.FC = () => {
                     {tplCadence === 'weekly' && (
                       <div>
                         <label className="block text-[11px] text-slate-400 mb-1">
-                          Scheduled Days of Week
+                          Weekly Schedule (pick specific day(s) or allow any day 1× per week)
                         </label>
                         <div className="flex items-center gap-1.5 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => setTplWeeklyAnyDay(true)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold border cursor-pointer ${
+                              tplWeeklyAnyDay
+                                ? 'bg-emerald-600/30 border-emerald-400 text-emerald-200'
+                                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                            }`}
+                          >
+                            Any Day (1× / Week)
+                          </button>
+
                           {DAY_LABELS.map((label, dayIdx) => {
-                            const selected = tplDaysOfWeek.includes(dayIdx);
+                            const selected = !tplWeeklyAnyDay && tplDaysOfWeek.includes(dayIdx);
                             return (
                               <button
                                 key={label}
                                 type="button"
-                                onClick={() =>
-                                  setTplDaysOfWeek((prev) =>
-                                    selected
-                                      ? prev.filter((d) => d !== dayIdx)
-                                      : [...prev, dayIdx].sort()
-                                  )
-                                }
+                                onClick={() => {
+                                  if (tplWeeklyAnyDay) {
+                                    setTplWeeklyAnyDay(false);
+                                    setTplDaysOfWeek([dayIdx]);
+                                  } else {
+                                    setTplDaysOfWeek((prev) =>
+                                      selected
+                                        ? prev.filter((d) => d !== dayIdx)
+                                        : [...prev, dayIdx].sort()
+                                    );
+                                  }
+                                }}
                                 className={`px-2.5 py-1 rounded-lg text-xs font-semibold border cursor-pointer ${
                                   selected
                                     ? 'bg-emerald-600/30 border-emerald-400 text-emerald-200'
-                                    : 'bg-slate-900 border-slate-800 text-slate-400'
+                                    : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
                                 }`}
                               >
                                 {label}
@@ -1665,6 +1702,11 @@ export const ParentChoreDrawer: React.FC = () => {
                             );
                           })}
                         </div>
+                        {tplWeeklyAnyDay && (
+                          <p className="text-[11px] text-emerald-300/80 mt-1.5">
+                            Can be completed on any day from Sunday to Saturday (1 time per week max, full points all week).
+                          </p>
+                        )}
                       </div>
                     )}
 
@@ -1779,12 +1821,14 @@ export const ParentChoreDrawer: React.FC = () => {
                               </span>
                               <span className="px-1.5 py-0.2 rounded text-[10px] bg-slate-800 text-slate-300">
                                 {tpl.cadence === 'weekly'
-                                  ? `weekly • ${(tpl.daysOfWeek && tpl.daysOfWeek.length > 0
-                                      ? tpl.daysOfWeek
-                                      : [0]
-                                    )
-                                      .map((d) => DAY_LABELS[d] || 'Sun')
-                                      .join(', ')}`
+                                  ? tpl.weeklyAnyDay
+                                    ? 'weekly • Any Day (1×/wk)'
+                                    : `weekly • ${(tpl.daysOfWeek && tpl.daysOfWeek.length > 0
+                                        ? tpl.daysOfWeek
+                                        : [0]
+                                      )
+                                        .map((d) => DAY_LABELS[d] || 'Sun')
+                                        .join(', ')}`
                                   : tpl.cadence === 'interval'
                                     ? `every ${tpl.intervalDays || 2}d`
                                     : tpl.cadence}
