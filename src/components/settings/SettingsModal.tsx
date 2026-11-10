@@ -376,11 +376,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
   return (
     <>
       <div
-        className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 cursor-pointer"
+        className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
+        onMouseDown={(e) => {
+          (e.currentTarget as any).__backdropMouseDown =
+            e.target === e.currentTarget &&
+            !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName || '');
+        }}
         onClick={(e) => {
-          if (e.target === e.currentTarget) {
+          if (e.target === e.currentTarget && (e.currentTarget as any).__backdropMouseDown) {
             onClose();
           }
+          (e.currentTarget as any).__backdropMouseDown = false;
         }}
       >
         <div

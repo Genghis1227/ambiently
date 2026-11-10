@@ -333,8 +333,7 @@ export const ParentChoreDrawer: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-[9200] flex justify-end bg-black/75 backdrop-blur-md animate-in fade-in duration-200 select-none"
-      onClick={handleCloseDrawer}
+      className="fixed inset-0 z-[9200] flex justify-end bg-black/75 backdrop-blur-md animate-in fade-in duration-200"
       role="dialog"
       aria-modal="true"
       aria-label="Parent Chore & Reward Controls"

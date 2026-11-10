@@ -1,80 +1,163 @@
 /**
- * Zero-dependency client-side avatar processor.
- * Loads an image file (JPEG, PNG, WebP, HEIC), performs an automatic center-square crop,
- * scales down to 256x256 pixels on an offscreen HTMLCanvasElement, and exports as a
- * compact ~8-15 KB Base64 WebP Data URL (`canvas.toDataURL('image/webp', 0.82)`).
+ * Client-side avatar decoder, interactive crop renderer & WebP compressor.
+ * Supports JPEG, PNG, WebP, GIF, AVIF, and Apple HEIC/HEIF photos across all browsers
+ * (using native decoding where available and lazy-loading `heic2any` on Windows/Chromium).
+ */
+
+export interface AvatarCropTransform {
+  /** Zoom multiplier (1 = fit shortest side to circle, up to 3.5x) */
+  zoom: number;
+  /** Horizontal pan offset as a fraction of the crop viewport width (-1 to 1) */
+  offsetX: number;
+  /** Vertical pan offset as a fraction of the crop viewport height (-1 to 1) */
+  offsetY: number;
+  /** Rotation in degrees (0, 90, 180, 270) */
+  rotationDeg: number;
+}
+
+function canLoadImageUrl(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      if ((img.naturalWidth || img.width) > 0 && (img.naturalHeight || img.height) > 0) {
+        resolve(img);
+      } else {
+        reject(new Error('Invalid image dimensions.'));
+      }
+    };
+    img.onerror = () => reject(new Error('Could not decode image.'));
+    img.src = url;
+  });
+}
+
+function isHeicFile(file: File | Blob): boolean {
+  const mime = (file.type || '').toLowerCase();
+  if (mime.includes('heic') || mime.includes('heif')) return true;
+  const name = ((file as File).name || '').toLowerCase();
+  return /\.hei[cf]$/i.test(name);
+}
+
+/**
+ * Decodes any user-selected image File/Blob (including iPhone .HEIC / .HEIF on Windows Chrome/Edge)
+ * into a browser-renderable Object URL that can be previewed in the interactive crop modal.
+ */
+export async function decodeImageFileForPreview(file: File | Blob): Promise<{
+  previewUrl: string;
+  revoke: () => void;
+}> {
+  // 1. If not HEIC, or if Safari supports native HEIC decoding, try direct Object URL first
+  const directUrl = URL.createObjectURL(file);
+  try {
+    await canLoadImageUrl(directUrl);
+    return {
+      previewUrl: directUrl,
+      revoke: () => URL.revokeObjectURL(directUrl),
+    };
+  } catch {
+    URL.revokeObjectURL(directUrl);
+  }
+
+  // 2. Fallback to lazy-loaded heic2any for .HEIC / .HEIF files on Windows / Chrome / Edge / Firefox
+  try {
+    const heicModule = await import('heic2any');
+    const heic2any = heicModule.default || heicModule;
+    const converted = await heic2any({
+      blob: file,
+      toType: 'image/jpeg',
+      quality: 0.92,
+    });
+    const resultBlob = Array.isArray(converted) ? converted[0] : converted;
+    const convertedUrl = URL.createObjectURL(resultBlob);
+    await canLoadImageUrl(convertedUrl);
+    return {
+      previewUrl: convertedUrl,
+      revoke: () => URL.revokeObjectURL(convertedUrl),
+    };
+  } catch (err) {
+    if (isHeicFile(file)) {
+      throw new Error('Could not decode this HEIC photo. Please try another photo.');
+    }
+    throw err instanceof Error
+      ? err
+      : new Error('Could not decode the selected image file.');
+  }
+}
+
+/**
+ * Renders an image with user-selected pan, zoom, and 90-degree rotation onto a square
+ * 256x256 canvas and exports a compact WebP Data URL (~8-15 KB).
+ */
+export async function renderCroppedAvatarToWebP(
+  sourceUrl: string,
+  transform: AvatarCropTransform = { zoom: 1, offsetX: 0, offsetY: 0, rotationDeg: 0 },
+  targetSize = 256,
+  quality = 0.84
+): Promise<string> {
+  const img = await canLoadImageUrl(sourceUrl);
+  const srcWidth = img.naturalWidth || img.width;
+  const srcHeight = img.naturalHeight || img.height;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = targetSize;
+  canvas.height = targetSize;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    throw new Error('Could not initialize 2D canvas context.');
+  }
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.clearRect(0, 0, targetSize, targetSize);
+
+  const normRot = ((transform.rotationDeg % 360) + 360) % 360;
+  const isRotated90 = normRot === 90 || normRot === 270;
+  const effWidth = isRotated90 ? srcHeight : srcWidth;
+  const effHeight = isRotated90 ? srcWidth : srcHeight;
+
+  // Base scale so the shorter side fills the targetSize square (cover fit at zoom = 1)
+  const baseScale = Math.max(targetSize / effWidth, targetSize / effHeight);
+  const finalScale = baseScale * Math.max(1, Math.min(4, transform.zoom || 1));
+
+  const panX = (transform.offsetX || 0) * targetSize;
+  const panY = (transform.offsetY || 0) * targetSize;
+
+  ctx.save();
+  ctx.translate(targetSize / 2 + panX, targetSize / 2 + panY);
+  if (normRot !== 0) {
+    ctx.rotate((normRot * Math.PI) / 180);
+  }
+  ctx.scale(finalScale, finalScale);
+  ctx.drawImage(img, -srcWidth / 2, -srcHeight / 2, srcWidth, srcHeight);
+  ctx.restore();
+
+  let dataUrl = canvas.toDataURL('image/webp', quality);
+  if (!dataUrl.startsWith('data:image/webp')) {
+    dataUrl = canvas.toDataURL('image/jpeg', quality);
+  }
+  return dataUrl;
+}
+
+/**
+ * Convenience one-shot center-cropper for direct File/Blob compression.
  */
 export async function compressAvatarToWebP(
   file: File | Blob,
   targetSize = 256,
-  quality = 0.82
+  quality = 0.84
 ): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const objectUrl = URL.createObjectURL(file);
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-
-    img.onload = () => {
-      try {
-        URL.revokeObjectURL(objectUrl);
-
-        const srcWidth = img.naturalWidth || img.width;
-        const srcHeight = img.naturalHeight || img.height;
-
-        if (!srcWidth || !srcHeight) {
-          reject(new Error('Invalid image dimensions.'));
-          return;
-        }
-
-        // Center-square crop coordinates
-        const minSide = Math.min(srcWidth, srcHeight);
-        const sx = Math.floor((srcWidth - minSide) / 2);
-        const sy = Math.floor((srcHeight - minSide) / 2);
-
-        const canvas = document.createElement('canvas');
-        canvas.width = targetSize;
-        canvas.height = targetSize;
-
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          reject(new Error('Could not initialize 2D canvas context.'));
-          return;
-        }
-
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.clearRect(0, 0, targetSize, targetSize);
-        ctx.drawImage(
-          img,
-          sx,
-          sy,
-          minSide,
-          minSide,
-          0,
-          0,
-          targetSize,
-          targetSize
-        );
-
-        let dataUrl = canvas.toDataURL('image/webp', quality);
-        // Fallback to JPEG if a legacy browser does not support WebP canvas encoding
-        if (!dataUrl.startsWith('data:image/webp')) {
-          dataUrl = canvas.toDataURL('image/jpeg', quality);
-        }
-
-        resolve(dataUrl);
-      } catch (err) {
-        reject(err instanceof Error ? err : new Error('Failed to process avatar image.'));
-      }
-    };
-
-    img.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      reject(new Error('Could not decode the selected image file.'));
-    };
-
-    img.src = objectUrl;
-  });
+  const { previewUrl, revoke } = await decodeImageFileForPreview(file);
+  try {
+    return await renderCroppedAvatarToWebP(
+      previewUrl,
+      { zoom: 1, offsetX: 0, offsetY: 0, rotationDeg: 0 },
+      targetSize,
+      quality
+    );
+  } finally {
+    revoke();
+  }
 }
 
 /**

@@ -35,6 +35,7 @@ export interface ProfileStoreState {
     emoji?: string;
   }) => Promise<HouseholdProfile>;
   uploadAndSetAvatar: (profileId: string, file: File | Blob) => Promise<string>;
+  setProfileAvatarDataUrl: (profileId: string, dataUrl: string) => Promise<void>;
   removeProfileAvatar: (profileId: string) => Promise<void>;
   deleteHouseholdProfile: (profileId: string) => Promise<void>;
   applyRemoteProfiles: (remoteProfiles: HouseholdProfile[]) => Promise<void>;
@@ -118,6 +119,25 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
     set({ profiles: nextProfiles });
     profilePersistListener?.(nextProfiles);
     return dataUrl;
+  },
+
+  setProfileAvatarDataUrl: async (profileId, dataUrl) => {
+    const current = get().profiles;
+    const target = current.find((p) => p.id === profileId);
+    if (!target) {
+      throw new Error('Profile not found.');
+    }
+
+    const updated: HouseholdProfile = {
+      ...target,
+      avatarDataUrl: dataUrl,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await db.profiles.put(updated);
+    const nextProfiles = current.map((p) => (p.id === profileId ? updated : p));
+    set({ profiles: nextProfiles });
+    profilePersistListener?.(nextProfiles);
   },
 
   removeProfileAvatar: async (profileId) => {
