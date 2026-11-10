@@ -1640,7 +1640,16 @@ export const ParentChoreDrawer: React.FC = () => {
                                 {tpl.points} pts
                               </span>
                               <span className="px-1.5 py-0.2 rounded text-[10px] bg-slate-800 text-slate-300">
-                                {tpl.cadence}
+                                {tpl.cadence === 'weekly'
+                                  ? `weekly • ${(tpl.daysOfWeek && tpl.daysOfWeek.length > 0
+                                      ? tpl.daysOfWeek
+                                      : [0]
+                                    )
+                                      .map((d) => DAY_LABELS[d] || 'Sun')
+                                      .join(', ')}`
+                                  : tpl.cadence === 'interval'
+                                    ? `every ${tpl.intervalDays || 2}d`
+                                    : tpl.cadence}
                               </span>
                               {tpl.requiresApproval && (
                                 <span className="px-1.5 py-0.2 rounded text-[10px] bg-amber-500/15 text-amber-300">
