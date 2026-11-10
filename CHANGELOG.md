@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.14] - 2026-11-10
+
+### Canvas Carousel Rotation Fix, Order Self-Healing & Realtime Sync Reliability
+* **Canvas Order Self-Healing (`src/store/dashboardStore.ts`, `src/services/supabase.ts`):**
+  * Guarded `order` indices with `Number.isFinite` across `initStore`, `addTab`, `syncRemoteTabChange`, and cloud sync payloads so null/undefined remote `order_index` values never corrupt new canvas ordering with `NaN`, and automatically repaired any affected local IndexedDB tabs.
+* **Carousel Progression & Tap Reset Timing (`src/App.tsx`, `src/store/dashboardStore.ts`):**
+  * Updated the carousel interval in `App.tsx` to advance from `activeTabIdResolved` and pause cleanly while any modal or drawer is open.
+  * Adjusted `pauseCarouselTemporarily` so user taps reset the rotation countdown cleanly without stacking an extra 20-second pause on top of `defaultRotateDurationSec`.
+* **Realtime WebSocket & Background Sync Reliability (`src/services/supabase.ts`, `src/stores/useProfileStore.ts`):**
+  * Removed the `household_profiles` binding from the shared `dashboard-realtime` WebSocket channel (profiles already sync via `__ambiently_household_profiles__` in `public.widgets`), preventing `CHANNEL_ERROR` rejections on databases without the optional table.
+  * Stopped `initProfileStore` from firing `profilePersistListener` on normal startup/pull reads so background `initStore` calls no longer trigger redundant cloud pushes.
+
+---
+
 ## [0.4.13] - 2026-11-10
 
 ### Chore Widget Canvas Drag Fix, Schedule-Aware Overdue Cleanup & Header Polish
