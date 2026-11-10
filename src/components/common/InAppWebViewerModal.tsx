@@ -159,6 +159,10 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
       className="fixed inset-0 z-[9980] bg-black/85 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 md:p-6 animate-in fade-in duration-200 select-none"
     >
       <style>{`
+        .ambiently-reader-body {
+          position: relative;
+          overflow-x: hidden;
+        }
         .ambiently-reader-body p {
           margin-bottom: 1.25rem;
           line-height: 1.8;
@@ -182,9 +186,13 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
           margin-bottom: 0.5rem;
         }
         .ambiently-reader-body img {
+          position: static !important;
           border-radius: 0.875rem;
           max-width: 100%;
+          max-height: 520px;
+          width: auto;
           height: auto;
+          object-fit: contain;
           margin: 1.5rem auto;
           display: block;
           border: 1px solid #1e293b;

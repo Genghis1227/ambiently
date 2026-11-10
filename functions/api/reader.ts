@@ -67,6 +67,8 @@ function sanitizeArticleHtml(rawHtml: string): string {
   return rawHtml
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+    .replace(/\s+style="[^"]*"/gi, '')
+    .replace(/\s+style='[^']*'/gi, '')
     .replace(/\s+on[a-z]+="[^"]*"/gi, '')
     .replace(/\s+on[a-z]+='[^']*'/gi, '');
 }
@@ -175,25 +177,79 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       }
     }
 
-    // 3. Resolve relative image URLs and links across the document first
+    // 3. Remove non-article UI chrome (popovers, follow buttons, author bio headers, recirculation)
+    const preCleanSelectors = [
+      'script',
+      'style',
+      'noscript',
+      'aside',
+      'nav',
+      'footer',
+      'form',
+      '[aria-hidden="true"]',
+      '[id^="popover-"]',
+      '[id^="follow-"]',
+      '[role="navigation"]',
+      '[role="complementary"]',
+      '.duet--article--lede',
+      '.duet--article--article-byline',
+      '.duet--article--share-buttons',
+      '.duet--cta--newsletter',
+      '.duet--layout--article-recirc-color-container',
+      '.duet--layout--rail',
+    ].join(', ');
+    for (const el of Array.from(document.querySelectorAll(preCleanSelectors)) as any[]) {
+      el.remove();
+    }
+
+    // 4. Resolve relative image URLs, promote srcset over data: blur placeholders, and strip inline styles
     const images = Array.from(document.querySelectorAll('img')) as any[];
     for (const img of images) {
-      const src =
+      const wAttr = Number(img.getAttribute('width') || 0);
+      const hAttr = Number(img.getAttribute('height') || 0);
+      if ((wAttr > 0 && wAttr <= 64) || (hAttr > 0 && hAttr <= 64)) {
+        img.remove();
+        continue;
+      }
+
+      let src =
         img.getAttribute('src') ||
         img.getAttribute('data-src') ||
-        img.getAttribute('data-original');
-      if (src) {
-        try {
-          img.setAttribute('src', new URL(src, finalUrl).href);
-        } catch {
-          // Keep original src
+        img.getAttribute('data-original') ||
+        '';
+      const srcset = img.getAttribute('srcset') || img.getAttribute('data-srcset') || '';
+
+      if ((!src || src.startsWith('data:')) && srcset) {
+        const candidates = srcset
+          .split(',')
+          .map((part: string) => part.trim().split(/\s+/)[0])
+          .filter(Boolean);
+        if (candidates.length > 0) {
+          src = candidates[candidates.length - 1];
         }
       }
+
+      if (!src || src.startsWith('data:')) {
+        img.remove();
+        continue;
+      }
+
+      try {
+        img.setAttribute('src', new URL(src, finalUrl).href);
+      } catch {
+        // Keep original src
+      }
       img.removeAttribute('srcset');
+      img.removeAttribute('data-srcset');
       img.removeAttribute('data-src');
+      img.removeAttribute('style');
       img.removeAttribute('loading');
       img.removeAttribute('onerror');
       img.removeAttribute('onload');
+    }
+
+    for (const styledEl of Array.from(document.querySelectorAll('[style]')) as any[]) {
+      styledEl.removeAttribute('style');
     }
 
     const anchors = Array.from(document.querySelectorAll('a')) as any[];
@@ -208,9 +264,10 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       }
     }
 
-    // 4. Capture semantic <article> / articleBody container BEFORE Readability mutates the DOM
+    // 5. Capture semantic <article> / articleBody container BEFORE Readability mutates the DOM
     const semanticTarget =
       document.querySelector('[itemprop="articleBody"]') ||
+      document.querySelector('.duet--layout--entry-body') ||
       document.querySelector('article .markdown-body') ||
       document.querySelector('article .post-content') ||
       document.querySelector('article .entry-content') ||
@@ -236,6 +293,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
           'form',
           'noscript',
           'svg',
+          'button',
           '.sidebar',
           '.Layout-sidebar',
           '.related',
@@ -254,10 +312,12 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       }
     }
 
-    // 5. Protect ancestors of <article> and <main> so Readability's UNLIKELY_CANDIDATES regex
+    // 6. Protect ancestors of <article> and <main> so Readability's UNLIKELY_CANDIDATES regex
     // (which matches "sidebar" in classes like "Layout--sidebarPosition-end") never deletes the article wrapper!
     const coreNodes = Array.from(
-      document.querySelectorAll('article, main, [role="main"], [itemprop="articleBody"]')
+      document.querySelectorAll(
+        'article, main, [role="main"], [itemprop="articleBody"], .duet--layout--entry-body'
+      )
     ) as any[];
     for (const core of coreNodes) {
       let el = core;
@@ -270,7 +330,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       }
     }
 
-    // 6. Run Mozilla Readability
+    // 7. Run Mozilla Readability
     const reader = new Readability(document as any, {
       charThreshold: 80,
       keepClasses: false,
@@ -292,11 +352,12 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       textContent = '';
     }
 
-    // 7. If semantic <article> extracted substantially more content than Readability, prefer semantic <article>
+    // 8. Only fall back to semantic <article> when Readability fails or truncates severely
     if (
       semanticText.length > 250 &&
       !isBoilerplateStub(semanticText) &&
-      (textContent.length < 250 || semanticText.length > textContent.length * 1.35)
+      (textContent.length < 250 ||
+        (textContent.length < 800 && semanticText.length > textContent.length * 2.2))
     ) {
       contentHtml = semanticHtml;
       textContent = semanticText;
