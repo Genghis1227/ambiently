@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.4.10",
+    date: "November 10, 2026",
+    title: "iOS 18 HEIC Decoder Upgrade, Active Reward Store Management & 24h Overdue Auto-Dismiss",
+    highlights: [
+      "Upgraded HEIC/HEIF Decoder (libheif-js v1.23.5): Full client-side decoding for modern iOS 17/18 HDR Gain Map (tmap / MiHB) HEIC photos without Web Worker or CSP restrictions.",
+      "Active Reward Store Goal Management: Added an Active Reward Store Goals section in the Parent Drawer to remove or re-price live rewards at any time.",
+      "24-Hour Overdue Grace Window & Manual Dismiss: Overdue tasks automatically dismiss after 24 hours so stale chores never pile up, plus a one-click Dismiss button on overdue cards.",
+    ],
+  },
+  {
     version: "v0.4.9",
     date: "November 9, 2026",
     title: "HEIC Avatar Cropper, Multi-Kid Chores, Web Preview Fix & Toolbar Hub Polish",
