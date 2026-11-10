@@ -22,6 +22,8 @@ export interface ChoreTemplate {
   assignedTo: string | 'shared';
   cadence: CadenceType;
   daysOfWeek?: number[];
+  /** When true on a 'weekly' cadence, the chore can be done any day of the week (1x per week max) */
+  weeklyAnyDay?: boolean;
   intervalDays?: number;
   intervalAnchorDate?: string; // "YYYY-MM-DD" anchor for interval cadence
   requiresApproval: boolean;

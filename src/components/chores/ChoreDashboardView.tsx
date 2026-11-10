@@ -390,6 +390,12 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
                   Shared
                 </span>
               )}
+
+              {template.cadence === 'weekly' && template.weeklyAnyDay && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                  1× / wk (Any day)
+                </span>
+              )}
             </div>
           </div>
         </div>

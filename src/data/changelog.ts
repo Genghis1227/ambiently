@@ -11,6 +11,15 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.4.11",
+    date: "November 10, 2026",
+    title: "Toolbar Horizontal Pop-Out Panels & Flexible Weekly (1x / Any Day) Chores",
+    highlights: [
+      "Compact Toolbar Horizontal Pop-Out Panels: Grouped the Family Hub (Chores & Rewards + Meal Planner preview), the '+' Add Menu (New Note, Add Widget, Create Canvas), and Quick Utilities (Night Mode, Fullscreen, Refresh/Update, Hide Toolbar) into sleek horizontal pop-out bars so canvases never overflow on smaller screens.",
+      "Weekly — Any Day (1x / Week) Chore Schedule: Added a flexible 'Any Day (1x / Week)' weekly cadence option so household chores can be completed on any day from Sunday to Saturday for full points and automatically complete for the remainder of the week.",
+    ],
+  },
+  {
     version: "v0.4.10",
     date: "November 10, 2026",
     title: "iOS 18 HEIC Decoder Upgrade, Active Reward Store Management & 24h Overdue Auto-Dismiss",

@@ -44,6 +44,24 @@ export function daysBetweenDateKeys(startKey: string, endKey: string): number {
 }
 
 /**
+ * Returns the Sunday "YYYY-MM-DD" date key starting the calendar week of `dateKey`.
+ */
+export function getWeekStartDateKey(dateKey: string): string {
+  const date = parseLocalDateKey(dateKey);
+  const dayOfWeek = date.getDay(); // 0 (Sun) .. 6 (Sat)
+  const sunday = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate() - dayOfWeek,
+    0,
+    0,
+    0,
+    0
+  );
+  return localDateKey(sunday);
+}
+
+/**
  * Recomputes spendable `balance` and cumulative `lifetimePoints` for every profile
  * strictly from the immutable append-only audit ledger.
  */
@@ -174,6 +192,20 @@ export function isTemplateDueOnDate(
     case 'weekends':
       return dayOfWeek === 0 || dayOfWeek === 6;
     case 'weekly': {
+      if (template.weeklyAnyDay) {
+        const weekStartKey = getWeekStartDateKey(dateKey);
+        const alreadyHandledThisWeek = existingInstances.some(
+          (inst) =>
+            inst.choreId === template.id &&
+            inst.dateScheduled >= weekStartKey &&
+            inst.dateScheduled <= dateKey &&
+            (inst.status === 'pending' ||
+              inst.status === 'awaiting_approval' ||
+              inst.status === 'completed' ||
+              inst.status === 'expired')
+        );
+        return !alreadyHandledThisWeek;
+      }
       const days =
         template.daysOfWeek && template.daysOfWeek.length > 0 ? template.daysOfWeek : [0];
       return days.includes(dayOfWeek);
@@ -286,10 +318,30 @@ export function evaluateChoreRollover(
   // 3. Process past-day pending instances
   // Track overdue instances per choreId so at most one active overdue carry-over exists per template
   const overdueByChoreId = new Map<string, ActiveChoreInstance>();
+  const currentWeekStartKey = getWeekStartDateKey(todayKey);
 
   nextInstances = nextInstances.map((inst) => {
     if (inst.dateScheduled < todayKey && inst.status === 'pending') {
       const tpl = templateMap.get(inst.choreId);
+
+      // For "Weekly — Any Day (1x / Week)" chores, keep the pending instance active
+      // throughout the current calendar week (Sun–Sat) without marking it overdue mid-week
+      if (
+        tpl &&
+        tpl.cadence === 'weekly' &&
+        tpl.weeklyAnyDay &&
+        !inst.isOverdue &&
+        inst.dateScheduled >= currentWeekStartKey
+      ) {
+        changed = true;
+        return {
+          ...inst,
+          instanceId: `${inst.choreId}_${todayKey}`,
+          dateScheduled: todayKey,
+          isOverdue: false,
+        };
+      }
+
       const daysLate = daysBetweenDateKeys(inst.dateScheduled, todayKey);
       // Auto-dismiss overdue tasks after 24 whole hours (daysLate > 1) or if rolloverUntilDone is disabled
       if (!tpl || !tpl.rolloverUntilDone || daysLate > 1) {

@@ -46,6 +46,9 @@ import {
   CloudSun,
   Lightbulb,
   Bell,
+  SlidersHorizontal,
+  FolderPlus,
+  ClipboardList,
 } from 'lucide-react';
 import type {
   AutoOrganizeMode,
@@ -147,6 +150,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
   const isVertical = dockPosition === 'left' || dockPosition === 'right';
   const [showOrganizeMenu, setShowOrganizeMenu] = useState(false);
   const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(false);
+  const [activePopout, setActivePopout] = useState<'hub' | 'add' | 'utilities' | null>(null);
   const [activeMode, setActiveMode] = useState<AutoOrganizeMode>('bento');
   const [isPeekOpen, setIsPeekOpen] = useState(false);
   const navRef = useRef<HTMLElement>(null);
@@ -174,6 +178,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
     if (isNightMode) {
       setIsQuickMenuOpen(false);
       setShowOrganizeMenu(false);
+      setActivePopout(null);
       if (isDockHidden) {
         setIsPeekOpen(false);
       }
@@ -196,6 +201,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
       if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
       hideTimerRef.current = window.setTimeout(() => {
         setIsPeekOpen(false);
+        setActivePopout(null);
       }, isNightMode ? 350 : 500);
     }
   };
@@ -208,9 +214,9 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
     };
   }, []);
 
-  // Auto-hide when clicking off the toolbar while in hidden/peeked mode
+  // Close pop-out panels or auto-hide peeked dock when clicking outside or pressing Escape
   useEffect(() => {
-    if (!isDockHidden || !isPeekOpen) return;
+    if ((!isDockHidden || !isPeekOpen) && !activePopout) return;
 
     const handlePointerDownOutside = (e: PointerEvent | MouseEvent) => {
       const target = e.target as HTMLElement | null;
@@ -225,12 +231,18 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
         return;
       }
 
-      setIsPeekOpen(false);
+      setActivePopout(null);
+      if (isDockHidden && isPeekOpen) {
+        setIsPeekOpen(false);
+      }
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setIsPeekOpen(false);
+        setActivePopout(null);
+        if (isDockHidden && isPeekOpen) {
+          setIsPeekOpen(false);
+        }
       }
     };
 
@@ -240,7 +252,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
       window.removeEventListener('pointerdown', handlePointerDownOutside);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isDockHidden, isPeekOpen]);
+  }, [isDockHidden, isPeekOpen, activePopout]);
 
   // If dock is hidden, it is effectively hidden unless the user has peeked it open
   const isEffectivelyHidden = isDockHidden && !isPeekOpen;
@@ -274,6 +286,19 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
     top: 'top-16 left-1/2 -translate-x-1/2',
     bottom: 'bottom-16 left-1/2 -translate-x-1/2',
   }[dockPosition];
+
+  const inlinePopoutPositionClasses = {
+    left: 'left-full ml-3 top-1/2 -translate-y-1/2',
+    right: 'right-full mr-3 top-1/2 -translate-y-1/2',
+    top: 'top-full mt-3 left-1/2 -translate-x-1/2',
+    bottom: 'bottom-full mb-3 left-1/2 -translate-x-1/2',
+  }[dockPosition];
+
+  const togglePopout = (panel: 'hub' | 'add' | 'utilities') => {
+    setIsQuickMenuOpen(false);
+    setShowOrganizeMenu(false);
+    setActivePopout((prev) => (prev === panel ? null : panel));
+  };
 
   return (
     <>
@@ -322,7 +347,11 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
         <div className="relative flex items-center justify-center p-1">
           <button
             type="button"
-            onClick={() => setIsQuickMenuOpen(!isQuickMenuOpen)}
+            onClick={() => {
+              setActivePopout(null);
+              setShowOrganizeMenu(false);
+              setIsQuickMenuOpen(!isQuickMenuOpen);
+            }}
             title="Ambiently Quick Hub & Kiosk Controls"
             className={`rounded-xl p-0.5 transition-all cursor-pointer group active:scale-95 ${
               isQuickMenuOpen
@@ -344,6 +373,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
             onClose={() => setIsQuickMenuOpen(false)}
             onSelectTab={(tabId) => {
               setIsQuickMenuOpen(false);
+              setActivePopout(null);
               onSelectTab(tabId);
             }}
             onOpenSettings={onOpenSettings}
@@ -358,7 +388,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
           className={`bg-gray-800 ${isVertical ? 'w-6 h-px my-0.5' : 'h-6 w-px mx-0.5'}`}
         />
 
-        {/* Tab Switcher Icons */}
+        {/* Tab Switcher Icons (Canvases stay directly on main toolbar) */}
         <div className={`flex items-center gap-1.5 ${isVertical ? 'flex-col' : 'flex-row'}`}>
           {tabs.map((tab, idx) => {
             const isActive = tab.id === activeTabId;
@@ -370,6 +400,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
                 key={tab.id}
                 onClick={() => {
                   setIsQuickMenuOpen(false);
+                  setActivePopout(null);
                   onSelectTab(tab.id);
                 }}
                 title={
@@ -406,56 +437,33 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
               </button>
             );
           })}
-
-          {/* Create New Canvas Button */}
-          {onOpenAddCanvas && !isCanvasLocked && (
-            <button
-              onClick={tabs.length >= MAX_CANVASES ? undefined : onOpenAddCanvas}
-              disabled={tabs.length >= MAX_CANVASES}
-              title={
-                tabs.length >= MAX_CANVASES
-                  ? 'Canvas limit reached (maximum 10 canvases allowed)'
-                  : 'Create New Canvas'
-              }
-              className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all border ${
-                tabs.length >= MAX_CANVASES
-                  ? 'text-gray-600 border-gray-800 bg-gray-900/40 opacity-40 cursor-not-allowed'
-                  : 'text-emerald-400 hover:text-white hover:bg-emerald-600/30 border-emerald-500/20 cursor-pointer'
-              }`}
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-          )}
         </div>
 
         <div
           className={`bg-gray-800 ${isVertical ? 'w-6 h-px my-1' : 'h-6 w-px mx-1'}`}
         />
 
-        {/* Dedicated Middle Hub Section: Chores & Rewards (and upcoming Meal Planner) */}
+        {/* Dedicated Middle Hub Section: Pop-out launcher for Chores & Rewards + upcoming Meal Planner */}
         <div
-          className={`flex items-center gap-2 ${
-            isVertical ? 'flex-col py-0.5' : 'flex-row px-0.5'
+          className={`relative flex items-center justify-center ${
+            isVertical ? 'py-0.5' : 'px-0.5'
           }`}
         >
           <button
             type="button"
-            onClick={() => {
-              setIsQuickMenuOpen(false);
-              setChoreFullScreenOpen(!isChoreFullScreenOpen);
-            }}
+            onClick={() => togglePopout('hub')}
             title={
               pendingChoreCounts.totalPendingCount > 0
-                ? `Family Chores & Rewards Hub (${pendingChoreCounts.totalPendingCount} awaiting parent review)`
-                : 'Family Chores & Rewards Hub'
+                ? `Family Hub: Chores & Meal Planning (${pendingChoreCounts.totalPendingCount} awaiting parent review)`
+                : 'Family Hub: Chores & Meal Planning'
             }
             className={`relative flex items-center justify-center w-11 h-11 rounded-xl transition-all cursor-pointer border ${
-              isChoreFullScreenOpen
+              isChoreFullScreenOpen || activePopout === 'hub'
                 ? 'bg-emerald-600 text-white border-emerald-400/60 shadow-lg shadow-emerald-500/30'
                 : 'bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/30'
             }`}
           >
-            <CheckSquare className="w-5 h-5" />
+            <ClipboardList className="w-5 h-5" />
             {pendingChoreCounts.totalPendingCount > 0 && (
               <span
                 className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 text-gray-950 font-mono font-bold text-[10px] flex items-center justify-center shadow-md ring-1.5 ring-gray-950"
@@ -465,13 +473,60 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
               </span>
             )}
           </button>
+
+          {/* Horizontal Pop-Out Panel: Chores & Rewards + Meal Planner */}
+          {activePopout === 'hub' && (
+            <div
+              data-dock-element="true"
+              className={`absolute z-50 flex flex-row items-center gap-2 p-2 rounded-2xl bg-gray-900/95 backdrop-blur-xl border border-emerald-500/40 shadow-2xl animate-in fade-in zoom-in-95 duration-150 ${inlinePopoutPositionClasses}`}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setActivePopout(null);
+                  setChoreFullScreenOpen(!isChoreFullScreenOpen);
+                }}
+                title={
+                  pendingChoreCounts.totalPendingCount > 0
+                    ? `Family Chores & Rewards (${pendingChoreCounts.totalPendingCount} awaiting parent review)`
+                    : 'Family Chores & Rewards'
+                }
+                className={`relative flex items-center gap-2 px-3 h-10 rounded-xl transition-all cursor-pointer border whitespace-nowrap ${
+                  isChoreFullScreenOpen
+                    ? 'bg-emerald-600 text-white border-emerald-400/60 shadow-md shadow-emerald-500/30'
+                    : 'bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/30'
+                }`}
+              >
+                <CheckSquare className="w-4 h-4 shrink-0" />
+                <span className="text-xs font-semibold">Chores & Rewards</span>
+                {pendingChoreCounts.totalPendingCount > 0 && (
+                  <span className="min-w-[18px] h-4.5 px-1 rounded-full bg-amber-500 text-gray-950 font-mono font-bold text-[10px] flex items-center justify-center">
+                    {pendingChoreCounts.totalPendingCount}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                disabled
+                title="Weekly Meal Planner (Coming Soon)"
+                className="relative flex items-center gap-2 px-3 h-10 rounded-xl bg-gray-800/60 text-gray-400 border border-gray-700/60 opacity-75 cursor-not-allowed whitespace-nowrap"
+              >
+                <Utensils className="w-4 h-4 shrink-0 text-amber-400/70" />
+                <span className="text-xs font-semibold">Meal Planner</span>
+                <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-gray-700/80 text-gray-300">
+                  Soon
+                </span>
+              </button>
+            </div>
+          )}
         </div>
 
         <div
           className={`bg-gray-800 ${isVertical ? 'w-6 h-px my-1' : 'h-6 w-px mx-1'}`}
         />
 
-        {/* Board Creation & Organization Actions: Pin Note, Add Tile, Auto-Organize & Trash */}
+        {/* Board Creation & Organization Actions: '+' Pop-out (Note, Widget, Canvas), Auto-Organize & Archive */}
         {isCanvasLocked ? (
           <div
             title="Canvas layout & editing is locked (tiles, positions, and creation disabled)"
@@ -481,35 +536,103 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
           </div>
         ) : (
           <div className={`flex items-center gap-1.5 ${isVertical ? 'flex-col' : 'flex-row'}`}>
-            {onOpenCreateNote && (
-              <button
-                onClick={onOpenCreateNote}
-                title="New Sticky Note"
-                className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition-all cursor-pointer group shadow-xs"
-              >
-                <StickyNote className="w-4 h-4 transition-transform group-hover:scale-105" />
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-gray-950 flex items-center justify-center shadow-md ring-1.5 ring-gray-950">
-                  <Plus className="w-2.5 h-2.5 stroke-[3]" />
-                </span>
-              </button>
-            )}
+            {/* '+' Add Menu Trigger & Horizontal Pop-Out Panel */}
+            {(onOpenCreateNote || onOpenAddWidget || onOpenAddCanvas) && (
+              <div className="relative flex items-center justify-center">
+                <button
+                  type="button"
+                  onClick={() => togglePopout('add')}
+                  title="Add Note, Widget, or Canvas"
+                  className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all cursor-pointer border ${
+                    activePopout === 'add'
+                      ? 'bg-blue-600 text-white border-blue-400/60 shadow-lg shadow-blue-500/30'
+                      : 'bg-blue-500/15 hover:bg-blue-500/30 text-blue-300 border-blue-500/30'
+                  }`}
+                >
+                  <Plus
+                    className={`w-5 h-5 transition-transform duration-200 ${
+                      activePopout === 'add' ? 'rotate-45' : ''
+                    }`}
+                  />
+                </button>
 
-            {onOpenAddWidget && (
-              <button
-                onClick={onOpenAddWidget}
-                title="Add Widget Tile to Canvas"
-                className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-blue-500/15 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 transition-all cursor-pointer group shadow-xs"
-              >
-                <LayoutGrid className="w-4 h-4 transition-transform group-hover:scale-105" />
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-md ring-1.5 ring-gray-950">
-                  <Plus className="w-2.5 h-2.5 stroke-[3]" />
-                </span>
-              </button>
+                {activePopout === 'add' && (
+                  <div
+                    data-dock-element="true"
+                    className={`absolute z-50 flex flex-row items-center gap-2 p-2 rounded-2xl bg-gray-900/95 backdrop-blur-xl border border-blue-500/40 shadow-2xl animate-in fade-in zoom-in-95 duration-150 ${inlinePopoutPositionClasses}`}
+                  >
+                    {onOpenCreateNote && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActivePopout(null);
+                          onOpenCreateNote();
+                        }}
+                        title="New Sticky Note"
+                        className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition-all cursor-pointer group shadow-xs"
+                      >
+                        <StickyNote className="w-4 h-4 transition-transform group-hover:scale-105" />
+                        <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-gray-950 flex items-center justify-center shadow-md ring-1.5 ring-gray-950">
+                          <Plus className="w-2.5 h-2.5 stroke-[3]" />
+                        </span>
+                      </button>
+                    )}
+
+                    {onOpenAddWidget && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActivePopout(null);
+                          onOpenAddWidget();
+                        }}
+                        title="Add Widget Tile to Canvas"
+                        className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-blue-500/15 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 transition-all cursor-pointer group shadow-xs"
+                      >
+                        <LayoutGrid className="w-4 h-4 transition-transform group-hover:scale-105" />
+                        <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-md ring-1.5 ring-gray-950">
+                          <Plus className="w-2.5 h-2.5 stroke-[3]" />
+                        </span>
+                      </button>
+                    )}
+
+                    {onOpenAddCanvas && (
+                      <button
+                        type="button"
+                        onClick={
+                          tabs.length >= MAX_CANVASES
+                            ? undefined
+                            : () => {
+                                setActivePopout(null);
+                                onOpenAddCanvas();
+                              }
+                        }
+                        disabled={tabs.length >= MAX_CANVASES}
+                        title={
+                          tabs.length >= MAX_CANVASES
+                            ? 'Canvas limit reached (maximum 10 canvases allowed)'
+                            : 'Create New Canvas'
+                        }
+                        className={`relative flex items-center justify-center w-10 h-10 rounded-xl transition-all border group shadow-xs ${
+                          tabs.length >= MAX_CANVASES
+                            ? 'text-gray-600 border-gray-800 bg-gray-900/40 opacity-40 cursor-not-allowed'
+                            : 'bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/30 cursor-pointer'
+                        }`}
+                      >
+                        <FolderPlus className="w-4 h-4 transition-transform group-hover:scale-105" />
+                        <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 text-gray-950 flex items-center justify-center shadow-md ring-1.5 ring-gray-950">
+                          <Plus className="w-2.5 h-2.5 stroke-[3]" />
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
 
             {onAutoOrganize && (
               <button
                 onClick={() => {
+                  setActivePopout(null);
                   onAutoOrganize(activeMode);
                   setShowOrganizeMenu(true);
                 }}
@@ -522,7 +645,10 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
 
             {onOpenTrash && trashCount > 0 && (
               <button
-                onClick={onOpenTrash}
+                onClick={() => {
+                  setActivePopout(null);
+                  onOpenTrash();
+                }}
                 title={`Archived & Expired Notes (${trashCount})`}
                 className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gray-800/80 hover:bg-gray-700 text-amber-400 border border-amber-500/30 transition-all cursor-pointer"
               >
@@ -539,90 +665,145 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
           className={`bg-gray-800 ${isVertical ? 'w-6 h-px my-0.5' : 'h-6 w-px mx-0.5'}`}
         />
 
-        {/* Quick Utilities / Kiosk controls */}
+        {/* Quick Utilities Pop-out & Settings/Lock */}
         <div className={`flex items-center gap-1.5 ${isVertical ? 'flex-col' : 'flex-row'}`}>
-          <button
-            onClick={() => {
-              onToggleNightMode();
-              if (isDockHidden) {
-                setIsPeekOpen(false);
+          <div className="relative flex items-center justify-center">
+            <button
+              type="button"
+              onClick={() => togglePopout('utilities')}
+              title={
+                isUpdateAvailable
+                  ? `Quick Utilities (✨ Update v${latestVersion} available!)`
+                  : 'Quick Utilities (Night Mode, Fullscreen, Refresh, Hide Toolbar)'
               }
-            }}
-            title="Toggle Night Mode"
-            className="flex items-center justify-center w-10 h-10 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-gray-800/70 transition-all cursor-pointer"
-          >
-            <Moon className="w-4 h-4" />
-          </button>
+              className={`relative flex items-center justify-center w-10 h-10 rounded-xl transition-all cursor-pointer ${
+                activePopout === 'utilities'
+                  ? 'bg-gray-700 text-white shadow-md'
+                  : isUpdateAvailable
+                  ? 'text-cyan-300 bg-cyan-500/20 hover:bg-cyan-500/35 border border-cyan-400/50 shadow-lg shadow-cyan-950/60'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/70'
+              }`}
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+              {isUpdateAvailable && (
+                <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500 ring-2 ring-gray-950" />
+                </span>
+              )}
+            </button>
 
-          <button
-            onClick={onToggleFullscreen}
-            title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen Kiosk'}
-            className="flex items-center justify-center w-10 h-10 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-gray-800/70 transition-all cursor-pointer"
-          >
-            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-          </button>
+            {/* Horizontal Pop-Out Panel: Night Mode, Fullscreen, Refresh/Update, Hide Toolbar */}
+            {activePopout === 'utilities' && (
+              <div
+                data-dock-element="true"
+                className={`absolute z-50 flex flex-row items-center gap-1.5 p-2 rounded-2xl bg-gray-900/95 backdrop-blur-xl border border-gray-700/80 shadow-2xl animate-in fade-in zoom-in-95 duration-150 ${inlinePopoutPositionClasses}`}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePopout(null);
+                    onToggleNightMode();
+                    if (isDockHidden) {
+                      setIsPeekOpen(false);
+                    }
+                  }}
+                  title="Toggle Night Mode"
+                  className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all cursor-pointer ${
+                    isNightMode
+                      ? 'text-amber-300 bg-amber-500/15 border border-amber-500/30'
+                      : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/70'
+                  }`}
+                >
+                  <Moon className="w-4 h-4" />
+                </button>
 
-          {/* Quick Dashboard Refresh / Update Pull */}
-          <button
-            onClick={() => {
-              if (isUpdateAvailable) {
-                applyUpdate();
-              } else {
-                window.location.reload();
-              }
-            }}
-            title={
-              isUpdateAvailable
-                ? `✨ New version v${latestVersion} available! Click to refresh and apply update`
-                : 'Refresh Dashboard (Reload panel)'
-            }
-            className={`relative flex items-center justify-center w-10 h-10 rounded-xl transition-all cursor-pointer ${
-              isUpdateAvailable
-                ? 'text-cyan-300 bg-cyan-500/20 hover:bg-cyan-500/35 border border-cyan-400/50 shadow-lg shadow-cyan-950/60'
-                : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/70'
-            }`}
-          >
-            <RotateCw className={`w-4 h-4 ${isUpdateAvailable ? 'animate-spin [animation-duration:3s]' : ''}`} />
-            {isUpdateAvailable && (
-              <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500 ring-2 ring-gray-950" />
-              </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePopout(null);
+                    onToggleFullscreen();
+                  }}
+                  title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen Kiosk'}
+                  className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all cursor-pointer ${
+                    isFullscreen
+                      ? 'text-blue-300 bg-blue-500/15 border border-blue-500/30'
+                      : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/70'
+                  }`}
+                >
+                  {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePopout(null);
+                    if (isUpdateAvailable) {
+                      applyUpdate();
+                    } else {
+                      window.location.reload();
+                    }
+                  }}
+                  title={
+                    isUpdateAvailable
+                      ? `✨ New version v${latestVersion} available! Click to refresh and apply update`
+                      : 'Refresh Dashboard (Reload panel)'
+                  }
+                  className={`relative flex items-center justify-center w-10 h-10 rounded-xl transition-all cursor-pointer ${
+                    isUpdateAvailable
+                      ? 'text-cyan-300 bg-cyan-500/20 hover:bg-cyan-500/35 border border-cyan-400/50 shadow-lg shadow-cyan-950/60'
+                      : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/70'
+                  }`}
+                >
+                  <RotateCw className={`w-4 h-4 ${isUpdateAvailable ? 'animate-spin [animation-duration:3s]' : ''}`} />
+                  {isUpdateAvailable && (
+                    <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500 ring-2 ring-gray-950" />
+                    </span>
+                  )}
+                </button>
+
+                {onToggleDockHidden && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActivePopout(null);
+                      onToggleDockHidden();
+                      setIsPeekOpen(false);
+                    }}
+                    title={
+                      isDockHidden
+                        ? 'Keep toolbar visible (Pin toolbar)'
+                        : 'Hide toolbar (Shortcut: \\)'
+                    }
+                    className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all cursor-pointer ${
+                      isDockHidden
+                        ? 'text-amber-400 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 shadow-sm'
+                        : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/70'
+                    }`}
+                  >
+                    {isDockHidden ? (
+                      <EyeOff className="w-4 h-4 text-amber-400" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
+                )}
+              </div>
             )}
-          </button>
+          </div>
 
           <button
-            onClick={onOpenSettings}
+            onClick={() => {
+              setActivePopout(null);
+              onOpenSettings();
+            }}
             title="Settings & Lock"
             className="flex items-center justify-center w-10 h-10 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-gray-800/70 transition-all cursor-pointer"
           >
             {isLocked ? <Lock className="w-4 h-4 text-blue-400" /> : <Settings className="w-4 h-4" />}
           </button>
-
-          {onToggleDockHidden && (
-            <button
-              onClick={() => {
-                onToggleDockHidden();
-                setIsPeekOpen(false);
-              }}
-              title={
-                isDockHidden
-                  ? 'Keep toolbar visible (Pin toolbar)'
-                  : 'Hide toolbar (Shortcut: \\)'
-              }
-              className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all cursor-pointer ${
-                isDockHidden
-                  ? 'text-amber-400 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 shadow-sm'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/70'
-              }`}
-            >
-              {isDockHidden ? (
-                <EyeOff className="w-4 h-4 text-amber-400" />
-              ) : (
-                <Eye className="w-4 h-4" />
-              )}
-            </button>
-          )}
         </div>
       </nav>
 
