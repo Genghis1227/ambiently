@@ -122,6 +122,13 @@ To enable multi-device sync across phones and displays:
 
 ---
 
-## 📄 License
+## 📄 License & Self-Hosting Attribution (AGPLv3)
 
 This project is licensed under the terms of the **GNU Affero General Public License v3.0 (AGPLv3)**. See the [LICENSE](LICENSE) file for full details.
+
+### Self-Hosting & Attribution Policy
+Ambiently keeps the live ambient display canvas 100% free of watermarks to prevent OLED burn-in and visual clutter. Instead, attribution and source links live unobtrusively inside the **Ambiently Quick Hub popover** (top-left logo menu) and the **Settings & Changelog modal footers** (`Powered by Ambiently • trinhism.com • Source (AGPLv3)`).
+
+In accordance with **AGPLv3 Sections 7(b) and 13** (Remote Network Interaction & Preservation of Legal/Author Notices):
+* If you self-host, fork, or deploy a modified version of Ambiently over a network, you **must preserve** the interactive attribution notices and source code links in the Quick Hub menu and Settings/Changelog modal footers.
+* Any modified network deployment must also make its complete corresponding source code available under the AGPLv3.

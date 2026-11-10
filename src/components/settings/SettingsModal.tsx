@@ -2033,6 +2033,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
             </>
             )}
           </div>
+
+          {/* Subtle Attribution Footer */}
+          <div className="px-6 py-3 border-t border-gray-800/80 bg-gray-950/60 flex flex-wrap items-center justify-between gap-2 text-[11px] text-gray-500 shrink-0">
+            <div className="flex items-center gap-1.5">
+              <span>
+                Powered by <strong className="text-gray-300 font-semibold">Ambiently</strong> v{APP_VERSION}
+              </span>
+              <span>•</span>
+              <a
+                href="https://trinhism.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-400 hover:text-white hover:underline transition-colors"
+              >
+                trinhism.com
+              </a>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setIsChangelogOpen(true)}
+                className="text-gray-400 hover:text-blue-400 hover:underline transition-colors cursor-pointer"
+              >
+                Release Notes
+              </button>
+              <span>•</span>
+              <a
+                href="https://github.com/Genghis1227/ambiently"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-400 hover:text-cyan-400 hover:underline transition-colors"
+              >
+                Source (AGPLv3)
+              </a>
+            </div>
+          </div>
         </div>
       </div>
 
