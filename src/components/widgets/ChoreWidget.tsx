@@ -25,6 +25,8 @@ import type {
 import {
   calculateEffectiveChorePoints,
   canSelfRevertInstance,
+  daysBetweenDateKeys,
+  isDateMatchingTemplateCadence,
 } from '../../utils/choreEngine';
 import { localDateKey } from '../../utils/timePrefs';
 import { HouseholdAvatar } from '../common/HouseholdAvatar';
@@ -144,6 +146,13 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
     for (const inst of snapshot.instances) {
       const tpl = templateMap.get(inst.choreId);
       if (!tpl) continue;
+
+      const isValidPending =
+        inst.status !== 'pending' ||
+        (isDateMatchingTemplateCadence(tpl, inst.dateScheduled) &&
+          (inst.dateScheduled === todayKey ||
+            (inst.isOverdue && daysBetweenDateKeys(inst.dateScheduled, todayKey) <= 1)));
+      if (!isValidPending) continue;
 
       const isRelevantDate = inst.dateScheduled === todayKey || inst.isOverdue;
       if (!isRelevantDate && inst.status !== 'awaiting_approval') continue;

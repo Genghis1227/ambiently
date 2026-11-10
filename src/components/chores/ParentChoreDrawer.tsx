@@ -118,7 +118,7 @@ export const ParentChoreDrawer: React.FC = () => {
   const [tplPoints, setTplPoints] = useState('15');
   const [tplAssignees, setTplAssignees] = useState<string[]>(['shared']);
   const [tplCadence, setTplCadence] = useState<CadenceType>('daily');
-  const [tplDaysOfWeek, setTplDaysOfWeek] = useState<number[]>([1, 3, 5]);
+  const [tplDaysOfWeek, setTplDaysOfWeek] = useState<number[]>([6]);
   const [tplWeeklyAnyDay, setTplWeeklyAnyDay] = useState<boolean>(false);
   const [tplIntervalDays, setTplIntervalDays] = useState('3');
   const [tplRequiresApproval, setTplRequiresApproval] = useState(false);
@@ -350,7 +350,7 @@ export const ParentChoreDrawer: React.FC = () => {
     setTplPoints('15');
     setTplAssignees(['shared']);
     setTplCadence('daily');
-    setTplDaysOfWeek([1, 3, 5]);
+    setTplDaysOfWeek([6]);
     setTplWeeklyAnyDay(false);
     setTplIntervalDays('3');
     setTplRequiresApproval(false);

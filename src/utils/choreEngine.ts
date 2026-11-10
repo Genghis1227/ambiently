@@ -174,6 +174,44 @@ export function calculateEffectiveChorePoints(
 }
 
 /**
+ * Checks whether a given `dateKey` ("YYYY-MM-DD") is a valid scheduled day for `template`'s cadence.
+ * Used to automatically expire orphaned pending instances when a template's schedule is edited
+ * (e.g., when a chore created on Monday is changed to Weekly • Saturday).
+ */
+export function isDateMatchingTemplateCadence(
+  template: ChoreTemplate,
+  dateKey: string
+): boolean {
+  const date = parseLocalDateKey(dateKey);
+  const dayOfWeek = date.getDay(); // 0 (Sun) .. 6 (Sat)
+
+  switch (template.cadence) {
+    case 'daily':
+      return true;
+    case 'weekdays':
+      return dayOfWeek >= 1 && dayOfWeek <= 5;
+    case 'weekends':
+      return dayOfWeek === 0 || dayOfWeek === 6;
+    case 'weekly': {
+      if (template.weeklyAnyDay) return true;
+      const days =
+        template.daysOfWeek && template.daysOfWeek.length > 0 ? template.daysOfWeek : [0];
+      return days.includes(dayOfWeek);
+    }
+    case 'interval': {
+      const interval = Math.max(1, Math.round(template.intervalDays || 2));
+      const anchor = template.intervalAnchorDate || dateKey;
+      const diff = daysBetweenDateKeys(anchor, dateKey);
+      return diff >= 0 && diff % interval === 0;
+    }
+    case 'bounty':
+      return true;
+    default:
+      return false;
+  }
+}
+
+/**
  * Determines whether a ChoreTemplate should schedule an ActiveChoreInstance on `dateKey`.
  */
 export function isTemplateDueOnDate(
@@ -321,36 +359,45 @@ export function evaluateChoreRollover(
   const currentWeekStartKey = getWeekStartDateKey(todayKey);
 
   nextInstances = nextInstances.map((inst) => {
-    if (inst.dateScheduled < todayKey && inst.status === 'pending') {
+    if (inst.status === 'pending') {
       const tpl = templateMap.get(inst.choreId);
 
-      // For "Weekly — Any Day (1x / Week)" chores, keep the pending instance active
-      // throughout the current calendar week (Sun–Sat) without marking it overdue mid-week
-      if (
-        tpl &&
-        tpl.cadence === 'weekly' &&
-        tpl.weeklyAnyDay &&
-        !inst.isOverdue &&
-        inst.dateScheduled >= currentWeekStartKey
-      ) {
-        changed = true;
-        return {
-          ...inst,
-          instanceId: `${inst.choreId}_${todayKey}`,
-          dateScheduled: todayKey,
-          isOverdue: false,
-        };
-      }
-
-      const daysLate = daysBetweenDateKeys(inst.dateScheduled, todayKey);
-      // Auto-dismiss overdue tasks after 24 whole hours (daysLate > 1) or if rolloverUntilDone is disabled
-      if (!tpl || !tpl.rolloverUntilDone || daysLate > 1) {
+      // If the template was deleted or edited so that `inst.dateScheduled` no longer matches
+      // its configured day-of-week/cadence (e.g. a Saturday chore with an old Monday instance),
+      // immediately dismiss/expire it so it never appears as active or overdue on the wrong day.
+      if (!tpl || !isDateMatchingTemplateCadence(tpl, inst.dateScheduled)) {
         changed = true;
         return { ...inst, status: 'expired' as const, isOverdue: false };
       }
-      if (!inst.isOverdue) {
-        changed = true;
-        return { ...inst, isOverdue: true };
+
+      if (inst.dateScheduled < todayKey) {
+        // For "Weekly — Any Day (1x / Week)" chores, keep the pending instance active
+        // throughout the current calendar week (Sun–Sat) without marking it overdue mid-week
+        if (
+          tpl.cadence === 'weekly' &&
+          tpl.weeklyAnyDay &&
+          !inst.isOverdue &&
+          inst.dateScheduled >= currentWeekStartKey
+        ) {
+          changed = true;
+          return {
+            ...inst,
+            instanceId: `${inst.choreId}_${todayKey}`,
+            dateScheduled: todayKey,
+            isOverdue: false,
+          };
+        }
+
+        const daysLate = daysBetweenDateKeys(inst.dateScheduled, todayKey);
+        // Auto-dismiss overdue tasks after 24 whole hours (daysLate > 1) or if rolloverUntilDone is disabled
+        if (!tpl.rolloverUntilDone || daysLate > 1) {
+          changed = true;
+          return { ...inst, status: 'expired' as const, isOverdue: false };
+        }
+        if (!inst.isOverdue) {
+          changed = true;
+          return { ...inst, isOverdue: true };
+        }
       }
     }
     return inst;
