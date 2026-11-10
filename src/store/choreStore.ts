@@ -190,9 +190,26 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => ({
       const householdProfiles = useProfileStore.getState().profiles;
       const stored = await db.chores.get('household_chores');
       const base = stored || DEFAULT_CHORE_SNAPSHOT;
+      const LEGACY_ID_MAP: Record<string, string> = {
+        p_olivia: 'p_kid_1',
+        p_alyssa: 'p_kid_2',
+      };
+      const hasNewGenericKids = householdProfiles.some((hp) => hp.id === 'p_kid_1' || hp.id === 'p_kid_2');
+      const migratedTemplates = hasNewGenericKids
+        ? base.templates.map((t) =>
+            LEGACY_ID_MAP[t.assignedTo] ? { ...t, assignedTo: LEGACY_ID_MAP[t.assignedTo] } : t
+          )
+        : base.templates;
+      const migratedRewards = hasNewGenericKids
+        ? base.rewards.map((r) =>
+            LEGACY_ID_MAP[r.profileId] ? { ...r, profileId: LEGACY_ID_MAP[r.profileId] } : r
+          )
+        : base.rewards;
       const syncedProfiles = mapHouseholdToChoreProfiles(householdProfiles, base.ledger);
       const initial: ChoreEngineSnapshot = {
         ...base,
+        templates: migratedTemplates,
+        rewards: migratedRewards,
         profiles: syncedProfiles.length > 0 ? syncedProfiles : base.profiles,
       };
       const { snapshot: rolled, changed } = evaluateChoreRollover(initial, new Date());

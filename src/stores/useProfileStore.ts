@@ -48,7 +48,15 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
     try {
       const existing = await db.profiles.toArray();
       const active = existing.filter((p) => !p.deletedAt);
-      if (existing.length === 0) {
+      const LEGACY_SAMPLE_IDS = new Set(['p_tony', 'p_anh', 'p_olivia', 'p_alyssa']);
+      const isUntouchedLegacySeed =
+        active.length > 0 &&
+        active.every(
+          (p) => LEGACY_SAMPLE_IDS.has(p.id) && p.updatedAt === '1970-01-01T00:00:00.000Z'
+        );
+
+      if (existing.length === 0 || isUntouchedLegacySeed) {
+        await db.profiles.clear();
         await db.profiles.bulkPut(DEFAULT_HOUSEHOLD_PROFILES);
         set({ profiles: DEFAULT_HOUSEHOLD_PROFILES, isInitialized: true });
         profilePersistListener?.(DEFAULT_HOUSEHOLD_PROFILES);
