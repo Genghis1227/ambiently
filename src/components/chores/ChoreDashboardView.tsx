@@ -60,6 +60,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
   const snapshot = useChoreStore((s) => s.snapshot);
   const completeChore = useChoreStore((s) => s.completeChore);
   const revertChoreSameDay = useChoreStore((s) => s.revertChoreSameDay);
+  const dismissChoreInstance = useChoreStore((s) => s.dismissChoreInstance);
   const proposeWishlistReward = useChoreStore((s) => s.proposeWishlistReward);
   const claimUnlockedReward = useChoreStore((s) => s.claimUnlockedReward);
   const setParentDrawerOpen = useChoreStore((s) => s.setParentDrawerOpen);
@@ -394,6 +395,19 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {section === 'today' && instance.isOverdue && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                dismissChoreInstance(instance.instanceId);
+              }}
+              title="Dismiss overdue task"
+              className="px-2 py-0.5 rounded-lg bg-slate-800/80 hover:bg-rose-500/20 text-slate-400 hover:text-rose-300 border border-slate-700/60 hover:border-rose-500/40 text-[11px] font-medium transition-colors cursor-pointer"
+            >
+              Dismiss
+            </button>
+          )}
           {section !== 'today' && (
             canUndo ? (
               <span

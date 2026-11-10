@@ -61,6 +61,7 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
   const snapshot = useChoreStore((s) => s.snapshot);
   const completeChore = useChoreStore((s) => s.completeChore);
   const revertChoreSameDay = useChoreStore((s) => s.revertChoreSameDay);
+  const dismissChoreInstance = useChoreStore((s) => s.dismissChoreInstance);
   const proposeWishlistReward = useChoreStore((s) => s.proposeWishlistReward);
   const setFullScreenOpen = useChoreStore((s) => s.setFullScreenOpen);
   const setParentDrawerOpen = useChoreStore((s) => s.setParentDrawerOpen);
@@ -419,6 +420,23 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
 
         {/* Right Side: Points Pill & Same-Day Undo Hint */}
         <div className="flex items-center gap-1.5 shrink-0">
+          {section === 'today' && instance.isOverdue && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                dismissChoreInstance(instance.instanceId);
+              }}
+              title="Dismiss overdue task"
+              className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer ${
+                isLight
+                  ? 'text-slate-500 hover:text-rose-600 hover:bg-rose-50'
+                  : 'text-slate-400 hover:text-rose-300 hover:bg-rose-500/15'
+              }`}
+            >
+              Dismiss
+            </button>
+          )}
           {section !== 'today' && (
             canUndo ? (
               <span

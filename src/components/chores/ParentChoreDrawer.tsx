@@ -1704,7 +1704,7 @@ export const ParentChoreDrawer: React.FC = () => {
                           onChange={(e) => setTplRolloverUntilDone(e.target.checked)}
                           className="rounded border-slate-700"
                         />
-                        <span>Carry over as Overdue if unfinished at midnight</span>
+                        <span>Carry over as Overdue for 24h if unfinished at midnight (auto-dismisses after 24h)</span>
                       </label>
                     </div>
 

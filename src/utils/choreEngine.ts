@@ -290,7 +290,9 @@ export function evaluateChoreRollover(
   nextInstances = nextInstances.map((inst) => {
     if (inst.dateScheduled < todayKey && inst.status === 'pending') {
       const tpl = templateMap.get(inst.choreId);
-      if (!tpl || !tpl.rolloverUntilDone) {
+      const daysLate = daysBetweenDateKeys(inst.dateScheduled, todayKey);
+      // Auto-dismiss overdue tasks after 24 whole hours (daysLate > 1) or if rolloverUntilDone is disabled
+      if (!tpl || !tpl.rolloverUntilDone || daysLate > 1) {
         changed = true;
         return { ...inst, status: 'expired' as const, isOverdue: false };
       }
