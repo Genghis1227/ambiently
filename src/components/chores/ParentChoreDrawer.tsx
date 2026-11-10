@@ -1185,15 +1185,12 @@ export const ParentChoreDrawer: React.FC = () => {
                     }
                     className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                       householdSettings.vacationMode
-                        ? 'bg-amber-500/15 border-amber-400/40 text-amber-200'
+                        ? 'bg-amber-500/20 border-amber-400/60 text-amber-200 shadow-sm shadow-amber-500/10'
                         : 'bg-slate-950/60 border-slate-800 text-slate-300 hover:border-slate-700'
                     }`}
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold">Vacation Mode</span>
-                      <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-800">
-                        {householdSettings.vacationMode ? 'PAUSED' : 'ACTIVE'}
-                      </span>
                     </div>
                     <p className="text-[11px] text-slate-400 mt-1">
                       Freezes midnight rollovers & overdue penalties while away.
