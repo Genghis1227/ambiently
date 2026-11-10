@@ -99,9 +99,24 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
 
     const items = rawItems.slice(0, 25).map((item: any, idx: number) => {
       const title = decodeHtmlEntities(textOf(item.title)) || 'Untitled';
-      const link = typeof item.link === 'string' ? item.link : item.link?.['@_href'] || '';
+      const link = Array.isArray(item.link)
+        ? item.link.find((l: any) => l?.['@_rel'] === 'alternate')?.['@_href'] ||
+          item.link[0]?.['@_href'] ||
+          textOf(item.link[0])
+        : typeof item.link === 'string'
+        ? item.link
+        : item.link?.['@_href'] || textOf(item.link) || '';
       const pubDate = item.pubDate || item.published || item.updated || new Date().toISOString();
-      const rawDesc = (textOf(item.description) || textOf(item.summary)).replace(/<[^>]*>?/gm, '').slice(0, 200);
+      const rawDesc = (
+        textOf(item.description) ||
+        textOf(item.summary) ||
+        textOf(item.content) ||
+        textOf(item['content:encoded'])
+      )
+        .replace(/<[^>]*>?/gm, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 200);
       const description = decodeHtmlEntities(rawDesc);
 
       return {
