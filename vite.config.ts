@@ -82,11 +82,15 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         // The app's own scripts and styles are built into assets/, so they must be cached for the app to
         // open offline. Only the donation pictures from public/assets are left out.
-        globIgnores: ['**/og-banner.png', 'assets/{paypal,venmo,zelle}.*'],
+        globIgnores: ['**/og-banner.png', 'assets/{paypal,venmo,zelle}.*', 'assets/heic2any-*.js'],
+        // Never intercept /api/* or /functions/* requests (such as /api/web-proxy inside an iframe)
+        // with the SPA index.html navigation fallback.
+        navigateFallbackDenylist: [/^\/api\//, /^\/functions\//],
       },
     }),
   ],
   build: {
+    chunkSizeWarningLimit: 1500,
     rolldownOptions: {
       output: {
         manualChunks(id) {

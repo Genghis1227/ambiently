@@ -426,8 +426,18 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
               <Plus className="w-4 h-4" />
             </button>
           )}
+        </div>
 
-          {/* Dedicated Top-Level Chores & Rewards Hub Button */}
+        <div
+          className={`bg-gray-800 ${isVertical ? 'w-6 h-px my-1' : 'h-6 w-px mx-1'}`}
+        />
+
+        {/* Dedicated Middle Hub Section: Chores & Rewards (and upcoming Meal Planner) */}
+        <div
+          className={`flex items-center gap-2 ${
+            isVertical ? 'flex-col py-0.5' : 'flex-row px-0.5'
+          }`}
+        >
           <button
             type="button"
             onClick={() => {
@@ -458,7 +468,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
         </div>
 
         <div
-          className={`bg-gray-800 ${isVertical ? 'w-6 h-px my-0.5' : 'h-6 w-px mx-0.5'}`}
+          className={`bg-gray-800 ${isVertical ? 'w-6 h-px my-1' : 'h-6 w-px mx-1'}`}
         />
 
         {/* Board Creation & Organization Actions: Pin Note, Add Tile, Auto-Organize & Trash */}

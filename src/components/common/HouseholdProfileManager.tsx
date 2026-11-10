@@ -1,21 +1,37 @@
 import React, { useState, useRef } from 'react';
-import { Edit2, Plus, Trash2, Upload, Users } from 'lucide-react';
+import { Crop, Edit2, Plus, Trash2, Upload, Users } from 'lucide-react';
 import { useProfileStore } from '../../stores/useProfileStore';
 import {
   HOUSEHOLD_PROFILE_PALETTE,
   type HouseholdProfile,
   type HouseholdRole,
 } from '../../types/profiles';
+import { decodeImageFileForPreview } from '../../utils/avatarCompressor';
 import { HouseholdAvatar } from './HouseholdAvatar';
+import { AvatarCropModal } from './AvatarCropModal';
 
 const PROFILE_EMOJI_PRESETS = [
-  '🧒', '👧', '👦', '🧑', '👨', '👩', '🦊', '🐼', '🦁', '🐸', '🦄', '⭐',
+  '🧒', '👧', '👦', '🧑', '👨', '👩', '👶', '🧓', '👵', '🦊', '🐼', '🦁',
+  '🐸', '🦄', '🐨', '🐯', '🐰', '🐶', '🐱', '🦉', '🦋', '🦖', '🚀', '⭐',
 ];
+
+function extractLatestEmoji(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  if (typeof Intl !== 'undefined' && 'Segmenter' in Intl) {
+    const segs = Array.from(
+      new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(trimmed)
+    );
+    return segs[segs.length - 1]?.segment || trimmed;
+  }
+  const chars = Array.from(trimmed);
+  return chars[chars.length - 1] || trimmed;
+}
 
 export const HouseholdProfileManager: React.FC = () => {
   const householdProfiles = useProfileStore((s) => s.profiles);
   const upsertHouseholdProfile = useProfileStore((s) => s.upsertHouseholdProfile);
-  const uploadAndSetAvatar = useProfileStore((s) => s.uploadAndSetAvatar);
+  const setProfileAvatarDataUrl = useProfileStore((s) => s.setProfileAvatarDataUrl);
   const removeProfileAvatar = useProfileStore((s) => s.removeProfileAvatar);
   const deleteHouseholdProfile = useProfileStore((s) => s.deleteHouseholdProfile);
 
@@ -28,6 +44,11 @@ export const HouseholdProfileManager: React.FC = () => {
   const [avatarStatus, setAvatarStatus] = useState<string | null>(null);
   const avatarFileInputRef = useRef<HTMLInputElement | null>(null);
   const [avatarTargetProfileId, setAvatarTargetProfileId] = useState<string | null>(null);
+  const [cropModalState, setCropModalState] = useState<{
+    profileId: string;
+    previewUrl: string;
+    revoke?: () => void;
+  } | null>(null);
 
   const openEditProfile = (hp: HouseholdProfile) => {
     setEditingProfileId(hp.id);
@@ -68,12 +89,36 @@ export const HouseholdProfileManager: React.FC = () => {
     e.target.value = '';
     if (!file || !avatarTargetProfileId) return;
     try {
-      setAvatarStatus('Compressing to 256×256 WebP...');
-      await uploadAndSetAvatar(avatarTargetProfileId, file);
+      setAvatarStatus('Decoding photo (including HEIC support)...');
+      const { previewUrl, revoke } = await decodeImageFileForPreview(file);
+      setAvatarStatus(null);
+      setCropModalState({
+        profileId: avatarTargetProfileId,
+        previewUrl,
+        revoke,
+      });
+    } catch (err: any) {
+      setAvatarStatus(err?.message || 'Failed to decode image');
+      setTimeout(() => setAvatarStatus(null), 4000);
+    }
+  };
+
+  const handleCloseCropModal = () => {
+    cropModalState?.revoke?.();
+    setCropModalState(null);
+  };
+
+  const handleSaveCroppedAvatar = async (croppedWebpDataUrl: string) => {
+    if (!cropModalState) return;
+    const { profileId, revoke } = cropModalState;
+    try {
+      await setProfileAvatarDataUrl(profileId, croppedWebpDataUrl);
+      revoke?.();
+      setCropModalState(null);
       setAvatarStatus('Avatar saved & synced!');
       setTimeout(() => setAvatarStatus(null), 2500);
     } catch (err: any) {
-      setAvatarStatus(err?.message || 'Failed to process image');
+      setAvatarStatus(err?.message || 'Failed to save avatar');
     }
   };
 
@@ -100,11 +145,11 @@ export const HouseholdProfileManager: React.FC = () => {
         </button>
       </div>
 
-      {/* Hidden File Input for Client-Side 256x256 WebP Avatar Upload */}
+      {/* Hidden File Input for Client-Side 256x256 WebP & HEIC Avatar Upload */}
       <input
         ref={avatarFileInputRef}
         type="file"
-        accept="image/jpeg,image/png,image/webp,image/heic,image/*"
+        accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif,image/*"
         onChange={handleAvatarFileSelected}
         className="hidden"
       />
@@ -136,7 +181,7 @@ export const HouseholdProfileManager: React.FC = () => {
                     {hp.role}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex flex-wrap items-center gap-2 mt-1">
                   <button
                     type="button"
                     onClick={() => {
@@ -146,16 +191,32 @@ export const HouseholdProfileManager: React.FC = () => {
                     className="text-[11px] text-sky-400 hover:text-sky-300 flex items-center gap-1 cursor-pointer"
                   >
                     <Upload className="w-3 h-3" />
-                    <span>{hp.avatarDataUrl ? 'Change Photo' : 'Upload Photo'}</span>
+                    <span>{hp.avatarDataUrl ? 'Change' : 'Upload Photo'}</span>
                   </button>
                   {hp.avatarDataUrl && (
-                    <button
-                      type="button"
-                      onClick={() => removeProfileAvatar(hp.id)}
-                      className="text-[11px] text-gray-500 hover:text-rose-400 cursor-pointer"
-                    >
-                      Clear
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCropModalState({
+                            profileId: hp.id,
+                            previewUrl: hp.avatarDataUrl!,
+                          })
+                        }
+                        className="text-[11px] text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer"
+                        title="Adjust photo placement & zoom"
+                      >
+                        <Crop className="w-3 h-3" />
+                        <span>Adjust</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeProfileAvatar(hp.id)}
+                        className="text-[11px] text-gray-500 hover:text-rose-400 cursor-pointer"
+                      >
+                        Clear
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -264,11 +325,25 @@ export const HouseholdProfileManager: React.FC = () => {
             </div>
           </div>
 
-          {/* Fallback Emoji Picker */}
+          {/* Fallback Emoji Picker + Custom Keyboard Emoji Input */}
           <div>
-            <span className="block text-[11px] text-gray-400 mb-1">
-              Fallback Icon (used if no photo is uploaded):
-            </span>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+              <span className="block text-[11px] text-gray-400">
+                Fallback Icon (used if no photo is uploaded):
+              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-gray-400">Custom:</span>
+                <input
+                  type="text"
+                  value={profEmoji}
+                  onChange={(e) => setProfEmoji(extractLatestEmoji(e.target.value))}
+                  onFocus={(e) => e.currentTarget.select()}
+                  placeholder="😀"
+                  title="Type or paste any emoji from your keyboard"
+                  className="w-12 h-7 px-1.5 rounded-lg bg-gray-900 border border-sky-500/40 focus:border-sky-400 text-center text-sm text-white focus:outline-none"
+                />
+              </div>
+            </div>
             <div className="flex items-center flex-wrap gap-1.5">
               {PROFILE_EMOJI_PRESETS.map((em) => (
                 <button
@@ -297,6 +372,20 @@ export const HouseholdProfileManager: React.FC = () => {
           </div>
         </form>
       )}
+
+      {/* Interactive Circular Avatar Placement, Zoom & Rotate Modal */}
+      <AvatarCropModal
+        isOpen={Boolean(cropModalState)}
+        imageUrl={cropModalState?.previewUrl || null}
+        profileName={
+          householdProfiles.find((p) => p.id === cropModalState?.profileId)?.name || 'Family Member'
+        }
+        profileColor={
+          householdProfiles.find((p) => p.id === cropModalState?.profileId)?.color || '#38bdf8'
+        }
+        onCancel={handleCloseCropModal}
+        onSave={handleSaveCroppedAvatar}
+      />
     </div>
   );
 };

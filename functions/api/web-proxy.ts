@@ -123,7 +123,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       try {
         var abs = new URL(href, document.baseURI).href;
         if (abs.startsWith('http://') || abs.startsWith('https://')) {
-          a.href = '/api/web-proxy?url=' + encodeURIComponent(abs);
+          a.href = window.location.origin + '/api/web-proxy?url=' + encodeURIComponent(abs);
           a.target = '_self';
         }
       } catch (err) {}

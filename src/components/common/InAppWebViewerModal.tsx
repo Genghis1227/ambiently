@@ -42,6 +42,7 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
   const [isWebLoading, setIsWebLoading] = useState(true);
   const [iframeKey, setIframeKey] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const swRecoveryAttemptedRef = useRef(false);
 
   // Synchronize when modal is opened with new props
   useEffect(() => {
@@ -524,7 +525,27 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
                 title={currentTitle || 'Web Preview'}
                 className="w-full h-full border-0 bg-white"
                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                onLoad={() => setIsWebLoading(false)}
+                onLoad={() => {
+                  try {
+                    const doc = iframeRef.current?.contentDocument;
+                    const isAmbientlyShell = Boolean(
+                      doc?.querySelector('meta[name="application-name"][content="Ambiently"]')
+                    );
+                    if (isAmbientlyShell && !swRecoveryAttemptedRef.current && 'serviceWorker' in navigator) {
+                      swRecoveryAttemptedRef.current = true;
+                      navigator.serviceWorker
+                        .getRegistrations()
+                        .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+                        .finally(() => {
+                          setIframeKey((prev) => prev + 1);
+                        });
+                      return;
+                    }
+                  } catch {
+                    // Cross-origin direct embed; safe to ignore
+                  }
+                  setIsWebLoading(false);
+                }}
               />
             </div>
           )}
