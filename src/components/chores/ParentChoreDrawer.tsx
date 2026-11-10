@@ -42,9 +42,23 @@ import { PinOverlay } from '../kiosk/PinOverlay';
 import { openInAppWebViewer } from '../../utils/webViewer';
 
 const CHORE_ICON_PRESETS = [
-  '🧹', '🛏️', '🍽️', '🐕', '🗑️', '🧺', '📚', '🦷',
-  '🌱', '🧸', '🎒', '🧽', '🚿', '🚲', '🎹', '✨',
+  '🧹', '🛏️', '🍽️', '🐕', '🐈', '🗑️', '🧺', '📚', '🦷', '🌱', '🧸', '🎒',
+  '🧽', '🚿', '🚲', '🎹', '✨', '🧼', '👕', '🧦', '👟', '🥣', '🍎', '🥪',
+  '💧', '🪴', '🍂', '🚗', '📦', '✏️', '🎨', '🎻', '⚽', '🏊', '⏰', '🌟',
 ];
+
+function extractLatestEmoji(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  if (typeof Intl !== 'undefined' && 'Segmenter' in Intl) {
+    const segs = Array.from(
+      new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(trimmed)
+    );
+    return segs[segs.length - 1]?.segment || trimmed;
+  }
+  const chars = Array.from(trimmed);
+  return chars[chars.length - 1] || trimmed;
+}
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -1398,9 +1412,25 @@ export const ParentChoreDrawer: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Icon Picker */}
+                    {/* Icon Picker + Custom Keyboard Emoji Input */}
                     <div>
-                      <label className="block text-[11px] text-slate-400 mb-1">Icon</label>
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                        <label className="block text-[11px] text-slate-400">
+                          Icon (pick a preset or type/paste any emoji from your keyboard)
+                        </label>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] text-slate-400">Custom:</span>
+                          <input
+                            type="text"
+                            value={tplIcon}
+                            onChange={(e) => setTplIcon(extractLatestEmoji(e.target.value))}
+                            onFocus={(e) => e.currentTarget.select()}
+                            placeholder="😀"
+                            title="Type or paste any emoji (Win + . on Windows, Ctrl + Cmd + Space on Mac)"
+                            className="w-12 h-7 px-1.5 rounded-lg bg-slate-900 border border-emerald-500/40 focus:border-emerald-400 text-center text-sm text-white focus:outline-none"
+                          />
+                        </div>
+                      </div>
                       <div className="flex items-center flex-wrap gap-1.5">
                         {CHORE_ICON_PRESETS.map((ic) => (
                           <button

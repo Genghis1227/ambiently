@@ -11,8 +11,22 @@ import { HouseholdAvatar } from './HouseholdAvatar';
 import { AvatarCropModal } from './AvatarCropModal';
 
 const PROFILE_EMOJI_PRESETS = [
-  '🧒', '👧', '👦', '🧑', '👨', '👩', '🦊', '🐼', '🦁', '🐸', '🦄', '⭐',
+  '🧒', '👧', '👦', '🧑', '👨', '👩', '👶', '🧓', '👵', '🦊', '🐼', '🦁',
+  '🐸', '🦄', '🐨', '🐯', '🐰', '🐶', '🐱', '🦉', '🦋', '🦖', '🚀', '⭐',
 ];
+
+function extractLatestEmoji(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  if (typeof Intl !== 'undefined' && 'Segmenter' in Intl) {
+    const segs = Array.from(
+      new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(trimmed)
+    );
+    return segs[segs.length - 1]?.segment || trimmed;
+  }
+  const chars = Array.from(trimmed);
+  return chars[chars.length - 1] || trimmed;
+}
 
 export const HouseholdProfileManager: React.FC = () => {
   const householdProfiles = useProfileStore((s) => s.profiles);
@@ -311,11 +325,25 @@ export const HouseholdProfileManager: React.FC = () => {
             </div>
           </div>
 
-          {/* Fallback Emoji Picker */}
+          {/* Fallback Emoji Picker + Custom Keyboard Emoji Input */}
           <div>
-            <span className="block text-[11px] text-gray-400 mb-1">
-              Fallback Icon (used if no photo is uploaded):
-            </span>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+              <span className="block text-[11px] text-gray-400">
+                Fallback Icon (used if no photo is uploaded):
+              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-gray-400">Custom:</span>
+                <input
+                  type="text"
+                  value={profEmoji}
+                  onChange={(e) => setProfEmoji(extractLatestEmoji(e.target.value))}
+                  onFocus={(e) => e.currentTarget.select()}
+                  placeholder="😀"
+                  title="Type or paste any emoji from your keyboard"
+                  className="w-12 h-7 px-1.5 rounded-lg bg-gray-900 border border-sky-500/40 focus:border-sky-400 text-center text-sm text-white focus:outline-none"
+                />
+              </div>
+            </div>
             <div className="flex items-center flex-wrap gap-1.5">
               {PROFILE_EMOJI_PRESETS.map((em) => (
                 <button
