@@ -4,6 +4,7 @@ import {
   CheckCheck,
   Calculator,
   Coins,
+  Copy,
   Edit2,
   ExternalLink,
   History,
@@ -101,7 +102,7 @@ export const ParentChoreDrawer: React.FC = () => {
   const [tplTitle, setTplTitle] = useState('');
   const [tplIcon, setTplIcon] = useState('🧹');
   const [tplPoints, setTplPoints] = useState('15');
-  const [tplAssignedTo, setTplAssignedTo] = useState<string>('shared');
+  const [tplAssignees, setTplAssignees] = useState<string[]>(['shared']);
   const [tplCadence, setTplCadence] = useState<CadenceType>('daily');
   const [tplDaysOfWeek, setTplDaysOfWeek] = useState<number[]>([1, 3, 5]);
   const [tplIntervalDays, setTplIntervalDays] = useState('3');
@@ -284,7 +285,32 @@ export const ParentChoreDrawer: React.FC = () => {
     setTplTitle(tpl.title);
     setTplIcon(tpl.icon || '🧹');
     setTplPoints(String(tpl.points));
-    setTplAssignedTo(tpl.assignedTo);
+    setTplAssignees([tpl.assignedTo]);
+    setTplCadence(tpl.cadence);
+    setTplDaysOfWeek(tpl.daysOfWeek || [1, 3, 5]);
+    setTplIntervalDays(String(tpl.intervalDays || 3));
+    setTplRequiresApproval(tpl.requiresApproval);
+    setTplRolloverUntilDone(tpl.rolloverUntilDone);
+    setTplOverduePolicy(tpl.overduePolicy);
+    setTplOverdueCustomPct(String(tpl.overdueCustomPct ?? 50));
+  };
+
+  const openDuplicateTemplate = (tpl: ChoreTemplate) => {
+    setEditingTemplateId(null);
+    setIsAddingTemplate(true);
+    setTplTitle(tpl.title);
+    setTplIcon(tpl.icon || '🧹');
+    setTplPoints(String(tpl.points));
+    // Pre-select kids who don't yet have an identical chore title, or fallback to current assignee
+    const existingAssigneesForTitle = new Set(
+      templates
+        .filter((t) => t.title.trim().toLowerCase() === tpl.title.trim().toLowerCase())
+        .map((t) => t.assignedTo)
+    );
+    const unassignedKids = profiles
+      .filter((p) => !existingAssigneesForTitle.has(p.id))
+      .map((p) => p.id);
+    setTplAssignees(unassignedKids.length > 0 ? unassignedKids : [tpl.assignedTo]);
     setTplCadence(tpl.cadence);
     setTplDaysOfWeek(tpl.daysOfWeek || [1, 3, 5]);
     setTplIntervalDays(String(tpl.intervalDays || 3));
@@ -300,7 +326,7 @@ export const ParentChoreDrawer: React.FC = () => {
     setTplTitle('');
     setTplIcon('🧹');
     setTplPoints('15');
-    setTplAssignedTo('shared');
+    setTplAssignees(['shared']);
     setTplCadence('daily');
     setTplDaysOfWeek([1, 3, 5]);
     setTplIntervalDays('3');
@@ -310,23 +336,71 @@ export const ParentChoreDrawer: React.FC = () => {
     setTplOverdueCustomPct('50');
   };
 
+  const toggleTplAssignee = (targetId: string) => {
+    if (targetId === 'shared') {
+      setTplAssignees(['shared']);
+      return;
+    }
+    setTplAssignees((prev) => {
+      const withoutShared = prev.filter((id) => id !== 'shared');
+      if (withoutShared.includes(targetId)) {
+        const next = withoutShared.filter((id) => id !== targetId);
+        return next.length > 0 ? next : ['shared'];
+      }
+      return [...withoutShared, targetId];
+    });
+  };
+
   const handleSaveTemplate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!tplTitle.trim()) return;
-    await upsertChoreTemplate({
-      id: editingTemplateId || undefined,
+    const targetAssignees = tplAssignees.length > 0 ? tplAssignees : ['shared'];
+    const baseData = {
       title: tplTitle.trim(),
       icon: tplIcon || '🧹',
       points: Math.max(1, Math.round(Number(tplPoints) || 10)),
-      assignedTo: tplAssignedTo,
       cadence: tplCadence,
       daysOfWeek: tplCadence === 'weekly' ? tplDaysOfWeek : undefined,
-      intervalDays: tplCadence === 'interval' ? Math.max(1, Math.round(Number(tplIntervalDays) || 2)) : undefined,
+      intervalDays:
+        tplCadence === 'interval' ? Math.max(1, Math.round(Number(tplIntervalDays) || 2)) : undefined,
       requiresApproval: tplRequiresApproval,
       rolloverUntilDone: tplRolloverUntilDone,
       overduePolicy: tplOverduePolicy,
-      overdueCustomPct: tplOverduePolicy === 'custom' ? Math.max(0, Math.min(100, Math.round(Number(tplOverdueCustomPct) || 50))) : undefined,
-    });
+      overdueCustomPct:
+        tplOverduePolicy === 'custom'
+          ? Math.max(0, Math.min(100, Math.round(Number(tplOverdueCustomPct) || 50)))
+          : undefined,
+    };
+
+    if (editingTemplateId) {
+      const [primaryAssignee, ...extraAssignees] = targetAssignees;
+      await upsertChoreTemplate({
+        id: editingTemplateId,
+        ...baseData,
+        assignedTo: primaryAssignee,
+      });
+      for (const extraId of extraAssignees) {
+        const existingSibling = templates.find(
+          (t) =>
+            t.id !== editingTemplateId &&
+            t.assignedTo === extraId &&
+            t.title.trim().toLowerCase() === baseData.title.toLowerCase()
+        );
+        await upsertChoreTemplate({
+          id: existingSibling?.id,
+          ...baseData,
+          assignedTo: extraId,
+        });
+      }
+    } else {
+      for (const assigneeId of targetAssignees) {
+        await upsertChoreTemplate({
+          ...baseData,
+          assignedTo: assigneeId,
+        });
+      }
+    }
+
     setEditingTemplateId(null);
     setIsAddingTemplate(false);
   };
@@ -1345,22 +1419,64 @@ export const ParentChoreDrawer: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Assigned To & Cadence */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {/* Assigned To (Multi-Kid Checkboxes + Shared Pool) & Cadence */}
+                    <div className="space-y-2.5">
                       <div>
-                        <label className="block text-[11px] text-slate-400 mb-1">Assigned To</label>
-                        <select
-                          value={tplAssignedTo}
-                          onChange={(e) => setTplAssignedTo(e.target.value)}
-                          className="w-full px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white"
-                        >
-                          <option value="shared">Shared / Anyone (Supports Point Splitting)</option>
-                          {profiles.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.name}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <label className="block text-[11px] text-slate-400">
+                            Assigned To (check multiple kids to create an individual chore for each)
+                          </label>
+                          {profiles.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setTplAssignees(profiles.map((p) => p.id))}
+                              className="text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 cursor-pointer"
+                            >
+                              Select All Kids ({profiles.length})
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {/* Shared Pool Option */}
+                          <label
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-medium cursor-pointer transition-all ${
+                              tplAssignees.includes('shared')
+                                ? 'bg-emerald-500/20 border-emerald-400/60 text-emerald-200'
+                                : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={tplAssignees.includes('shared')}
+                              onChange={() => toggleTplAssignee('shared')}
+                              className="rounded border-slate-700"
+                            />
+                            <span>Shared Pool (1 Chore — Anyone / Split)</span>
+                          </label>
+
+                          {/* Individual Kid Checkboxes */}
+                          {profiles.map((p) => {
+                            const isChecked = tplAssignees.includes(p.id);
+                            return (
+                              <label
+                                key={p.id}
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-medium cursor-pointer transition-all ${
+                                  isChecked
+                                    ? 'bg-emerald-500/20 border-emerald-400/60 text-emerald-200'
+                                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => toggleTplAssignee(p.id)}
+                                  className="rounded border-slate-700"
+                                />
+                                <span>{p.name}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
                       </div>
 
                       <div>
@@ -1495,7 +1611,9 @@ export const ParentChoreDrawer: React.FC = () => {
                         type="submit"
                         className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold cursor-pointer"
                       >
-                        Save Chore Template
+                        {tplAssignees.length > 1 && !tplAssignees.includes('shared')
+                          ? `Save for ${tplAssignees.length} Kids (${tplAssignees.length} Chores)`
+                          : 'Save Chore Template'}
                       </button>
                     </div>
                   </form>
@@ -1549,6 +1667,14 @@ export const ParentChoreDrawer: React.FC = () => {
                         </div>
 
                         <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => openDuplicateTemplate(tpl)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-300 hover:bg-emerald-500/15 cursor-pointer"
+                            title="Duplicate chore for another kid"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
                           <button
                             type="button"
                             onClick={() => openEditTemplate(tpl)}
