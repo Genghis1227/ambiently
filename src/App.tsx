@@ -633,23 +633,49 @@ export function App() {
     t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false
   );
 
+  const homeTab = visibleTabs.find((t) => t.isHome) || visibleTabs[0] || tabs[0];
+  const activeTab = visibleTabs.find((t) => t.id === activeTabId) || homeTab;
+  const activeTabIdResolved = activeTab?.id || 'tab-corkboard';
+
   // `visibleTabs` is a new array on every render, and a background cloud refresh renders every 60
   // seconds. Depending on the ids instead keeps that from restarting the countdown.
   const visibleTabIds = visibleTabs.map((t) => t.id).join('\n');
   const rotateDurationSec = settings.defaultRotateDurationSec || 30;
+  const isAnyOverlayOpen = Boolean(
+    isChoreFullScreenOpen ||
+      isParentDrawerOpen ||
+      isSettingsOpen ||
+      isAddWidgetOpen ||
+      isCreateCanvasOpen ||
+      isNoteCreatorOpen ||
+      isTrashOpen ||
+      isShareOpen ||
+      isBackupModalOpen ||
+      pinChallenge ||
+      activeWebModal
+  );
 
-  // Tab auto-carousel rotation (pauses automatically when user interacts)
+  // Tab auto-carousel rotation (pauses automatically when user interacts or a modal/hub is open)
   useEffect(() => {
-    const tabIds = visibleTabIds.split('\n');
-    if (!settings.carouselEnabled || isCarouselPaused || isChoreFullScreenOpen || tabIds.length <= 1) return;
+    const tabIds = visibleTabIds.split('\n').filter(Boolean);
+    if (!settings.carouselEnabled || isCarouselPaused || isAnyOverlayOpen || tabIds.length <= 1) return;
 
     const interval = setInterval(() => {
-      const nextIndex = (tabIds.indexOf(activeTabId) + 1) % tabIds.length;
+      const currentIndex = tabIds.indexOf(activeTabIdResolved);
+      const nextIndex = (currentIndex === -1 ? 1 : currentIndex + 1) % tabIds.length;
       rotateToTab(tabIds[nextIndex]);
     }, rotateDurationSec * 1000);
 
     return () => clearInterval(interval);
-  }, [settings.carouselEnabled, isCarouselPaused, isChoreFullScreenOpen, rotateDurationSec, visibleTabIds, activeTabId, rotateToTab]);
+  }, [
+    settings.carouselEnabled,
+    isCarouselPaused,
+    isAnyOverlayOpen,
+    rotateDurationSec,
+    visibleTabIds,
+    activeTabIdResolved,
+    rotateToTab,
+  ]);
 
   if (!isInitialized) {
     return (
@@ -662,9 +688,6 @@ export function App() {
     );
   }
 
-  const homeTab = visibleTabs.find((t) => t.isHome) || visibleTabs[0] || tabs[0];
-  const activeTab = visibleTabs.find((t) => t.id === activeTabId) || homeTab;
-  const activeTabIdResolved = activeTab?.id || 'tab-corkboard';
   const tabWidgets = widgets.filter((w) => w.tabId === activeTabIdResolved);
 
   // 1. Mobile Companion Mode on small screens unless user specifically toggled Desktop

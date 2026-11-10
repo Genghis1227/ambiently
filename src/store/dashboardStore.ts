@@ -261,9 +261,23 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         : rawSettings?.nightModeEnabled ?? false,
     };
     const allTabs = await db.tabs.toArray();
+    const tabsToRepair: DashboardTab[] = [];
     const loadedTabs = allTabs
       .filter((t: DashboardTab) => !t.deleted_at)
-      .sort((a: DashboardTab, b: DashboardTab) => a.order - b.order);
+      .map((t: DashboardTab, idx: number) => {
+        const validOrder = Number.isFinite(t.order) ? t.order : idx;
+        const validEnabled = t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false;
+        if (t.order !== validOrder || t.enabled !== validEnabled) {
+          const repaired = { ...t, order: validOrder, enabled: validEnabled };
+          tabsToRepair.push(repaired);
+          return repaired;
+        }
+        return t;
+      })
+      .sort((a: DashboardTab, b: DashboardTab) => (a.order ?? 0) - (b.order ?? 0));
+    if (tabsToRepair.length > 0) {
+      await db.tabs.bulkPut(tabsToRepair).catch(() => {});
+    }
     const loadedWidgets = (await db.widgets.toArray()).filter(
       (w) =>
         !w.deleted_at &&
@@ -324,7 +338,10 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       return null;
     }
     const newId = `tab-${Date.now()}`;
-    const maxOrder = get().tabs.reduce((max, t) => Math.max(max, t.order), -1);
+    const maxOrder = get().tabs.reduce(
+      (max, t, idx) => Math.max(max, Number.isFinite(t.order) ? t.order : idx),
+      -1
+    );
     const newTab: DashboardTab = {
       id: newId,
       name: name.trim() || 'New Canvas',
@@ -625,9 +642,16 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const currentTimer = get().carouselPauseTimer;
     if (currentTimer) clearTimeout(currentTimer);
 
+    // The carousel effect starts a fresh `rotateDurationSec` interval once `isCarouselPaused`
+    // clears, so only hold `isCarouselPaused` for the difference needed to guarantee at least
+    // `durationMs` (and at least 50ms to reset the active interval timer) rather than stacking
+    // 20s + rotateDurationSec on every tap.
+    const rotateMs = (get().settings.defaultRotateDurationSec || 30) * 1000;
+    const holdMs = Math.max(50, durationMs - rotateMs);
+
     const timer = window.setTimeout(() => {
       set({ isCarouselPaused: false, carouselPauseTimer: null });
-    }, durationMs);
+    }, holdMs);
 
     set({ isCarouselPaused: true, carouselPauseTimer: timer });
   },
@@ -987,7 +1011,17 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
 
   syncRemoteTabChange: (incomingTab, eventType) => {
     const existing = get().tabs.find((t) => t.id === incomingTab.id);
-    const remoteTab = keepLocalTabFields(incomingTab, existing);
+    const mergedTab = keepLocalTabFields(incomingTab, existing);
+    const remoteTab: DashboardTab = {
+      ...mergedTab,
+      order: Number.isFinite(mergedTab.order)
+        ? mergedTab.order
+        : existing && Number.isFinite(existing.order)
+          ? existing.order
+          : get().tabs.length,
+      enabled:
+        mergedTab.id === 'tab-overview' ? Boolean(mergedTab.enabled) : mergedTab.enabled !== false,
+    };
     if (existing) {
       const localTime = new Date(existing.updated_at || 0).getTime();
       const remoteTime = new Date(remoteTab.updated_at || 0).getTime();
@@ -997,7 +1031,10 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     }
 
     if (eventType === 'DELETE' || remoteTab.deleted_at) {
-      set({ tabs: get().tabs.filter((t) => t.id !== remoteTab.id) });
+      const remaining = get().tabs.filter((t) => t.id !== remoteTab.id);
+      const nextActiveTabId =
+        get().activeTabId === remoteTab.id ? remaining[0]?.id || 'tab-corkboard' : get().activeTabId;
+      set({ tabs: remaining, activeTabId: nextActiveTabId });
       db.tabs.delete(remoteTab.id).catch(() => {});
     } else if (eventType === 'INSERT') {
       const exists = get().tabs.some((t) => t.id === remoteTab.id);
@@ -1007,7 +1044,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       } else {
         nextTabs = get().tabs.map((t) => (t.id === remoteTab.id ? remoteTab : t));
       }
-      nextTabs.sort((a, b) => a.order - b.order);
+      nextTabs.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
       set({ tabs: nextTabs });
       db.tabs.put(remoteTab).catch(() => {});
     } else if (eventType === 'UPDATE') {
@@ -1018,7 +1055,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       } else {
         nextTabs = [...get().tabs, remoteTab];
       }
-      nextTabs.sort((a, b) => a.order - b.order);
+      nextTabs.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
       set({ tabs: nextTabs });
       db.tabs.put(remoteTab).catch(() => {});
     }
