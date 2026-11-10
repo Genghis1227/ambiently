@@ -426,19 +426,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
           </div>
 
           {/* Navigation Tabs Header - All 5 tabs visible at a glance on mobile & desktop */}
-          <div className="grid grid-cols-5 sm:flex sm:items-center gap-1 px-2 sm:px-4 pt-2 pb-1.5 sm:pb-0 border-b border-gray-800 bg-gray-950/60 shrink-0">
+          <div className="grid grid-cols-5 sm:flex sm:items-center sm:justify-between gap-1 px-2 sm:px-3 pt-2 pb-1.5 sm:pb-0 border-b border-gray-800 bg-gray-950/60 shrink-0">
             {[
               { id: 'boards' as const, label: 'Canvases', shortLabel: 'Canvases', icon: <Grid className="w-4 h-4 sm:w-3.5 sm:h-3.5" />, badge: tabs.length },
               { id: 'display' as const, label: 'Display & Kiosk', shortLabel: 'Display', icon: <Sliders className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> },
               { id: 'photos' as const, label: 'Shared Photos', shortLabel: 'Photos', icon: <ImageIcon className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> },
               { id: 'sync' as const, label: 'Sync & Backup', shortLabel: 'Sync', icon: <FolderSync className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> },
-              { id: 'system' as const, label: 'Household & System', shortLabel: 'System', icon: <Shield className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> },
+              { id: 'system' as const, label: 'Household', shortLabel: 'Household', icon: <Shield className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> },
             ].map((tab) => (
               <button
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`relative flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-3 py-2 text-[10px] sm:text-xs font-semibold rounded-xl sm:rounded-b-none sm:rounded-t-xl transition-all sm:border-b-2 cursor-pointer whitespace-nowrap ${
+                className={`relative sm:flex-1 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-2 py-2 text-[10px] sm:text-xs font-semibold rounded-xl sm:rounded-b-none sm:rounded-t-xl transition-all sm:border-b-2 cursor-pointer whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'bg-blue-600/20 sm:bg-gray-900/90 text-blue-400 border border-blue-500/40 sm:border-0 sm:border-b-2 sm:border-blue-500 shadow-sm'
                     : 'border border-transparent sm:border-0 sm:border-b-2 text-gray-400 hover:text-gray-200 hover:bg-gray-900/40'

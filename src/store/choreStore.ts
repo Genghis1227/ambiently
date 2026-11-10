@@ -190,9 +190,32 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => ({
       const householdProfiles = useProfileStore.getState().profiles;
       const stored = await db.chores.get('household_chores');
       const base = stored || DEFAULT_CHORE_SNAPSHOT;
+      const LEGACY_ID_MAP: Record<string, string> = {
+        p_olivia: 'p_kid_1',
+        p_alyssa: 'p_kid_2',
+      };
+      const LEGACY_CHORE_MAP: Record<string, string> = {
+        c_bed_olivia: 'c_bed_kid_1',
+        c_bed_alyssa: 'c_bed_kid_2',
+      };
+      const hasNewGenericKids = householdProfiles.some((hp) => hp.id === 'p_kid_1' || hp.id === 'p_kid_2');
+      const migratedTemplates = hasNewGenericKids
+        ? base.templates.map((t) => ({
+            ...t,
+            id: LEGACY_CHORE_MAP[t.id] || t.id,
+            assignedTo: LEGACY_ID_MAP[t.assignedTo] || t.assignedTo,
+          }))
+        : base.templates;
+      const migratedRewards = hasNewGenericKids
+        ? base.rewards.map((r) =>
+            LEGACY_ID_MAP[r.profileId] ? { ...r, profileId: LEGACY_ID_MAP[r.profileId] } : r
+          )
+        : base.rewards;
       const syncedProfiles = mapHouseholdToChoreProfiles(householdProfiles, base.ledger);
       const initial: ChoreEngineSnapshot = {
         ...base,
+        templates: migratedTemplates,
+        rewards: migratedRewards,
         profiles: syncedProfiles.length > 0 ? syncedProfiles : base.profiles,
       };
       const { snapshot: rolled, changed } = evaluateChoreRollover(initial, new Date());
@@ -242,9 +265,35 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => ({
   },
 
   applyRemoteSnapshot: async (remote) => {
+    const LEGACY_ID_MAP: Record<string, string> = {
+      p_olivia: 'p_kid_1',
+      p_alyssa: 'p_kid_2',
+    };
+    const LEGACY_CHORE_MAP: Record<string, string> = {
+      c_bed_olivia: 'c_bed_kid_1',
+      c_bed_alyssa: 'c_bed_kid_2',
+    };
+    const sanitizedRemote: ChoreEngineSnapshot = {
+      ...remote,
+      templates: (remote.templates || []).map((t) => ({
+        ...t,
+        id: LEGACY_CHORE_MAP[t.id] || t.id,
+        assignedTo: LEGACY_ID_MAP[t.assignedTo] || t.assignedTo,
+      })),
+      rewards: (remote.rewards || []).map((r) => ({
+        ...r,
+        profileId: LEGACY_ID_MAP[r.profileId] || r.profileId,
+      })),
+    };
     const local = get().snapshot;
-    const merged = mergeChoreSnapshotsAuthoritative(local, remote);
-    const { snapshot: rolled } = evaluateChoreRollover(merged, new Date());
+    const merged = mergeChoreSnapshotsAuthoritative(local, sanitizedRemote);
+    const householdProfiles = useProfileStore.getState().profiles;
+    const syncedProfiles = mapHouseholdToChoreProfiles(householdProfiles, merged.ledger);
+    const withProfiles: ChoreEngineSnapshot = {
+      ...merged,
+      profiles: syncedProfiles.length > 0 ? syncedProfiles : merged.profiles,
+    };
+    const { snapshot: rolled } = evaluateChoreRollover(withProfiles, new Date());
     set({ snapshot: rolled });
     await db.chores.put(rolled);
   },

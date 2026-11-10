@@ -165,8 +165,8 @@ export const DEFAULT_NOTES: StickyNoteItem[] = [
 
 export const DEFAULT_HOUSEHOLD_PROFILES: HouseholdProfile[] = [
   {
-    id: 'p_tony',
-    name: 'Tony',
+    id: 'p_parent_1',
+    name: 'Parent 1',
     role: 'parent',
     color: CHORE_PROFILE_COLORS[1], // Slate Blue
     emoji: '🛡️',
@@ -174,8 +174,8 @@ export const DEFAULT_HOUSEHOLD_PROFILES: HouseholdProfile[] = [
     updatedAt: '1970-01-01T00:00:00.000Z',
   },
   {
-    id: 'p_anh',
-    name: 'Anh',
+    id: 'p_parent_2',
+    name: 'Parent 2',
     role: 'parent',
     color: CHORE_PROFILE_COLORS[2], // Dusty Rose
     emoji: '🌸',
@@ -183,8 +183,8 @@ export const DEFAULT_HOUSEHOLD_PROFILES: HouseholdProfile[] = [
     updatedAt: '1970-01-01T00:00:00.000Z',
   },
   {
-    id: 'p_olivia',
-    name: 'Olivia',
+    id: 'p_kid_1',
+    name: 'Alex',
     role: 'kid',
     color: CHORE_PROFILE_COLORS[0], // Sage Green
     emoji: '🌿',
@@ -192,8 +192,8 @@ export const DEFAULT_HOUSEHOLD_PROFILES: HouseholdProfile[] = [
     updatedAt: '1970-01-01T00:00:00.000Z',
   },
   {
-    id: 'p_alyssa',
-    name: 'Alyssa',
+    id: 'p_kid_2',
+    name: 'Maya',
     role: 'kid',
     color: CHORE_PROFILE_COLORS[4], // Lavender-Gray
     emoji: '🦋',
@@ -206,8 +206,8 @@ export const DEFAULT_CHORE_SNAPSHOT: ChoreEngineSnapshot = {
   id: 'household_chores',
   profiles: [
     {
-      id: 'p_olivia',
-      name: 'Olivia',
+      id: 'p_kid_1',
+      name: 'Alex',
       role: 'kid',
       color: CHORE_PROFILE_COLORS[0], // Sage Green
       emoji: '🌿',
@@ -215,8 +215,8 @@ export const DEFAULT_CHORE_SNAPSHOT: ChoreEngineSnapshot = {
       lifetimePoints: 0,
     },
     {
-      id: 'p_alyssa',
-      name: 'Alyssa',
+      id: 'p_kid_2',
+      name: 'Maya',
       role: 'kid',
       color: CHORE_PROFILE_COLORS[4], // Lavender-Gray
       emoji: '🦋',
@@ -229,7 +229,7 @@ export const DEFAULT_CHORE_SNAPSHOT: ChoreEngineSnapshot = {
       id: 'chore-tpl-bed-1',
       title: 'Make Bed & Tidy Room',
       points: 10,
-      assignedTo: 'p_olivia',
+      assignedTo: 'p_kid_1',
       cadence: 'daily',
       requiresApproval: false,
       rolloverUntilDone: false,
@@ -240,7 +240,7 @@ export const DEFAULT_CHORE_SNAPSHOT: ChoreEngineSnapshot = {
       id: 'chore-tpl-bed-2',
       title: 'Make Bed & Tidy Room',
       points: 10,
-      assignedTo: 'p_alyssa',
+      assignedTo: 'p_kid_2',
       cadence: 'daily',
       requiresApproval: false,
       rolloverUntilDone: false,
@@ -251,7 +251,7 @@ export const DEFAULT_CHORE_SNAPSHOT: ChoreEngineSnapshot = {
       id: 'chore-tpl-backpack-1',
       title: 'Unpack School Backpack & Lunchbox',
       points: 15,
-      assignedTo: 'p_olivia',
+      assignedTo: 'p_kid_1',
       cadence: 'weekdays',
       requiresApproval: false,
       rolloverUntilDone: true,
@@ -262,7 +262,7 @@ export const DEFAULT_CHORE_SNAPSHOT: ChoreEngineSnapshot = {
       id: 'chore-tpl-backpack-2',
       title: 'Unpack School Backpack & Lunchbox',
       points: 15,
-      assignedTo: 'p_alyssa',
+      assignedTo: 'p_kid_2',
       cadence: 'weekdays',
       requiresApproval: false,
       rolloverUntilDone: true,
@@ -296,7 +296,7 @@ export const DEFAULT_CHORE_SNAPSHOT: ChoreEngineSnapshot = {
   rewards: [
     {
       id: 'reward-1',
-      profileId: 'p_olivia',
+      profileId: 'p_kid_1',
       title: 'Pick Friday Family Movie & Popcorn',
       pointsCost: 100,
       status: 'active_goal',
@@ -305,7 +305,7 @@ export const DEFAULT_CHORE_SNAPSHOT: ChoreEngineSnapshot = {
     },
     {
       id: 'reward-2',
-      profileId: 'p_alyssa',
+      profileId: 'p_kid_2',
       title: 'Ice Cream Outing',
       pointsCost: 100,
       status: 'active_goal',

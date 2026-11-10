@@ -1,7 +1,7 @@
 export type HouseholdRole = 'parent' | 'kid';
 
 export interface HouseholdProfile {
-  id: string;                 // UUID or slug (e.g., 'p_tony', 'p_anh', 'p_alyssa', 'p_olivia')
+  id: string;                 // UUID or slug (e.g., 'p_parent_1', 'p_kid_1')
   name: string;
   role: HouseholdRole;        // Controls whether profile appears in Kid Chore/Reward views vs. Admin/Kanban
   color: string;              // Calming palette hex/token (Sage, Slate, Dusty Rose, Lavender-Gray, Soft Amber)
