@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.7] - 2026-11-09
+
+### Generic Household Sample Seeds & Settings Modal Navigation Polish
+* **Generic Default Household Profiles (`src/services/db.ts`, `src/stores/useProfileStore.ts`, `src/store/choreStore.ts`):**
+  * Replaced personal family names in default sample seeds with generic defaults (`Parent 1`, `Parent 2`, `Alex`, `Maya`).
+  * Automatically migrates untouched legacy sample profiles in IndexedDB and strips untouched epoch-seeded legacy profiles during Supabase cloud pulls so sample names are never re-imported.
+* **Settings Modal Tab Bar Layout Fix (`src/components/settings/SettingsModal.tsx`):**
+  * Shortened the 5th tab label to `Household` and applied balanced flex sizing (`sm:flex-1 sm:px-2`) so the rightmost tab never clips against the right border of the modal.
+
+---
+
 ## [0.4.6] - 2026-11-09
 
 ### Ambiently Chore & Reward Engine & Global Household Profiles
