@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.8] - 2026-11-09
+
+### RSS Reader Mode Image & SVG Fixes + Expanded 26-Feed Curated Directory
+* **Reader Mode Full-Screen Image & SVG Overlay Fixes (`functions/api/reader.ts`, `src/components/common/InAppWebViewerModal.tsx`):**
+  * Fixed an issue where Next.js `fill` images (`style="position:absolute;height:100%;width:100%;..."`) on shorter articles (e.g., on *The Verge*, *NASA*, and *GitHub Blog*) stretched across 100% of the Reader modal viewport and blocked scrolling.
+  * Strips inline `style` attributes globally, promotes high-resolution `srcset` URLs over `data:` blur placeholders, removes unstyled inline `<svg>` icons and `<source>` tags, and cleans out author bio / follow popovers and NBC video playlist drawers.
+  * Enforces `position: static !important; max-height: 520px; object-fit: contain;` on `.ambiently-reader-body img`.
+* **Expanded 26-Feed Curated RSS Directory & Category Filters (`src/data/curatedFeeds.ts`, `src/components/widgets/WidgetSettingsModal.tsx`, `functions/api/rss.ts`):**
+  * Expanded the built-in RSS feed directory from 8 to 26 live-verified feeds across 6 categories (`Featured`, `News`, `Tech`, `Science`, `Lifestyle`, `Sports & Finance`).
+  * Added category filter pills and a quick search bar in the RSS Tile Settings modal, plus `<content>` / `<content:encoded>` snippet fallback in `/api/rss`.
+
+---
+
 ## [0.4.7] - 2026-11-09
 
 ### Generic Household Sample Seeds & Settings Modal Navigation Polish
