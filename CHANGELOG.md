@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.12] - 2026-11-10
+
+### Self-Hosting AGPLv3 Attribution & Comprehensive Documentation Refresh
+* **Unobtrusive AGPLv3 Attribution Touchpoints (`src/components/dock/AmbientQuickMenu.tsx`, `src/components/settings/SettingsModal.tsx`, `src/components/changelog/ChangelogModal.tsx`, `README.md`):**
+  * Added subtle `Powered by Ambiently • trinhism.com • Source (AGPLv3)` credit links inside the top-left Quick Hub popover and the Settings & Changelog modal footers while keeping the live ambient display canvas 100% watermark-free.
+  * Documented the AGPLv3 Sections 7(b) and 13 Self-Hosting & Attribution Policy in `README.md`.
+* **Comprehensive Documentation Refresh (`README.md`, `FEATURES.md`, `ARCHITECTURE.md`, `CHANGELOG.md`):**
+  * Updated all system documentation to reflect the Ambiently Chore & Reward Engine, Global Household Profiles, client-side iOS 17/18 `.HEIC` decoding (`libheif-js`), In-App Reader Mode (`/api/reader`), and Horizontal Toolbar Pop-Out Panels.
+
+---
+
 ## [0.4.11] - 2026-11-10
 
 ### Toolbar Horizontal Pop-Out Panels & Flexible Weekly (1× / Any Day) Chores
