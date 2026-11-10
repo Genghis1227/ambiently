@@ -190,6 +190,7 @@ export interface ChoreStoreState {
   ) => Promise<void>;
   approveAllPendingChores: () => Promise<number>;
   rejectChoreInstance: (instanceId: string) => Promise<void>;
+  dismissChoreInstance: (instanceId: string) => Promise<void>;
   priceWishlistReward: (
     rewardId: string,
     updates: {
@@ -713,6 +714,29 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => ({
       ...current,
       instances: nextInstances,
       lastParentActionAt: nowIso,
+      updated_at: nowIso,
+    };
+
+    set({ snapshot: nextSnapshot });
+    await persistSnapshot(nextSnapshot);
+  },
+
+  dismissChoreInstance: async (instanceId) => {
+    const current = get().snapshot;
+    const nowIso = new Date().toISOString();
+    const nextInstances = current.instances.map((inst) =>
+      inst.instanceId === instanceId
+        ? {
+            ...inst,
+            status: 'expired' as const,
+            isOverdue: false,
+          }
+        : inst
+    );
+
+    const nextSnapshot: ChoreEngineSnapshot = {
+      ...current,
+      instances: nextInstances,
       updated_at: nowIso,
     };
 

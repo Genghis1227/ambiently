@@ -158,6 +158,11 @@ export const ParentChoreDrawer: React.FC = () => {
     [rewards]
   );
 
+  const activeStoreRewards = useMemo(
+    () => rewards.filter((r) => r.status === 'active_goal' || r.status === 'unlocked'),
+    [rewards]
+  );
+
   const pendingFulfillmentRewards = useMemo(
     () => rewards.filter((r) => r.status === 'pending_fulfillment'),
     [rewards]
@@ -956,6 +961,109 @@ export const ParentChoreDrawer: React.FC = () => {
                   })}
                 </div>
               )}
+
+              {/* Active Reward Store Items (Manage / Re-Price / Delete) */}
+              <div className="pt-4 border-t border-slate-800/80 space-y-3">
+                <div>
+                  <h3 className="text-sm font-bold text-white">
+                    Active Reward Store Goals ({activeStoreRewards.length})
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Manage, re-price, or remove active rewards currently visible in the Reward Store.
+                  </p>
+                </div>
+
+                {activeStoreRewards.length === 0 ? (
+                  <div className="p-5 rounded-2xl bg-slate-900/40 border border-slate-800/70 text-center text-xs text-slate-400">
+                    No active rewards in the Reward Store.
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {activeStoreRewards.map((reward) => {
+                      const hp = profileMap.get(reward.profileId);
+                      const fallbackName =
+                        hp?.name || profiles.find((p) => p.id === reward.profileId)?.name || 'Child';
+                      const state = getRewardInputState(reward);
+                      const parsedPts = Math.max(1, parseInt(state.pointsCost, 10) || reward.pointsCost);
+                      const isModified = parsedPts !== reward.pointsCost;
+
+                      return (
+                        <div
+                          key={reward.id}
+                          className="p-3.5 rounded-2xl bg-slate-900/70 border border-slate-800/90 flex flex-wrap items-center justify-between gap-3"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            {reward.imageUrl ? (
+                              <img
+                                src={reward.imageUrl}
+                                alt={reward.title}
+                                className="w-11 h-11 rounded-xl object-cover border border-slate-700/80 shrink-0 bg-slate-950"
+                              />
+                            ) : (
+                              <div className="w-11 h-11 rounded-xl bg-slate-800/80 border border-slate-700/70 flex items-center justify-center text-lg shrink-0">
+                                🎁
+                              </div>
+                            )}
+
+                            <div className="min-w-0">
+                              <h4 className="text-xs font-bold text-white truncate">
+                                {reward.title}
+                              </h4>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                {hp && <HouseholdAvatar profile={hp} size="xs" />}
+                                <span className="text-[11px] font-medium text-slate-300">
+                                  {fallbackName}
+                                </span>
+                                <span className="text-[11px] text-slate-500">•</span>
+                                <span className="text-[11px] font-mono text-emerald-300 font-semibold">
+                                  {reward.pointsCost} pts
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="number"
+                                min="1"
+                                step="1"
+                                value={state.pointsCost}
+                                onChange={(e) =>
+                                  handlePriceInputChange(reward, 'pointsCost', e.target.value)
+                                }
+                                title="Adjust point cost"
+                                className="w-20 px-2.5 py-1 rounded-xl bg-slate-950 border border-slate-700 text-xs font-mono text-white text-center"
+                              />
+                              <span className="text-[11px] text-slate-400">pts</span>
+                            </div>
+
+                            {isModified && (
+                              <button
+                                type="button"
+                                onClick={() => handleApproveRewardPricing(reward)}
+                                className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold cursor-pointer"
+                              >
+                                Update
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => deleteWishlistReward(reward.id)}
+                              title="Remove reward from Reward Store"
+                              className="px-2.5 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Remove</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -1596,7 +1704,7 @@ export const ParentChoreDrawer: React.FC = () => {
                           onChange={(e) => setTplRolloverUntilDone(e.target.checked)}
                           className="rounded border-slate-700"
                         />
-                        <span>Carry over as Overdue if unfinished at midnight</span>
+                        <span>Carry over as Overdue for 24h if unfinished at midnight (auto-dismisses after 24h)</span>
                       </label>
                     </div>
 

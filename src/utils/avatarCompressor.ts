@@ -58,17 +58,63 @@ export async function decodeImageFileForPreview(file: File | Blob): Promise<{
     URL.revokeObjectURL(directUrl);
   }
 
-  // 2. Fallback to lazy-loaded heic2any for .HEIC / .HEIF files on Windows / Chrome / Edge / Firefox
+  // 2. Fallback to lazy-loaded libheif-js (v1.23.5+) for iPhone .HEIC / .HEIF files
+  //    (including modern iOS 17/18 HDR Gain Map / tmap HEIC containers) on Windows / Chrome / Edge / Firefox
   try {
-    const heicModule = await import('heic2any');
-    const heic2any = heicModule.default || heicModule;
-    const converted = await heic2any({
-      blob: file,
-      toType: 'image/jpeg',
-      quality: 0.92,
+    const heifModule: any = await import('libheif-js');
+    const libheif = heifModule.default || heifModule;
+    const HeifDecoder = libheif.HeifDecoder || (typeof libheif === 'function' ? libheif().HeifDecoder : null);
+    if (!HeifDecoder) {
+      throw new Error('HEIC decoder failed to initialize.');
+    }
+
+    const arrayBuffer = await file.arrayBuffer();
+    const decoder = new HeifDecoder();
+    const images = decoder.decode(new Uint8Array(arrayBuffer));
+    if (!images || !images.length) {
+      throw new Error('No decodable image frames found in HEIC file.');
+    }
+
+    const primaryImage = images[0];
+    const width = primaryImage.get_width();
+    const height = primaryImage.get_height();
+    if (!width || !height) {
+      throw new Error('Invalid HEIC image dimensions.');
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      throw new Error('Could not initialize 2D canvas context for HEIC decode.');
+    }
+
+    const imageData = ctx.createImageData(width, height);
+    await new Promise<void>((resolve, reject) => {
+      primaryImage.display(imageData, (displayData: ImageData | null) => {
+        if (!displayData) {
+          reject(new Error('HEIC frame rendering failed.'));
+          return;
+        }
+        resolve();
+      });
     });
-    const resultBlob = Array.isArray(converted) ? converted[0] : converted;
-    const convertedUrl = URL.createObjectURL(resultBlob);
+
+    ctx.putImageData(imageData, 0, 0);
+
+    const decodedBlob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error('Failed to encode decoded HEIC frame.'));
+        },
+        'image/jpeg',
+        0.92
+      );
+    });
+
+    const convertedUrl = URL.createObjectURL(decodedBlob);
     await canLoadImageUrl(convertedUrl);
     return {
       previewUrl: convertedUrl,

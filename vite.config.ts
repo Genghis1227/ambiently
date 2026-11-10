@@ -82,7 +82,7 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         // The app's own scripts and styles are built into assets/, so they must be cached for the app to
         // open offline. Only the donation pictures from public/assets are left out.
-        globIgnores: ['**/og-banner.png', 'assets/{paypal,venmo,zelle}.*', 'assets/heic2any-*.js'],
+        globIgnores: ['**/og-banner.png', 'assets/{paypal,venmo,zelle}.*', 'assets/vendor-heif-*.js'],
         // Never intercept /api/* or /functions/* requests (such as /api/web-proxy inside an iframe)
         // with the SPA index.html navigation fallback.
         navigateFallbackDenylist: [/^\/api\//, /^\/functions\//],
@@ -90,7 +90,7 @@ export default defineConfig({
     }),
   ],
   build: {
-    chunkSizeWarningLimit: 1500,
+    chunkSizeWarningLimit: 3500,
     rolldownOptions: {
       output: {
         manualChunks(id) {
@@ -101,6 +101,7 @@ export default defineConfig({
             if (id.includes('framer-motion')) return 'vendor-motion';
             if (id.includes('lucide-react')) return 'vendor-icons';
             if (id.includes('dexie')) return 'vendor-db';
+            if (id.includes('libheif-js')) return 'vendor-heif';
           }
         },
       },
