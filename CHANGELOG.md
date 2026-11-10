@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.13] - 2026-11-10
+
+### Chore Widget Canvas Drag Fix, Schedule-Aware Overdue Cleanup & Header Polish
+* **Chore Widget Canvas Dragging (`src/components/widgets/ChoreWidget.tsx`):**
+  * Removed `data-no-drag="true"` from the root container of `ChoreWidget.tsx` so the tile can be dragged freely across the canvas while interactive chore rows and buttons remain clickable.
+* **Schedule-Aware Pending & Overdue Auto-Dismissal (`src/utils/choreEngine.ts`, `src/components/chores/ChoreDashboardView.tsx`, `src/components/widgets/ChoreWidget.tsx`, `src/components/chores/ParentChoreDrawer.tsx`):**
+  * Added `isDateMatchingTemplateCadence` validation in `evaluateChoreRollover` and UI filters so any `pending` instance whose `dateScheduled` no longer matches its template's configured day(s) of the week is immediately expired.
+  * Updated the default weekly day selection for new specific-day weekly chores from `[1, 3, 5]` (Mon, Wed, Fri) to `[6]` (Saturday).
+* **Removed Redundant Inner Maximize Button (`src/components/widgets/ChoreWidget.tsx`):**
+  * Removed the duplicate inner `Maximize2` button from the `ChoreWidget` tile header.
+
+---
+
 ## [0.4.12] - 2026-11-10
 
 ### Self-Hosting AGPLv3 Attribution & Comprehensive Documentation Refresh

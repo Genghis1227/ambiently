@@ -6,7 +6,6 @@ import {
   Clock,
   Inbox,
   Lock,
-  Maximize2,
   Palmtree,
   Plus,
   RotateCcw,
@@ -25,6 +24,8 @@ import type {
 import {
   calculateEffectiveChorePoints,
   canSelfRevertInstance,
+  daysBetweenDateKeys,
+  isDateMatchingTemplateCadence,
 } from '../../utils/choreEngine';
 import { localDateKey } from '../../utils/timePrefs';
 import { HouseholdAvatar } from '../common/HouseholdAvatar';
@@ -63,7 +64,6 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
   const revertChoreSameDay = useChoreStore((s) => s.revertChoreSameDay);
   const dismissChoreInstance = useChoreStore((s) => s.dismissChoreInstance);
   const proposeWishlistReward = useChoreStore((s) => s.proposeWishlistReward);
-  const setFullScreenOpen = useChoreStore((s) => s.setFullScreenOpen);
   const setParentDrawerOpen = useChoreStore((s) => s.setParentDrawerOpen);
 
   const [isProposeModalOpen, setIsProposeModalOpen] = useState(false);
@@ -144,6 +144,13 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
     for (const inst of snapshot.instances) {
       const tpl = templateMap.get(inst.choreId);
       if (!tpl) continue;
+
+      const isValidPending =
+        inst.status !== 'pending' ||
+        (isDateMatchingTemplateCadence(tpl, inst.dateScheduled) &&
+          (inst.dateScheduled === todayKey ||
+            (inst.isOverdue && daysBetweenDateKeys(inst.dateScheduled, todayKey) <= 1)));
+      if (!isValidPending) continue;
 
       const isRelevantDate = inst.dateScheduled === todayKey || inst.isOverdue;
       if (!isRelevantDate && inst.status !== 'awaiting_approval') continue;
@@ -697,7 +704,6 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
 
   return (
     <div
-      data-no-drag="true"
       className={`w-full h-full flex flex-col overflow-hidden select-none ${
         isLight ? 'text-slate-800' : 'text-slate-100'
       }`}
@@ -728,9 +734,9 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
           </div>
         </div>
 
-        {/* Right Controls: 🛡️ X Review Pill + Maximize to Full-Screen View */}
-        <div className="flex items-center gap-1.5 shrink-0 pr-12">
-          {pendingCounts.totalPendingCount > 0 && (
+        {/* Right Controls: 🛡️ X Review Pill */}
+        {pendingCounts.totalPendingCount > 0 && (
+          <div className="flex items-center gap-1.5 shrink-0 pr-12">
             <button
               type="button"
               onClick={(e) => {
@@ -747,24 +753,8 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
               <Shield className="w-3 h-3 text-amber-400" />
               <span>{pendingCounts.totalPendingCount} Review</span>
             </button>
-          )}
-
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setFullScreenOpen(true);
-            }}
-            title="Open Full-Screen Chore & Reward Hub"
-            className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
-              isLight
-                ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-                : 'bg-slate-800/80 hover:bg-slate-700 text-slate-200 border-slate-700/60'
-            }`}
-          >
-            <Maximize2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Scope Filter Strip (when configured as Household View) */}

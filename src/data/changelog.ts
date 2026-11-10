@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.4.13",
+    date: "November 10, 2026",
+    title: "Chore Widget Canvas Drag Fix, Schedule-Aware Overdue Cleanup & Header Polish",
+    highlights: [
+      "Chore Widget Canvas Dragging: Fixed an issue where root data-no-drag prevented dragging the Chore Widget across the freeform canvas.",
+      "Schedule-Aware Pending & Overdue Auto-Dismissal: Automatically expires orphaned pending instances when a chore template's scheduled days are changed (e.g. Saturday chores no longer carry over stale Monday instances).",
+      "Removed Redundant Inner Maximize Button: Cleaned up the duplicate fullscreen icon inside the Chore Widget header so it relies cleanly on the outer tile controls and Navigation Dock Hub.",
+    ],
+  },
+  {
     version: "v0.4.12",
     date: "November 10, 2026",
     title: "Self-Hosting AGPLv3 Attribution & Comprehensive Documentation Refresh",
