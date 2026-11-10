@@ -1539,7 +1539,9 @@ export const ParentChoreDrawer: React.FC = () => {
                                 <strong className="text-slate-300">
                                   {tpl.assignedTo === 'shared'
                                     ? 'Shared (All Kids)'
-                                    : assignedProfile?.name || tpl.assignedTo}
+                                    : assignedProfile?.name ||
+                                      profiles.find((p) => p.id === tpl.assignedTo)?.name ||
+                                      'Shared (All Kids)'}
                                 </strong>
                               </span>
                               {tpl.rolloverUntilDone && (

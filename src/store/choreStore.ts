@@ -41,6 +41,52 @@ function mapHouseholdToChoreProfiles(
   return recalculateProfilesFromLedger(kidProfiles, ledger);
 }
 
+function reconcileTemplateAndRewardProfileIds(
+  templates: ChoreTemplate[],
+  rewards: WishlistReward[],
+  householdProfiles: HouseholdProfile[]
+): { templates: ChoreTemplate[]; rewards: WishlistReward[] } {
+  const activeKids = householdProfiles.filter((hp) => hp.role === 'kid' && !hp.deletedAt);
+  const validProfileIds = new Set(
+    householdProfiles.filter((hp) => !hp.deletedAt).map((hp) => hp.id)
+  );
+  const firstKidId = activeKids[0]?.id || 'shared';
+  const secondKidId = activeKids[1]?.id || firstKidId;
+
+  const resolveAssignedTo = (assignedTo: string): string => {
+    if (!assignedTo || assignedTo === 'shared') return 'shared';
+    if (validProfileIds.has(assignedTo)) return assignedTo;
+    if (assignedTo === 'p_kid_1' || assignedTo === 'p_olivia') return firstKidId;
+    if (assignedTo === 'p_kid_2' || assignedTo === 'p_alyssa') return secondKidId;
+    return firstKidId;
+  };
+
+  const resolveRewardProfileId = (profileId: string): string => {
+    if (validProfileIds.has(profileId)) return profileId;
+    if (profileId === 'p_kid_2' || profileId === 'p_alyssa') {
+      return activeKids[1]?.id || activeKids[0]?.id || profileId;
+    }
+    return activeKids[0]?.id || profileId;
+  };
+
+  const LEGACY_CHORE_MAP: Record<string, string> = {
+    c_bed_olivia: 'c_bed_kid_1',
+    c_bed_alyssa: 'c_bed_kid_2',
+  };
+
+  return {
+    templates: (templates || []).map((t) => ({
+      ...t,
+      id: LEGACY_CHORE_MAP[t.id] || t.id,
+      assignedTo: resolveAssignedTo(t.assignedTo),
+    })),
+    rewards: (rewards || []).map((r) => ({
+      ...r,
+      profileId: resolveRewardProfileId(r.profileId),
+    })),
+  };
+}
+
 let rolloverIntervalId: ReturnType<typeof setInterval> | null = null;
 let midnightTimeoutId: ReturnType<typeof setTimeout> | null = null;
 let visibilityListenerAttached = false;
@@ -190,27 +236,8 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => ({
       const householdProfiles = useProfileStore.getState().profiles;
       const stored = await db.chores.get('household_chores');
       const base = stored || DEFAULT_CHORE_SNAPSHOT;
-      const LEGACY_ID_MAP: Record<string, string> = {
-        p_olivia: 'p_kid_1',
-        p_alyssa: 'p_kid_2',
-      };
-      const LEGACY_CHORE_MAP: Record<string, string> = {
-        c_bed_olivia: 'c_bed_kid_1',
-        c_bed_alyssa: 'c_bed_kid_2',
-      };
-      const hasNewGenericKids = householdProfiles.some((hp) => hp.id === 'p_kid_1' || hp.id === 'p_kid_2');
-      const migratedTemplates = hasNewGenericKids
-        ? base.templates.map((t) => ({
-            ...t,
-            id: LEGACY_CHORE_MAP[t.id] || t.id,
-            assignedTo: LEGACY_ID_MAP[t.assignedTo] || t.assignedTo,
-          }))
-        : base.templates;
-      const migratedRewards = hasNewGenericKids
-        ? base.rewards.map((r) =>
-            LEGACY_ID_MAP[r.profileId] ? { ...r, profileId: LEGACY_ID_MAP[r.profileId] } : r
-          )
-        : base.rewards;
+      const { templates: migratedTemplates, rewards: migratedRewards } =
+        reconcileTemplateAndRewardProfileIds(base.templates, base.rewards, householdProfiles);
       const syncedProfiles = mapHouseholdToChoreProfiles(householdProfiles, base.ledger);
       const initial: ChoreEngineSnapshot = {
         ...base,
@@ -265,32 +292,26 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => ({
   },
 
   applyRemoteSnapshot: async (remote) => {
-    const LEGACY_ID_MAP: Record<string, string> = {
-      p_olivia: 'p_kid_1',
-      p_alyssa: 'p_kid_2',
-    };
-    const LEGACY_CHORE_MAP: Record<string, string> = {
-      c_bed_olivia: 'c_bed_kid_1',
-      c_bed_alyssa: 'c_bed_kid_2',
-    };
+    const householdProfiles = useProfileStore.getState().profiles;
+    const { templates: rTemplates, rewards: rRewards } = reconcileTemplateAndRewardProfileIds(
+      remote.templates || [],
+      remote.rewards || [],
+      householdProfiles
+    );
     const sanitizedRemote: ChoreEngineSnapshot = {
       ...remote,
-      templates: (remote.templates || []).map((t) => ({
-        ...t,
-        id: LEGACY_CHORE_MAP[t.id] || t.id,
-        assignedTo: LEGACY_ID_MAP[t.assignedTo] || t.assignedTo,
-      })),
-      rewards: (remote.rewards || []).map((r) => ({
-        ...r,
-        profileId: LEGACY_ID_MAP[r.profileId] || r.profileId,
-      })),
+      templates: rTemplates,
+      rewards: rRewards,
     };
     const local = get().snapshot;
     const merged = mergeChoreSnapshotsAuthoritative(local, sanitizedRemote);
-    const householdProfiles = useProfileStore.getState().profiles;
+    const { templates: finalTemplates, rewards: finalRewards } =
+      reconcileTemplateAndRewardProfileIds(merged.templates, merged.rewards, householdProfiles);
     const syncedProfiles = mapHouseholdToChoreProfiles(householdProfiles, merged.ledger);
     const withProfiles: ChoreEngineSnapshot = {
       ...merged,
+      templates: finalTemplates,
+      rewards: finalRewards,
       profiles: syncedProfiles.length > 0 ? syncedProfiles : merged.profiles,
     };
     const { snapshot: rolled } = evaluateChoreRollover(withProfiles, new Date());
@@ -1131,11 +1152,14 @@ registerProfileSyncListener((householdProfiles) => {
   const state = useChoreStore.getState();
   if (!state.isInitialized) return;
   const current = state.snapshot;
+  const { templates: nextTemplates, rewards: reconciledRewards } =
+    reconcileTemplateAndRewardProfileIds(current.templates, current.rewards, householdProfiles);
   const nextProfiles = mapHouseholdToChoreProfiles(householdProfiles, current.ledger);
-  const nextRewards = syncRewardUnlockStates(current.rewards, nextProfiles);
+  const nextRewards = syncRewardUnlockStates(reconciledRewards, nextProfiles);
   const nowIso = new Date().toISOString();
   const nextSnapshot: ChoreEngineSnapshot = {
     ...current,
+    templates: nextTemplates,
     profiles: nextProfiles,
     rewards: nextRewards,
     updated_at: nowIso,
