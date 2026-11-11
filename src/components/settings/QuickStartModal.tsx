@@ -268,7 +268,7 @@ const SLIDES: WalkthroughSlide[] = [
       {
         icon: <Cloud className="w-4 h-4 text-cyan-400" />,
         heading: 'Live Cloud Sync & Household Board Sharing',
-        body: 'Sign in under Settings → Sync & Backup to enable instant WebSocket sync across devices. Use the QR/Share button on the Dock to invite family members or pair a wall display.',
+        body: 'Sign in under Settings → Backup & System to enable instant WebSocket sync across devices. Use the QR/Share button on the Dock to invite family members or pair a wall display.',
       },
       {
         icon: <Smartphone className="w-4 h-4 text-emerald-400" />,
@@ -278,12 +278,12 @@ const SLIDES: WalkthroughSlide[] = [
       {
         icon: <Check className="w-4 h-4 text-amber-400" />,
         heading: '1-Click JSON Backup & PC Auto-Sync',
-        body: 'Export or restore a full JSON backup anytime in Settings → Sync & Backup, or bind a local file on your PC/Mac so every board change mirrors to disk automatically.',
+        body: 'Export or restore a full JSON backup anytime in Settings → Backup & System, or bind a local file on your PC/Mac so every board change mirrors to disk automatically.',
       },
     ],
     proTip:
       'You can reopen this Quick Start & How-To guide anytime from the Quick Utilities (sliders) button on the Dock or from the top of the Settings window.',
-    ctaLabel: 'Open Sync & Backup Settings',
+    ctaLabel: 'Open Backup & System Settings',
     ctaAction: 'settings',
   },
 ];

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.20] - 2026-11-10
+
+### Backup & System Settings Organization & Inline Auto-Organize Dock Pop-Out
+* **Settings Tab Consolidation (`src/components/settings/SettingsModal.tsx`, `src/components/settings/QuickStartModal.tsx`):**
+  * Renamed Tab 4 to **Backup & System** (`System` on compact viewports) and moved **App Version & Updates**, **Support**, and **Danger Zone: Factory Reset** beneath **Local Backup & Restore**, keeping the **Household** tab 100% focused on **Household Members & Avatars** and **Kid Protection & Kiosk Lock**.
+* **Inline Auto-Organize Pop-Out (`src/components/dock/NavigationDock.tsx`):**
+  * Moved the Auto-Organize mode switcher (`Bento Grid`, `Keep Sizes`, `Split`) & `Undo` horizontal panel inside the `relative` wrapper of the `Wand2` button so it pops out directly inline with the button and closes on outside click or `Escape`.
+* **Opt-In Startup Walkthrough Toggle (`src/components/settings/QuickStartModal.tsx`):**
+  * Made the **"Don't show automatically on startup"** checkbox unchecked by default (`isQuickStartDismissed()`).
+
+---
+
 ## [0.4.19] - 2026-11-10
 
 ### Interactive Quick Start & How-To Walkthrough Tour
