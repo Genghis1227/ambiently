@@ -11,6 +11,15 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.5.3",
+    date: "November 11, 2026",
+    title: "Auto-Carousel Pause Guard for Widget Modals, Portals & Active Form Inputs",
+    highlights: [
+      "Widget Modal & Active Input Carousel Lock: Prevented the automated canvas carousel from rotating whenever any widget modal (Schedule Family Meal, Cooking Mode, Tile Settings, Photo Sources, Wishlist Proposals, Sticky Note Editor) is open or any form input is focused.",
+      "Global Keyboard, Scroll & Portal Activity Detection: Added window-level capture listeners for keyboard typing, scrolling, and pointer events inside portal-mounted modals to automatically pause canvas rotation.",
+    ],
+  },
+  {
     version: "v0.5.2",
     date: "November 11, 2026",
     title: "Streamlined Navigation Dock, 8-Step Getting Started Wizard & Documentation Refresh",

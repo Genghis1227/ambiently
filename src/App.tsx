@@ -669,12 +669,48 @@ export function App() {
       activeWebModal
   );
 
-  // Tab auto-carousel rotation (pauses automatically when user interacts or a modal/hub is open)
+  // Pause carousel on any pointer, touch, wheel, or keyboard activity (including inside portals)
+  useEffect(() => {
+    if (!settings.carouselEnabled) return;
+
+    const handleUserActivity = () => {
+      pauseCarouselTemporarily(20000);
+    };
+
+    const events = ['pointerdown', 'touchstart', 'keydown', 'input', 'wheel'] as const;
+    events.forEach((evt) =>
+      window.addEventListener(evt, handleUserActivity, { capture: true, passive: true })
+    );
+    return () => {
+      events.forEach((evt) =>
+        window.removeEventListener(evt, handleUserActivity, { capture: true })
+      );
+    };
+  }, [settings.carouselEnabled, pauseCarouselTemporarily]);
+
+  // Tab auto-carousel rotation (pauses automatically when user interacts or any modal/hub/input is active)
   useEffect(() => {
     const tabIds = visibleTabIds.split('\n').filter(Boolean);
     if (!settings.carouselEnabled || isCarouselPaused || isAnyOverlayOpen || tabIds.length <= 1) return;
 
     const interval = setInterval(() => {
+      // Never rotate if any widget modal, dialog, or inline editor is open, or if an input is focused
+      if (typeof document !== 'undefined') {
+        if (document.querySelector('[role="dialog"], [aria-modal="true"], [data-carousel-lock="true"]')) {
+          return;
+        }
+        const activeEl = document.activeElement as HTMLElement | null;
+        if (
+          activeEl &&
+          (activeEl.tagName === 'INPUT' ||
+            activeEl.tagName === 'TEXTAREA' ||
+            activeEl.tagName === 'SELECT' ||
+            activeEl.isContentEditable)
+        ) {
+          return;
+        }
+      }
+
       const currentIndex = tabIds.indexOf(activeTabIdResolved);
       const nextIndex = (currentIndex === -1 ? 1 : currentIndex + 1) % tabIds.length;
       rotateToTab(tabIds[nextIndex]);

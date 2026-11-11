@@ -772,6 +772,8 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
       className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 select-none cursor-pointer"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();

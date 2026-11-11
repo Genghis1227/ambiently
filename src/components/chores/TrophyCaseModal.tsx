@@ -62,6 +62,8 @@ export const TrophyCaseModal: React.FC<TrophyCaseModalProps> = ({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
       className="fixed inset-0 z-[94] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4"
       onClick={onClose}
     >

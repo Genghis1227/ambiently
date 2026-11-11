@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.3] - 2026-11-11
+
+### Auto-Carousel Pause Guard for Widget Modals, Portals & Active Form Inputs
+* **Widget Modal & Active Input Carousel Lock (`src/App.tsx`):**
+  * Prevented the automated canvas carousel from rotating to the next canvas whenever any widget modal, portal dialog, or inline editor (`[role="dialog"]`, `[aria-modal="true"]`, `[data-carousel-lock="true"]`) is open—or whenever an `<input>`, `<textarea>`, `<select>`, or `contentEditable` element is focused—so scheduling a meal, adding a recipe, or editing tile settings is never interrupted.
+  * Added window-level capture listeners (`pointerdown`, `touchstart`, `keydown`, `input`, `wheel`) so typing, scrolling, or interacting inside `createPortal(..., document.body)` modals resets the temporary carousel pause window.
+* **Complete Dialog Semantics (`src/components/widgets/WidgetSettingsModal.tsx`, `src/components/photos/PhotoSourcesModal.tsx`, `src/components/chores/ProposeRewardModal.tsx`, `src/components/chores/TrophyCaseModal.tsx`, `src/components/calendar/CalendarUrlGuideModal.tsx`, `src/components/widgets/MediaSearchModal.tsx`, `src/components/changelog/ChangelogModal.tsx`, `src/components/layout/Corkboard.tsx`, `src/components/widgets/StickyNotesWidget.tsx`):**
+  * Added `role="dialog" aria-modal="true"` across all widget and corkboard modals and `data-carousel-lock="true"` on the inline Sticky Notes creator drawer.
+
+---
+
 ## [0.5.2] - 2026-11-11
 
 ### Streamlined Navigation Dock, 8-Step Getting Started Wizard & Documentation Refresh

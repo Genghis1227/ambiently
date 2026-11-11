@@ -642,6 +642,8 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
       className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
       onMouseDown={(e) => {
         (e.currentTarget as any).__backdropMouseDown =
