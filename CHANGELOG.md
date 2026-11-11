@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.2] - 2026-11-11
+
+### Streamlined Navigation Dock, 8-Step Getting Started Wizard & Documentation Refresh
+* **Streamlined Navigation Dock (`src/components/dock/NavigationDock.tsx`):**
+  * Removed the redundant middle Family Hub (`ClipboardList`) pop-out button from the toolbar since both **Chores & Rewards** and **Family Meal Planner** live as canvas widgets (with the Chore tile's header Maximize button or *Full-Screen Hub on Canvas* setting launching the 3-column Chore & Reward Hub).
+* **Expanded 8-Step Interactive Getting Started Wizard (`src/components/settings/QuickStartModal.tsx`):**
+  * Added **Step 5: Meals & Grocery** covering flexible meal planner scopes (`Tomorrow`, `3-Day`, `Full Week`), dynamic quick-meal autocomplete chips, Schema.org recipe URL scraping, **Cooking Mode** with Screen Wake Lock, and the **Smart Grocery Aggregator** (*Google Keep* export + **To Sticky Note** sync).
+  * Updated **Step 4: Chores & Rewards** and **Step 6: Notes & Lists** to document launching the Chore Hub from the canvas widget and using all **3 Sticky Note Formats** (`Text`, `Checklist`, and `🛒 Shopping List`).
+* **Project Documentation Refresh (`README.md`, `FEATURES.md`, `ARCHITECTURE.md`):**
+  * Documented the Family Meal Planner, Recipe URL Scraper, Cooking Mode, 3rd `🛒 Shopping List` sticky note format, Dexie v6 `meals` store, and Phase 1 Supabase SQL migration across all architecture and feature reference guides.
+
+---
+
 ## [0.5.1] - 2026-11-11
 
 ### Dedicated Shopping List Sticky Note, Recent Meal Chips & 21-Day Schedule Pruning

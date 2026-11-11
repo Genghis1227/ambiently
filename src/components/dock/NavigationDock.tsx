@@ -48,7 +48,6 @@ import {
   Bell,
   SlidersHorizontal,
   FolderPlus,
-  ClipboardList,
   HelpCircle,
 } from 'lucide-react';
 import type {
@@ -59,7 +58,6 @@ import type {
 import { MAX_CANVASES } from '../../types/dashboard';
 import { AmbientQuickMenu } from './AmbientQuickMenu';
 import { useUpdateChecker } from '../../services/updateChecker';
-import { useChoreStore } from '../../stores/useChoreStore';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { isAmbientlyInNightMode } from '../../utils/confetti';
 
@@ -155,19 +153,13 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
   const isVertical = dockPosition === 'left' || dockPosition === 'right';
   const [showOrganizeMenu, setShowOrganizeMenu] = useState(false);
   const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(false);
-  const [activePopout, setActivePopout] = useState<'hub' | 'add' | 'utilities' | null>(null);
+  const [activePopout, setActivePopout] = useState<'add' | 'utilities' | null>(null);
   const [activeMode, setActiveMode] = useState<AutoOrganizeMode>('bento');
   const [isPeekOpen, setIsPeekOpen] = useState(false);
   const navRef = useRef<HTMLElement>(null);
   const { isUpdateAvailable, latestVersion, applyUpdate } = useUpdateChecker();
   const dashboardSettings = useDashboardStore((s) => s.settings);
-  const dashboardWidgets = useDashboardStore((s) => s.widgets);
-  const pendingParentActionsCount = useChoreStore((s) => s.pendingParentActionsCount);
-  const isChoreFullScreenOpen = useChoreStore((s) => s.isFullScreenOpen);
-  const setChoreFullScreenOpen = useChoreStore((s) => s.setFullScreenOpen);
   const effectiveNightMode = Boolean(isNightMode || isAmbientlyInNightMode(dashboardSettings));
-  const showPendingBadge = pendingParentActionsCount > 0 && !effectiveNightMode;
-  const existingMealsWidget = dashboardWidgets.find((w) => w.type === 'meals' && !w.deleted_at);
 
   useEffect(() => {
     if (!showOrganizeMenu) return;
@@ -298,7 +290,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
     bottom: 'bottom-full mb-3 left-1/2 -translate-x-1/2',
   }[dockPosition];
 
-  const togglePopout = (panel: 'hub' | 'add' | 'utilities') => {
+  const togglePopout = (panel: 'add' | 'utilities') => {
     setIsQuickMenuOpen(false);
     setShowOrganizeMenu(false);
     setActivePopout((prev) => (prev === panel ? null : panel));
@@ -458,115 +450,6 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
               </button>
             );
           })}
-        </div>
-
-        <div
-          className={`bg-gray-800 ${isVertical ? 'w-6 h-px my-1' : 'h-6 w-px mx-1'}`}
-        />
-
-        {/* Dedicated Middle Hub Section: Pop-out launcher for Chores & Rewards + Meal Planner */}
-        <div
-          className={`relative flex items-center justify-center ${
-            isVertical ? 'py-0.5' : 'px-0.5'
-          }`}
-        >
-          <button
-            type="button"
-            onClick={() => togglePopout('hub')}
-            title={
-              showPendingBadge
-                ? `Family Hub: Chores & Meal Planning (${pendingParentActionsCount} awaiting parent review)`
-                : 'Family Hub: Chores & Meal Planning'
-            }
-            className={`relative flex items-center justify-center w-11 h-11 rounded-xl transition-all cursor-pointer border ${
-              isChoreFullScreenOpen || activePopout === 'hub'
-                ? effectiveNightMode
-                  ? 'bg-emerald-900/50 text-emerald-200 border-emerald-700/40 shadow-none'
-                  : 'bg-emerald-600 text-white border-emerald-400/60 shadow-lg shadow-emerald-500/30'
-                : effectiveNightMode
-                ? 'bg-slate-900/60 hover:bg-slate-800/70 text-emerald-400/60 border-white/10 shadow-none'
-                : 'bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/30'
-            }`}
-          >
-            <ClipboardList className="w-5 h-5" />
-            {showPendingBadge && (
-              <span
-                className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-amber-500/90 text-slate-950 border border-amber-200/40 font-mono font-bold text-[10px] flex items-center justify-center"
-                title={`${pendingParentActionsCount} pending parent actions`}
-              >
-                {pendingParentActionsCount}
-              </span>
-            )}
-          </button>
-
-          {/* Horizontal Pop-Out Panel: Chores & Rewards + Meal Planner */}
-          {activePopout === 'hub' && (
-            <div
-              data-dock-element="true"
-              className={`absolute z-50 flex flex-row items-center gap-2 p-2 rounded-2xl bg-gray-900/95 backdrop-blur-xl border border-white/10 ${
-                effectiveNightMode ? 'shadow-none' : 'shadow-2xl'
-              } animate-in fade-in zoom-in-95 duration-150 ${inlinePopoutPositionClasses}`}
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  setActivePopout(null);
-                  setChoreFullScreenOpen(!isChoreFullScreenOpen);
-                }}
-                title={
-                  showPendingBadge
-                    ? `Family Chores & Rewards (${pendingParentActionsCount} awaiting parent review)`
-                    : 'Family Chores & Rewards'
-                }
-                className={`relative flex items-center gap-2 px-3 h-10 rounded-xl transition-all cursor-pointer border whitespace-nowrap ${
-                  isChoreFullScreenOpen
-                    ? effectiveNightMode
-                      ? 'bg-emerald-900/50 text-emerald-200 border-emerald-700/40 shadow-none'
-                      : 'bg-emerald-600 text-white border-emerald-400/60 shadow-md shadow-emerald-500/30'
-                    : effectiveNightMode
-                    ? 'bg-slate-900/60 hover:bg-slate-800/70 text-emerald-300/75 border-white/10 shadow-none'
-                    : 'bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/30'
-                }`}
-              >
-                <CheckSquare className="w-4 h-4 shrink-0" />
-                <span className="text-xs font-semibold">Chores &amp; Rewards</span>
-                {showPendingBadge && (
-                  <span className="min-w-[18px] h-4.5 px-1 rounded-full bg-amber-500/90 text-slate-950 border border-amber-200/40 font-mono font-bold text-[10px] flex items-center justify-center">
-                    {pendingParentActionsCount}
-                  </span>
-                )}
-              </button>
-
-              <button
-                type="button"
-                disabled={!existingMealsWidget && (!onOpenAddWidget || isCanvasLocked)}
-                onClick={() => {
-                  setActivePopout(null);
-                  setChoreFullScreenOpen(false);
-                  if (existingMealsWidget) {
-                    onSelectTab(existingMealsWidget.tabId);
-                  } else if (onOpenAddWidget && !isCanvasLocked) {
-                    onOpenAddWidget();
-                  }
-                }}
-                title={
-                  existingMealsWidget
-                    ? 'Jump to Family Meal Planner'
-                    : 'Add Family Meal Planner tile to canvas'
-                }
-                className={`relative flex items-center gap-2 px-3 h-10 rounded-xl transition-all border whitespace-nowrap ${
-                  !existingMealsWidget && (!onOpenAddWidget || isCanvasLocked)
-                    ? 'bg-gray-800/60 text-gray-500 border-gray-700/60 opacity-60 cursor-not-allowed'
-                    : effectiveNightMode
-                    ? 'bg-slate-900/60 hover:bg-slate-800/70 text-amber-200/75 border-white/10 cursor-pointer shadow-none'
-                    : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border-amber-500/30 cursor-pointer'
-                }`}
-              >
-                <Utensils className="w-4 h-4 shrink-0 text-amber-300/90" />
-                <span className="text-xs font-semibold">Meal Planner</span>
-              </button>
-            </div>
-          )}
         </div>
 
         <div

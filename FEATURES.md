@@ -28,8 +28,8 @@
 * **4-Edge Dock Placement & Compact Horizontal Pop-Out Panels (`NavigationDock.tsx`):**
   * Position the glassmorphic navigation dock on the **Left, Right, Top, or Bottom** of the screen.
   * All Canvas board buttons (`1`–`0` hotkeys) stay directly accessible on the main toolbar while secondary actions expand into sleek **horizontal pop-out bars** so controls never clip on smaller screens:
-    * **Family Hub Pop-Out (`ClipboardList`):** Opens **Chores & Rewards** (with live pending parent review badge) and **Meal Planner** (`Soon`).
     * **`+` Add Menu Pop-Out (`Plus`):** Opens **New Sticky Note**, **Add Widget Tile**, and **Create New Canvas** (while keeping **Auto-Organize (`Wand2`)** and **Archived & Expired Notes (`Archive`)** directly on the toolbar).
+    * **Auto-Organize Pop-Out (`Wand2`):** Choose between **Smart Bento Grid**, **Keep Sizes & Pack**, or **Split Zones**, plus a 1-click **Undo Layout** button when a snapshot is available.
     * **Quick Utilities Pop-Out (`SlidersHorizontal`):** Opens **Night Mode**, **Fullscreen**, **Refresh / Apply Update** (with cyan live-update pulse badge), and **Hide Toolbar** right above the 1-click **Settings / Lock** button.
 * **Automated Tab Carousel:** Enable auto-rotation (`15s`, `30s`, `45s`, `1m`, `2m`) to cycle across your canvases automatically. Touching or clicking anywhere on the screen temporarily pauses the carousel for 20 seconds.
 
@@ -54,7 +54,10 @@
   * Each canvas owns its own independent sticky notes by default so new canvases start completely clean and deleting a note on one canvas never deletes notes on another.
   * Move any note to another canvas—or explicitly select **📌 Pin to All Canvases**—via the Canvas Board selector inside the Note Creator / Editor modal.
   * Toggle **Show / Hide Sticky Notes (`Eye` / `EyeOff`)** per canvas in Settings to temporarily hide all sticky notes on a board without deleting them.
-* **Rich Note & Interactive Checklist Modes:** Switch seamlessly between free-text notes and interactive to-do checklists with live strikethrough completion.
+* **3 Sticky Note Formats (`Text Note`, `Checklist`, & `🛒 Shopping List`):**
+  * **Text Note:** Free-form memo pad with auto-wrapping typography.
+  * **Checklist:** Interactive to-do items with live strikethrough completion.
+  * **Dedicated `🛒 Shopping List` (`ShoppingListNoteBody.tsx`):** Automatically groups unchecked items by grocery store aisle (*🥬 Produce*, *🥩 Meat & Seafood*, *🥛 Dairy & Eggs*, *🥖 Bakery & Bread*, *🥫 Pantry & Dry Goods*, *🧊 Frozen*, *🧴 Household*, and *📦 Other*), includes an inline `+ Add grocery item...` quick-add input directly on the note face, and provides a 1-tap `Clear (X)` button for checked items. Can also be populated automatically from the **Family Meal Planner** via *Send to Sticky Note*.
 * **Inline Sticky Note Editing (`✏️` / Double-Click):** Edit any existing note's title, message body, checklist items (add, edit, or delete rows), pastel color, typography scale (`S`, `M`, `L`, `XL`), canvas board assignment, or expiration timer without losing its position, size, or rotation on the corkboard.
 * **Wide-Range Sizing & 4 Font Scales (`S / M / L / XL`):** Resize sticky notes from tiny `8%` label tags all the way up to `100%` posters, and choose from Small (`S`), Medium (`M`), Large (`L`), or Poster (`XL`) text scales.
 * **6-Color Pastel Palette:** Customize notes in Amber Yellow, Emerald Green, Sky Blue, Rose Pink, Lavender Purple, or Warm Peach.
@@ -121,7 +124,7 @@ Every widget features a top-right **Tile Settings (`⚙️`)** button to customi
   * **Universal Photo Upload (including iOS 17/18 `.HEIC` / `.HEIF`):** Client-side decoding via `libheif-js` paired with an interactive circular **Avatar Cropper** (drag-to-pan, `1×`–`3×` zoom, and `90°` rotation) that exports lightweight `256×256` WebP avatars synced via IndexedDB and Supabase Realtime.
 * **Polymorphic Dual-View Chore & Reward UI (`ChoreWidget.tsx`, `ChoreDashboardView.tsx`):**
   * **Compact Bento Tile (`variant="tile"`):** Filter by *Whole Household* or a specific child, with collapsible accordions for *Today's Chores*, *Awaiting Parent Review*, and *Completed Today*.
-  * **Full-Screen Chore & Reward Hub (`variant="view"`):** 3-column dashboard launched from the Navigation Dock featuring profile point banks, daily/weekly/bounty tasks, and the visual **Reward Store**.
+  * **Full-Screen Chore & Reward Hub (`variant="view"`):** 3-column dashboard launched via the Chore tile header's **Maximize** button (or *Full-Screen Hub on Canvas* in Tile Settings) featuring profile point banks, daily/weekly/bounty tasks, and the visual **Reward Store**.
 * **Flexible Scheduling Cadences, Multi-Kid Creation & Overdue Policies (`choreEngine.ts`, `ParentChoreDrawer.tsx`):**
   * **Cadences:** *Daily*, *Weekdays (Mon–Fri)*, *Weekends (Sat–Sun)*, *Weekly — Any Day (1× / Week)*, *Weekly (Specific Days)*, *Interval (Every N Days)*, and *One-Off Bounty*.
   * **Multi-Kid Assignment & Duplication:** Check multiple kids when creating a chore to generate individual tasks for each child in one click, or duplicate any existing chore via the `Copy` button.
@@ -133,7 +136,23 @@ Every widget features a top-right **Tile Settings (`⚙️`)** button to customi
 
 ---
 
-## 6. Mobile Companion Mode & Hybrid Sync (Phase 5)
+## 6. Family Meal Planner, Smart Grocery Aggregator & Cooking Mode (`v0.5.0` – `v0.5.1`)
+
+* **Flexible Calendar Scopes & Automatic History Pruning (`MealPlannerWidget.tsx`, `useMealStore.ts`):**
+  * Add a **Family Meal Planner** widget to any canvas and switch between **Tomorrow**, **3-Day**, or **Full Week (7-Day)** views across configurable meal slots (*Breakfast*, *Lunch*, *Dinner*, *Snack*), with optional cook profile badges and prep/cook time pills.
+  * **Automatic 21-Day Past Meal Pruning:** Scheduled meal entries older than 21 days in the past are automatically pruned on load and save (recording tombstones for cloud sync) while keeping all saved recipes in your **Recipe Book** untouched.
+* **Quick-Meal Autocomplete, Recipe Book & Schema.org URL Scraper (`MealEntryModal.tsx`, `functions/api/metadata.ts`):**
+  * **Quick-Text Entry with Dynamic Autocomplete Chips:** Type a quick meal title (*Taco Night*, *Leftovers*) or tap one of up to 8 clickable recent/saved meal pills for instant 1-tap scheduling.
+  * **Recipe URL Scraper (`/api/metadata`):** Paste any recipe blog URL to automatically extract Schema.org `Recipe` JSON-LD metadata (`recipeIngredient`, `recipeInstructions` including `HowToStep`/`HowToSection`, `recipeYield`, ISO 8601 `prepTime`/`cookTime`, and hero image).
+* **Distraction-Free Kitchen Cooking Mode (`CookingModeModal.tsx`):**
+  * Clicking a linked recipe card opens a high-contrast, touch-friendly **Cooking Mode** modal featuring interactive ingredient checkboxes, step-by-step instructions with active step highlighting and progress bar, and automatic **Screen Wake Lock** so the display never dims while your hands are busy in the kitchen.
+* **Smart Grocery Aggregator, Google Keep Export & Shopping List Sticky Note Sync (`ingredientAggregator.ts`):**
+  * Automatically parses, normalizes, and sums ingredient quantities across your active date window (converting compatible units like `tbsp`/`tsp`/`cup` and grouping by grocery aisle).
+  * **1-Click Export & Canvas Sync:** Copy a clean **Google Keep** checklist to your clipboard, or click **To Sticky Note** to push unchecked ingredients directly into a dedicated **`🛒 Shopping List`** sticky note on your active canvas (updating your existing shopping list note in place or creating a new emerald one).
+
+---
+
+## 7. Mobile Companion Mode & Hybrid Sync (Phase 5)
 
 * **Vertical Tile Stream (`MobileCompanion.tsx`):**
   * Automatically serves a structured single-column vertical feed of the active canvas when opened on a smartphone (`< 768px`).
@@ -158,11 +177,7 @@ Every widget features a top-right **Tile Settings (`⚙️`)** button to customi
 
 ---
 
-## 7. Upcoming Roadmap
+## 8. Upcoming Roadmap
 
-* **Phase 4 — Weekly Meal Planner:**
-  * Dedicated household meal planning view & canvas widget accessible from the Family Hub pop-out bar alongside Chores & Rewards.
-* **Phase 5 — Live Cloud Grocery List & Google Keep Export:**
-  * Shared family grocery & shopping checklist with 1-click Google Keep-friendly copy/export.
-* **Phase 6 — Docker & Self-Hosting (`server/index.ts`, `Dockerfile`, `compose.yaml`):**
+* **Docker & Self-Hosting (`server/index.ts`, `Dockerfile`, `compose.yaml`):**
   * Standalone Node/Hono container bundling static PWA assets and `/api/*` proxy routes for home-lab deployments (Synology, Unraid, Proxmox, Raspberry Pi).
