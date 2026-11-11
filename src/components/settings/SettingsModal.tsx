@@ -458,7 +458,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               { id: 'boards' as const, label: 'Canvases', shortLabel: 'Canvases', icon: <Grid className="w-4 h-4 sm:w-3.5 sm:h-3.5" />, badge: tabs.length },
               { id: 'display' as const, label: 'Display & Kiosk', shortLabel: 'Display', icon: <Sliders className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> },
               { id: 'photos' as const, label: 'Shared Photos', shortLabel: 'Photos', icon: <ImageIcon className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> },
-              { id: 'sync' as const, label: 'Sync & Backup', shortLabel: 'Sync', icon: <FolderSync className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> },
+              { id: 'sync' as const, label: 'Backup & System', shortLabel: 'System', icon: <FolderSync className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> },
               { id: 'system' as const, label: 'Household', shortLabel: 'Household', icon: <Shield className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> },
             ].map((tab) => (
               <button
@@ -1744,10 +1744,142 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               )}
             </div>
+
+            {/* Software Version, Updates & Panel Refresh */}
+            <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                    <RotateCw className="w-4 h-4 text-cyan-400" />
+                    <span>App Version & Updates</span>
+                  </div>
+                  <span className="text-[11px] text-gray-400 block mt-0.5">
+                    Ambiently automatically checks for newer releases and updates in the background.
+                  </span>
+                </div>
+                <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                  Installed: v{APP_VERSION}
+                </span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-gray-900/60 border border-gray-800">
+                <div className="space-y-0.5">
+                  <div className="text-xs font-semibold text-white flex items-center gap-1.5">
+                    {isUpdateAvailable ? (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+                        <span className="text-cyan-300 font-bold">New Version Available: v{latestVersion}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="text-gray-300">Ambiently is up to date (v{APP_VERSION})</span>
+                      </>
+                    )}
+                  </div>
+                  <div className="text-[10.5px] text-gray-500 font-mono">
+                    {checkFeedback || (lastChecked ? `Last checked: ${new Date(lastChecked).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Auto-checking every 5 minutes')}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setCheckFeedback('Checking for updates...');
+                      const hasUp = await checkForUpdates();
+                      setCheckFeedback(hasUp ? `Update found: v${useUpdateChecker.getState().latestVersion}!` : 'You are on the newest version!');
+                      setTimeout(() => setCheckFeedback(''), 4000);
+                    }}
+                    disabled={isChecking}
+                    className="py-1.5 px-3 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 border border-gray-700"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isChecking ? 'animate-spin' : ''}`} />
+                    <span>{isChecking ? 'Checking...' : 'Check Now'}</span>
+                  </button>
+
+                  {isUpdateAvailable ? (
+                    <button
+                      type="button"
+                      onClick={applyUpdate}
+                      className="py-1.5 px-3 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white text-xs font-bold transition-all cursor-pointer shadow-md shadow-blue-600/30 flex items-center gap-1.5"
+                    >
+                      <RotateCw className="w-3.5 h-3.5" />
+                      <span>Refresh & Update</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => window.location.reload()}
+                      className="py-1.5 px-3 rounded-lg bg-gray-800/80 hover:bg-gray-700 text-gray-300 text-xs font-medium transition-all cursor-pointer flex items-center gap-1.5 border border-gray-700/80"
+                      title="Reload all dashboard panels and web assets"
+                    >
+                      <RotateCw className="w-3.5 h-3.5" />
+                      <span>Refresh Panel</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Support & Donate Panel */}
+            <SupportPanel />
+
+            {/* Danger Zone: Factory Reset */}
+            <div className="p-4 rounded-xl bg-red-950/20 border border-red-500/20 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm font-semibold text-red-400">
+                  <AlertTriangle className="w-4 h-4 text-red-400" />
+                  <span>Danger Zone: Factory Reset</span>
+                </div>
+              </div>
+              <p className="text-xs text-gray-400 leading-relaxed">
+                Permanently wipes all customized tiles, notes, Plex credentials, local folders, and custom layouts, restoring Ambiently to its fresh out-of-the-box state.
+              </p>
+
+              {!isConfirmingReset ? (
+                <button
+                  onClick={() => setIsConfirmingReset(true)}
+                  className="py-2 px-4 rounded-lg bg-red-500/10 hover:bg-red-500/25 text-red-400 hover:text-red-300 border border-red-500/30 text-xs font-bold transition-all cursor-pointer flex items-center gap-2"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Start From Scratch (Factory Reset)</span>
+                </button>
+              ) : (
+                <div className="p-3 bg-red-950/60 rounded-xl border border-red-500/40 space-y-2.5">
+                  <p className="text-xs font-bold text-red-300">
+                    ⚠️ Are you absolutely sure? All tiles and notes will be permanently erased.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleFactoryReset}
+                      disabled={isResetting}
+                      className="py-1.5 px-3 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all cursor-pointer shadow-lg shadow-red-600/30 flex items-center gap-1.5"
+                    >
+                      {isResetting ? (
+                        <>
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                          <span>Resetting...</span>
+                        </>
+                      ) : (
+                        <span>Yes, Wipe Everything & Reset</span>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setIsConfirmingReset(false)}
+                      disabled={isResetting}
+                      className="py-1.5 px-3 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-medium transition-all cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
             </>
             )}
 
-            {/* TAB 5: Household & System Settings */}
+            {/* TAB 5: Household Profiles & PIN Security */}
             {activeTab === 'system' && (
               <>
             {/* Global Household Members & Avatars */}
@@ -1918,138 +2050,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </button>
                 </div>
               </div>
-            </div>
-
-            {/* Software Version, Updates & Panel Refresh */}
-            <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2 text-sm font-semibold text-white">
-                    <RotateCw className="w-4 h-4 text-cyan-400" />
-                    <span>App Version & Updates</span>
-                  </div>
-                  <span className="text-[11px] text-gray-400 block mt-0.5">
-                    Ambiently automatically checks for newer releases and updates in the background.
-                  </span>
-                </div>
-                <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
-                  Installed: v{APP_VERSION}
-                </span>
-              </div>
-
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-gray-900/60 border border-gray-800">
-                <div className="space-y-0.5">
-                  <div className="text-xs font-semibold text-white flex items-center gap-1.5">
-                    {isUpdateAvailable ? (
-                      <>
-                        <Sparkles className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
-                        <span className="text-cyan-300 font-bold">New Version Available: v{latestVersion}</span>
-                      </>
-                    ) : (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-emerald-400" />
-                        <span className="text-gray-300">Ambiently is up to date (v{APP_VERSION})</span>
-                      </>
-                    )}
-                  </div>
-                  <div className="text-[10.5px] text-gray-500 font-mono">
-                    {checkFeedback || (lastChecked ? `Last checked: ${new Date(lastChecked).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Auto-checking every 5 minutes')}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      setCheckFeedback('Checking for updates...');
-                      const hasUp = await checkForUpdates();
-                      setCheckFeedback(hasUp ? `Update found: v${useUpdateChecker.getState().latestVersion}!` : 'You are on the newest version!');
-                      setTimeout(() => setCheckFeedback(''), 4000);
-                    }}
-                    disabled={isChecking}
-                    className="py-1.5 px-3 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 border border-gray-700"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isChecking ? 'animate-spin' : ''}`} />
-                    <span>{isChecking ? 'Checking...' : 'Check Now'}</span>
-                  </button>
-
-                  {isUpdateAvailable ? (
-                    <button
-                      type="button"
-                      onClick={applyUpdate}
-                      className="py-1.5 px-3 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white text-xs font-bold transition-all cursor-pointer shadow-md shadow-blue-600/30 flex items-center gap-1.5"
-                    >
-                      <RotateCw className="w-3.5 h-3.5" />
-                      <span>Refresh & Update</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => window.location.reload()}
-                      className="py-1.5 px-3 rounded-lg bg-gray-800/80 hover:bg-gray-700 text-gray-300 text-xs font-medium transition-all cursor-pointer flex items-center gap-1.5 border border-gray-700/80"
-                      title="Reload all dashboard panels and web assets"
-                    >
-                      <RotateCw className="w-3.5 h-3.5" />
-                      <span>Refresh Panel</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Support & Donate Panel */}
-            <SupportPanel />
-
-            {/* Danger Zone: Factory Reset */}
-            <div className="p-4 rounded-xl bg-red-950/20 border border-red-500/20 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm font-semibold text-red-400">
-                  <AlertTriangle className="w-4 h-4 text-red-400" />
-                  <span>Danger Zone: Factory Reset</span>
-                </div>
-              </div>
-              <p className="text-xs text-gray-400 leading-relaxed">
-                Permanently wipes all customized tiles, notes, Plex credentials, local folders, and custom layouts, restoring Ambiently to its fresh out-of-the-box state.
-              </p>
-
-              {!isConfirmingReset ? (
-                <button
-                  onClick={() => setIsConfirmingReset(true)}
-                  className="py-2 px-4 rounded-lg bg-red-500/10 hover:bg-red-500/25 text-red-400 hover:text-red-300 border border-red-500/30 text-xs font-bold transition-all cursor-pointer flex items-center gap-2"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Start From Scratch (Factory Reset)</span>
-                </button>
-              ) : (
-                <div className="p-3 bg-red-950/60 rounded-xl border border-red-500/40 space-y-2.5">
-                  <p className="text-xs font-bold text-red-300">
-                    ⚠️ Are you absolutely sure? All tiles and notes will be permanently erased.
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={handleFactoryReset}
-                      disabled={isResetting}
-                      className="py-1.5 px-3 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all cursor-pointer shadow-lg shadow-red-600/30 flex items-center gap-1.5"
-                    >
-                      {isResetting ? (
-                        <>
-                          <RefreshCw className="w-3 h-3 animate-spin" />
-                          <span>Resetting...</span>
-                        </>
-                      ) : (
-                        <span>Yes, Wipe Everything & Reset</span>
-                      )}
-                    </button>
-                    <button
-                      onClick={() => setIsConfirmingReset(false)}
-                      disabled={isResetting}
-                      className="py-1.5 px-3 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-medium transition-all cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
             </>
             )}

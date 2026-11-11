@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.4.20",
+    date: "November 10, 2026",
+    title: "Backup & System Settings Organization & Inline Auto-Organize Dock Pop-Out",
+    highlights: [
+      "Focused Household Tab & 'Backup & System' Consolidation: Moved App Version & Updates, Support, and Danger Zone: Factory Reset into the 'Backup & System' tab so the 'Household' tab remains 100% focused on Family Members, Avatars, and Parent PIN security.",
+      "Inline Auto-Organize Pop-Out Alignment: Anchored the Auto-Organize layout mode switcher & Undo bar directly inline with the purple Magic Wand button on the Navigation Dock.",
+      "Opt-In Startup Tour Dismissal: Updated the Quick Start 'Don't show automatically on startup' checkbox to be unchecked by default.",
+    ],
+  },
+  {
     version: "v0.4.19",
     date: "November 10, 2026",
     title: "Interactive Quick Start & How-To Walkthrough Tour",
