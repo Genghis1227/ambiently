@@ -297,7 +297,7 @@ export const QuickStartModal: React.FC<QuickStartModalProps> = ({
   onOpenChoresHub,
 }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [dontShowAgain, setDontShowAgain] = useState<boolean>(() => isQuickStartDismissed() || true);
+  const [dontShowAgain, setDontShowAgain] = useState<boolean>(() => isQuickStartDismissed());
 
   useEffect(() => {
     if (!isOpen) return;
