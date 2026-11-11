@@ -289,7 +289,13 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         w.id !== HOUSEHOLD_PROFILES_CLOUD_ROW_ID &&
         w.id !== MEAL_PLANNER_CLOUD_ROW_ID
     );
-    const loadedNotes = (await db.notes.toArray()).filter((n) => !n.deleted_at);
+    const loadedNotes = (await db.notes.toArray())
+      .filter((n) => !n.deleted_at)
+      .map((n) =>
+        n.isShoppingList || n.freeformPos?.isShoppingList
+          ? { ...n, isShoppingList: true, isChecklist: true }
+          : n
+      );
 
     // Initialize Global Household Profile Store, Chore Engine Store & Meal Planner Store
     await useProfileStore.getState().initProfileStore();
@@ -881,18 +887,25 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       Math.floor(Math.random() * 5) - 2
     );
 
+    const isShoppingList = Boolean(newNote.isShoppingList || newNote.freeformPos?.isShoppingList);
+    const resolvedPos = {
+      ...(newNote.freeformPos || defaultPos),
+      ...(isShoppingList ? { isShoppingList: true } : {}),
+    };
+
     const note: StickyNoteItem = {
       id: newNote.id || `note-${Date.now()}`,
       tabId: targetTabId,
       widgetId: newNote.widgetId,
       title: newNote.title,
       content: newNote.content || '',
-      isChecklist: Boolean(newNote.isChecklist),
+      isChecklist: Boolean(newNote.isChecklist || isShoppingList),
+      isShoppingList,
       checklistItems: newNote.checklistItems,
       bgColor: newNote.bgColor || '#fef08a',
       fontSize: newNote.fontSize || 'base',
       expiresAt: newNote.expiresAt,
-      freeformPos: newNote.freeformPos || defaultPos,
+      freeformPos: resolvedPos,
       updated_at: new Date().toISOString(),
     };
     await db.notes.put(note);
@@ -903,9 +916,23 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   updateNote: async (noteId, updates) => {
     const existing = get().notes.find((n) => n.id === noteId);
     if (!existing) return;
+    const isShoppingList =
+      updates.isShoppingList !== undefined
+        ? Boolean(updates.isShoppingList)
+        : Boolean(existing.isShoppingList || existing.freeformPos?.isShoppingList);
+    const basePos = updates.freeformPos || existing.freeformPos;
+    const updatedPos = basePos
+      ? {
+          ...basePos,
+          isShoppingList,
+        }
+      : undefined;
     const updated: StickyNoteItem = {
       ...existing,
       ...updates,
+      isShoppingList,
+      ...(isShoppingList ? { isChecklist: true } : {}),
+      ...(updatedPos ? { freeformPos: updatedPos } : {}),
       updated_at: new Date().toISOString(),
     };
     await db.notes.put(updated);
@@ -1231,9 +1258,16 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   updateNotePosition: async (noteId, freeformPos) => {
     const note = get().notes.find((n) => n.id === noteId);
     if (!note) return;
+    const isShoppingList = Boolean(note.isShoppingList || note.freeformPos?.isShoppingList);
     const updated: StickyNoteItem = {
       ...note,
-      freeformPos,
+      isShoppingList,
+      freeformPos: freeformPos
+        ? {
+            ...freeformPos,
+            ...(isShoppingList ? { isShoppingList: true } : {}),
+          }
+        : freeformPos,
       updated_at: new Date().toISOString(),
     };
     await db.notes.put(updated);

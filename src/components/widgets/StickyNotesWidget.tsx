@@ -10,7 +10,9 @@ import {
   Copy,
   X,
 } from 'lucide-react';
-import type { StickyNoteItem } from '../../types/dashboard';
+import type { StickyNoteItem, StickyNoteChecklistItem } from '../../types/dashboard';
+import { ShoppingListNoteBody } from '../common/ShoppingListNoteBody';
+import { categorizeIngredient, parseIngredient } from '../../utils/ingredientAggregator';
 
 interface StickyNotesWidgetProps {
   notes: StickyNoteItem[];
@@ -51,8 +53,9 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
   const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
   const [isChecklist, setIsChecklist] = useState(false);
+  const [isShoppingList, setIsShoppingList] = useState(false);
   const [newChecklistText, setNewChecklistText] = useState('');
-  const [tempChecklist, setTempChecklist] = useState<{ id: string; text: string; done: boolean }[]>([]);
+  const [tempChecklist, setTempChecklist] = useState<StickyNoteChecklistItem[]>([]);
   const [selectedColor, setSelectedColor] = useState(COLOR_PALETTE[0]);
   const [expiryOption, setExpiryOption] = useState<'permanent' | '1day' | '3days' | 'custom'>('permanent');
   const [customExpiry, setCustomExpiry] = useState('');
@@ -73,7 +76,7 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
   });
 
   const handleCreate = () => {
-    if (!newTitle.trim() && !newContent.trim() && tempChecklist.length === 0) return;
+    if (!newTitle.trim() && !newContent.trim() && tempChecklist.length === 0 && !isShoppingList) return;
 
     let expiresAt: string | null = null;
     if (expiryOption === '1day') {
@@ -84,12 +87,14 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
       expiresAt = new Date(customExpiry).toISOString();
     }
 
+    const effectiveChecklist = Boolean(isChecklist || isShoppingList);
     onAddNote({
       id: `note-${Date.now()}`,
-      title: newTitle.trim() || undefined,
+      title: newTitle.trim() || (isShoppingList ? '🛒 Shopping List' : undefined),
       content: newContent,
-      isChecklist,
-      checklistItems: isChecklist ? tempChecklist : undefined,
+      isChecklist: effectiveChecklist,
+      isShoppingList,
+      checklistItems: effectiveChecklist ? tempChecklist : undefined,
       bgColor: selectedColor,
       expiresAt,
       updated_at: new Date().toISOString(),
@@ -100,15 +105,25 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
     setNewTitle('');
     setNewContent('');
     setIsChecklist(false);
+    setIsShoppingList(false);
     setTempChecklist([]);
     setExpiryOption('permanent');
   };
 
   const addChecklistItem = () => {
-    if (!newChecklistText.trim()) return;
+    const trimmed = newChecklistText.trim();
+    if (!trimmed) return;
+    const category = isShoppingList
+      ? categorizeIngredient(parseIngredient(trimmed).itemName || trimmed)
+      : undefined;
     setTempChecklist((prev) => [
       ...prev,
-      { id: Date.now().toString(), text: newChecklistText.trim(), done: false },
+      {
+        id: Date.now().toString(),
+        text: trimmed,
+        done: false,
+        ...(category ? { category } : {}),
+      },
     ]);
     setNewChecklistText('');
   };
@@ -281,9 +296,12 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setIsChecklist(false)}
-              className={`px-2.5 py-1 text-[11px] rounded font-medium ${
-                !isChecklist
+              onClick={() => {
+                setIsChecklist(false);
+                setIsShoppingList(false);
+              }}
+              className={`px-2.5 py-1 text-[11px] rounded font-medium cursor-pointer ${
+                !isChecklist && !isShoppingList
                   ? isLight ? 'bg-slate-300 text-slate-900' : 'bg-gray-800 text-white'
                   : isLight ? 'text-slate-600' : 'text-gray-400'
               }`}
@@ -291,15 +309,33 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
               Text
             </button>
             <button
-              onClick={() => setIsChecklist(true)}
-              className={`px-2.5 py-1 text-[11px] rounded font-medium flex items-center gap-1 ${
-                isChecklist
+              onClick={() => {
+                setIsChecklist(true);
+                setIsShoppingList(false);
+              }}
+              className={`px-2.5 py-1 text-[11px] rounded font-medium flex items-center gap-1 cursor-pointer ${
+                isChecklist && !isShoppingList
                   ? isLight ? 'bg-slate-300 text-slate-900' : 'bg-gray-800 text-white'
                   : isLight ? 'text-slate-600' : 'text-gray-400'
               }`}
             >
               <CheckSquare className="w-3 h-3 text-emerald-500" />
               Checklist
+            </button>
+            <button
+              onClick={() => {
+                setIsChecklist(true);
+                setIsShoppingList(true);
+                if (!newTitle.trim()) setNewTitle('🛒 Shopping List');
+                setSelectedColor('#bbf7d0');
+              }}
+              className={`px-2.5 py-1 text-[11px] rounded font-medium flex items-center gap-1 cursor-pointer ${
+                isShoppingList
+                  ? 'bg-emerald-600 text-white'
+                  : isLight ? 'text-slate-600' : 'text-gray-400'
+              }`}
+            >
+              🛒 Shopping List
             </button>
           </div>
 
@@ -439,7 +475,15 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
                         </div>
                       )}
 
-                      {note.isChecklist && note.checklistItems ? (
+                      {note.isShoppingList || note.freeformPos?.isShoppingList ? (
+                        <ShoppingListNoteBody
+                          note={note}
+                          onUpdateItems={(nextItems) =>
+                            onUpdateNote(note.id, { checklistItems: nextItems })
+                          }
+                          onToggleItem={(itemId) => toggleChecklistItem(note, itemId)}
+                        />
+                      ) : note.isChecklist && note.checklistItems ? (
                         <div className="space-y-1 my-1">
                           {note.checklistItems.map((item) => (
                             <button

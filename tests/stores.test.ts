@@ -1,7 +1,7 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { useProfileStore } from '../src/stores/useProfileStore.ts';
-import { useMealStore } from '../src/stores/useMealStore.ts';
+import { useMealStore, prunePastScheduledMeals } from '../src/stores/useMealStore.ts';
 import { DEFAULT_HOUSEHOLD_PROFILES, DEFAULT_MEAL_SNAPSHOT } from '../src/services/db.ts';
 import { resolveProfileColorHex } from '../src/types/profiles.ts';
 
@@ -127,5 +127,40 @@ describe('useProfileStore & useMealStore', () => {
     assert.equal(cleared, 1);
     assert.equal(useMealStore.getState().shoppingItems.length, 1);
     assert.equal(useMealStore.getState().shoppingItems[0].normalizedKey, 'milk');
+
+    // Prunes scheduled meals older than 21 days while keeping recent/upcoming meals and Recipe Book
+    const pruned = prunePastScheduledMeals(
+      [
+        {
+          id: 'meal_2026-10-01_dinner',
+          date: '2026-10-01',
+          slot: 'dinner',
+          title: 'Ancient Pasta',
+          updatedAt: '2026-10-01T18:00:00.000Z',
+        },
+        {
+          id: 'meal_2026-11-05_dinner',
+          date: '2026-11-05',
+          slot: 'dinner',
+          title: 'Recent Tacos',
+          updatedAt: '2026-11-05T18:00:00.000Z',
+        },
+        {
+          id: 'meal_2026-11-14_dinner',
+          date: '2026-11-14',
+          slot: 'dinner',
+          title: 'Upcoming Roast',
+          updatedAt: '2026-11-11T18:00:00.000Z',
+        },
+      ],
+      [],
+      new Date(2026, 10, 11, 12, 0, 0) // 2026-11-11 local time -> cutoff 2026-10-21
+    );
+    assert.deepEqual(
+      pruned.scheduledMeals.map((m) => m.date),
+      ['2026-11-05', '2026-11-14']
+    );
+    assert.deepEqual(pruned.deletedScheduledMealIds, ['meal_2026-10-01_dinner']);
+    assert.equal(useMealStore.getState().recipes.length, 1);
   });
 });

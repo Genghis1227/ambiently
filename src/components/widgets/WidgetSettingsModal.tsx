@@ -195,6 +195,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   ]);
 
   // Meal Planner widget states
+  const boardNotes = useDashboardStore((state) => state.notes);
   const [mealScope, setMealScope] = useState<WidgetMealScope>('three_day');
   const [mealWeekStartsOn, setMealWeekStartsOn] = useState<WeekStartDay>('sunday');
   const [mealVisibleSlots, setMealVisibleSlots] = useState<MealSlot[]>([
@@ -203,6 +204,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     'dinner',
   ]);
   const [mealShowCookAvatar, setMealShowCookAvatar] = useState<boolean>(true);
+  const [mealListNoteId, setMealListNoteId] = useState<string>('');
   const [rssCategoryFilter, setRssCategoryFilter] = useState<'All' | RssFeedCategory>('All');
   const [rssSearchQuery, setRssSearchQuery] = useState('');
 
@@ -348,6 +350,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
         : validSlots;
       setMealVisibleSlots(cfgSlots.length > 0 ? cfgSlots : validSlots);
       setMealShowCookAvatar(widget.config?.showCookAvatar !== false);
+      setMealListNoteId(typeof widget.config?.listNoteId === 'string' ? widget.config.listNoteId : '');
     }
   }, [widget, isOpen, settings.commonPhotos]);
 
@@ -625,6 +628,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.visibleSlots =
         orderedSlots.length > 0 ? orderedSlots : ['breakfast', 'lunch', 'dinner'];
       configUpdates.showCookAvatar = mealShowCookAvatar;
+      configUpdates.listNoteId = mealListNoteId || undefined;
       void useMealStore.getState().setWeekStartsOn(mealWeekStartsOn);
     }
 
@@ -3138,6 +3142,48 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                       }`}
                     />
                   </button>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-gray-300 block mb-1.5">
+                    Target Shopping List Sticky Note
+                  </label>
+                  <p className="text-[11px] text-gray-400 mb-2">
+                    Choose which canvas checklist sticky note receives grocery items when you tap &ldquo;To Sticky Note&rdquo;.
+                  </p>
+                  <select
+                    value={mealListNoteId}
+                    onChange={(e) => setMealListNoteId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-gray-950 border border-gray-800 text-xs text-gray-200 focus:outline-none focus:border-amber-500/60"
+                  >
+                    <option value="">
+                      Auto (Dedicated 🛒 Shopping List Sticky Note — creates if missing)
+                    </option>
+                    {boardNotes
+                      .filter(
+                        (n) =>
+                          (n.isShoppingList || n.freeformPos?.isShoppingList || n.isChecklist) &&
+                          !n.deleted_at &&
+                          !n.archivedAt
+                      )
+                      .sort((a, b) => {
+                        const aShop = Boolean(a.isShoppingList || a.freeformPos?.isShoppingList);
+                        const bShop = Boolean(b.isShoppingList || b.freeformPos?.isShoppingList);
+                        return aShop === bShop ? 0 : aShop ? -1 : 1;
+                      })
+                      .map((n) => {
+                        const isShop = Boolean(n.isShoppingList || n.freeformPos?.isShoppingList);
+                        const firstLine = (n.title || n.content || '')
+                          .split('\n')[0]
+                          .replace(/^#+\s*/, '')
+                          .trim();
+                        return (
+                          <option key={n.id} value={n.id}>
+                            {isShop ? `[Shopping List] ${firstLine || '🛒 Shopping List'}` : firstLine || 'Untitled Checklist Note'}
+                          </option>
+                        );
+                      })}
+                  </select>
                 </div>
               </div>
             )}

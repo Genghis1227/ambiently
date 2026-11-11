@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.1] - 2026-11-11
+
+### Dedicated Shopping List Sticky Note, Recent Meal Chips & 21-Day Schedule Pruning
+* **Dedicated `🛒 Shopping List` Sticky Note Type (`src/components/common/ShoppingListNoteBody.tsx`, `src/components/layout/Corkboard.tsx`, `src/components/widgets/StickyNotesWidget.tsx`, `src/components/mobile/MobileCompanion.tsx`, `src/types/dashboard.ts`):**
+  * Added **`🛒 Shopping List`** (`isShoppingList: true`) as a 3rd sticky note format alongside **Text Note** and **Checklist** across the Canvas Note Creator, Notes Collection Tile, and Mobile Companion.
+  * Automatically groups sticky note items by store aisle (`Produce`, `Bakery`, `Meat & Seafood`, `Dairy & Eggs`, `Pantry & Dry Goods`, `Frozen`, `Beverages`, `Household & Other`) with inline `+ Add grocery item...` quick-add and 1-tap `Clear (X)` for completed items.
+* **Send to Canvas Shopping List Sticky Note (`src/components/widgets/MealPlannerWidget.tsx`, `src/components/widgets/WidgetSettingsModal.tsx`):**
+  * Added 1-tap **"Add X items to 🛒 Shopping List note"** and **"To Sticky Note"** actions that merge unchecked shopping items (or upcoming scheduled recipe ingredients) into your dedicated Shopping List sticky note—un-checking previously completed items needed again and preserving store aisle categories.
+* **Dynamic Recent Quick-Meal & Recipe Autocomplete (`src/components/meals/MealEntryModal.tsx`):**
+  * Added dynamic suggestion chips combining recently scheduled household meals, saved Recipe Book titles, and staple quick meals that filter as you type and pre-fill the last-used cook and notes.
+* **Automatic 21-Day Past Scheduled Meal Pruning (`src/stores/useMealStore.ts`, `tests/stores.test.ts`):**
+  * Automatically prunes `scheduledMeals` older than 21 days on store initialization, meal scheduling, and cloud merges while keeping saved `recipes` permanently.
+
+---
+
 ## [0.5.0] - 2026-11-11
 
 ### Family Meal Planner, Smart Grocery Aggregator, Cooking Mode & Profile Studio

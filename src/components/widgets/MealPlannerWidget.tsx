@@ -12,6 +12,7 @@ import {
   Trash2,
   X,
   Sparkles,
+  StickyNote,
 } from 'lucide-react';
 import type {
   GoogleKeepExportMode,
@@ -24,9 +25,14 @@ import type {
   WeekStartDay,
   WidgetMealScope,
 } from '../../types/meals';
+import type { StickyNoteItem } from '../../types/dashboard';
 import { DEFAULT_AISLE_ORDER } from '../../types/meals';
 import { useMealStore } from '../../stores/useMealStore';
 import { useDashboardStore } from '../../store/dashboardStore';
+import {
+  aggregateIngredients,
+  normalizeItemNameSingular,
+} from '../../utils/ingredientAggregator';
 import { isAmbientlyInNightMode } from '../../utils/confetti';
 import { localDateKey } from '../../utils/dateKey';
 import { ProfileAvatar } from '../common/ProfileAvatar';
@@ -135,6 +141,8 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
   );
 
   const settings = useDashboardStore((s) => s.settings);
+  const boardNotes = useDashboardStore((s) => s.notes);
+  const activeTabId = useDashboardStore((s) => s.activeTabId);
 
   // Refresh clock tick every 60s so midnight date rollover and Night Mode schedules stay accurate
   const [clockTick, setClockTick] = useState<number>(() => Date.now());
@@ -189,6 +197,7 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
   const [keepExportMode, setKeepExportMode] =
     useState<GoogleKeepExportMode>('checklist');
   const [copiedKeepNotice, setCopiedKeepNotice] = useState<boolean>(false);
+  const [stickyNoteNotice, setStickyNoteNotice] = useState<string>('');
 
   // Meal Entry & Cooking Mode Modals state
   const [entryModalState, setEntryModalState] = useState<{
@@ -441,6 +450,184 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
     window.setTimeout(() => {
       setRecentlyAddedStapleId((cur) => (cur === stapleId ? null : cur));
     }, 1200);
+  };
+
+  // Dedicated Shopping List Sticky Note on the canvas (`isShoppingList: true`)
+  const targetListNote = useMemo((): StickyNoteItem | undefined => {
+    const isUsableChecklist = (n: StickyNoteItem | undefined): n is StickyNoteItem =>
+      Boolean(n && (n.isChecklist || n.isShoppingList || n.freeformPos?.isShoppingList) && !n.deleted_at && !n.archivedAt);
+    const isDedicatedShoppingNote = (n: StickyNoteItem): boolean =>
+      Boolean(n.isShoppingList || n.freeformPos?.isShoppingList);
+
+    if (config?.listNoteId) {
+      const explicit = boardNotes.find((n) => n.id === config.listNoteId);
+      if (isUsableChecklist(explicit)) return explicit;
+    }
+
+    const pattern = /shopping|grocer|essentials/i;
+    return (
+      boardNotes.find(
+        (n) =>
+          isUsableChecklist(n) &&
+          isDedicatedShoppingNote(n) &&
+          (n.tabId === activeTabId || n.tabId === 'all')
+      ) ||
+      boardNotes.find((n) => isUsableChecklist(n) && isDedicatedShoppingNote(n)) ||
+      boardNotes.find(
+        (n) =>
+          isUsableChecklist(n) &&
+          (n.tabId === activeTabId || n.tabId === 'all') &&
+          pattern.test(n.title || '')
+      ) ||
+      boardNotes.find((n) => isUsableChecklist(n) && pattern.test(n.title || ''))
+    );
+  }, [boardNotes, config?.listNoteId, activeTabId]);
+
+  // Combined items ready to sync into the canvas Sticky Note (unchecked shopping items + upcoming scheduled recipes)
+  const syncableStickyNoteItems = useMemo(() => {
+    const out: { key: string; label: string; category?: GroceryCategory }[] = [];
+    const seenKeys = new Set<string>();
+
+    for (const item of shoppingItems) {
+      if (item.checked) continue;
+      const key = item.normalizedKey || normalizeItemNameSingular(item.displayLabel);
+      if (key && !seenKeys.has(key)) {
+        seenKeys.add(key);
+        out.push({ key, label: item.displayLabel, category: item.category });
+      }
+    }
+
+    if (out.length === 0) {
+      const upcomingSpecs: {
+        raw: string;
+        scaleFactor?: number;
+        sourceRecipeId?: string;
+        sourceMealId?: string;
+      }[] = [];
+      for (const day of dayBoxes) {
+        if (day.dateKey < todayKey) continue;
+        const dayMeals = mealsByDate.get(day.dateKey) || [];
+        for (const meal of dayMeals) {
+          if (!meal.recipeId) continue;
+          const recipe = recipeById.get(meal.recipeId);
+          if (!recipe) continue;
+          for (const raw of recipe.ingredients) {
+            upcomingSpecs.push({
+              raw,
+              scaleFactor: meal.scaleFactor ?? 1,
+              sourceRecipeId: recipe.id,
+              sourceMealId: meal.id,
+            });
+          }
+        }
+      }
+      if (upcomingSpecs.length > 0) {
+        const aggregated = aggregateIngredients(upcomingSpecs);
+        for (const agg of aggregated) {
+          const key = agg.normalizedKey || normalizeItemNameSingular(agg.displayLabel);
+          if (key && !seenKeys.has(key)) {
+            seenKeys.add(key);
+            out.push({ key, label: agg.displayLabel, category: agg.category });
+          }
+        }
+      }
+    }
+
+    return out;
+  }, [shoppingItems, dayBoxes, todayKey, mealsByDate, recipeById]);
+
+  const handleSendToStickyNote = async () => {
+    if (syncableStickyNoteItems.length === 0) return;
+    const dashStore = useDashboardStore.getState();
+    const makeId = () =>
+      `chk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+
+    const mergeChecklistItems = (
+      existingItems: NonNullable<StickyNoteItem['checklistItems']>
+    ) => {
+      const next = existingItems.map((i) => ({ ...i }));
+      let addedOrReopened = 0;
+
+      for (const entry of syncableStickyNoteItems) {
+        const entryLower = entry.label.trim().toLowerCase();
+        const existing = next.find((i) => {
+          const textTrimmed = i.text.trim();
+          return (
+            textTrimmed.toLowerCase() === entryLower ||
+            normalizeItemNameSingular(textTrimmed) === entry.key
+          );
+        });
+
+        if (existing) {
+          if (existing.done) {
+            existing.done = false;
+            existing.text = entry.label;
+            if (entry.category) existing.category = entry.category;
+            addedOrReopened += 1;
+          } else if (entry.category && !existing.category) {
+            existing.category = entry.category;
+          }
+        } else {
+          next.push({
+            id: makeId(),
+            text: entry.label,
+            done: false,
+            ...(entry.category ? { category: entry.category } : {}),
+          });
+          addedOrReopened += 1;
+        }
+      }
+
+      return { items: next, addedOrReopened };
+    };
+
+    const currentNote = targetListNote
+      ? dashStore.notes.find((n) => n.id === targetListNote.id)
+      : undefined;
+
+    if (
+      currentNote &&
+      (currentNote.isChecklist || currentNote.isShoppingList || currentNote.freeformPos?.isShoppingList) &&
+      !currentNote.deleted_at &&
+      !currentNote.archivedAt
+    ) {
+      const { items, addedOrReopened } = mergeChecklistItems(
+        currentNote.checklistItems || []
+      );
+      await dashStore.updateNote(currentNote.id, {
+        isChecklist: true,
+        isShoppingList: true,
+        checklistItems: items,
+        isPinnedToCanvas: true,
+      });
+      if (config?.listNoteId !== currentNote.id) {
+        onUpdateConfig?.({ listNoteId: currentNote.id });
+      }
+      const noteName = currentNote.title || '🛒 Shopping List';
+      setStickyNoteNotice(
+        addedOrReopened > 0
+          ? `Sent ${addedOrReopened} to ${noteName}`
+          : `All items already on ${noteName}`
+      );
+    } else {
+      const newNoteId = `note-shop-${Date.now().toString(36)}`;
+      const { items } = mergeChecklistItems([]);
+      await dashStore.addNote({
+        id: newNoteId,
+        tabId: activeTabId,
+        title: '🛒 Shopping List',
+        content: '',
+        isChecklist: true,
+        isShoppingList: true,
+        checklistItems: items,
+        bgColor: '#bbf7d0',
+        isPinnedToCanvas: true,
+      });
+      onUpdateConfig?.({ listNoteId: newNoteId });
+      setStickyNoteNotice(`Created 🛒 Shopping List (${items.length} items)`);
+    }
+
+    window.setTimeout(() => setStickyNoteNotice(''), 3200);
   };
 
   const handleCopyForGoogleKeep = async () => {
@@ -855,7 +1042,33 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
               </button>
             </div>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                disabled={syncableStickyNoteItems.length === 0}
+                onClick={() => void handleSendToStickyNote()}
+                title={`Send items to ${targetListNote?.title || '🛒 Shopping List'} sticky note on canvas`}
+                className={`px-2.5 py-1.5 rounded-lg border font-semibold inline-flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-40 ${
+                  stickyNoteNotice
+                    ? isLight
+                      ? 'bg-emerald-100 border-emerald-400 text-emerald-900'
+                      : 'bg-emerald-950/70 border-emerald-600 text-emerald-200'
+                    : isLight
+                      ? 'bg-amber-50 border-amber-300 text-amber-950 hover:bg-amber-100'
+                      : 'bg-amber-950/40 border-amber-700/60 text-amber-200 hover:bg-amber-900/50'
+                }`}
+              >
+                {stickyNoteNotice ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-500" />
+                ) : (
+                  <StickyNote className="w-3.5 h-3.5" />
+                )}
+                <span>
+                  {stickyNoteNotice ||
+                    `To ${targetListNote?.title || 'Sticky Note'}`}
+                </span>
+              </button>
+
               <button
                 type="button"
                 onClick={() =>
@@ -1149,6 +1362,42 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
           )}
         </div>
       )}
+
+      {/* Main View Sticky Note Sync Bar */}
+      {!isShoppingOpen &&
+        (syncableStickyNoteItems.length > 0 || Boolean(stickyNoteNotice)) && (
+          <div
+            data-no-drag="true"
+            className="shrink-0 pt-2 mt-1 border-t border-slate-500/15 flex items-center justify-between gap-2 text-[11px]"
+          >
+            {stickyNoteNotice ? (
+              <span
+                className="font-semibold text-emerald-500 inline-flex items-center gap-1.5"
+                role="status"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>{stickyNoteNotice}</span>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void handleSendToStickyNote()}
+                className={`px-2.5 py-1.5 rounded-xl border font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  isLight
+                    ? 'bg-emerald-50/90 border-emerald-300/80 text-emerald-900 hover:bg-emerald-100'
+                    : 'bg-emerald-950/45 border-emerald-800/60 text-emerald-200 hover:bg-emerald-900/50'
+                }`}
+              >
+                <StickyNote className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  Add {syncableStickyNoteItems.length} item
+                  {syncableStickyNoteItems.length === 1 ? '' : 's'} to{' '}
+                  {targetListNote?.title || '🛒 Shopping List'} note
+                </span>
+              </button>
+            )}
+          </div>
+        )}
 
       {/* Dual-Mode Meal Entry Modal */}
       <MealEntryModal

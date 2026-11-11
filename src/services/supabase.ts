@@ -260,13 +260,17 @@ export function subscribeToRealtimeBoard(
         if (!raw) return;
         if (raw.dashboard_id && raw.dashboard_id !== boardId) return;
 
+        const isShoppingList = Boolean(
+          raw.is_shopping_list || raw.freeform_pos?.isShoppingList
+        );
         const note: StickyNoteItem = {
           id: raw.id,
           tabId: raw.tab_id,
           widgetId: raw.widget_id,
           title: raw.title,
           content: raw.content || '',
-          isChecklist: raw.is_checklist,
+          isChecklist: Boolean(raw.is_checklist || isShoppingList),
+          isShoppingList,
           checklistItems: raw.checklist_items || [],
           bgColor: raw.bg_color || '#fef08a',
           fontSize: raw.font_size || 'base',
@@ -838,25 +842,31 @@ export async function pushToCloud(
     // Upsert Notes: only send notes with genuinely newer timestamps or new records
     let notesToUpsert: any[] = [];
     if (notesToPush.length > 0) {
-      const formattedNotes = notesToPush.map((n) => ({
-        id: n.id,
-        dashboard_id: dashboardId,
-        user_id: ownerId,
-        tab_id: n.tabId,
-        widget_id: n.widgetId,
-        // Like widgets, a deleted note is sent without its text
-        title: n.deleted_at ? null : n.title,
-        content: n.deleted_at ? '' : n.content,
-        is_checklist: n.isChecklist,
-        checklist_items: n.deleted_at ? [] : n.checklistItems || [],
-        bg_color: n.bgColor,
-        font_size: n.fontSize || 'base',
-        expires_at: n.expiresAt || null,
-        archived_at: n.archivedAt || null,
-        freeform_pos: n.freeformPos || {},
-        updated_at: n.updated_at,
-        deleted_at: n.deleted_at || null,
-      }));
+      const formattedNotes = notesToPush.map((n) => {
+        const isShoppingList = Boolean(n.isShoppingList || n.freeformPos?.isShoppingList);
+        return {
+          id: n.id,
+          dashboard_id: dashboardId,
+          user_id: ownerId,
+          tab_id: n.tabId,
+          widget_id: n.widgetId,
+          // Like widgets, a deleted note is sent without its text
+          title: n.deleted_at ? null : n.title,
+          content: n.deleted_at ? '' : n.content,
+          is_checklist: Boolean(n.isChecklist || isShoppingList),
+          checklist_items: n.deleted_at ? [] : n.checklistItems || [],
+          bg_color: n.bgColor,
+          font_size: n.fontSize || 'base',
+          expires_at: n.expiresAt || null,
+          archived_at: n.archivedAt || null,
+          freeform_pos: {
+            ...(n.freeformPos || {}),
+            ...(isShoppingList ? { isShoppingList: true } : {}),
+          },
+          updated_at: n.updated_at,
+          deleted_at: n.deleted_at || null,
+        };
+      });
 
       notesToUpsert = formattedNotes.filter((n) => {
         const remoteTime = remoteNotesMap.get(n.id);
@@ -1257,13 +1267,17 @@ async function pullFromCloudOnce(options?: { force?: boolean }): Promise<PullRes
 
       const notesToPut: StickyNoteItem[] = [];
       for (const n of notesRes.data) {
+        const isShoppingList = Boolean(
+          n.is_shopping_list || n.freeform_pos?.isShoppingList
+        );
         const mapped: StickyNoteItem = {
           id: n.id,
           tabId: n.tab_id,
           widgetId: n.widget_id,
           title: n.title,
           content: n.content,
-          isChecklist: n.is_checklist,
+          isChecklist: Boolean(n.is_checklist || isShoppingList),
+          isShoppingList,
           checklistItems: n.checklist_items,
           bgColor: n.bg_color,
           fontSize: n.font_size,

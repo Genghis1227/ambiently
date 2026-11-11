@@ -1,4 +1,5 @@
 import type { PhotoItem } from '../services/photos';
+import type { GroceryCategory } from './meals';
 export type { ChoreWidgetConfig } from './chores';
 export type { MealWidgetConfig } from './meals';
 
@@ -75,6 +76,7 @@ export interface FreeformPosition {
   rotation: number; // degrees (-60 to 60)
   isFullScreen?: boolean;
   isBackground?: boolean;
+  isShoppingList?: boolean;
 }
 
 export interface DashboardTab {
@@ -107,6 +109,13 @@ export interface DashboardWidget<TConfig = Record<string, any>> {
   deleted_at?: string | null;
 }
 
+export interface StickyNoteChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+  category?: GroceryCategory;
+}
+
 export interface StickyNoteItem {
   id: string;
   tabId?: string;
@@ -114,7 +123,8 @@ export interface StickyNoteItem {
   title?: string;
   content: string;
   isChecklist: boolean;
-  checklistItems?: { id: string; text: string; done: boolean }[];
+  isShoppingList?: boolean;
+  checklistItems?: StickyNoteChecklistItem[];
   bgColor: string; // e.g. '#fef08a' or hex
   textColor?: string;
   fontSize?: 'sm' | 'base' | 'lg' | 'xl';
