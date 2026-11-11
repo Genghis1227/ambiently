@@ -219,7 +219,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
 
   // Close pop-out panels or auto-hide peeked dock when clicking outside or pressing Escape
   useEffect(() => {
-    if ((!isDockHidden || !isPeekOpen) && !activePopout) return;
+    if ((!isDockHidden || !isPeekOpen) && !activePopout && !showOrganizeMenu) return;
 
     const handlePointerDownOutside = (e: PointerEvent | MouseEvent) => {
       const target = e.target as HTMLElement | null;
@@ -235,6 +235,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
       }
 
       setActivePopout(null);
+      setShowOrganizeMenu(false);
       if (isDockHidden && isPeekOpen) {
         setIsPeekOpen(false);
       }
@@ -243,6 +244,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setActivePopout(null);
+        setShowOrganizeMenu(false);
         if (isDockHidden && isPeekOpen) {
           setIsPeekOpen(false);
         }
@@ -255,7 +257,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
       window.removeEventListener('pointerdown', handlePointerDownOutside);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isDockHidden, isPeekOpen, activePopout]);
+  }, [isDockHidden, isPeekOpen, activePopout, showOrganizeMenu]);
 
   // If dock is hidden, it is effectively hidden unless the user has peeked it open
   const isEffectivelyHidden = isDockHidden && !isPeekOpen;
@@ -281,13 +283,6 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
         ? '-translate-x-1/2 translate-y-[220%] opacity-0 pointer-events-none'
         : '-translate-x-1/2 translate-y-0 opacity-100'
     }`,
-  }[dockPosition];
-
-  const popoverPositionClasses = {
-    left: 'left-16 top-1/2 -translate-y-1/2',
-    right: 'right-16 top-1/2 -translate-y-1/2',
-    top: 'top-16 left-1/2 -translate-x-1/2',
-    bottom: 'bottom-16 left-1/2 -translate-x-1/2',
   }[dockPosition];
 
   const inlinePopoutPositionClasses = {
@@ -634,17 +629,75 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
             )}
 
             {onAutoOrganize && (
-              <button
-                onClick={() => {
-                  setActivePopout(null);
-                  onAutoOrganize(activeMode);
-                  setShowOrganizeMenu(true);
-                }}
-                title="Auto-Organize / Auto-Tile (Zero Overlap)"
-                className="flex items-center justify-center w-10 h-10 rounded-xl bg-purple-500/15 hover:bg-purple-500/30 text-purple-300 border border-purple-500/30 transition-all cursor-pointer"
-              >
-                <Wand2 className="w-4 h-4" />
-              </button>
+              <div className="relative flex items-center justify-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePopout(null);
+                    setIsQuickMenuOpen(false);
+                    onAutoOrganize(activeMode);
+                    setShowOrganizeMenu(true);
+                  }}
+                  title="Auto-Organize / Auto-Tile (Zero Overlap)"
+                  className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all cursor-pointer border ${
+                    showOrganizeMenu
+                      ? 'bg-purple-600 text-white border-purple-400/60 shadow-lg shadow-purple-500/30'
+                      : 'bg-purple-500/15 hover:bg-purple-500/30 text-purple-300 border-purple-500/30'
+                  }`}
+                >
+                  <Wand2 className="w-4 h-4" />
+                </button>
+
+                {/* Auto-Organize Mode Switcher & Undo Horizontal Pop-Out Panel */}
+                {showOrganizeMenu && (
+                  <div
+                    data-dock-element="true"
+                    className={`absolute z-50 flex flex-row items-center gap-1.5 whitespace-nowrap p-2 rounded-2xl bg-gray-900/95 backdrop-blur-xl border border-purple-500/40 shadow-2xl animate-in fade-in zoom-in-95 duration-150 ${inlinePopoutPositionClasses}`}
+                  >
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-purple-300 px-1.5">
+                      Layout:
+                    </span>
+                    {(
+                      [
+                        { id: 'bento', label: 'Bento Grid' },
+                        { id: 'pack', label: 'Keep Sizes' },
+                        { id: 'split', label: 'Split (Widgets | Notes)' },
+                      ] as const
+                    ).map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          setActiveMode(opt.id);
+                          onAutoOrganize(opt.id);
+                        }}
+                        className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                          activeMode === opt.id
+                            ? 'bg-purple-600 text-white shadow'
+                            : 'bg-gray-800 text-gray-300 hover:text-white'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+
+                    {canUndoOrganize && onUndoOrganize && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onUndoOrganize();
+                          setShowOrganizeMenu(false);
+                        }}
+                        title="Restore previous manual layout"
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-semibold transition-all cursor-pointer"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Undo</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
 
             {onOpenTrash && trashCount > 0 && (
@@ -815,6 +868,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
           <button
             onClick={() => {
               setActivePopout(null);
+              setShowOrganizeMenu(false);
               onOpenSettings();
             }}
             title="Settings & Lock"
@@ -824,55 +878,6 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
           </button>
         </div>
       </nav>
-
-      {/* Auto-Organize Mode Switcher & Undo Floating Bar */}
-      {showOrganizeMenu && onAutoOrganize && (
-        <div
-          className={`fixed z-40 flex items-center gap-1.5 p-2 rounded-2xl bg-gray-900/95 backdrop-blur-xl border border-purple-500/40 shadow-2xl ${popoverPositionClasses}`}
-        >
-          <span className="text-[10px] font-bold uppercase tracking-wider text-purple-300 px-1.5">
-            Layout:
-          </span>
-          {(
-            [
-              { id: 'bento', label: 'Bento Grid' },
-              { id: 'pack', label: 'Keep Sizes' },
-              { id: 'split', label: 'Split (Widgets | Notes)' },
-            ] as const
-          ).map((opt) => (
-            <button
-              key={opt.id}
-              type="button"
-              onClick={() => {
-                setActiveMode(opt.id);
-                onAutoOrganize(opt.id);
-              }}
-              className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                activeMode === opt.id
-                  ? 'bg-purple-600 text-white shadow'
-                  : 'bg-gray-800 text-gray-300 hover:text-white'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-
-          {canUndoOrganize && onUndoOrganize && (
-            <button
-              type="button"
-              onClick={() => {
-                onUndoOrganize();
-                setShowOrganizeMenu(false);
-              }}
-              title="Restore previous manual layout"
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-semibold transition-all cursor-pointer"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Undo</span>
-            </button>
-          )}
-        </div>
-      )}
     </>
   );
 };
