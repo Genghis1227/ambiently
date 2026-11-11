@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.19] - 2026-11-10
+
+### Interactive Quick Start & How-To Walkthrough Tour
+* **7-Step Interactive Quick Start & How-To Modal (`src/components/settings/QuickStartModal.tsx`):**
+  * Added a lazy-loaded, step-by-step interactive walkthrough covering **1. Welcome & Household Profiles**, **2. Canvases & Auto-Organize**, **3. Family Calendar Feeds**, **4. Chores, Points & Rewards**, **5. Sticky Notes & Archive**, **6. Shared Photos & Night Mode**, and **7. Cloud Sync & Mobile Companion**.
+  * Included top topic-jump pills, keyboard navigation (`ArrowLeft`, `ArrowRight`, `Escape`), pro-tips, and contextual action buttons to launch the Widget Catalog, Note Creator, Chores & Rewards Hub, or Settings directly from each slide.
+* **First-Visit Welcome & 4 Re-Entry Points (`src/App.tsx`, `src/components/dock/NavigationDock.tsx`, `src/components/dock/AmbientQuickMenu.tsx`, `src/components/settings/SettingsModal.tsx`):**
+  * Automatically launches on a brand-new device until dismissed (with a **"Don't show automatically on startup"** checkbox in the modal footer) while pausing background canvas auto-rotation while open.
+  * Added instant access to reopen the tour anytime from the **Ambiently Logo Quick Menu**, the **Dock Quick Utilities (`?`)** pop-out, the **Settings Header** pill next to the version badge, and the **Settings Footer**.
+
+---
+
 ## [0.4.18] - 2026-11-10
 
 ### Delete All for Archived & Expired Notes & Permanent Reward Store Deletion Fix

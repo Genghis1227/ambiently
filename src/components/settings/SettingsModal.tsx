@@ -40,6 +40,7 @@ import {
   Loader2,
   Clock,
   CalendarDays,
+  HelpCircle,
 } from 'lucide-react';
 import { useUpdateChecker } from '../../services/updateChecker';
 import { db } from '../../services/db';
@@ -93,9 +94,15 @@ interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialTab?: SettingsTabId;
+  onOpenQuickStart?: () => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, initialTab = 'boards' }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({
+  isOpen,
+  onClose,
+  initialTab = 'boards',
+  onOpenQuickStart,
+}) => {
   const {
     settings,
     photoSyncState,
@@ -410,6 +417,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                   >
                     <span>v{APP_VERSION}</span>
                   </button>
+                  {onOpenQuickStart && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        onOpenQuickStart();
+                      }}
+                      className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/20 hover:border-emerald-400 transition-all cursor-pointer flex items-center gap-1"
+                      title="Open Quick Start & How-To walkthrough"
+                    >
+                      <HelpCircle className="w-3 h-3" />
+                      <span>Quick Start & How-To</span>
+                    </button>
+                  )}
                   {isUpdateAvailable && (
                     <button
                       onClick={applyUpdate}
@@ -2051,6 +2072,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
               </a>
             </div>
             <div className="flex items-center gap-3">
+              {onOpenQuickStart && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenQuickStart();
+                    }}
+                    className="text-emerald-400 hover:text-emerald-300 hover:underline transition-colors cursor-pointer font-medium"
+                  >
+                    Quick Start & How-To
+                  </button>
+                  <span>•</span>
+                </>
+              )}
               <button
                 type="button"
                 onClick={() => setIsChangelogOpen(true)}
