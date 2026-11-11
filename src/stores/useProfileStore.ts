@@ -1,14 +1,27 @@
 import { create } from 'zustand';
 import { db, DEFAULT_HOUSEHOLD_PROFILES } from '../services/db';
-import type { HouseholdProfile, HouseholdRole } from '../types/profiles';
+import { resolveProfileColorHex, type HouseholdProfile, type HouseholdRole } from '../types/profiles';
 import { compressAvatarToWebP } from '../utils/avatarCompressor';
 
-let profilePersistListener: ((profiles: HouseholdProfile[]) => void) | null = null;
+const profileSyncListeners = new Set<(profiles: HouseholdProfile[]) => void>();
 
 export function registerProfileSyncListener(
   listener: (profiles: HouseholdProfile[]) => void
-): void {
-  profilePersistListener = listener;
+): () => void {
+  profileSyncListeners.add(listener);
+  return () => {
+    profileSyncListeners.delete(listener);
+  };
+}
+
+function notifyProfileListeners(profiles: HouseholdProfile[]): void {
+  for (const listener of profileSyncListeners) {
+    try {
+      listener(profiles);
+    } catch {
+      // Ignore listener errors
+    }
+  }
 }
 
 function slugifyProfileId(name: string): string {
@@ -26,6 +39,7 @@ export interface ProfileStoreState {
   profiles: HouseholdProfile[];
 
   initProfileStore: () => Promise<void>;
+  getProfileById: (profileId: string) => HouseholdProfile | undefined;
   upsertHouseholdProfile: (input: {
     id?: string;
     name: string;
@@ -39,6 +53,23 @@ export interface ProfileStoreState {
   removeProfileAvatar: (profileId: string) => Promise<void>;
   deleteHouseholdProfile: (profileId: string) => Promise<void>;
   applyRemoteProfiles: (remoteProfiles: HouseholdProfile[]) => Promise<void>;
+  applyRemoteProfileRow: (
+    row: HouseholdProfile,
+    eventType: 'INSERT' | 'UPDATE' | 'DELETE'
+  ) => Promise<void>;
+}
+
+function hasIndexedDB(): boolean {
+  return typeof indexedDB !== 'undefined';
+}
+
+async function safePutProfile(record: HouseholdProfile): Promise<void> {
+  if (!hasIndexedDB()) return;
+  try {
+    await db.profiles.put(record);
+  } catch (err) {
+    console.warn('Failed to persist profile to IndexedDB:', err);
+  }
 }
 
 export const useProfileStore = create<ProfileStoreState>((set, get) => ({
@@ -46,6 +77,10 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
   profiles: DEFAULT_HOUSEHOLD_PROFILES,
 
   initProfileStore: async () => {
+    if (!hasIndexedDB()) {
+      set({ profiles: DEFAULT_HOUSEHOLD_PROFILES, isInitialized: true });
+      return;
+    }
     try {
       const existing = await db.profiles.toArray();
       const active = existing.filter((p) => !p.deletedAt);
@@ -61,7 +96,7 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
         await db.profiles.bulkPut(DEFAULT_HOUSEHOLD_PROFILES);
         set({ profiles: DEFAULT_HOUSEHOLD_PROFILES, isInitialized: true });
         if (isUntouchedLegacySeed) {
-          profilePersistListener?.(DEFAULT_HOUSEHOLD_PROFILES);
+          notifyProfileListeners(DEFAULT_HOUSEHOLD_PROFILES);
         }
         return;
       }
@@ -73,6 +108,10 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
     }
   },
 
+  getProfileById: (profileId) => {
+    return get().profiles.find((p) => p.id === profileId && !p.deletedAt);
+  },
+
   upsertHouseholdProfile: async (input) => {
     const nowIso = new Date().toISOString();
     const current = get().profiles;
@@ -82,7 +121,7 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
       id: existing?.id || input.id || slugifyProfileId(input.name),
       name: input.name.trim() || 'Family Member',
       role: input.role,
-      color: input.color,
+      color: resolveProfileColorHex(input.color),
       avatarDataUrl:
         input.avatarDataUrl !== undefined ? input.avatarDataUrl : existing?.avatarDataUrl,
       emoji: input.emoji !== undefined ? input.emoji : existing?.emoji,
@@ -91,13 +130,13 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
       deletedAt: null,
     };
 
-    await db.profiles.put(record);
+    await safePutProfile(record);
     const nextProfiles = existing
       ? current.map((p) => (p.id === record.id ? record : p))
       : [...current, record];
 
     set({ profiles: nextProfiles });
-    profilePersistListener?.(nextProfiles);
+    notifyProfileListeners(nextProfiles);
     return record;
   },
 
@@ -115,10 +154,10 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
       updatedAt: new Date().toISOString(),
     };
 
-    await db.profiles.put(updated);
+    await safePutProfile(updated);
     const nextProfiles = current.map((p) => (p.id === profileId ? updated : p));
     set({ profiles: nextProfiles });
-    profilePersistListener?.(nextProfiles);
+    notifyProfileListeners(nextProfiles);
     return dataUrl;
   },
 
@@ -135,10 +174,10 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
       updatedAt: new Date().toISOString(),
     };
 
-    await db.profiles.put(updated);
+    await safePutProfile(updated);
     const nextProfiles = current.map((p) => (p.id === profileId ? updated : p));
     set({ profiles: nextProfiles });
-    profilePersistListener?.(nextProfiles);
+    notifyProfileListeners(nextProfiles);
   },
 
   removeProfileAvatar: async (profileId) => {
@@ -152,10 +191,10 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
       updatedAt: new Date().toISOString(),
     };
 
-    await db.profiles.put(updated);
+    await safePutProfile(updated);
     const nextProfiles = current.map((p) => (p.id === profileId ? updated : p));
     set({ profiles: nextProfiles });
-    profilePersistListener?.(nextProfiles);
+    notifyProfileListeners(nextProfiles);
   },
 
   deleteHouseholdProfile: async (profileId) => {
@@ -170,10 +209,10 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
       deletedAt: nowIso,
     };
 
-    await db.profiles.put(tombstone);
+    await safePutProfile(tombstone);
     const nextProfiles = current.filter((p) => p.id !== profileId);
     set({ profiles: nextProfiles });
-    profilePersistListener?.(nextProfiles);
+    notifyProfileListeners(nextProfiles);
   },
 
   applyRemoteProfiles: async (remoteProfiles) => {
@@ -183,14 +222,14 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
     const isUntouchedLegacyProfile = (p: HouseholdProfile) =>
       LEGACY_SAMPLE_IDS.has(p.id) && p.updatedAt === '1970-01-01T00:00:00.000Z';
 
-    const localAll = await db.profiles.toArray();
+    const localAll = hasIndexedDB() ? await db.profiles.toArray() : get().profiles;
     const legacyIdsToDelete: string[] = [];
     for (const p of localAll) {
       if (isUntouchedLegacyProfile(p)) {
         legacyIdsToDelete.push(p.id);
       }
     }
-    if (legacyIdsToDelete.length > 0) {
+    if (legacyIdsToDelete.length > 0 && hasIndexedDB()) {
       await db.profiles.bulkDelete(legacyIdsToDelete);
     }
 
@@ -217,20 +256,60 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
     }
 
     if (localMap.size === 0) {
-      await db.profiles.bulkPut(DEFAULT_HOUSEHOLD_PROFILES);
+      if (hasIndexedDB()) {
+        await db.profiles.bulkPut(DEFAULT_HOUSEHOLD_PROFILES);
+      }
       set({ profiles: DEFAULT_HOUSEHOLD_PROFILES });
-      profilePersistListener?.(DEFAULT_HOUSEHOLD_PROFILES);
+      notifyProfileListeners(DEFAULT_HOUSEHOLD_PROFILES);
       return;
     }
 
-    if (toPut.length > 0) {
+    if (toPut.length > 0 && hasIndexedDB()) {
       await db.profiles.bulkPut(toPut);
     }
 
     const active = Array.from(localMap.values()).filter((p) => !p.deletedAt);
     set({ profiles: active });
-    if (legacyIdsToDelete.length > 0 || remoteProfiles.some(isUntouchedLegacyProfile)) {
-      profilePersistListener?.(active);
+    if (
+      toPut.length > 0 ||
+      legacyIdsToDelete.length > 0 ||
+      remoteProfiles.some(isUntouchedLegacyProfile)
+    ) {
+      notifyProfileListeners(active);
     }
+  },
+
+  applyRemoteProfileRow: async (row, eventType) => {
+    if (!row || !row.id) return;
+    const local = hasIndexedDB()
+      ? await db.profiles.get(row.id)
+      : get().profiles.find((p) => p.id === row.id);
+    if (local) {
+      const localTime = Date.parse(local.updatedAt || '') || 0;
+      const remoteTime = Date.parse(row.updatedAt || '') || 0;
+      if (remoteTime < localTime) return;
+    }
+
+    if (eventType === 'DELETE' || row.deletedAt) {
+      const tombstone: HouseholdProfile = {
+        ...(local || row),
+        ...row,
+        deletedAt: row.deletedAt || new Date().toISOString(),
+      };
+      await safePutProfile(tombstone);
+      const next = get().profiles.filter((p) => p.id !== row.id);
+      set({ profiles: next });
+      notifyProfileListeners(next);
+      return;
+    }
+
+    await safePutProfile(row);
+    const current = get().profiles;
+    const exists = current.some((p) => p.id === row.id);
+    const next = exists
+      ? current.map((p) => (p.id === row.id ? row : p))
+      : [...current, row];
+    set({ profiles: next });
+    notifyProfileListeners(next);
   },
 }));

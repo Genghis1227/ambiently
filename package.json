@@ -2,13 +2,14 @@
   "name": "ambiently",
   "description": "Modern, ambient smart-display and command center PWA (dashboard.trinhism.com)",
   "private": true,
-  "version": "0.4.20",
+  "version": "0.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "node scripts/generate-icons.js && tsc -b && vite build",
     "generate-icons": "node scripts/generate-icons.js",
     "lint": "oxlint",
+    "test": "node --import ./tests/register-ts.mjs --test tests/*.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {

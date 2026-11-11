@@ -16,6 +16,7 @@ import {
   Type,
   Sparkles,
   CheckSquare,
+  Utensils,
 } from 'lucide-react';
 import type { WidgetType, DashboardWidget } from '../../types/dashboard';
 
@@ -105,6 +106,19 @@ const WIDGET_TEMPLATES: WidgetTemplate[] = [
     defaultGridPos: { w: 4, h: 8 },
     defaultConfig: { scope: 'household', defaultExpandedSections: ['today', 'review'] },
     color: 'from-emerald-500/20 to-teal-500/20 text-emerald-400 border-emerald-500/30',
+  },
+  {
+    type: 'meals',
+    title: 'Family Meal Planner',
+    description: 'Calm 3-day, tomorrow, or full-week meal outlook with recipe links, counter cooking mode, and smart grocery lists.',
+    icon: Utensils,
+    defaultGridPos: { w: 4, h: 6 },
+    defaultConfig: {
+      scope: 'three_day',
+      visibleSlots: ['breakfast', 'lunch', 'dinner'],
+      showCookAvatar: true,
+    },
+    color: 'from-amber-500/15 to-emerald-500/15 text-amber-300 border-amber-500/30',
   },
   {
     type: 'calendar',

@@ -138,7 +138,7 @@ export async function renderCroppedAvatarToWebP(
   sourceUrl: string,
   transform: AvatarCropTransform = { zoom: 1, offsetX: 0, offsetY: 0, rotationDeg: 0 },
   targetSize = 256,
-  quality = 0.84
+  quality = 0.82
 ): Promise<string> {
   const img = await canLoadImageUrl(sourceUrl);
   const srcWidth = img.naturalWidth || img.width;
@@ -191,7 +191,7 @@ export async function renderCroppedAvatarToWebP(
 export async function compressAvatarToWebP(
   file: File | Blob,
   targetSize = 256,
-  quality = 0.84
+  quality = 0.82
 ): Promise<string> {
   const { previewUrl, revoke } = await decodeImageFileForPreview(file);
   try {
@@ -205,6 +205,8 @@ export async function compressAvatarToWebP(
     revoke();
   }
 }
+
+export const compressAvatar = compressAvatarToWebP;
 
 /**
  * Extracts up to 2 uppercase initials from a profile name for the fallback avatar badge.

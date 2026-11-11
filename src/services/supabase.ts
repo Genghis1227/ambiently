@@ -1,16 +1,19 @@
 import { createClient, type SupabaseClient, type User, type RealtimeChannel } from '@supabase/supabase-js';
-import { db, DEFAULT_SETTINGS, DEFAULT_TABS, DEFAULT_WIDGETS, DEFAULT_NOTES, DEFAULT_CHORE_SNAPSHOT, DEFAULT_HOUSEHOLD_PROFILES } from './db';
+import { db, DEFAULT_SETTINGS, DEFAULT_TABS, DEFAULT_WIDGETS, DEFAULT_NOTES, DEFAULT_CHORE_SNAPSHOT, DEFAULT_HOUSEHOLD_PROFILES, DEFAULT_MEAL_SNAPSHOT } from './db';
 import { stripPlexTokens } from './plexLinks';
 import { isBoardFullError, setSyncRefusal } from './syncRefusal';
 import { keepLocalNoteFields, keepLocalTabFields, keepLocalWidgetFields } from './syncMerge';
 import type { DashboardTab, DashboardWidget, StickyNoteItem, AppSettings } from '../types/dashboard';
 import type { ChoreEngineSnapshot } from '../types/chores';
 import type { HouseholdProfile } from '../types/profiles';
+import type { MealPlannerSnapshot } from '../types/meals';
 import { useChoreStore } from '../store/choreStore';
 import { useProfileStore } from '../stores/useProfileStore';
+import { useMealStore } from '../stores/useMealStore';
 
 const CHORE_ENGINE_CLOUD_ROW_ID = '__ambiently_chore_engine__';
 const HOUSEHOLD_PROFILES_CLOUD_ROW_ID = '__ambiently_household_profiles__';
+const MEAL_PLANNER_CLOUD_ROW_ID = '__ambiently_meal_planner__';
 
 let supabaseClient: SupabaseClient | null = null;
 let realtimeChannel: RealtimeChannel | null = null;
@@ -83,14 +86,22 @@ function deviceOwnSettings(settings?: AppSettings): Partial<AppSettings> {
   };
 }
 
-// Removes the previous board's tabs, widgets, notes, settings, chores, profiles and photo catalog from this device
+// Removes the previous board's tabs, widgets, notes, settings, chores, profiles, meals and photo catalog from this device
 async function clearLocalBoard(): Promise<void> {
   const current = await db.settings.get('global');
-  await db.transaction('rw', [db.tabs, db.widgets, db.notes, db.settings, db.chores, db.profiles], async () => {
-    await Promise.all([db.tabs.clear(), db.widgets.clear(), db.notes.clear(), db.chores.clear(), db.profiles.clear()]);
+  await db.transaction('rw', [db.tabs, db.widgets, db.notes, db.settings, db.chores, db.profiles, db.meals], async () => {
+    await Promise.all([
+      db.tabs.clear(),
+      db.widgets.clear(),
+      db.notes.clear(),
+      db.chores.clear(),
+      db.profiles.clear(),
+      db.meals.clear(),
+    ]);
     await db.settings.put({ ...DEFAULT_SETTINGS, ...deviceOwnSettings(current) });
     await db.chores.put(DEFAULT_CHORE_SNAPSHOT);
     await db.profiles.bulkPut(DEFAULT_HOUSEHOLD_PROFILES);
+    await db.meals.put(DEFAULT_MEAL_SNAPSHOT);
   });
 }
 
@@ -329,6 +340,38 @@ export function subscribeToRealtimeBoard(
         };
 
         tabHandler(tab, eventType);
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'household_profiles',
+        filter: `dashboard_id=eq.${boardId}`,
+      },
+      (payload) => {
+        const eventType = payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE';
+        const raw = (payload.new || payload.old) as any;
+        if (!raw || !raw.id) return;
+        if (raw.dashboard_id && raw.dashboard_id !== boardId) return;
+
+        const mappedProfile: HouseholdProfile = {
+          id: raw.id,
+          name: raw.name || 'Family Member',
+          role: raw.role === 'parent' ? 'parent' : 'kid',
+          color: raw.color || '#6b8f71',
+          avatarDataUrl: raw.avatar_data_url || undefined,
+          emoji: raw.emoji || undefined,
+          createdAt: raw.created_at || new Date().toISOString(),
+          updatedAt: raw.updated_at || new Date().toISOString(),
+          deletedAt: raw.deleted_at || null,
+        };
+
+        useProfileStore
+          .getState()
+          .applyRemoteProfileRow(mappedProfile, eventType)
+          .catch(() => {});
       }
     )
     .subscribe((status) => {
@@ -602,12 +645,13 @@ export async function pushToCloud(
     }
 
     // 1. Query Dexie to include all active and soft-deleted records so remote devices sync additions and deletions
-    const [dbTabs, dbWidgets, dbNotes, dbChoreSnapshot, dbProfiles] = await Promise.all([
+    const [dbTabs, dbWidgets, dbNotes, dbChoreSnapshot, dbProfiles, dbMealSnapshot] = await Promise.all([
       db.tabs.toArray(),
       db.widgets.toArray(),
       db.notes.toArray(),
       db.chores.get('household_chores'),
       db.profiles.toArray(),
+      db.meals.get('household_meals'),
     ]);
 
     const tabsToPush = dbTabs.length > 0 ? dbTabs : tabs;
@@ -764,6 +808,33 @@ export async function pushToCloud(
       }
     }
 
+    // Sync Meal Planner & Smart Shopping List snapshot via reserved system row in widgets table
+    const activeMealSnapshot = dbMealSnapshot || useMealStore.getState().snapshot;
+    if (activeMealSnapshot && activeMealSnapshot.id === 'household_meals') {
+      const localMealTime = new Date(activeMealSnapshot.updated_at || 0).getTime();
+      const remoteMealTime = remoteWidgetsMap.get(MEAL_PLANNER_CLOUD_ROW_ID);
+      const shouldPushMeals =
+        remoteMealTime === undefined
+          ? localMealTime > 0
+          : localMealTime > remoteMealTime;
+
+      if (shouldPushMeals) {
+        widgetsToUpsert.push({
+          id: MEAL_PLANNER_CLOUD_ROW_ID,
+          dashboard_id: dashboardId,
+          tab_id: null,
+          user_id: ownerId,
+          type: 'meal_planner_store',
+          title: 'Household Meal Planner Store',
+          grid_pos: {},
+          freeform_pos: {},
+          config: activeMealSnapshot,
+          updated_at: activeMealSnapshot.updated_at,
+          deleted_at: null,
+        });
+      }
+    }
+
     // Upsert Notes: only send notes with genuinely newer timestamps or new records
     let notesToUpsert: any[] = [];
     if (notesToPush.length > 0) {
@@ -878,6 +949,27 @@ export async function pushToCloud(
     // Widgets go in small batches to avoid statement timeouts
     await upsertRows('widgets', widgetsToUpsert.filter(isNotDeletion), 5);
     await upsertRows('notes', notesToUpsert.filter(isNotDeletion), 25);
+
+    // Best-effort direct sync to public.household_profiles table when present in Supabase schema
+    if (
+      profilesToPush.length > 0 &&
+      widgetsToUpsert.some((w) => w.id === HOUSEHOLD_PROFILES_CLOUD_ROW_ID)
+    ) {
+      const profileRows = profilesToPush.map((p) => ({
+        id: p.id,
+        dashboard_id: dashboardId,
+        user_id: ownerId,
+        name: p.name,
+        role: p.role,
+        color: p.color,
+        avatar_data_url: p.avatarDataUrl || null,
+        emoji: p.emoji || null,
+        created_at: p.createdAt,
+        updated_at: p.updatedAt,
+        deleted_at: p.deletedAt || null,
+      }));
+      Promise.resolve(sb.from('household_profiles').upsert(profileRows)).catch(() => {});
+    }
 
     // Non-blocking purge of expired tombstones (> 30 days old) in cloud database
     const thirtyDaysAgoIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -1089,8 +1181,19 @@ async function pullFromCloudOnce(options?: { force?: boolean }): Promise<PullRes
         await useChoreStore.getState().applyRemoteSnapshot(choreEngineRow.config as ChoreEngineSnapshot);
       }
 
+      // Extract the Meal Planner & Smart Shopping List system row if present
+      const mealPlannerRow = widgetsRes.data.find((w: any) => w.id === MEAL_PLANNER_CLOUD_ROW_ID);
+      if (mealPlannerRow && !mealPlannerRow.deleted_at && mealPlannerRow.config?.id === 'household_meals') {
+        await useMealStore
+          .getState()
+          .applyRemoteMealSnapshot(mealPlannerRow.config as MealPlannerSnapshot);
+      }
+
       const canvasWidgetRows = widgetsRes.data.filter(
-        (w: any) => w.id !== CHORE_ENGINE_CLOUD_ROW_ID && w.id !== HOUSEHOLD_PROFILES_CLOUD_ROW_ID
+        (w: any) =>
+          w.id !== CHORE_ENGINE_CLOUD_ROW_ID &&
+          w.id !== HOUSEHOLD_PROFILES_CLOUD_ROW_ID &&
+          w.id !== MEAL_PLANNER_CLOUD_ROW_ID
       );
       const localWidgets = await db.widgets.toArray();
       const localMap = new Map(localWidgets.map((w) => [w.id, w]));

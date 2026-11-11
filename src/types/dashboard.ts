@@ -1,5 +1,6 @@
 import type { PhotoItem } from '../services/photos';
 export type { ChoreWidgetConfig } from './chores';
+export type { MealWidgetConfig } from './meals';
 
 export type DockPosition = 'left' | 'top' | 'right' | 'bottom';
 
@@ -34,7 +35,8 @@ export type WidgetType =
   | 'embed'
   | 'textbox'
   | 'image'
-  | 'chores';
+  | 'chores'
+  | 'meals';
 
 export interface RssWidgetConfig {
   feedUrl?: string;

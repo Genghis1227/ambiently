@@ -59,7 +59,9 @@ import type {
 import { MAX_CANVASES } from '../../types/dashboard';
 import { AmbientQuickMenu } from './AmbientQuickMenu';
 import { useUpdateChecker } from '../../services/updateChecker';
-import { useChoreStore, getPendingParentActionCounts } from '../../store/choreStore';
+import { useChoreStore } from '../../stores/useChoreStore';
+import { useDashboardStore } from '../../store/dashboardStore';
+import { isAmbientlyInNightMode } from '../../utils/confetti';
 
 interface NavigationDockProps {
   tabs: DashboardTab[];
@@ -158,10 +160,14 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
   const [isPeekOpen, setIsPeekOpen] = useState(false);
   const navRef = useRef<HTMLElement>(null);
   const { isUpdateAvailable, latestVersion, applyUpdate } = useUpdateChecker();
-  const choreSnapshot = useChoreStore((s) => s.snapshot);
+  const dashboardSettings = useDashboardStore((s) => s.settings);
+  const dashboardWidgets = useDashboardStore((s) => s.widgets);
+  const pendingParentActionsCount = useChoreStore((s) => s.pendingParentActionsCount);
   const isChoreFullScreenOpen = useChoreStore((s) => s.isFullScreenOpen);
   const setChoreFullScreenOpen = useChoreStore((s) => s.setFullScreenOpen);
-  const pendingChoreCounts = getPendingParentActionCounts(choreSnapshot);
+  const effectiveNightMode = Boolean(isNightMode || isAmbientlyInNightMode(dashboardSettings));
+  const showPendingBadge = pendingParentActionsCount > 0 && !effectiveNightMode;
+  const existingMealsWidget = dashboardWidgets.find((w) => w.type === 'meals' && !w.deleted_at);
 
   useEffect(() => {
     if (!showOrganizeMenu) return;
@@ -178,7 +184,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
 
   // When night mode activates, collapse peeked toolbar and close open menus immediately
   useEffect(() => {
-    if (isNightMode) {
+    if (effectiveNightMode) {
       setIsQuickMenuOpen(false);
       setShowOrganizeMenu(false);
       setActivePopout(null);
@@ -186,7 +192,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
         setIsPeekOpen(false);
       }
     }
-  }, [isNightMode, isDockHidden]);
+  }, [effectiveNightMode, isDockHidden]);
 
   // Mouse leave timer to auto-hide when moving away from the toolbar
   const hideTimerRef = useRef<number | null>(null);
@@ -305,28 +311,38 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
         <button
           type="button"
           data-dock-element="true"
-          onClick={() => setIsPeekOpen(true)}
+          onClick={() => {
+            setIsPeekOpen(true);
+          }}
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
           title="Peek Navigation Toolbar (Shortcut: \)"
           className={`fixed z-[65] flex items-center justify-center p-2.5 backdrop-blur-xl transition-all cursor-pointer group active:scale-95 ${
-            isNightMode
+            effectiveNightMode
               ? 'bg-gray-950/40 hover:bg-gray-900/80 text-gray-600 hover:text-gray-300 border border-gray-900/60 opacity-30 hover:opacity-100 shadow-none'
               : 'bg-gray-900/90 hover:bg-gray-800 text-gray-300 hover:text-white border border-gray-700/80 shadow-2xl'
           } ${
             dockPosition === 'left'
-              ? 'left-0 bottom-24 rounded-r-2xl border-l-0 shadow-[4px_0_15px_rgba(0,0,0,0.5)]'
+              ? effectiveNightMode
+                ? 'left-0 bottom-24 rounded-r-2xl border-l-0 shadow-none'
+                : 'left-0 bottom-24 rounded-r-2xl border-l-0 shadow-[4px_0_15px_rgba(0,0,0,0.5)]'
               : dockPosition === 'right'
-              ? 'right-0 bottom-24 rounded-l-2xl border-r-0 shadow-[-4px_0_15px_rgba(0,0,0,0.5)]'
+              ? effectiveNightMode
+                ? 'right-0 bottom-24 rounded-l-2xl border-r-0 shadow-none'
+                : 'right-0 bottom-24 rounded-l-2xl border-r-0 shadow-[-4px_0_15px_rgba(0,0,0,0.5)]'
               : dockPosition === 'top'
-              ? 'top-0 right-24 rounded-b-2xl border-t-0 shadow-[0_4px_15px_rgba(0,0,0,0.5)]'
+              ? effectiveNightMode
+                ? 'top-0 right-24 rounded-b-2xl border-t-0 shadow-none'
+                : 'top-0 right-24 rounded-b-2xl border-t-0 shadow-[0_4px_15px_rgba(0,0,0,0.5)]'
+              : effectiveNightMode
+              ? 'bottom-0 right-24 rounded-t-2xl border-b-0 shadow-none'
               : 'bottom-0 right-24 rounded-t-2xl border-b-0 shadow-[0_-4px_15px_rgba(0,0,0,0.5)]'
           }`}
         >
-          {dockPosition === 'left' && <ChevronRight className={`w-5 h-5 ${isNightMode ? 'text-blue-500/30 group-hover:text-blue-400' : 'text-blue-400'} group-hover:scale-110 transition-transform`} />}
-          {dockPosition === 'right' && <ChevronLeft className={`w-5 h-5 ${isNightMode ? 'text-blue-500/30 group-hover:text-blue-400' : 'text-blue-400'} group-hover:scale-110 transition-transform`} />}
-          {dockPosition === 'top' && <ChevronDown className={`w-5 h-5 ${isNightMode ? 'text-blue-500/30 group-hover:text-blue-400' : 'text-blue-400'} group-hover:scale-110 transition-transform`} />}
-          {dockPosition === 'bottom' && <ChevronUp className={`w-5 h-5 ${isNightMode ? 'text-blue-500/30 group-hover:text-blue-400' : 'text-blue-400'} group-hover:scale-110 transition-transform`} />}
+          {dockPosition === 'left' && <ChevronRight className={`w-5 h-5 ${effectiveNightMode ? 'text-blue-500/30 group-hover:text-blue-400' : 'text-blue-400'} group-hover:scale-110 transition-transform`} />}
+          {dockPosition === 'right' && <ChevronLeft className={`w-5 h-5 ${effectiveNightMode ? 'text-blue-500/30 group-hover:text-blue-400' : 'text-blue-400'} group-hover:scale-110 transition-transform`} />}
+          {dockPosition === 'top' && <ChevronDown className={`w-5 h-5 ${effectiveNightMode ? 'text-blue-500/30 group-hover:text-blue-400' : 'text-blue-400'} group-hover:scale-110 transition-transform`} />}
+          {dockPosition === 'bottom' && <ChevronUp className={`w-5 h-5 ${effectiveNightMode ? 'text-blue-500/30 group-hover:text-blue-400' : 'text-blue-400'} group-hover:scale-110 transition-transform`} />}
         </button>
       )}
 
@@ -336,8 +352,8 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         className={`fixed z-[65] flex items-center gap-2 p-2 rounded-2xl backdrop-blur-xl transition-all duration-300 ease-in-out ${
-          isNightMode
-            ? 'opacity-85 hover:opacity-100 bg-gray-950/95 border border-gray-900 shadow-xl'
+          effectiveNightMode
+            ? 'opacity-85 hover:opacity-100 bg-gray-950/95 border border-gray-900 shadow-none'
             : 'bg-gray-900/85 border border-gray-800/90 shadow-2xl'
         } ${positionClasses}`}
       >
@@ -353,7 +369,9 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
             title="Ambiently Quick Hub & Kiosk Controls"
             className={`rounded-xl p-0.5 transition-all cursor-pointer group active:scale-95 ${
               isQuickMenuOpen
-                ? 'ring-2 ring-blue-500 shadow-lg shadow-blue-500/30'
+                ? effectiveNightMode
+                  ? 'ring-1 ring-blue-500/40 shadow-none'
+                  : 'ring-2 ring-blue-500 shadow-lg shadow-blue-500/30'
                 : 'hover:ring-1 hover:ring-blue-400/50'
             }`}
           >
@@ -409,7 +427,9 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
                 }
                 className={`relative flex items-center justify-center w-11 h-11 rounded-xl transition-all cursor-pointer ${
                   isActive
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
+                    ? effectiveNightMode
+                      ? 'bg-blue-700/80 text-slate-100 shadow-none'
+                      : 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
                     : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/70'
                 }`}
               >
@@ -417,7 +437,9 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
                 {/* Home Indicator Icon */}
                 {isHome && (
                   <span
-                    className={`absolute -top-1 -right-1 p-0.5 rounded-full flex items-center justify-center shadow-md transition-colors ${
+                    className={`absolute -top-1 -right-1 p-0.5 rounded-full flex items-center justify-center transition-colors ${
+                      effectiveNightMode ? 'shadow-none' : 'shadow-md'
+                    } ${
                       isActive
                         ? 'bg-purple-600 text-white ring-2 ring-gray-950'
                         : 'bg-gray-800 text-purple-300 border border-purple-500/40'
@@ -442,7 +464,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
           className={`bg-gray-800 ${isVertical ? 'w-6 h-px my-1' : 'h-6 w-px mx-1'}`}
         />
 
-        {/* Dedicated Middle Hub Section: Pop-out launcher for Chores & Rewards + upcoming Meal Planner */}
+        {/* Dedicated Middle Hub Section: Pop-out launcher for Chores & Rewards + Meal Planner */}
         <div
           className={`relative flex items-center justify-center ${
             isVertical ? 'py-0.5' : 'px-0.5'
@@ -452,23 +474,27 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
             type="button"
             onClick={() => togglePopout('hub')}
             title={
-              pendingChoreCounts.totalPendingCount > 0
-                ? `Family Hub: Chores & Meal Planning (${pendingChoreCounts.totalPendingCount} awaiting parent review)`
+              showPendingBadge
+                ? `Family Hub: Chores & Meal Planning (${pendingParentActionsCount} awaiting parent review)`
                 : 'Family Hub: Chores & Meal Planning'
             }
             className={`relative flex items-center justify-center w-11 h-11 rounded-xl transition-all cursor-pointer border ${
               isChoreFullScreenOpen || activePopout === 'hub'
-                ? 'bg-emerald-600 text-white border-emerald-400/60 shadow-lg shadow-emerald-500/30'
+                ? effectiveNightMode
+                  ? 'bg-emerald-900/50 text-emerald-200 border-emerald-700/40 shadow-none'
+                  : 'bg-emerald-600 text-white border-emerald-400/60 shadow-lg shadow-emerald-500/30'
+                : effectiveNightMode
+                ? 'bg-slate-900/60 hover:bg-slate-800/70 text-emerald-400/60 border-white/10 shadow-none'
                 : 'bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/30'
             }`}
           >
             <ClipboardList className="w-5 h-5" />
-            {pendingChoreCounts.totalPendingCount > 0 && (
+            {showPendingBadge && (
               <span
-                className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 text-gray-950 font-mono font-bold text-[10px] flex items-center justify-center shadow-md ring-1.5 ring-gray-950"
-                title={`${pendingChoreCounts.totalPendingCount} pending parent actions`}
+                className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-amber-500/90 text-slate-950 border border-amber-200/40 font-mono font-bold text-[10px] flex items-center justify-center"
+                title={`${pendingParentActionsCount} pending parent actions`}
               >
-                {pendingChoreCounts.totalPendingCount}
+                {pendingParentActionsCount}
               </span>
             )}
           </button>
@@ -477,7 +503,9 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
           {activePopout === 'hub' && (
             <div
               data-dock-element="true"
-              className={`absolute z-50 flex flex-row items-center gap-2 p-2 rounded-2xl bg-gray-900/95 backdrop-blur-xl border border-emerald-500/40 shadow-2xl animate-in fade-in zoom-in-95 duration-150 ${inlinePopoutPositionClasses}`}
+              className={`absolute z-50 flex flex-row items-center gap-2 p-2 rounded-2xl bg-gray-900/95 backdrop-blur-xl border border-white/10 ${
+                effectiveNightMode ? 'shadow-none' : 'shadow-2xl'
+              } animate-in fade-in zoom-in-95 duration-150 ${inlinePopoutPositionClasses}`}
             >
               <button
                 type="button"
@@ -486,36 +514,56 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
                   setChoreFullScreenOpen(!isChoreFullScreenOpen);
                 }}
                 title={
-                  pendingChoreCounts.totalPendingCount > 0
-                    ? `Family Chores & Rewards (${pendingChoreCounts.totalPendingCount} awaiting parent review)`
+                  showPendingBadge
+                    ? `Family Chores & Rewards (${pendingParentActionsCount} awaiting parent review)`
                     : 'Family Chores & Rewards'
                 }
                 className={`relative flex items-center gap-2 px-3 h-10 rounded-xl transition-all cursor-pointer border whitespace-nowrap ${
                   isChoreFullScreenOpen
-                    ? 'bg-emerald-600 text-white border-emerald-400/60 shadow-md shadow-emerald-500/30'
+                    ? effectiveNightMode
+                      ? 'bg-emerald-900/50 text-emerald-200 border-emerald-700/40 shadow-none'
+                      : 'bg-emerald-600 text-white border-emerald-400/60 shadow-md shadow-emerald-500/30'
+                    : effectiveNightMode
+                    ? 'bg-slate-900/60 hover:bg-slate-800/70 text-emerald-300/75 border-white/10 shadow-none'
                     : 'bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/30'
                 }`}
               >
                 <CheckSquare className="w-4 h-4 shrink-0" />
-                <span className="text-xs font-semibold">Chores & Rewards</span>
-                {pendingChoreCounts.totalPendingCount > 0 && (
-                  <span className="min-w-[18px] h-4.5 px-1 rounded-full bg-amber-500 text-gray-950 font-mono font-bold text-[10px] flex items-center justify-center">
-                    {pendingChoreCounts.totalPendingCount}
+                <span className="text-xs font-semibold">Chores &amp; Rewards</span>
+                {showPendingBadge && (
+                  <span className="min-w-[18px] h-4.5 px-1 rounded-full bg-amber-500/90 text-slate-950 border border-amber-200/40 font-mono font-bold text-[10px] flex items-center justify-center">
+                    {pendingParentActionsCount}
                   </span>
                 )}
               </button>
 
               <button
                 type="button"
-                disabled
-                title="Weekly Meal Planner (Coming Soon)"
-                className="relative flex items-center gap-2 px-3 h-10 rounded-xl bg-gray-800/60 text-gray-400 border border-gray-700/60 opacity-75 cursor-not-allowed whitespace-nowrap"
+                disabled={!existingMealsWidget && (!onOpenAddWidget || isCanvasLocked)}
+                onClick={() => {
+                  setActivePopout(null);
+                  setChoreFullScreenOpen(false);
+                  if (existingMealsWidget) {
+                    onSelectTab(existingMealsWidget.tabId);
+                  } else if (onOpenAddWidget && !isCanvasLocked) {
+                    onOpenAddWidget();
+                  }
+                }}
+                title={
+                  existingMealsWidget
+                    ? 'Jump to Family Meal Planner'
+                    : 'Add Family Meal Planner tile to canvas'
+                }
+                className={`relative flex items-center gap-2 px-3 h-10 rounded-xl transition-all border whitespace-nowrap ${
+                  !existingMealsWidget && (!onOpenAddWidget || isCanvasLocked)
+                    ? 'bg-gray-800/60 text-gray-500 border-gray-700/60 opacity-60 cursor-not-allowed'
+                    : effectiveNightMode
+                    ? 'bg-slate-900/60 hover:bg-slate-800/70 text-amber-200/75 border-white/10 cursor-pointer shadow-none'
+                    : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border-amber-500/30 cursor-pointer'
+                }`}
               >
-                <Utensils className="w-4 h-4 shrink-0 text-amber-400/70" />
+                <Utensils className="w-4 h-4 shrink-0 text-amber-300/90" />
                 <span className="text-xs font-semibold">Meal Planner</span>
-                <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-gray-700/80 text-gray-300">
-                  Soon
-                </span>
               </button>
             </div>
           )}
@@ -710,9 +758,11 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
                 className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gray-800/80 hover:bg-gray-700 text-amber-400 border border-amber-500/30 transition-all cursor-pointer"
               >
                 <Archive className="w-4 h-4" />
-                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 text-gray-950 font-mono font-bold text-[10px] flex items-center justify-center">
-                  {trashCount}
-                </span>
+                {!effectiveNightMode && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-amber-500/90 text-slate-950 border border-amber-200/40 font-mono font-bold text-[10px] flex items-center justify-center">
+                    {trashCount}
+                  </span>
+                )}
               </button>
             )}
           </div>
@@ -729,20 +779,22 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
               type="button"
               onClick={() => togglePopout('utilities')}
               title={
-                isUpdateAvailable
+                isUpdateAvailable && !effectiveNightMode
                   ? `Quick Utilities (✨ Update v${latestVersion} available!)`
                   : 'Quick Utilities (Night Mode, Fullscreen, Refresh, Hide Toolbar)'
               }
               className={`relative flex items-center justify-center w-10 h-10 rounded-xl transition-all cursor-pointer ${
                 activePopout === 'utilities'
-                  ? 'bg-gray-700 text-white shadow-md'
-                  : isUpdateAvailable
+                  ? effectiveNightMode
+                    ? 'bg-gray-800 text-white shadow-none'
+                    : 'bg-gray-700 text-white shadow-md'
+                  : isUpdateAvailable && !effectiveNightMode
                   ? 'text-cyan-300 bg-cyan-500/20 hover:bg-cyan-500/35 border border-cyan-400/50 shadow-lg shadow-cyan-950/60'
                   : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/70'
               }`}
             >
               <SlidersHorizontal className="w-4 h-4" />
-              {isUpdateAvailable && (
+              {isUpdateAvailable && !effectiveNightMode && (
                 <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
                   <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500 ring-2 ring-gray-950" />
@@ -754,7 +806,9 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
             {activePopout === 'utilities' && (
               <div
                 data-dock-element="true"
-                className={`absolute z-50 flex flex-row items-center gap-1.5 p-2 rounded-2xl bg-gray-900/95 backdrop-blur-xl border border-gray-700/80 shadow-2xl animate-in fade-in zoom-in-95 duration-150 ${inlinePopoutPositionClasses}`}
+                className={`absolute z-50 flex flex-row items-center gap-1.5 p-2 rounded-2xl bg-gray-900/95 backdrop-blur-xl border border-gray-700/80 ${
+                  effectiveNightMode ? 'shadow-none' : 'shadow-2xl'
+                } animate-in fade-in zoom-in-95 duration-150 ${inlinePopoutPositionClasses}`}
               >
                 <button
                   type="button"
@@ -767,7 +821,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
                   }}
                   title="Toggle Night Mode"
                   className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all cursor-pointer ${
-                    isNightMode
+                    effectiveNightMode
                       ? 'text-amber-300 bg-amber-500/15 border border-amber-500/30'
                       : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/70'
                   }`}
@@ -807,13 +861,13 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
                       : 'Refresh Dashboard (Reload panel)'
                   }
                   className={`relative flex items-center justify-center w-10 h-10 rounded-xl transition-all cursor-pointer ${
-                    isUpdateAvailable
+                    isUpdateAvailable && !effectiveNightMode
                       ? 'text-cyan-300 bg-cyan-500/20 hover:bg-cyan-500/35 border border-cyan-400/50 shadow-lg shadow-cyan-950/60'
                       : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/70'
                   }`}
                 >
-                  <RotateCw className={`w-4 h-4 ${isUpdateAvailable ? 'animate-spin [animation-duration:3s]' : ''}`} />
-                  {isUpdateAvailable && (
+                  <RotateCw className={`w-4 h-4 ${isUpdateAvailable && !effectiveNightMode ? 'animate-spin [animation-duration:3s]' : ''}`} />
+                  {isUpdateAvailable && !effectiveNightMode && (
                     <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
                       <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500 ring-2 ring-gray-950" />

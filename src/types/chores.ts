@@ -2,6 +2,23 @@ import type { HouseholdRole } from './profiles';
 
 export type CadenceType = 'daily' | 'weekdays' | 'weekends' | 'weekly' | 'interval' | 'bounty';
 export type OverduePolicy = 'zero' | 'half' | 'full' | 'custom';
+export type ActiveChoreStatus = 'pending' | 'awaiting_approval' | 'completed' | 'expired';
+export type WishlistRewardStatus =
+  | 'needs_pricing'
+  | 'active_goal'
+  | 'unlocked'
+  | 'pending_fulfillment'
+  | 'fulfilled';
+export type LedgerEntryType =
+  | 'chore_completion'
+  | 'reward_redemption'
+  | 'manual_adjustment'
+  | 'reversion';
+
+export interface ChoreCompletionSplit {
+  profileId: string;
+  pointsAwarded: number;
+}
 
 export interface Profile {
   id: string;
@@ -11,8 +28,8 @@ export interface Profile {
   avatarUrl?: string;
   avatarDataUrl?: string;
   emoji?: string;
-  balance: number;        // Spendable points
-  lifetimePoints: number; // Cumulative all-time points
+  balance: number;        // Spendable points (strictly derived from ledger)
+  lifetimePoints: number; // Cumulative all-time points (strictly derived from ledger)
 }
 
 export interface ChoreTemplate {
@@ -34,11 +51,11 @@ export interface ChoreTemplate {
 }
 
 export interface ActiveChoreInstance {
-  instanceId: string; // e.g., `${choreId}_${YYYY-MM-DD}`
+  instanceId: string; // `${choreId}_${YYYY-MM-DD}`
   choreId: string;
   dateScheduled: string; // "YYYY-MM-DD"
-  status: 'pending' | 'awaiting_approval' | 'completed' | 'expired';
-  completedBy?: { profileId: string; pointsAwarded: number }[]; // Supports whole-number splits
+  status: ActiveChoreStatus;
+  completedBy?: ChoreCompletionSplit[]; // Supports whole-number splits
   completedAt?: string;
   isOverdue: boolean;
 }
@@ -51,7 +68,7 @@ export interface WishlistReward {
   imageUrl?: string;
   rawPrice?: number;
   pointsCost: number;
-  status: 'needs_pricing' | 'active_goal' | 'unlocked' | 'pending_fulfillment' | 'fulfilled';
+  status: WishlistRewardStatus;
   createdAt: string;
   pricedAt?: string;
   fulfilledAt?: string;
@@ -71,7 +88,7 @@ export interface TrophyItem {
 export interface LedgerEntry {
   id: string;
   timestamp: string;
-  type: 'chore_completion' | 'reward_redemption' | 'manual_adjustment' | 'reversion';
+  type: LedgerEntryType;
   refId: string;
   profileId: string;
   pointsDelta: number;

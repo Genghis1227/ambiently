@@ -7,8 +7,12 @@ import type {
   LocalDeviceVaultItem,
 } from '../types/dashboard';
 import type { ChoreEngineSnapshot } from '../types/chores';
-import type { HouseholdProfile } from '../types/profiles';
-import { CHORE_PROFILE_COLORS } from '../utils/choreEngine';
+import { HOUSEHOLD_PROFILE_PALETTE, type HouseholdProfile } from '../types/profiles';
+import {
+  DEFAULT_AISLE_ORDER,
+  type MealPlannerSnapshot,
+  type StapleItem,
+} from '../types/meals';
 
 export class AmbientlyDatabase extends Dexie {
   tabs!: EntityTable<DashboardTab, 'id'>;
@@ -18,6 +22,7 @@ export class AmbientlyDatabase extends Dexie {
   vault!: EntityTable<LocalDeviceVaultItem, 'key'>;
   chores!: EntityTable<ChoreEngineSnapshot, 'id'>;
   profiles!: EntityTable<HouseholdProfile, 'id'>;
+  meals!: EntityTable<MealPlannerSnapshot, 'id'>;
 
   constructor() {
     super('AmbientlyDB');
@@ -36,6 +41,16 @@ export class AmbientlyDatabase extends Dexie {
       vault: 'key, updated_at',
       chores: 'id, updated_at',
       profiles: 'id, role, updatedAt, deletedAt',
+    });
+    this.version(3).stores({
+      tabs: 'id, order, updated_at, deleted_at',
+      widgets: 'id, tabId, type, updated_at, deleted_at',
+      notes: 'id, tabId, widgetId, expiresAt, archivedAt, updated_at, deleted_at',
+      settings: 'id, updated_at',
+      vault: 'key, updated_at',
+      chores: 'id, updated_at',
+      profiles: 'id, role, updatedAt, deletedAt',
+      meals: 'id, updated_at',
     });
   }
 }
@@ -168,7 +183,7 @@ export const DEFAULT_HOUSEHOLD_PROFILES: HouseholdProfile[] = [
     id: 'p_parent_1',
     name: 'Parent 1',
     role: 'parent',
-    color: CHORE_PROFILE_COLORS[1], // Slate Blue
+    color: HOUSEHOLD_PROFILE_PALETTE[1].hex, // Slate Blue
     emoji: '🛡️',
     createdAt: '1970-01-01T00:00:00.000Z',
     updatedAt: '1970-01-01T00:00:00.000Z',
@@ -177,7 +192,7 @@ export const DEFAULT_HOUSEHOLD_PROFILES: HouseholdProfile[] = [
     id: 'p_parent_2',
     name: 'Parent 2',
     role: 'parent',
-    color: CHORE_PROFILE_COLORS[2], // Dusty Rose
+    color: HOUSEHOLD_PROFILE_PALETTE[2].hex, // Dusty Rose
     emoji: '🌸',
     createdAt: '1970-01-01T00:00:00.000Z',
     updatedAt: '1970-01-01T00:00:00.000Z',
@@ -186,7 +201,7 @@ export const DEFAULT_HOUSEHOLD_PROFILES: HouseholdProfile[] = [
     id: 'p_kid_1',
     name: 'Alex',
     role: 'kid',
-    color: CHORE_PROFILE_COLORS[0], // Sage Green
+    color: HOUSEHOLD_PROFILE_PALETTE[0].hex, // Sage Green
     emoji: '🌿',
     createdAt: '1970-01-01T00:00:00.000Z',
     updatedAt: '1970-01-01T00:00:00.000Z',
@@ -195,7 +210,7 @@ export const DEFAULT_HOUSEHOLD_PROFILES: HouseholdProfile[] = [
     id: 'p_kid_2',
     name: 'Maya',
     role: 'kid',
-    color: CHORE_PROFILE_COLORS[4], // Lavender-Gray
+    color: HOUSEHOLD_PROFILE_PALETTE[3].hex, // Lavender-Gray
     emoji: '🦋',
     createdAt: '1970-01-01T00:00:00.000Z',
     updatedAt: '1970-01-01T00:00:00.000Z',
@@ -209,7 +224,7 @@ export const DEFAULT_CHORE_SNAPSHOT: ChoreEngineSnapshot = {
       id: 'p_kid_1',
       name: 'Alex',
       role: 'kid',
-      color: CHORE_PROFILE_COLORS[0], // Sage Green
+      color: HOUSEHOLD_PROFILE_PALETTE[0].hex, // Sage Green
       emoji: '🌿',
       balance: 0,
       lifetimePoints: 0,
@@ -218,7 +233,7 @@ export const DEFAULT_CHORE_SNAPSHOT: ChoreEngineSnapshot = {
       id: 'p_kid_2',
       name: 'Maya',
       role: 'kid',
-      color: CHORE_PROFILE_COLORS[4], // Lavender-Gray
+      color: HOUSEHOLD_PROFILE_PALETTE[3].hex, // Lavender-Gray
       emoji: '🦋',
       balance: 0,
       lifetimePoints: 0,
@@ -227,7 +242,7 @@ export const DEFAULT_CHORE_SNAPSHOT: ChoreEngineSnapshot = {
       id: 'p_parent_1',
       name: 'Parent 1',
       role: 'parent',
-      color: CHORE_PROFILE_COLORS[1], // Slate Blue
+      color: HOUSEHOLD_PROFILE_PALETTE[1].hex, // Slate Blue
       emoji: '🛡️',
       balance: 0,
       lifetimePoints: 0,
@@ -236,7 +251,7 @@ export const DEFAULT_CHORE_SNAPSHOT: ChoreEngineSnapshot = {
       id: 'p_parent_2',
       name: 'Parent 2',
       role: 'parent',
-      color: CHORE_PROFILE_COLORS[2], // Dusty Rose
+      color: HOUSEHOLD_PROFILE_PALETTE[2].hex, // Dusty Rose
       emoji: '🌸',
       balance: 0,
       lifetimePoints: 0,
@@ -338,6 +353,114 @@ export const DEFAULT_CHORE_SNAPSHOT: ChoreEngineSnapshot = {
     pointsPerDollar: 10,
     soundEffectsEnabled: false,
   },
+  updated_at: '1970-01-01T00:00:00.000Z',
+};
+
+export const DEFAULT_HOUSEHOLD_STAPLES: StapleItem[] = [
+  {
+    id: 'staple-milk',
+    name: 'Milk',
+    defaultQuantity: 1,
+    defaultUnit: 'gallon',
+    category: 'Dairy & Eggs',
+    createdAt: '1970-01-01T00:00:00.000Z',
+    updatedAt: '1970-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'staple-eggs',
+    name: 'Eggs',
+    defaultQuantity: 12,
+    defaultUnit: null,
+    category: 'Dairy & Eggs',
+    createdAt: '1970-01-01T00:00:00.000Z',
+    updatedAt: '1970-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'staple-butter',
+    name: 'Butter',
+    defaultQuantity: 1,
+    defaultUnit: 'lb',
+    category: 'Dairy & Eggs',
+    createdAt: '1970-01-01T00:00:00.000Z',
+    updatedAt: '1970-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'staple-bread',
+    name: 'Sourdough Bread',
+    defaultQuantity: 1,
+    defaultUnit: null,
+    category: 'Bakery',
+    createdAt: '1970-01-01T00:00:00.000Z',
+    updatedAt: '1970-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'staple-bananas',
+    name: 'Bananas',
+    defaultQuantity: 1,
+    defaultUnit: 'bunch',
+    category: 'Produce',
+    createdAt: '1970-01-01T00:00:00.000Z',
+    updatedAt: '1970-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'staple-onions',
+    name: 'Yellow Onions',
+    defaultQuantity: 3,
+    defaultUnit: null,
+    category: 'Produce',
+    createdAt: '1970-01-01T00:00:00.000Z',
+    updatedAt: '1970-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'staple-garlic',
+    name: 'Garlic',
+    defaultQuantity: 2,
+    defaultUnit: 'head',
+    category: 'Produce',
+    createdAt: '1970-01-01T00:00:00.000Z',
+    updatedAt: '1970-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'staple-chicken',
+    name: 'Chicken Breast',
+    defaultQuantity: 2,
+    defaultUnit: 'lb',
+    category: 'Meat & Seafood',
+    createdAt: '1970-01-01T00:00:00.000Z',
+    updatedAt: '1970-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'staple-olive-oil',
+    name: 'Olive Oil',
+    defaultQuantity: 1,
+    defaultUnit: 'bottle',
+    category: 'Pantry & Dry Goods',
+    createdAt: '1970-01-01T00:00:00.000Z',
+    updatedAt: '1970-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'staple-rice',
+    name: 'Jasmine Rice',
+    defaultQuantity: 1,
+    defaultUnit: 'bag',
+    category: 'Pantry & Dry Goods',
+    createdAt: '1970-01-01T00:00:00.000Z',
+    updatedAt: '1970-01-01T00:00:00.000Z',
+  },
+];
+
+export const DEFAULT_MEAL_SNAPSHOT: MealPlannerSnapshot = {
+  id: 'household_meals',
+  recipes: [],
+  scheduledMeals: [],
+  shoppingItems: [],
+  staples: DEFAULT_HOUSEHOLD_STAPLES,
+  aisleOrder: [...DEFAULT_AISLE_ORDER],
+  weekStartsOn: 'sunday',
+  deletedRecipeIds: [],
+  deletedScheduledMealIds: [],
+  deletedShoppingItemIds: [],
+  deletedStapleIds: [],
   updated_at: '1970-01-01T00:00:00.000Z',
 };
 

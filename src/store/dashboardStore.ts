@@ -25,11 +25,14 @@ import { getSupabase, getCurrentUser, pushToCloud } from '../services/supabase';
 import { CANVAS_LOOK_FIELDS, keepLocalNoteFields, keepLocalTabFields, keepLocalWidgetFields } from '../services/syncMerge';
 import { useChoreStore, registerChorePersistListener } from './choreStore';
 import type { ChoreEngineSnapshot } from '../types/chores';
-import { useProfileStore } from '../stores/useProfileStore';
+import { useProfileStore, registerProfileSyncListener } from '../stores/useProfileStore';
 import type { HouseholdProfile } from '../types/profiles';
+import { useMealStore, registerMealPersistListener } from '../stores/useMealStore';
+import type { MealPlannerSnapshot } from '../types/meals';
 
 const CHORE_ENGINE_CLOUD_ROW_ID = '__ambiently_chore_engine__';
 const HOUSEHOLD_PROFILES_CLOUD_ROW_ID = '__ambiently_household_profiles__';
+const MEAL_PLANNER_CLOUD_ROW_ID = '__ambiently_meal_planner__';
 
 let backupDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 let cloudAutoSyncTimer: ReturnType<typeof setTimeout> | null = null;
@@ -283,13 +286,15 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       (w) =>
         !w.deleted_at &&
         w.id !== CHORE_ENGINE_CLOUD_ROW_ID &&
-        w.id !== HOUSEHOLD_PROFILES_CLOUD_ROW_ID
+        w.id !== HOUSEHOLD_PROFILES_CLOUD_ROW_ID &&
+        w.id !== MEAL_PLANNER_CLOUD_ROW_ID
     );
     const loadedNotes = (await db.notes.toArray()).filter((n) => !n.deleted_at);
 
-    // Initialize Global Household Profile Store & Chore Engine Store
+    // Initialize Global Household Profile Store, Chore Engine Store & Meal Planner Store
     await useProfileStore.getState().initProfileStore();
     await useChoreStore.getState().initChoreStore();
+    await useMealStore.getState().initMealStore();
 
     const tabsToUse = loadedTabs.length > 0 ? loadedTabs : DEFAULT_TABS;
     const explicitHome = tabsToUse.find((t) => t.isHome && (t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false));
@@ -740,6 +745,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         notes: state.notes,
         profiles: useProfileStore.getState().profiles,
         chores: useChoreStore.getState().snapshot,
+        meals: useMealStore.getState().snapshot,
       });
     }, 400);
   },
@@ -761,6 +767,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       notes: state.notes,
       profiles: useProfileStore.getState().profiles,
       chores: useChoreStore.getState().snapshot,
+      meals: useMealStore.getState().snapshot,
     });
   },
 
@@ -969,6 +976,20 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         useChoreStore
           .getState()
           .applyRemoteSnapshot(incomingWidget.config as ChoreEngineSnapshot)
+          .catch(() => {});
+      }
+      return;
+    }
+
+    if (incomingWidget.id === MEAL_PLANNER_CLOUD_ROW_ID) {
+      if (
+        eventType !== 'DELETE' &&
+        !incomingWidget.deleted_at &&
+        incomingWidget.config?.id === 'household_meals'
+      ) {
+        useMealStore
+          .getState()
+          .applyRemoteMealSnapshot(incomingWidget.config as MealPlannerSnapshot)
           .catch(() => {});
       }
       return;
@@ -1224,6 +1245,20 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
 }));
 
 registerChorePersistListener(() => {
+  const dashState = useDashboardStore.getState();
+  if (dashState.isInitialized) {
+    dashState.saveLocalBackup();
+  }
+});
+
+registerMealPersistListener(() => {
+  const dashState = useDashboardStore.getState();
+  if (dashState.isInitialized) {
+    dashState.saveLocalBackup();
+  }
+});
+
+registerProfileSyncListener(() => {
   const dashState = useDashboardStore.getState();
   if (dashState.isInitialized) {
     dashState.saveLocalBackup();
