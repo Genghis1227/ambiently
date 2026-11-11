@@ -281,7 +281,9 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
 
       {/* Note Creator Drawer */}
       {isCreating ? (
-        <div className={`flex-1 overflow-y-auto p-3 rounded-xl border flex flex-col gap-2.5 ${
+        <div
+          data-carousel-lock="true"
+          className={`flex-1 overflow-y-auto p-3 rounded-xl border flex flex-col gap-2.5 ${
           isLight ? 'bg-slate-100 border-slate-300 text-slate-800' : 'bg-gray-950 border-gray-800'
         }`}>
           <input
