@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.4.15",
+    date: "November 10, 2026",
+    title: "Full-Screen Chore & Reward Hub on Canvas Rotation & Tile Settings Polish",
+    highlights: [
+      "Full-Screen Chore & Reward Hub on Canvas: Added a persistent Canvas Presentation Mode ('Compact Bento Tile' vs 'Full-Screen Hub on Canvas') so the 3-column Point Banks, Chores & Reward Store Hub lives directly on a canvas and participates naturally in auto-rotation.",
+      "Synchronized Maximize/Restore & Dock Safe Areas: Kept the canvas tile's full-screen toggle in sync with Tile Settings, added Navigation Dock safe-area padding, light/dark canvas theme support, and smooth touch scrolling across all three Hub columns.",
+      "Tile Settings Action Styling: Styled the 'Manage Chores & Profiles' footer action as a neutral secondary button so only active selected options appear highlighted.",
+    ],
+  },
+  {
     version: "v0.4.14",
     date: "November 10, 2026",
     title: "Canvas Carousel Rotation Fix, Order Self-Healing & Realtime Sync Reliability",

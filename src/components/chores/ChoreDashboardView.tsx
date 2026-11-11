@@ -10,6 +10,7 @@ import {
   Palmtree,
   Plus,
   RotateCcw,
+  Settings,
   Shield,
   Sparkles,
   Trophy,
@@ -21,6 +22,7 @@ import { useChoreStore, getPendingParentActionCounts } from '../../store/choreSt
 import type {
   ActiveChoreInstance,
   ChoreTemplate,
+  ChoreWidgetConfig,
   Profile,
 } from '../../types/chores';
 import {
@@ -40,8 +42,14 @@ import { triggerChoreCelebration } from '../../utils/confetti';
 
 export interface ChoreDashboardViewProps {
   isOpen: boolean;
-  onClose: () => void;
+  onClose?: () => void;
   variant?: 'view';
+  mode?: 'overlay' | 'canvas';
+  title?: string;
+  config?: ChoreWidgetConfig;
+  isLight?: boolean;
+  dockPaddingClass?: string;
+  onOpenWidgetSettings?: () => void;
 }
 
 type AccordionSectionId = 'today' | 'review' | 'completed';
@@ -58,6 +66,12 @@ interface ChildChoreRowItem {
 export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
   isOpen,
   onClose,
+  mode = 'overlay',
+  title,
+  config,
+  isLight = false,
+  dockPaddingClass,
+  onOpenWidgetSettings,
 }) => {
   const snapshot = useChoreStore((s) => s.snapshot);
   const completeChore = useChoreStore((s) => s.completeChore);
@@ -67,13 +81,29 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
   const claimUnlockedReward = useChoreStore((s) => s.claimUnlockedReward);
   const setParentDrawerOpen = useChoreStore((s) => s.setParentDrawerOpen);
 
-  const [activeScope, setActiveScope] = useState<string>('household');
+  const [activeScope, setActiveScope] = useState<string>(config?.scope || 'household');
   const [mobileColumnTab, setMobileColumnTab] = useState<'chores' | 'rewards' | 'profiles'>('chores');
 
-  const [expandedSections, setExpandedSections] = useState<Record<AccordionSectionId, boolean>>({
-    today: true,
-    review: true,
-    completed: true,
+  useEffect(() => {
+    if (mode === 'canvas') {
+      setActiveScope(config?.scope || 'household');
+    }
+  }, [mode, config?.scope]);
+
+  const [expandedSections, setExpandedSections] = useState<Record<AccordionSectionId, boolean>>(() => {
+    if (mode === 'canvas' && Array.isArray(config?.defaultExpandedSections)) {
+      const defaults = config.defaultExpandedSections;
+      return {
+        today: defaults.includes('today'),
+        review: defaults.includes('review'),
+        completed: defaults.includes('completed'),
+      };
+    }
+    return {
+      today: true,
+      review: true,
+      completed: true,
+    };
   });
   const [collapsedChildKeys, setCollapsedChildKeys] = useState<Record<string, boolean>>({});
 
@@ -87,7 +117,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
   const [isTrophyCaseOpen, setIsTrophyCaseOpen] = useState(false);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || mode === 'canvas' || !onClose) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
         e.key === 'Escape' &&
@@ -102,7 +132,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose, splitTarget, isProposeModalOpen, isProposalsTrayOpen, isTrophyCaseOpen]);
+  }, [isOpen, mode, onClose, splitTarget, isProposeModalOpen, isProposalsTrayOpen, isTrophyCaseOpen]);
 
   const todayKey = localDateKey(new Date());
   const templateMap = useMemo(
@@ -353,8 +383,12 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
         }}
         className={`group/row flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl border transition-all select-none ${
           isOverdue
-            ? 'border-amber-400/40 bg-amber-950/15 hover:bg-amber-950/25'
-            : 'border-slate-800/80 bg-slate-900/60 hover:bg-slate-800/75'
+            ? isLight
+              ? 'border-amber-300 bg-amber-50/70 hover:bg-amber-50'
+              : 'border-amber-400/40 bg-amber-950/15 hover:bg-amber-950/25'
+            : isLight
+              ? 'border-slate-200/90 bg-white hover:bg-slate-50'
+              : 'border-slate-800/80 bg-slate-900/60 hover:bg-slate-800/75'
         } ${section === 'today' || canUndo ? 'cursor-pointer active:scale-[0.99]' : 'cursor-default'}`}
       >
         <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -363,8 +397,12 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
               isCompleted
                 ? 'bg-emerald-600/85 border-emerald-500/70 text-white'
                 : isReview
-                  ? 'bg-amber-500/20 border-amber-400/50 text-amber-300'
-                  : 'border-slate-700 bg-slate-950/60 group-hover/row:border-emerald-400/60'
+                  ? isLight
+                    ? 'bg-amber-100 border-amber-300 text-amber-700'
+                    : 'bg-amber-500/20 border-amber-400/50 text-amber-300'
+                  : isLight
+                    ? 'border-slate-300 bg-slate-50 group-hover/row:border-emerald-500'
+                    : 'border-slate-700 bg-slate-950/60 group-hover/row:border-emerald-400/60'
             }`}
           >
             {isCompleted ? (
@@ -381,27 +419,47 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
               )}
               <span
                 className={`text-sm font-medium truncate ${
-                  isCompleted ? 'line-through text-slate-500' : 'text-slate-100'
+                  isCompleted
+                    ? 'line-through text-slate-400'
+                    : isLight
+                      ? 'text-slate-800'
+                      : 'text-slate-100'
                 }`}
               >
                 {template.title}
               </span>
 
               {instance.isOverdue && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-amber-500/15 text-amber-300/90 border border-amber-400/30">
+                <span
+                  className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium border ${
+                    isLight
+                      ? 'bg-amber-100 text-amber-800 border-amber-300'
+                      : 'bg-amber-500/15 text-amber-300/90 border-amber-400/30'
+                  }`}
+                >
                   Yesterday
                 </span>
               )}
 
               {isShared && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-800/90 text-slate-300">
+                <span
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium ${
+                    isLight ? 'bg-slate-100 text-slate-600' : 'bg-slate-800/90 text-slate-300'
+                  }`}
+                >
                   <Users className="w-3 h-3" />
                   Shared
                 </span>
               )}
 
               {template.cadence === 'weekly' && template.weeklyAnyDay && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                <span
+                  className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium border ${
+                    isLight
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                  }`}
+                >
                   1× / wk (Any day)
                 </span>
               )}
@@ -418,7 +476,11 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
                 dismissChoreInstance(instance.instanceId);
               }}
               title="Dismiss overdue task"
-              className="px-2 py-0.5 rounded-lg bg-slate-800/80 hover:bg-rose-500/20 text-slate-400 hover:text-rose-300 border border-slate-700/60 hover:border-rose-500/40 text-[11px] font-medium transition-colors cursor-pointer"
+              className={`px-2 py-0.5 rounded-lg border text-[11px] font-medium transition-colors cursor-pointer ${
+                isLight
+                  ? 'bg-white hover:bg-rose-50 text-slate-500 hover:text-rose-600 border-slate-200 hover:border-rose-300'
+                  : 'bg-slate-800/80 hover:bg-rose-500/20 text-slate-400 hover:text-rose-300 border-slate-700/60 hover:border-rose-500/40'
+              }`}
             >
               Dismiss
             </button>
@@ -427,7 +489,9 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
             canUndo ? (
               <span
                 title="Tap to undo (same-day self-revert)"
-                className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded text-slate-400 hover:bg-slate-800 opacity-70 group-hover/row:opacity-100 transition-opacity"
+                className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded opacity-70 group-hover/row:opacity-100 transition-opacity ${
+                  isLight ? 'text-slate-500 hover:bg-slate-100' : 'text-slate-400 hover:bg-slate-800'
+                }`}
               >
                 <RotateCcw className="w-3 h-3" />
                 Undo
@@ -442,10 +506,16 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
           <span
             className={`px-2.5 py-1 rounded-full text-xs font-semibold tabular-nums border ${
               isCompleted
-                ? 'bg-emerald-950/50 text-emerald-300/90 border-emerald-700/40'
+                ? isLight
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-emerald-950/50 text-emerald-300/90 border-emerald-700/40'
                 : isReview
-                  ? 'bg-amber-950/50 text-amber-300/90 border-amber-700/40'
-                  : 'bg-slate-800/80 text-slate-200 border-slate-700/60'
+                  ? isLight
+                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                    : 'bg-amber-950/50 text-amber-300/90 border-amber-700/40'
+                  : isLight
+                    ? 'bg-slate-100 text-slate-700 border-slate-200'
+                    : 'bg-slate-800/80 text-slate-200 border-slate-700/60'
             }`}
           >
             +{displayPoints} pt{displayPoints === 1 ? '' : 's'}
@@ -465,7 +535,13 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
 
     if (!hasAnyChildItems && !hasShared) {
       return (
-        <div className="px-4 py-5 text-center text-xs text-slate-500 rounded-xl border border-dashed border-slate-800/70 bg-slate-950/30">
+        <div
+          className={`px-4 py-5 text-center text-xs rounded-xl border border-dashed ${
+            isLight
+              ? 'text-slate-400 border-slate-200 bg-slate-50/60'
+              : 'text-slate-500 border-slate-800/70 bg-slate-950/30'
+          }`}
+        >
           {section === 'today'
             ? 'All caught up for today!'
             : section === 'review'
@@ -487,7 +563,11 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
           return (
             <div
               key={subKey}
-              className="rounded-xl border border-slate-800/70 bg-slate-950/45 overflow-hidden"
+              className={`rounded-xl border overflow-hidden ${
+                isLight
+                  ? 'border-slate-200/80 bg-slate-50/70'
+                  : 'border-slate-800/70 bg-slate-950/45'
+              }`}
               style={{
                 borderLeftWidth: '3px',
                 borderLeftColor: profile.color || '#6B8E7B',
@@ -496,14 +576,24 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
               <button
                 type="button"
                 onClick={() => toggleChildSubGroup(section, profile.id)}
-                className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-slate-900/60 transition-colors cursor-pointer"
+                className={`w-full flex items-center justify-between px-3 py-2 text-left transition-colors cursor-pointer ${
+                  isLight ? 'hover:bg-slate-100/80' : 'hover:bg-slate-900/60'
+                }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <HouseholdAvatar profile={profile} size="xs" showRing={false} />
-                  <span className="text-xs font-semibold text-slate-200 truncate">
+                  <span
+                    className={`text-xs font-semibold truncate ${
+                      isLight ? 'text-slate-800' : 'text-slate-200'
+                    }`}
+                  >
                     {profile.name}
                   </span>
-                  <span className="text-[11px] px-1.5 py-0.2 rounded-full font-medium bg-slate-800 text-slate-400 tabular-nums">
+                  <span
+                    className={`text-[11px] px-1.5 py-0.2 rounded-full font-medium tabular-nums ${
+                      isLight ? 'bg-slate-200/80 text-slate-600' : 'bg-slate-800 text-slate-400'
+                    }`}
+                  >
                     {items.length}
                   </span>
                 </div>
@@ -540,7 +630,11 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
 
         {hasShared && extraSharedItems && (
           <div
-            className="rounded-xl border border-slate-800/70 bg-slate-950/45 overflow-hidden"
+            className={`rounded-xl border overflow-hidden ${
+              isLight
+                ? 'border-slate-200/80 bg-slate-50/70'
+                : 'border-slate-800/70 bg-slate-950/45'
+            }`}
             style={{
               borderLeftWidth: '3px',
               borderLeftColor: '#648296',
@@ -549,16 +643,30 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
             <button
               type="button"
               onClick={() => toggleChildSubGroup(section, '__shared__')}
-              className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-slate-900/60 transition-colors cursor-pointer"
+              className={`w-full flex items-center justify-between px-3 py-2 text-left transition-colors cursor-pointer ${
+                isLight ? 'hover:bg-slate-100/80' : 'hover:bg-slate-900/60'
+              }`}
             >
               <div className="flex items-center gap-2.5 min-w-0">
-                <span className="w-6 h-6 rounded-full bg-slate-800 text-slate-200 inline-flex items-center justify-center">
+                <span
+                  className={`w-6 h-6 rounded-full inline-flex items-center justify-center ${
+                    isLight ? 'bg-slate-200 text-slate-700' : 'bg-slate-800 text-slate-200'
+                  }`}
+                >
                   <Users className="w-3.5 h-3.5" />
                 </span>
-                <span className="text-xs font-semibold text-slate-200 truncate">
+                <span
+                  className={`text-xs font-semibold truncate ${
+                    isLight ? 'text-slate-800' : 'text-slate-200'
+                  }`}
+                >
                   Shared & Bounties
                 </span>
-                <span className="text-[11px] px-1.5 py-0.2 rounded-full font-medium bg-slate-800 text-slate-400 tabular-nums">
+                <span
+                  className={`text-[11px] px-1.5 py-0.2 rounded-full font-medium tabular-nums ${
+                    isLight ? 'bg-slate-200/80 text-slate-600' : 'bg-slate-800 text-slate-400'
+                  }`}
+                >
                   {extraSharedItems.length}
                 </span>
               </div>
@@ -591,21 +699,27 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
       id: 'today',
       label: "Today's Chores",
       count: todayTotalCount,
-      badgeTone: 'bg-emerald-950/70 text-emerald-300 border border-emerald-700/40',
+      badgeTone: isLight
+        ? 'bg-emerald-100 text-emerald-800'
+        : 'bg-emerald-950/70 text-emerald-300 border border-emerald-700/40',
       renderContent: () => renderChildSubGroups('today', todayByChild, sharedPendingItems),
     },
     {
       id: 'review',
       label: 'Awaiting Parent Review',
       count: reviewTotalCount,
-      badgeTone: 'bg-amber-950/70 text-amber-300 border border-amber-700/40',
+      badgeTone: isLight
+        ? 'bg-amber-100 text-amber-800'
+        : 'bg-amber-950/70 text-amber-300 border border-amber-700/40',
       renderContent: () => renderChildSubGroups('review', reviewByChild),
     },
     {
       id: 'completed',
       label: 'Completed Today',
       count: completedTotalCount,
-      badgeTone: 'bg-slate-800 text-slate-300 border border-slate-700/50',
+      badgeTone: isLight
+        ? 'bg-slate-200 text-slate-700'
+        : 'bg-slate-800 text-slate-300 border border-slate-700/50',
       renderContent: () => renderChildSubGroups('completed', completedByChild),
     },
   ];
@@ -617,20 +731,50 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
   });
 
   const totalHouseholdBank = snapshot.profiles.reduce((sum, p) => sum + p.balance, 0);
+  const resolvedHeaderTitle =
+    title && title.trim() && title.trim() !== 'Family Chores'
+      ? title.trim()
+      : 'Family Chore & Reward Hub';
 
   return (
-    <div className="fixed inset-0 z-[75] bg-[#0c1118]/98 backdrop-blur-xl text-slate-100 flex flex-col overflow-hidden select-none">
+    <div
+      className={
+        mode === 'canvas'
+          ? `w-full h-full flex flex-col overflow-hidden select-none ${
+              isLight
+                ? 'bg-slate-50/92 text-slate-800'
+                : 'bg-[#0c1118]/90 text-slate-100'
+            } ${dockPaddingClass || ''}`
+          : 'fixed inset-0 z-[75] bg-[#0c1118]/98 backdrop-blur-xl text-slate-100 flex flex-col overflow-hidden select-none'
+      }
+    >
       {/* Top Bar */}
-      <header className="flex items-center justify-between gap-4 px-5 py-3.5 border-b border-slate-800/80 bg-slate-950/60 shrink-0">
+      <header
+        className={`flex items-center justify-between gap-4 px-5 py-3.5 border-b shrink-0 ${
+          isLight
+            ? 'border-slate-200/90 bg-white/80'
+            : 'border-slate-800/80 bg-slate-950/60'
+        } ${mode === 'canvas' && onOpenWidgetSettings ? 'sm:pr-24' : ''}`}
+      >
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-300 shrink-0">
+          <div
+            className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${
+              isLight
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+            }`}
+          >
             <Sparkles className="w-5 h-5" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-base sm:text-lg font-semibold tracking-tight text-slate-100 truncate">
-              Family Chore & Reward Hub
+            <h1
+              className={`text-base sm:text-lg font-semibold tracking-tight truncate ${
+                isLight ? 'text-slate-900' : 'text-slate-100'
+              }`}
+            >
+              {resolvedHeaderTitle}
             </h1>
-            <p className="text-xs text-slate-400 truncate">
+            <p className={`text-xs truncate ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
               {formattedDate} •{' '}
               {activeScope === 'household'
                 ? 'Household View'
@@ -641,8 +785,14 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
 
         <div className="flex items-center gap-2.5 shrink-0">
           {snapshot.householdSettings.vacationMode && (
-            <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-950/50 border border-teal-700/40 text-xs font-medium text-teal-200">
-              <Palmtree className="w-3.5 h-3.5 text-teal-400" />
+            <span
+              className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium ${
+                isLight
+                  ? 'bg-teal-50 border-teal-200 text-teal-800'
+                  : 'bg-teal-950/50 border-teal-700/40 text-teal-200'
+              }`}
+            >
+              <Palmtree className="w-3.5 h-3.5 text-teal-500" />
               <span>Vacation Mode</span>
             </span>
           )}
@@ -664,8 +814,12 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
             }
             className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
               pendingCounts.totalPendingCount > 0
-                ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border-amber-400/40 shadow-sm'
-                : 'bg-slate-800/80 hover:bg-slate-800 text-slate-200 border-slate-700/70'
+                ? isLight
+                  ? 'bg-amber-100/90 hover:bg-amber-200 text-amber-900 border-amber-300 shadow-sm'
+                  : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border-amber-400/40 shadow-sm'
+                : isLight
+                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                  : 'bg-slate-800/80 hover:bg-slate-800 text-slate-200 border-slate-700/70'
             }`}
           >
             <Shield className="w-4 h-4 text-amber-400" />
@@ -676,21 +830,42 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
             </span>
           </button>
 
-          {/* Minimize / Close Full-Screen View */}
-          <button
-            type="button"
-            onClick={onClose}
-            title="Return to Dashboard Canvas (Esc)"
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 transition-colors cursor-pointer"
-          >
-            <Minimize2 className="w-4 h-4" />
-            <span className="hidden sm:inline">Canvas</span>
-          </button>
+          {mode === 'canvas' && onOpenWidgetSettings && (
+            <button
+              type="button"
+              onClick={onOpenWidgetSettings}
+              title="Configure Chores widget & presentation mode"
+              className={`sm:hidden inline-flex items-center justify-center p-2 rounded-xl border transition-colors cursor-pointer ${
+                isLight
+                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200'
+                  : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-800'
+              }`}
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Minimize / Close Full-Screen Overlay View */}
+          {mode === 'overlay' && onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              title="Return to Dashboard Canvas (Esc)"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 transition-colors cursor-pointer"
+            >
+              <Minimize2 className="w-4 h-4" />
+              <span className="hidden sm:inline">Canvas</span>
+            </button>
+          )}
         </div>
       </header>
 
       {/* Mobile Column Switcher (< 1024px) */}
-      <div className="flex lg:hidden items-center gap-1.5 px-4 py-2 border-b border-slate-800/80 bg-slate-950/40 shrink-0">
+      <div
+        className={`flex lg:hidden items-center gap-1.5 px-4 py-2 border-b shrink-0 ${
+          isLight ? 'border-slate-200 bg-white/60' : 'border-slate-800/80 bg-slate-950/40'
+        }`}
+      >
         {[
           { id: 'profiles' as const, label: 'Profiles & Wallet' },
           { id: 'chores' as const, label: `Chores (${todayTotalCount})` },
@@ -702,8 +877,12 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
             onClick={() => setMobileColumnTab(tab.id)}
             className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
               mobileColumnTab === tab.id
-                ? 'bg-emerald-600/25 text-emerald-300 border border-emerald-500/40'
-                : 'text-slate-400 hover:text-slate-200'
+                ? isLight
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                  : 'bg-emerald-600/25 text-emerald-300 border border-emerald-500/40'
+                : isLight
+                  ? 'text-slate-500 hover:text-slate-800'
+                  : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             {tab.label}
@@ -720,13 +899,23 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
           }`}
         >
           {/* Profile Switcher & Spendable Point Banks */}
-          <div className="p-4 rounded-2xl bg-slate-900/55 border border-slate-800/80 space-y-3">
+          <div
+            className={`p-4 rounded-2xl border space-y-3 ${
+              isLight
+                ? 'bg-white/90 border-slate-200/90 shadow-sm'
+                : 'bg-slate-900/55 border-slate-800/80'
+            }`}
+          >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                <Wallet className="w-3.5 h-3.5 text-emerald-400" />
+              <span
+                className={`text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 ${
+                  isLight ? 'text-slate-500' : 'text-slate-400'
+                }`}
+              >
+                <Wallet className="w-3.5 h-3.5 text-emerald-500" />
                 Point Banks
               </span>
-              <span className="text-[11px] text-slate-400 tabular-nums">
+              <span className={`text-[11px] tabular-nums ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                 Total: {totalHouseholdBank} pts
               </span>
             </div>
@@ -738,24 +927,42 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
                 onClick={() => setActiveScope('household')}
                 className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition-all cursor-pointer ${
                   activeScope === 'household'
-                    ? 'bg-slate-800/90 border-emerald-500/50 ring-1 ring-emerald-500/25'
-                    : 'bg-slate-950/50 border-slate-800/80 hover:border-slate-700'
+                    ? isLight
+                      ? 'bg-emerald-50/80 border-emerald-400 ring-1 ring-emerald-400/25'
+                      : 'bg-slate-800/90 border-emerald-500/50 ring-1 ring-emerald-500/25'
+                    : isLight
+                      ? 'bg-slate-50/70 border-slate-200 hover:border-slate-300'
+                      : 'bg-slate-950/50 border-slate-800/80 hover:border-slate-700'
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-9 h-9 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-base shrink-0">
+                  <div
+                    className={`w-9 h-9 rounded-full border flex items-center justify-center text-base shrink-0 ${
+                      isLight
+                        ? 'bg-emerald-50 border-emerald-200'
+                        : 'bg-emerald-500/15 border-emerald-500/30'
+                    }`}
+                  >
                     🏠
                   </div>
                   <div className="min-w-0">
-                    <div className="text-xs font-semibold text-slate-100 truncate">
+                    <div
+                      className={`text-xs font-semibold truncate ${
+                        isLight ? 'text-slate-800' : 'text-slate-100'
+                      }`}
+                    >
                       All Kids (Household)
                     </div>
-                    <div className="text-[11px] text-slate-400">
+                    <div className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                       {snapshot.profiles.length} active profiles
                     </div>
                   </div>
                 </div>
-                <span className="text-xs font-bold text-emerald-300 tabular-nums">
+                <span
+                  className={`text-xs font-bold tabular-nums ${
+                    isLight ? 'text-emerald-700' : 'text-emerald-300'
+                  }`}
+                >
                   {totalHouseholdBank} pts
                 </span>
               </button>
@@ -770,8 +977,12 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
                     onClick={() => setActiveScope(profile.id)}
                     className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition-all cursor-pointer ${
                       isSelected
-                        ? 'bg-slate-800/90 border-emerald-500/50 ring-1 ring-emerald-500/25'
-                        : 'bg-slate-950/50 border-slate-800/80 hover:border-slate-700'
+                        ? isLight
+                          ? 'bg-emerald-50/80 border-emerald-400 ring-1 ring-emerald-400/25'
+                          : 'bg-slate-800/90 border-emerald-500/50 ring-1 ring-emerald-500/25'
+                        : isLight
+                          ? 'bg-slate-50/70 border-slate-200 hover:border-slate-300'
+                          : 'bg-slate-950/50 border-slate-800/80 hover:border-slate-700'
                     }`}
                     style={{
                       borderLeftWidth: '3px',
@@ -781,10 +992,18 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
                     <div className="flex items-center gap-2.5 min-w-0">
                       <HouseholdAvatar profile={profile} size="md" />
                       <div className="min-w-0">
-                        <div className="text-sm font-semibold text-slate-100 truncate">
+                        <div
+                          className={`text-sm font-semibold truncate ${
+                            isLight ? 'text-slate-800' : 'text-slate-100'
+                          }`}
+                        >
                           {profile.name}
                         </div>
-                        <div className="text-[10px] text-slate-400 tabular-nums">
+                        <div
+                          className={`text-[10px] tabular-nums ${
+                            isLight ? 'text-slate-500' : 'text-slate-400'
+                          }`}
+                        >
                           Lifetime: {profile.lifetimePoints} pts
                         </div>
                       </div>
@@ -797,7 +1016,9 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
                       >
                         {profile.balance}
                       </div>
-                      <div className="text-[10px] text-slate-400">spendable</div>
+                      <div className={`text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                        spendable
+                      </div>
                     </div>
                   </button>
                 );
@@ -806,23 +1027,45 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
           </div>
 
           {/* Quick Access Trays */}
-          <div className="p-4 rounded-2xl bg-slate-900/55 border border-slate-800/80 space-y-2.5">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 block">
+          <div
+            className={`p-4 rounded-2xl border space-y-2.5 ${
+              isLight
+                ? 'bg-white/90 border-slate-200/90 shadow-sm'
+                : 'bg-slate-900/55 border-slate-800/80'
+            }`}
+          >
+            <span
+              className={`text-xs font-semibold uppercase tracking-wider block ${
+                isLight ? 'text-slate-500' : 'text-slate-400'
+              }`}
+            >
               Wishlist & Milestones
             </span>
 
             <button
               type="button"
               onClick={() => setIsProposeModalOpen(true)}
-              className="w-full flex items-center justify-between p-3 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/35 text-left transition-colors cursor-pointer"
+              className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition-colors cursor-pointer ${
+                isLight
+                  ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200'
+                  : 'bg-emerald-600/20 hover:bg-emerald-600/30 border-emerald-500/35'
+              }`}
             >
               <div className="flex items-center gap-2.5">
-                <Plus className="w-4 h-4 text-emerald-300" />
+                <Plus className={`w-4 h-4 ${isLight ? 'text-emerald-700' : 'text-emerald-300'}`} />
                 <div>
-                  <div className="text-xs font-semibold text-emerald-200">
+                  <div
+                    className={`text-xs font-semibold ${
+                      isLight ? 'text-emerald-900' : 'text-emerald-200'
+                    }`}
+                  >
                     Propose a Reward
                   </div>
-                  <div className="text-[10px] text-emerald-300/75">
+                  <div
+                    className={`text-[10px] ${
+                      isLight ? 'text-emerald-700/80' : 'text-emerald-300/75'
+                    }`}
+                  >
                     Paste a product link or wish
                   </div>
                 </div>
@@ -832,20 +1075,30 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
             <button
               type="button"
               onClick={() => setIsProposalsTrayOpen(true)}
-              className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-950/60 hover:bg-slate-800/70 border border-slate-800 text-left transition-colors cursor-pointer"
+              className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition-colors cursor-pointer ${
+                isLight
+                  ? 'bg-slate-50 hover:bg-slate-100 border-slate-200'
+                  : 'bg-slate-950/60 hover:bg-slate-800/70 border-slate-800'
+              }`}
             >
               <div className="flex items-center gap-2.5">
-                <Inbox className="w-4 h-4 text-amber-400" />
+                <Inbox className="w-4 h-4 text-amber-500" />
                 <div>
-                  <div className="text-xs font-semibold text-slate-200">
+                  <div className={`text-xs font-semibold ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>
                     Proposals Tray
                   </div>
-                  <div className="text-[10px] text-slate-400">
+                  <div className={`text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                     Awaiting parent pricing
                   </div>
                 </div>
               </div>
-              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30 tabular-nums">
+              <span
+                className={`px-2 py-0.5 rounded-full text-xs font-semibold border tabular-nums ${
+                  isLight
+                    ? 'bg-amber-100 text-amber-800 border-amber-300'
+                    : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                }`}
+              >
                 {pendingCounts.needsPricingCount}
               </span>
             </button>
@@ -853,20 +1106,28 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
             <button
               type="button"
               onClick={() => setIsTrophyCaseOpen(true)}
-              className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-950/60 hover:bg-slate-800/70 border border-slate-800 text-left transition-colors cursor-pointer"
+              className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition-colors cursor-pointer ${
+                isLight
+                  ? 'bg-slate-50 hover:bg-slate-100 border-slate-200'
+                  : 'bg-slate-950/60 hover:bg-slate-800/70 border-slate-800'
+              }`}
             >
               <div className="flex items-center gap-2.5">
-                <Trophy className="w-4 h-4 text-amber-400" />
+                <Trophy className="w-4 h-4 text-amber-500" />
                 <div>
-                  <div className="text-xs font-semibold text-slate-200">
+                  <div className={`text-xs font-semibold ${isLight ? 'text-slate-800' : 'text-slate-200'}`}>
                     Trophy Case
                   </div>
-                  <div className="text-[10px] text-slate-400">
+                  <div className={`text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                     Fulfilled rewards archive
                   </div>
                 </div>
               </div>
-              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-800 text-slate-300 tabular-nums">
+              <span
+                className={`px-2 py-0.5 rounded-full text-xs font-semibold tabular-nums ${
+                  isLight ? 'bg-slate-200 text-slate-700' : 'bg-slate-800 text-slate-300'
+                }`}
+              >
                 {snapshot.trophies.length}
               </span>
             </button>
@@ -875,16 +1136,22 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
 
         {/* CENTER COLUMN: Active Daily Chores, Subtle Overdue Carry-Overs & Shared Bounties */}
         <main
-          className={`lg:col-span-5 flex flex-col overflow-hidden rounded-2xl bg-slate-900/55 border border-slate-800/80 p-4 ${
-            mobileColumnTab === 'chores' ? 'flex' : 'hidden lg:flex'
-          }`}
+          className={`lg:col-span-5 flex flex-col overflow-hidden rounded-2xl border p-4 ${
+            isLight
+              ? 'bg-white/90 border-slate-200/90 shadow-sm'
+              : 'bg-slate-900/55 border-slate-800/80'
+          } ${mobileColumnTab === 'chores' ? 'flex' : 'hidden lg:flex'}`}
         >
-          <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800/80 shrink-0">
+          <div
+            className={`flex items-center justify-between pb-3 mb-3 border-b shrink-0 ${
+              isLight ? 'border-slate-200' : 'border-slate-800/80'
+            }`}
+          >
             <div>
-              <h2 className="text-sm font-semibold text-slate-100">
+              <h2 className={`text-sm font-semibold ${isLight ? 'text-slate-800' : 'text-slate-100'}`}>
                 Daily Chores & Bounties
               </h2>
-              <p className="text-[11px] text-slate-400">
+              <p className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                 Single tap to complete • Same-day undo supported
               </p>
             </div>
@@ -892,7 +1159,11 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
               <button
                 type="button"
                 onClick={() => setActiveScope('household')}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer"
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium cursor-pointer ${
+                  isLight
+                    ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                }`}
               >
                 <X className="w-3 h-3" />
                 <span>Show All Kids</span>
@@ -906,12 +1177,18 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
               return (
                 <div
                   key={sec.id}
-                  className="rounded-xl border border-slate-800/80 bg-slate-950/35 overflow-hidden"
+                  className={`rounded-xl border overflow-hidden ${
+                    isLight
+                      ? 'border-slate-200/90 bg-slate-50/40'
+                      : 'border-slate-800/80 bg-slate-950/35'
+                  }`}
                 >
                   <button
                     type="button"
                     onClick={() => toggleSection(sec.id)}
-                    className="w-full flex items-center justify-between px-3.5 py-2.5 text-left hover:bg-slate-900/50 transition-colors cursor-pointer"
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 text-left transition-colors cursor-pointer ${
+                      isLight ? 'hover:bg-slate-100/70' : 'hover:bg-slate-900/50'
+                    }`}
                   >
                     <div className="flex items-center gap-2">
                       {isExpanded ? (
@@ -919,7 +1196,11 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
                       ) : (
                         <ChevronRight className="w-4 h-4 text-slate-400" />
                       )}
-                      <span className="text-xs font-semibold tracking-tight text-slate-100">
+                      <span
+                        className={`text-xs font-semibold tracking-tight ${
+                          isLight ? 'text-slate-800' : 'text-slate-100'
+                        }`}
+                      >
                         {sec.label}
                       </span>
                     </div>
@@ -941,16 +1222,18 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
 
         {/* RIGHT COLUMN: Visual Reward Store */}
         <section
-          className={`lg:col-span-4 flex flex-col overflow-hidden rounded-2xl bg-slate-900/55 border border-slate-800/80 p-4 ${
-            mobileColumnTab === 'rewards' ? 'flex' : 'hidden lg:flex'
-          }`}
+          className={`lg:col-span-4 flex flex-col overflow-hidden rounded-2xl border p-4 ${
+            isLight
+              ? 'bg-white/90 border-slate-200/90 shadow-sm'
+              : 'bg-slate-900/55 border-slate-800/80'
+          } ${mobileColumnTab === 'rewards' ? 'flex' : 'hidden lg:flex'}`}
         >
           <RewardStorePanel
             profiles={snapshot.profiles}
             rewards={snapshot.rewards}
             trophies={snapshot.trophies}
             activeScope={activeScope}
-            isLight={false}
+            isLight={isLight}
             onClaimReward={claimUnlockedReward}
             onOpenProposeModal={() => setIsProposeModalOpen(true)}
             onOpenProposalsTray={() => setIsProposalsTrayOpen(true)}
