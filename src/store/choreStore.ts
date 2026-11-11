@@ -128,7 +128,7 @@ async function persistSnapshot(snapshot: ChoreEngineSnapshot): Promise<void> {
     } catch {
       // Ignore if offline or unauthenticated
     }
-  }, 1500);
+  }, 150);
 }
 
 function scheduleNextMidnightTimeout(onMidnight: () => void): void {
@@ -244,8 +244,14 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => ({
       const householdProfiles = useProfileStore.getState().profiles;
       const stored = await db.chores.get('household_chores');
       const base = stored || DEFAULT_CHORE_SNAPSHOT;
+      const deletedTemplateSet = new Set(base.deletedTemplateIds || []);
+      const deletedRewardSet = new Set(base.deletedRewardIds || []);
       const { templates: migratedTemplates, rewards: migratedRewards } =
-        reconcileTemplateAndRewardProfileIds(base.templates, base.rewards, householdProfiles);
+        reconcileTemplateAndRewardProfileIds(
+          (base.templates || []).filter((t) => !deletedTemplateSet.has(t.id)),
+          (base.rewards || []).filter((r) => !deletedRewardSet.has(r.id)),
+          householdProfiles
+        );
       const syncedProfiles = mapHouseholdToChoreProfiles(householdProfiles, base.ledger);
       const initial: ChoreEngineSnapshot = {
         ...base,
@@ -311,7 +317,11 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => ({
       templates: rTemplates,
       rewards: rRewards,
     };
-    const local = get().snapshot;
+    // Never merge against the uninitialized in-memory DEFAULT_CHORE_SNAPSHOT on boot
+    const storedLocal = get().isInitialized
+      ? get().snapshot
+      : await db.chores.get('household_chores').catch(() => undefined);
+    const local = storedLocal || sanitizedRemote;
     const merged = mergeChoreSnapshotsAuthoritative(local, sanitizedRemote);
     const { templates: finalTemplates, rewards: finalRewards } =
       reconcileTemplateAndRewardProfileIds(merged.templates, merged.rewards, householdProfiles);
@@ -323,7 +333,7 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => ({
       profiles: syncedProfiles.length > 0 ? syncedProfiles : merged.profiles,
     };
     const { snapshot: rolled } = evaluateChoreRollover(withProfiles, new Date());
-    set({ snapshot: rolled });
+    set({ snapshot: rolled, isInitialized: true });
     await db.chores.put(rolled);
   },
 
@@ -785,9 +795,13 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => ({
   deleteWishlistReward: async (rewardId) => {
     const current = get().snapshot;
     const nowIso = new Date().toISOString();
+    const nextDeletedRewardIds = Array.from(
+      new Set([...(current.deletedRewardIds || []), rewardId])
+    );
     const nextSnapshot: ChoreEngineSnapshot = {
       ...current,
       rewards: current.rewards.filter((r) => r.id !== rewardId),
+      deletedRewardIds: nextDeletedRewardIds,
       lastParentActionAt: nowIso,
       updated_at: nowIso,
     };
@@ -1086,6 +1100,7 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => ({
     const draftSnapshot: ChoreEngineSnapshot = {
       ...current,
       templates: nextTemplates,
+      deletedTemplateIds: (current.deletedTemplateIds || []).filter((tid) => tid !== id),
       lastParentActionAt: nowIso,
       updated_at: nowIso,
     };
@@ -1105,6 +1120,9 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => ({
     const current = get().snapshot;
     const nowIso = new Date().toISOString();
     const nextTemplates = current.templates.filter((t) => t.id !== templateId);
+    const nextDeletedTemplateIds = Array.from(
+      new Set([...(current.deletedTemplateIds || []), templateId])
+    );
     // Remove pending instances for deleted template while preserving completed history
     const nextInstances = current.instances.filter(
       (i) => !(i.choreId === templateId && i.status === 'pending')
@@ -1113,6 +1131,7 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => ({
     const nextSnapshot: ChoreEngineSnapshot = {
       ...current,
       templates: nextTemplates,
+      deletedTemplateIds: nextDeletedTemplateIds,
       instances: nextInstances,
       lastParentActionAt: nowIso,
       updated_at: nowIso,

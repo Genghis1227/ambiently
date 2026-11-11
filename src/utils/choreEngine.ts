@@ -540,29 +540,57 @@ export function mergeChoreSnapshotsAuthoritative(
 
   // 2. Profiles & Templates & Household Settings: parent-authoritative source wins
   const baseSource = remoteIsParentAuthoritative ? remote : local;
+  const otherSource = remoteIsParentAuthoritative ? local : remote;
+
+  const deletedRewardIds = Array.from(
+    new Set([...(local.deletedRewardIds || []), ...(remote.deletedRewardIds || [])])
+  );
+  const deletedRewardSet = new Set(deletedRewardIds);
+
+  const deletedTemplateIds = Array.from(
+    new Set([...(local.deletedTemplateIds || []), ...(remote.deletedTemplateIds || [])])
+  );
+  const deletedTemplateSet = new Set(deletedTemplateIds);
 
   // 3. Merge Instances: remote wins on conflict when remoteIsParentAuthoritative
   const instanceMap = new Map<string, ActiveChoreInstance>();
   for (const inst of remoteIsParentAuthoritative ? local.instances : remote.instances) {
-    instanceMap.set(inst.instanceId, inst);
+    if (!deletedTemplateSet.has(inst.choreId)) {
+      instanceMap.set(inst.instanceId, inst);
+    }
   }
   for (const inst of remoteIsParentAuthoritative ? remote.instances : local.instances) {
-    instanceMap.set(inst.instanceId, inst);
+    if (!deletedTemplateSet.has(inst.choreId)) {
+      instanceMap.set(inst.instanceId, inst);
+    }
   }
 
-  // 4. Merge Rewards & Trophies: parent-authoritative source wins on status/pricing conflicts, preserving new kid proposals
+  // 4. Merge Rewards & Trophies: parent-authoritative source is the source of truth for rewards
+  //    (so deleted rewards never resurrect from an older snapshot or DEFAULT_CHORE_SNAPSHOT),
+  //    while preserving genuinely new kid proposals created after the authoritative snapshot's timestamp.
+  const baseAuthTime = Math.max(
+    Date.parse(baseSource.lastParentActionAt || '') || 0,
+    Date.parse(baseSource.updated_at || '') || 0
+  );
   const rewardMap = new Map<string, WishlistReward>();
-  for (const r of remoteIsParentAuthoritative ? local.rewards : remote.rewards) {
-    rewardMap.set(r.id, r);
+  for (const r of baseSource.rewards) {
+    if (!deletedRewardSet.has(r.id)) {
+      rewardMap.set(r.id, r);
+    }
   }
-  for (const r of remoteIsParentAuthoritative ? remote.rewards : local.rewards) {
-    rewardMap.set(r.id, r);
+  for (const r of otherSource.rewards) {
+    if (deletedRewardSet.has(r.id) || rewardMap.has(r.id)) continue;
+    const createdTime = Date.parse(r.createdAt || '') || 0;
+    if (r.status === 'needs_pricing' && createdTime > baseAuthTime) {
+      rewardMap.set(r.id, r);
+    }
   }
 
   const trophyMap = new Map<string, TrophyItem>();
   for (const t of local.trophies) trophyMap.set(t.id, t);
   for (const t of remote.trophies) trophyMap.set(t.id, t);
 
+  const mergedTemplates = baseSource.templates.filter((t) => !deletedTemplateSet.has(t.id));
   const mergedProfiles = recalculateProfilesFromLedger(baseSource.profiles, mergedLedger);
   const mergedRewards = syncRewardUnlockStates(Array.from(rewardMap.values()), mergedProfiles);
 
@@ -574,12 +602,14 @@ export function mergeChoreSnapshotsAuthoritative(
   return {
     id: 'household_chores',
     profiles: mergedProfiles,
-    templates: baseSource.templates,
+    templates: mergedTemplates,
     instances: Array.from(instanceMap.values()),
     rewards: mergedRewards,
     trophies: Array.from(trophyMap.values()),
     ledger: mergedLedger,
     householdSettings: baseSource.householdSettings,
+    deletedRewardIds,
+    deletedTemplateIds,
     lastParentActionAt: latestParentAt,
     updated_at: latestUpdatedAt,
   };

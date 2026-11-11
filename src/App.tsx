@@ -80,6 +80,7 @@ export function App() {
     updateNote,
     deleteNote,
     permanentlyDeleteNote,
+    permanentlyDeleteNotes,
     addTab,
     updateTab,
     autoOrganizeCanvas,
@@ -795,6 +796,7 @@ export function App() {
           onUpdateNote={updateNote}
           onDeleteNote={deleteNote}
           onPermanentlyDeleteNote={permanentlyDeleteNote}
+          onPermanentlyDeleteNotes={permanentlyDeleteNotes}
           onRemoveWidget={removeWidget}
           onOpenAddWidget={() => setIsAddWidgetOpen(true)}
           onUpdateWidget={updateWidget}

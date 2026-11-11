@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.18] - 2026-11-10
+
+### Delete All for Archived & Expired Notes & Permanent Reward Store Deletion Fix
+* **Delete All for Archived & Expired Notes (`src/components/layout/Corkboard.tsx`, `src/components/widgets/StickyNotesWidget.tsx`, `src/store/dashboardStore.ts`, `src/App.tsx`):**
+  * Added a **Delete All** header button with a touch-friendly inline two-tap confirmation (`Delete All` → `Cancel` / `Confirm (N)`) to the **Archived & Expired Notes** modal and the Sticky Notes widget's `Trash` tab, backed by an atomic `permanentlyDeleteNotes` batch tombstone update (`db.notes.bulkPut`).
+* **Permanent Reward & Chore Template Deletion Across Cloud Sync (`src/types/chores.ts`, `src/utils/choreEngine.ts`, `src/store/choreStore.ts`):**
+  * Added `deletedRewardIds` and `deletedTemplateIds` tombstones to `ChoreEngineSnapshot` and updated `mergeChoreSnapshotsAuthoritative` so deleted rewards (such as default rewards) and templates never resurrect from older snapshots during cloud pulls or Realtime sync.
+  * Updated `applyRemoteSnapshot` to load persisted IndexedDB state before merging on startup (instead of merging against the uninitialized in-memory `DEFAULT_CHORE_SNAPSHOT`) and reduced the chore persist listener delay from `1500ms` to `150ms`.
+
+---
+
 ## [0.4.17] - 2026-11-10
 
 ### Calendar Feed HTTP 429 Resilience, Private Feed Caching & US Holidays Fallback
