@@ -2839,7 +2839,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                   Widget View Scope
                 </label>
                 <p className="text-[11px] text-gray-400 mb-2.5">
-                  Show all children grouped together (Household View) or pin this view to a single child profile.
+                  Show everyone grouped together (Household View) or pin this view to a single family member.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <button

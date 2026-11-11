@@ -25,20 +25,27 @@ function mapHouseholdToChoreProfiles(
   householdProfiles: HouseholdProfile[],
   ledger: LedgerEntry[]
 ): Profile[] {
-  const kidProfiles: Profile[] = householdProfiles
-    .filter((hp) => hp.role === 'kid' && !hp.deletedAt)
-    .map((hp) => ({
-      id: hp.id,
-      name: hp.name,
-      role: hp.role,
-      color: hp.color,
-      avatarDataUrl: hp.avatarDataUrl,
-      avatarUrl: hp.avatarDataUrl,
-      emoji: hp.emoji,
-      balance: 0,
-      lifetimePoints: 0,
-    }));
-  return recalculateProfilesFromLedger(kidProfiles, ledger);
+  const activeMembers = householdProfiles
+    .filter((hp) => !hp.deletedAt)
+    .slice()
+    .sort((a, b) => {
+      const aRank = a.role === 'parent' ? 1 : 0;
+      const bRank = b.role === 'parent' ? 1 : 0;
+      return aRank - bRank;
+    });
+
+  const mappedProfiles: Profile[] = activeMembers.map((hp) => ({
+    id: hp.id,
+    name: hp.name,
+    role: hp.role,
+    color: hp.color,
+    avatarDataUrl: hp.avatarDataUrl,
+    avatarUrl: hp.avatarDataUrl,
+    emoji: hp.emoji,
+    balance: 0,
+    lifetimePoints: 0,
+  }));
+  return recalculateProfilesFromLedger(mappedProfiles, ledger);
 }
 
 function reconcileTemplateAndRewardProfileIds(
@@ -1002,28 +1009,27 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => ({
     const householdProfiles = useProfileStore.getState().profiles;
     const nextProfiles = mapHouseholdToChoreProfiles(householdProfiles, current.ledger);
 
-    // Ensure if it was a kid profile, it appears in nextProfiles
+    // Ensure the saved profile appears immediately in nextProfiles
     const hasSaved = nextProfiles.some((p) => p.id === saved.id);
-    const mergedProfiles =
-      !hasSaved && saved.role === 'kid'
-        ? recalculateProfilesFromLedger(
-            [
-              ...nextProfiles,
-              {
-                id: saved.id,
-                name: saved.name,
-                role: saved.role,
-                color: saved.color,
-                avatarDataUrl: saved.avatarDataUrl,
-                avatarUrl: saved.avatarDataUrl,
-                emoji: saved.emoji,
-                balance: 0,
-                lifetimePoints: 0,
-              },
-            ],
-            current.ledger
-          )
-        : nextProfiles;
+    const mergedProfiles = !hasSaved
+      ? recalculateProfilesFromLedger(
+          [
+            ...nextProfiles,
+            {
+              id: saved.id,
+              name: saved.name,
+              role: saved.role,
+              color: saved.color,
+              avatarDataUrl: saved.avatarDataUrl,
+              avatarUrl: saved.avatarDataUrl,
+              emoji: saved.emoji,
+              balance: 0,
+              lifetimePoints: 0,
+            },
+          ],
+          current.ledger
+        )
+      : nextProfiles;
 
     const nextSnapshot: ChoreEngineSnapshot = {
       ...current,

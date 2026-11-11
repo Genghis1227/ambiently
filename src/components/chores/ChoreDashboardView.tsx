@@ -555,7 +555,18 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
       <div className="space-y-2.5">
         {visibleProfiles.map((profile) => {
           const items = byChildMap.get(profile.id) || [];
-          if (items.length === 0 && section !== 'today') return null;
+          const hasPersonalTemplates = snapshot.templates.some(
+            (t) => t.assignedTo === profile.id
+          );
+          if (
+            items.length === 0 &&
+            (section !== 'today' ||
+              (profile.role === 'parent' &&
+                !hasPersonalTemplates &&
+                activeScope !== profile.id))
+          ) {
+            return null;
+          }
 
           const subKey = `${section}_${profile.id}`;
           const isCollapsed = Boolean(collapsedChildKeys[subKey]);
@@ -951,7 +962,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
                         isLight ? 'text-slate-800' : 'text-slate-100'
                       }`}
                     >
-                      All Kids (Household)
+                      Everyone (Household)
                     </div>
                     <div className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                       {snapshot.profiles.length} active profiles
@@ -992,12 +1003,25 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
                     <div className="flex items-center gap-2.5 min-w-0">
                       <HouseholdAvatar profile={profile} size="md" />
                       <div className="min-w-0">
-                        <div
-                          className={`text-sm font-semibold truncate ${
-                            isLight ? 'text-slate-800' : 'text-slate-100'
-                          }`}
-                        >
-                          {profile.name}
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span
+                            className={`text-sm font-semibold truncate ${
+                              isLight ? 'text-slate-800' : 'text-slate-100'
+                            }`}
+                          >
+                            {profile.name}
+                          </span>
+                          {profile.role === 'parent' && (
+                            <span
+                              className={`px-1.5 py-0.2 rounded text-[10px] font-medium shrink-0 ${
+                                isLight
+                                  ? 'bg-slate-200/80 text-slate-600'
+                                  : 'bg-slate-800 text-slate-400'
+                              }`}
+                            >
+                              Parent
+                            </span>
+                          )}
                         </div>
                         <div
                           className={`text-[10px] tabular-nums ${
@@ -1166,7 +1190,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
                 }`}
               >
                 <X className="w-3 h-3" />
-                <span>Show All Kids</span>
+                <span>Show Everyone</span>
               </button>
             )}
           </div>

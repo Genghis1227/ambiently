@@ -223,6 +223,24 @@ export const DEFAULT_CHORE_SNAPSHOT: ChoreEngineSnapshot = {
       balance: 0,
       lifetimePoints: 0,
     },
+    {
+      id: 'p_parent_1',
+      name: 'Parent 1',
+      role: 'parent',
+      color: CHORE_PROFILE_COLORS[1], // Slate Blue
+      emoji: '🛡️',
+      balance: 0,
+      lifetimePoints: 0,
+    },
+    {
+      id: 'p_parent_2',
+      name: 'Parent 2',
+      role: 'parent',
+      color: CHORE_PROFILE_COLORS[2], // Dusty Rose
+      emoji: '🌸',
+      balance: 0,
+      lifetimePoints: 0,
+    },
   ],
   templates: [
     {
