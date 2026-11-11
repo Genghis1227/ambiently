@@ -526,7 +526,18 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
       <div className="space-y-2">
         {visibleProfiles.map((profile) => {
           const items = byChildMap.get(profile.id) || [];
-          if (items.length === 0 && section !== 'today') return null;
+          const hasPersonalTemplates = snapshot.templates.some(
+            (t) => t.assignedTo === profile.id
+          );
+          if (
+            items.length === 0 &&
+            (section !== 'today' ||
+              (profile.role === 'parent' &&
+                !hasPersonalTemplates &&
+                activeScope !== profile.id))
+          ) {
+            return null;
+          }
 
           const subKey = `${section}_${profile.id}`;
           const isCollapsed = Boolean(collapsedChildKeys[subKey]);
@@ -773,7 +784,7 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
                   : 'bg-slate-900/70 text-slate-400 hover:text-slate-200 border border-slate-800'
             }`}
           >
-            All Kids
+            Everyone
           </button>
           {snapshot.profiles.map((profile) => {
             const isSelected = activeScope === profile.id;

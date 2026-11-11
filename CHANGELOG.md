@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.16] - 2026-11-10
+
+### Parent Participation, Point Banks & Equal Point Splitting on Shared Family Tasks
+* **Parent Profiles in the Chore & Point Engine (`src/store/choreStore.ts`, `src/services/db.ts`):**
+  * Included active `parent` household profiles alongside `kid` profiles (`kid` profiles ordered first) in `mapHouseholdToChoreProfiles` so parents earn, bank, and split points equally from the ledger.
+* **Shared Chore Solo & Point-Split Support (`src/components/chores/PointSplitModal.tsx`):**
+  * Enabled Parents and Kids to claim solo or split points equally on Shared Family Tasks with subtle `Parent` badges for instant role clarity.
+* **Clean Daily Sub-Groups & Whole-Family Scope (`src/components/chores/ChoreDashboardView.tsx`, `src/components/widgets/ChoreWidget.tsx`, `src/components/chores/ParentChoreDrawer.tsx`, `src/components/widgets/WidgetSettingsModal.tsx`):**
+  * Updated Household filter labels to **Everyone**, added Parent Point Bank cards, omitted empty `Today's Chores` sub-cards for parents without personal daily templates, and preserved `Select All Kids` in the Parent Chore Drawer.
+
+---
+
 ## [0.4.15] - 2026-11-10
 
 ### Full-Screen Chore & Reward Hub on Canvas Rotation & Tile Settings Polish

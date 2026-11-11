@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.4.16",
+    date: "November 10, 2026",
+    title: "Parent Participation, Point Banks & Equal Point Splitting on Shared Family Tasks",
+    highlights: [
+      "Parents in Shared Family Tasks & Point Banks: Included Parent household profiles in the Chore & Point Engine so parents can claim solo or split points equally with kids on Shared Family Tasks and bank/redeem points.",
+      "Clean Daily Views & Role Badges: Added subtle 'Parent' role badges in Point Banks and the 'Who helped?' split modal while hiding empty daily sub-cards for parents who don't have personal daily chores assigned.",
+      "Whole-Family Scope & Kid Quick-Select: Updated Household filter labels to 'Everyone' while keeping the 'Select All Kids' quick-select helper inside the Parent Chore Drawer.",
+    ],
+  },
+  {
     version: "v0.4.15",
     date: "November 10, 2026",
     title: "Full-Screen Chore & Reward Hub on Canvas Rotation & Tile Settings Polish",

@@ -242,8 +242,15 @@ export const PointSplitModal: React.FC<PointSplitModalProps> = ({
                         size="md"
                       />
                       <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium text-slate-100 truncate">
-                          {profile.name}
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-sm font-medium text-slate-100 truncate">
+                            {profile.name}
+                          </span>
+                          {profile.role === 'parent' && (
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-medium bg-slate-700/80 text-slate-300 shrink-0">
+                              Parent
+                            </span>
+                          )}
                         </div>
                         <div className="text-xs text-emerald-300/90 font-medium">
                           +{effectivePoints} pts
@@ -295,8 +302,15 @@ export const PointSplitModal: React.FC<PointSplitModalProps> = ({
                             size="sm"
                           />
                           <div className="min-w-0">
-                            <div className="text-sm font-medium text-slate-100 truncate">
-                              {profile.name}
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="text-sm font-medium text-slate-100 truncate">
+                                {profile.name}
+                              </span>
+                              {profile.role === 'parent' && (
+                                <span className="px-1.5 py-0.2 rounded text-[10px] font-medium bg-slate-700/80 text-slate-300 shrink-0">
+                                  Parent
+                                </span>
+                              )}
                             </div>
                             <div className="text-[11px] text-slate-400">
                               {isParticipating ? 'Helped' : 'Tap to include'}

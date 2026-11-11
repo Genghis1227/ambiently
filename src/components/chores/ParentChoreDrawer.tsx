@@ -329,7 +329,7 @@ export const ParentChoreDrawer: React.FC = () => {
         .map((t) => t.assignedTo)
     );
     const unassignedKids = profiles
-      .filter((p) => !existingAssigneesForTitle.has(p.id))
+      .filter((p) => p.role !== 'parent' && !existingAssigneesForTitle.has(p.id))
       .map((p) => p.id);
     setTplAssignees(unassignedKids.length > 0 ? unassignedKids : [tpl.assignedTo]);
     setTplCadence(tpl.cadence);
@@ -1572,15 +1572,21 @@ export const ParentChoreDrawer: React.FC = () => {
                       <div>
                         <div className="flex items-center justify-between gap-2 mb-1.5">
                           <label className="block text-[11px] text-slate-400">
-                            Assigned To (check multiple kids to create an individual chore for each)
+                            Assigned To (Shared Pool for whole family, or check individuals)
                           </label>
-                          {profiles.length > 1 && (
+                          {profiles.filter((p) => p.role !== 'parent').length > 1 && (
                             <button
                               type="button"
-                              onClick={() => setTplAssignees(profiles.map((p) => p.id))}
+                              onClick={() =>
+                                setTplAssignees(
+                                  profiles
+                                    .filter((p) => p.role !== 'parent')
+                                    .map((p) => p.id)
+                                )
+                              }
                               className="text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 cursor-pointer"
                             >
-                              Select All Kids ({profiles.length})
+                              Select All Kids ({profiles.filter((p) => p.role !== 'parent').length})
                             </button>
                           )}
                         </div>
@@ -1621,6 +1627,9 @@ export const ParentChoreDrawer: React.FC = () => {
                                   className="rounded border-slate-700"
                                 />
                                 <span>{p.name}</span>
+                                {p.role === 'parent' && (
+                                  <span className="text-[10px] text-slate-400">(Parent)</span>
+                                )}
                               </label>
                             );
                           })}
