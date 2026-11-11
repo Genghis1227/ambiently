@@ -292,6 +292,7 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
   onSaved,
 }) => {
   const recipes = useMealStore((s) => s.recipes);
+  const scheduledMeals = useMealStore((s) => s.scheduledMeals);
   const staples = useMealStore((s) => s.staples);
   const upsertRecipe = useMealStore((s) => s.upsertRecipe);
   const updateRecipeTags = useMealStore((s) => s.updateRecipeTags);
@@ -329,6 +330,62 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
   const [quickTitle, setQuickTitle] = useState<string>(() =>
     editingMeal && !editingMeal.recipeId ? editingMeal.title : ''
   );
+
+  // Dynamic recent + starter quick-meal suggestions (filters as user types)
+  const dynamicQuickSuggestions = useMemo(() => {
+    const seen = new Set<string>();
+    const items: {
+      title: string;
+      source: 'recent' | 'starter';
+      cookProfileId?: string;
+      notes?: string;
+    }[] = [];
+
+    const sortedRecent = [...scheduledMeals]
+      .filter((m) => !m.deletedAt && m.title.trim())
+      .sort(
+        (a, b) =>
+          (Date.parse(b.updatedAt || '') || 0) -
+          (Date.parse(a.updatedAt || '') || 0)
+      );
+
+    for (const m of sortedRecent) {
+      const title = m.title.trim();
+      const key = title.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        items.push({
+          title,
+          source: 'recent',
+          cookProfileId: m.cookProfileId,
+          notes: m.notes,
+        });
+      }
+    }
+
+    for (const r of recipes) {
+      if (r.deletedAt || !r.title.trim()) continue;
+      const title = r.title.trim();
+      const key = title.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        items.push({ title, source: 'recent' });
+      }
+    }
+
+    for (const starter of QUICK_MEAL_SUGGESTIONS) {
+      const key = starter.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        items.push({ title: starter, source: 'starter' });
+      }
+    }
+
+    const query = quickTitle.trim().toLowerCase();
+    return items
+      .filter((item) => !query || item.title.toLowerCase().includes(query))
+      .slice(0, 8);
+  }, [scheduledMeals, recipes, quickTitle]);
 
   // Recipe-linked state
   const [sourceTab, setSourceTab] = useState<RecipeSourceTab>('book');
@@ -1028,26 +1085,44 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
                 />
               </div>
 
-              <div className="flex flex-wrap items-center gap-1.5">
-                {QUICK_MEAL_SUGGESTIONS.map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    type="button"
-                    onClick={() => setQuickTitle(suggestion)}
-                    className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
-                      quickTitle === suggestion
-                        ? isLight
-                          ? 'bg-emerald-100 border-emerald-400 text-emerald-950'
-                          : 'bg-emerald-950/50 border-emerald-700 text-emerald-200'
-                        : isLight
-                          ? 'bg-white border-stone-200 text-slate-600 hover:bg-stone-100'
-                          : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
+              {dynamicQuickSuggestions.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {dynamicQuickSuggestions.map((suggestion) => {
+                    const isSelected =
+                      quickTitle.trim().toLowerCase() ===
+                      suggestion.title.toLowerCase();
+                    return (
+                      <button
+                        key={suggestion.title}
+                        type="button"
+                        onClick={() => {
+                          setQuickTitle(suggestion.title);
+                          if (suggestion.cookProfileId && !cookProfileId) {
+                            setCookProfileId(suggestion.cookProfileId);
+                          }
+                          if (suggestion.notes && !mealNotes.trim()) {
+                            setMealNotes(suggestion.notes);
+                          }
+                        }}
+                        className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border inline-flex items-center gap-1 transition-colors cursor-pointer ${
+                          isSelected
+                            ? isLight
+                              ? 'bg-emerald-100 border-emerald-400 text-emerald-950'
+                              : 'bg-emerald-950/50 border-emerald-700 text-emerald-200'
+                            : isLight
+                              ? 'bg-white border-stone-200 text-slate-600 hover:bg-stone-100'
+                              : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {suggestion.source === 'recent' && (
+                          <Clock className="w-3 h-3 opacity-65 shrink-0" />
+                        )}
+                        <span>{suggestion.title}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
               <div>
                 <label

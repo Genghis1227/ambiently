@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import type {
   StickyNoteItem,
+  StickyNoteChecklistItem,
   DashboardWidget,
   CanvasBackgroundTheme,
   DashboardTab,
@@ -48,6 +49,8 @@ import { MediaEmbedWidget } from '../widgets/MediaEmbedWidget';
 import { ImageWidget } from '../widgets/ImageWidget';
 import { ChoreWidget } from '../widgets/ChoreWidget';
 import { MealPlannerWidget } from '../widgets/MealPlannerWidget';
+import { ShoppingListNoteBody } from '../common/ShoppingListNoteBody';
+import { categorizeIngredient, parseIngredient } from '../../utils/ingredientAggregator';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { CANVAS_THEMES, isCanvasThemeLight } from '../../data/canvasThemes';
 import { findOpenCanvasSpot } from '../../utils/autoLayout';
@@ -205,10 +208,11 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
   const [isChecklist, setIsChecklist] = useState(false);
+  const [isShoppingList, setIsShoppingList] = useState(false);
   const [selectedColor, setSelectedColor] = useState(COLOR_PALETTE[0]);
   const [selectedFontSize, setSelectedFontSize] = useState<NonNullable<StickyNoteItem['fontSize']>>('base');
   const [selectedNoteTabId, setSelectedNoteTabId] = useState<string>(activeTabId);
-  const [checklistItems, setChecklistItems] = useState<{ id: string; text: string; done: boolean }[]>([]);
+  const [checklistItems, setChecklistItems] = useState<StickyNoteChecklistItem[]>([]);
   const [newItemText, setNewItemText] = useState('');
   const [expiryOption, setExpiryOption] = useState<'permanent' | '1day' | '3days' | 'custom'>('permanent');
   const [customExpiry, setCustomExpiry] = useState('');
@@ -555,10 +559,12 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
   const openNoteEditorForExisting = (note: StickyNoteItem) => {
     if (isCanvasLocked) return;
+    const isShop = Boolean(note.isShoppingList || note.freeformPos?.isShoppingList);
     setEditingNoteId(note.id);
     setNewTitle(note.title || '');
     setNewContent(note.content || '');
-    setIsChecklist(Boolean(note.isChecklist));
+    setIsChecklist(Boolean(note.isChecklist || isShop));
+    setIsShoppingList(isShop);
     setChecklistItems(note.checklistItems ? [...note.checklistItems] : []);
     setSelectedColor(note.bgColor || COLOR_PALETTE[0]);
     setSelectedFontSize(note.fontSize || 'base');
@@ -587,6 +593,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     setNewTitle('');
     setNewContent('');
     setIsChecklist(false);
+    setIsShoppingList(false);
     setChecklistItems([]);
     setSelectedColor(COLOR_PALETTE[0]);
     setSelectedFontSize('base');
@@ -921,16 +928,20 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   }, [draggingId, rotatingId, resizingId]);
 
   const handleAddChecklistItem = () => {
-    if (!newItemText.trim()) return;
+    const trimmed = newItemText.trim();
+    if (!trimmed) return;
+    const category = isShoppingList
+      ? categorizeIngredient(parseIngredient(trimmed).itemName || trimmed)
+      : undefined;
     setChecklistItems([
       ...checklistItems,
-      { id: Date.now().toString(), text: newItemText.trim(), done: false },
+      { id: Date.now().toString(), text: trimmed, done: false, ...(category ? { category } : {}) },
     ]);
     setNewItemText('');
   };
 
   const handleSaveNoteModal = () => {
-    if (!newTitle.trim() && !newContent.trim() && checklistItems.length === 0) return;
+    if (!newTitle.trim() && !newContent.trim() && checklistItems.length === 0 && !isShoppingList) return;
 
     let expiresAt: string | null = null;
     if (expiryOption === '1day') {
@@ -941,13 +952,18 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       expiresAt = new Date(customExpiry).toISOString();
     }
 
+    const effectiveChecklist = Boolean(isChecklist || isShoppingList);
+    const resolvedTitle =
+      newTitle.trim() || (isShoppingList ? '🛒 Shopping List' : undefined);
+
     if (editingNoteId) {
       onUpdateNote(editingNoteId, {
         tabId: selectedNoteTabId || activeTabId,
-        title: newTitle.trim() || undefined,
+        title: resolvedTitle,
         content: newContent,
-        isChecklist,
-        checklistItems: isChecklist ? checklistItems : undefined,
+        isChecklist: effectiveChecklist,
+        isShoppingList,
+        checklistItems: effectiveChecklist ? checklistItems : undefined,
         bgColor: selectedColor,
         fontSize: selectedFontSize,
         expiresAt,
@@ -956,10 +972,11 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       // Omit freeformPos so dashboardStore.addNote automatically finds an open non-overlapping spot!
       onAddNote({
         tabId: selectedNoteTabId || activeTabId,
-        title: newTitle.trim() || undefined,
+        title: resolvedTitle,
         content: newContent,
-        isChecklist,
-        checklistItems: isChecklist ? checklistItems : undefined,
+        isChecklist: effectiveChecklist,
+        isShoppingList,
+        checklistItems: effectiveChecklist ? checklistItems : [],
         bgColor: selectedColor,
         fontSize: selectedFontSize,
         expiresAt,
@@ -1897,7 +1914,12 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 }}
               >
                 <span className="truncate select-none touch-none">
-                  {note.title || (note.isChecklist ? 'Checklist' : 'Note')}
+                  {note.title ||
+                    (note.isShoppingList || note.freeformPos?.isShoppingList
+                      ? '🛒 Shopping List'
+                      : note.isChecklist
+                      ? 'Checklist'
+                      : 'Note')}
                 </span>
                 <div className="flex items-center gap-1 shrink-0 select-none touch-none">
                   {note.expiresAt && (
@@ -1967,8 +1989,18 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 </div>
               </div>
 
-              {/* Note Content / Checklist */}
-              {note.isChecklist && note.checklistItems ? (
+              {/* Note Content / Checklist / Shopping List */}
+              {note.isShoppingList || note.freeformPos?.isShoppingList ? (
+                <ShoppingListNoteBody
+                  note={note}
+                  fontSizeClass={fontSizeClass}
+                  onUpdateItems={(nextItems) =>
+                    onUpdateNote(note.id, { checklistItems: nextItems })
+                  }
+                  onToggleItem={(itemId) => toggleChecklistItem(note, itemId)}
+                  onCheckDragGuard={() => isDraggingRef.current}
+                />
+              ) : note.isChecklist && note.checklistItems ? (
                 <div className="space-y-1.5 mt-1 select-none touch-none">
                   {note.checklistItems.map((item) => (
                     <div
@@ -2213,25 +2245,53 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               </div>
             </div>
 
-            {/* Format Toggle: Message vs Checklist */}
-            <div className="flex rounded-lg bg-gray-950 p-1 border border-gray-800 text-xs font-semibold">
+            {/* Format Toggle: Message vs Checklist vs Shopping List */}
+            <div className="grid grid-cols-3 gap-1 rounded-lg bg-gray-950 p-1 border border-gray-800 text-xs font-semibold">
               <button
                 type="button"
-                onClick={() => setIsChecklist(false)}
-                className={`flex-1 py-1.5 rounded-md text-center transition-all cursor-pointer ${
-                  !isChecklist ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'
+                onClick={() => {
+                  setIsChecklist(false);
+                  setIsShoppingList(false);
+                }}
+                className={`py-1.5 rounded-md text-center transition-all cursor-pointer ${
+                  !isChecklist && !isShoppingList
+                    ? 'bg-blue-600 text-white shadow'
+                    : 'text-gray-400 hover:text-white'
                 }`}
               >
                 Text Note
               </button>
               <button
                 type="button"
-                onClick={() => setIsChecklist(true)}
-                className={`flex-1 py-1.5 rounded-md text-center transition-all cursor-pointer ${
-                  isChecklist ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'
+                onClick={() => {
+                  setIsChecklist(true);
+                  setIsShoppingList(false);
+                }}
+                className={`py-1.5 rounded-md text-center transition-all cursor-pointer ${
+                  isChecklist && !isShoppingList
+                    ? 'bg-blue-600 text-white shadow'
+                    : 'text-gray-400 hover:text-white'
                 }`}
               >
                 Checklist
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsChecklist(true);
+                  setIsShoppingList(true);
+                  if (!editingNoteId) {
+                    if (!newTitle.trim()) setNewTitle('🛒 Shopping List');
+                    setSelectedColor('#bbf7d0');
+                  }
+                }}
+                className={`py-1.5 rounded-md text-center transition-all cursor-pointer ${
+                  isShoppingList
+                    ? 'bg-emerald-600 text-white shadow'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                🛒 Shopping List
               </button>
             </div>
 

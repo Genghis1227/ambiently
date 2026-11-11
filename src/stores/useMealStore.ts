@@ -71,6 +71,9 @@ function normalizeTags(tags?: string[]): string[] {
   return out;
 }
 
+export const KEEP_PAST_SCHEDULED_MEAL_DAYS = 21;
+const MAX_DELETED_MEAL_TOMBSTONES = 250;
+
 function addDaysToLocalDate(baseDate: Date, daysDelta: number): string {
   const next = new Date(
     baseDate.getFullYear(),
@@ -82,6 +85,39 @@ function addDaysToLocalDate(baseDate: Date, daysDelta: number): string {
     0
   );
   return localDateKey(next);
+}
+
+/**
+ * Drops scheduled meals strictly older than `KEEP_PAST_SCHEDULED_MEAL_DAYS` (21 days) before
+ * `referenceDate` so the calendar schedule stays compact over time while keeping Recipe Book
+ * recipes permanently.
+ */
+export function prunePastScheduledMeals(
+  meals: ScheduledMeal[],
+  existingDeletedIds: string[] = [],
+  referenceDate: Date = new Date()
+): { scheduledMeals: ScheduledMeal[]; deletedScheduledMealIds: string[] } {
+  const cutoffKey = addDaysToLocalDate(referenceDate, -KEEP_PAST_SCHEDULED_MEAL_DAYS);
+  const kept: ScheduledMeal[] = [];
+  const prunedIds: string[] = [];
+
+  for (const meal of meals || []) {
+    if (!meal || meal.deletedAt) continue;
+    if (meal.date && meal.date < cutoffKey) {
+      prunedIds.push(meal.id);
+    } else {
+      kept.push(meal);
+    }
+  }
+
+  const combinedDeleted = Array.from(new Set([...existingDeletedIds, ...prunedIds])).slice(
+    -MAX_DELETED_MEAL_TOMBSTONES
+  );
+
+  return {
+    scheduledMeals: kept,
+    deletedScheduledMealIds: combinedDeleted,
+  };
 }
 
 function getWeekBounds(
@@ -166,10 +202,17 @@ export function mergeMealSnapshots(
   const primary = remoteWinsScalar ? remote : local;
   const latestUpdatedAt = remoteWinsScalar ? remote.updated_at : local.updated_at;
 
+  const mergedScheduled = mergeById(
+    local.scheduledMeals,
+    remote.scheduledMeals,
+    deletedMealSet
+  );
+  const pruned = prunePastScheduledMeals(mergedScheduled, deletedScheduledMealIds);
+
   return {
     id: 'household_meals',
     recipes: mergeById(local.recipes, remote.recipes, deletedRecipeSet),
-    scheduledMeals: mergeById(local.scheduledMeals, remote.scheduledMeals, deletedMealSet),
+    scheduledMeals: pruned.scheduledMeals,
     shoppingItems: mergeById(local.shoppingItems, remote.shoppingItems, deletedShopSet),
     staples: mergeById(local.staples, remote.staples, deletedStapleSet),
     aisleOrder:
@@ -178,7 +221,7 @@ export function mergeMealSnapshots(
         : [...DEFAULT_AISLE_ORDER],
     weekStartsOn: primary.weekStartsOn === 'monday' ? 'monday' : 'sunday',
     deletedRecipeIds,
-    deletedScheduledMealIds,
+    deletedScheduledMealIds: pruned.deletedScheduledMealIds,
     deletedShoppingItemIds,
     deletedStapleIds,
     updated_at: latestUpdatedAt || new Date().toISOString(),
@@ -314,9 +357,16 @@ export const useMealStore = create<MealStoreState>((set, get) => {
             ? stored.staples
             : DEFAULT_HOUSEHOLD_STAPLES.filter((s) => !deletedStapleSet.has(s.id));
 
+        const pruned = prunePastScheduledMeals(
+          stored.scheduledMeals || [],
+          stored.deletedScheduledMealIds || []
+        );
+
         const hydrated: MealPlannerSnapshot = {
           ...DEFAULT_MEAL_SNAPSHOT,
           ...stored,
+          scheduledMeals: pruned.scheduledMeals,
+          deletedScheduledMealIds: pruned.deletedScheduledMealIds,
           staples,
           aisleOrder:
             Array.isArray(stored.aisleOrder) && stored.aisleOrder.length > 0
@@ -501,16 +551,19 @@ export const useMealStore = create<MealStoreState>((set, get) => {
         deletedAt: null,
       };
 
-      const nextMeals = existing
+      const nextMealsRaw = existing
         ? current.scheduledMeals.map((m) => (m.id === id ? record : m))
         : [...current.scheduledMeals, record];
 
+      const cleanedDeletedIds = (current.deletedScheduledMealIds || []).filter(
+        (mid) => mid !== id
+      );
+      const pruned = prunePastScheduledMeals(nextMealsRaw, cleanedDeletedIds);
+
       const nextSnapshot: MealPlannerSnapshot = {
         ...current,
-        scheduledMeals: nextMeals,
-        deletedScheduledMealIds: (current.deletedScheduledMealIds || []).filter(
-          (mid) => mid !== id
-        ),
+        scheduledMeals: pruned.scheduledMeals,
+        deletedScheduledMealIds: pruned.deletedScheduledMealIds,
         updated_at: nowIso,
       };
 

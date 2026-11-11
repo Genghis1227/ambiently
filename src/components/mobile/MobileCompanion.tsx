@@ -29,6 +29,8 @@ import {
   Utensils,
 } from 'lucide-react';
 import type { DashboardTab, DashboardWidget, StickyNoteItem, WidgetThemeMode } from '../../types/dashboard';
+import { ShoppingListNoteBody } from '../common/ShoppingListNoteBody';
+import { categorizeIngredient, parseIngredient } from '../../utils/ingredientAggregator';
 import { getCurrentUser } from '../../services/supabase';
 import { isCanvasThemeLight } from '../../data/canvasThemes';
 import { APP_VERSION } from '../../data/version';
@@ -121,6 +123,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
 
   const [newNoteText, setNewNoteText] = useState('');
   const [isChecklist, setIsChecklist] = useState(false);
+  const [isShoppingList, setIsShoppingList] = useState(false);
   const [isChangelogOpen, setIsChangelogOpen] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -176,23 +179,51 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
   };
 
   const handleQuickAdd = () => {
-    if (!newNoteText.trim()) return;
+    const raw = newNoteText.trim();
+    if (!raw) return;
 
-    if (isChecklist) {
+    if (isShoppingList) {
+      const category = categorizeIngredient(parseIngredient(raw).itemName || raw);
+      const existingShopNote = activeNotes.find(
+        (n) => n.isShoppingList || n.freeformPos?.isShoppingList
+      );
+      if (existingShopNote) {
+        const items = existingShopNote.checklistItems || [];
+        onUpdateNote(existingShopNote.id, {
+          isChecklist: true,
+          isShoppingList: true,
+          checklistItems: [
+            ...items,
+            { id: Date.now().toString(), text: raw, done: false, category },
+          ],
+        });
+      } else {
+        onAddNote({
+          id: `note-${Date.now()}`,
+          tabId: activeTabId,
+          title: '🛒 Shopping List',
+          content: '',
+          isChecklist: true,
+          isShoppingList: true,
+          checklistItems: [{ id: Date.now().toString(), text: raw, done: false, category }],
+          bgColor: '#bbf7d0',
+        });
+      }
+    } else if (isChecklist) {
       onAddNote({
         id: `note-${Date.now()}`,
         tabId: activeTabId,
         title: 'Checklist',
         content: '',
         isChecklist: true,
-        checklistItems: [{ id: Date.now().toString(), text: newNoteText.trim(), done: false }],
+        checklistItems: [{ id: Date.now().toString(), text: raw, done: false }],
         bgColor: '#bbf7d0',
       });
     } else {
       onAddNote({
         id: `note-${Date.now()}`,
         tabId: activeTabId,
-        content: newNoteText.trim(),
+        content: raw,
         isChecklist: false,
         bgColor: '#fef08a',
       });
@@ -630,7 +661,13 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
             <div className="flex gap-2 mb-2">
               <input
                 type="text"
-                placeholder={isChecklist ? 'Add checklist task...' : 'Type note...'}
+                placeholder={
+                  isShoppingList
+                    ? 'Add grocery item to Shopping List note...'
+                    : isChecklist
+                    ? 'Add checklist task...'
+                    : 'Type note...'
+                }
                 value={newNoteText}
                 onChange={(e) => setNewNoteText(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleQuickAdd()}
@@ -645,15 +682,36 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
             </div>
 
             <div className="flex items-center justify-between text-[11px] text-gray-400">
-              <button
-                onClick={() => setIsChecklist(!isChecklist)}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded transition-all cursor-pointer ${
-                  isChecklist ? 'bg-emerald-500/20 text-emerald-400 font-semibold' : 'text-gray-500'
-                }`}
-              >
-                <CheckSquare className="w-3.5 h-3.5" />
-                Checklist Mode
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => {
+                    setIsChecklist(!isChecklist && !isShoppingList);
+                    setIsShoppingList(false);
+                  }}
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded transition-all cursor-pointer ${
+                    isChecklist && !isShoppingList
+                      ? 'bg-emerald-500/20 text-emerald-400 font-semibold'
+                      : 'text-gray-500'
+                  }`}
+                >
+                  <CheckSquare className="w-3.5 h-3.5" />
+                  Checklist
+                </button>
+                <button
+                  onClick={() => {
+                    const next = !isShoppingList;
+                    setIsShoppingList(next);
+                    setIsChecklist(next);
+                  }}
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded transition-all cursor-pointer ${
+                    isShoppingList
+                      ? 'bg-emerald-500/20 text-emerald-300 font-semibold'
+                      : 'text-gray-500'
+                  }`}
+                >
+                  <span>🛒 Shopping List</span>
+                </button>
+              </div>
               <span>Instantly syncs to canvas</span>
             </div>
           </div>
@@ -895,7 +953,15 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
                         </div>
                       </div>
 
-                      {note.isChecklist && note.checklistItems ? (
+                      {note.isShoppingList || note.freeformPos?.isShoppingList ? (
+                        <ShoppingListNoteBody
+                          note={note}
+                          onUpdateItems={(nextItems) =>
+                            onUpdateNote(note.id, { checklistItems: nextItems })
+                          }
+                          onToggleItem={(itemId) => toggleItem(note, itemId)}
+                        />
+                      ) : note.isChecklist && note.checklistItems ? (
                         <div className="space-y-2 mt-1">
                           {note.checklistItems.map((item) => (
                             <div key={item.id} className="flex items-center justify-between gap-1.5">

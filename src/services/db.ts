@@ -162,18 +162,27 @@ export const DEFAULT_NOTES: StickyNoteItem[] = [
   {
     id: 'note-groceries',
     tabId: 'tab-corkboard',
-    title: '🛒 Weekly Essentials',
+    title: '🛒 Shopping List',
     content: '',
     isChecklist: true,
+    isShoppingList: true,
     checklistItems: [
-      { id: '1', text: 'Organic Whole Milk', done: false },
-      { id: '2', text: 'Sourdough Bread', done: true },
-      { id: '3', text: 'Avocados & Honeycrisp Apples', done: false },
-      { id: '4', text: 'Cold Brew Coffee', done: false },
+      { id: '1', text: 'Organic Whole Milk', done: false, category: 'Dairy & Eggs' },
+      { id: '2', text: 'Sourdough Bread', done: true, category: 'Bakery' },
+      { id: '3', text: 'Avocados & Honeycrisp Apples', done: false, category: 'Produce' },
+      { id: '4', text: 'Cold Brew Coffee', done: false, category: 'Beverages' },
     ],
     bgColor: '#bbf7d0', // Emerald light
     fontSize: 'base',
-    freeformPos: { xRatio: 0.52, yRatio: 0.2, wRatio: 0.38, hRatio: 0.45, zIndex: 11, rotation: 3 },
+    freeformPos: {
+      xRatio: 0.52,
+      yRatio: 0.2,
+      wRatio: 0.38,
+      hRatio: 0.45,
+      zIndex: 11,
+      rotation: 3,
+      isShoppingList: true,
+    },
     updated_at: '1970-01-01T00:00:00.000Z',
   },
 ];

@@ -11,6 +11,17 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.5.1",
+    date: "November 11, 2026",
+    title: "Dedicated Shopping List Sticky Note, Recent Meal Chips & 21-Day Schedule Pruning",
+    highlights: [
+      "Dedicated '🛒 Shopping List' Sticky Note Type: Added a 3rd sticky note format alongside Text and Checklist across the Canvas, Notes Tile, and Mobile Companion with automatic store-aisle grouping, inline quick-add, and 1-tap 'Clear Checked' controls.",
+      "Send to Canvas Shopping List Note: Sync unchecked grocery items or upcoming scheduled recipe ingredients from the Meal Planner directly into your dedicated Shopping List sticky note (re-opening previously checked items without duplicates).",
+      "Dynamic Recent Meal & Recipe Chips: Added 1-tap autocomplete pills in Quick-Text mode surfacing your household's recently scheduled meals and Recipe Book titles, pre-filling last-used cook and notes.",
+      "Automatic 21-Day Past Meal Pruning: Automatically trims scheduled meals older than 21 days to keep the calendar schedule compact while preserving your Household Recipe Book permanently.",
+    ],
+  },
+  {
     version: "v0.5.0",
     date: "November 11, 2026",
     title: "Family Meal Planner, Smart Grocery Aggregator, Cooking Mode & Profile Studio",

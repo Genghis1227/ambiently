@@ -138,4 +138,6 @@ export interface MealWidgetConfig {
   scope?: WidgetMealScope;
   visibleSlots?: MealSlot[];
   showCookAvatar?: boolean;
+  /** Optional target checklist Sticky Note ID on the canvas for 1-tap grocery list sync */
+  listNoteId?: string;
 }
