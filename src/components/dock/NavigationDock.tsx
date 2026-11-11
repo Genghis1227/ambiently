@@ -49,6 +49,7 @@ import {
   SlidersHorizontal,
   FolderPlus,
   ClipboardList,
+  HelpCircle,
 } from 'lucide-react';
 import type {
   AutoOrganizeMode,
@@ -77,6 +78,7 @@ interface NavigationDockProps {
   onOpenAddWidget?: () => void;
   onOpenAddCanvas?: () => void;
   onOpenCreateNote?: () => void;
+  onOpenQuickStart?: () => void;
   onOpenTrash?: () => void;
   trashCount?: number;
   onAutoOrganize?: (mode: AutoOrganizeMode) => void;
@@ -136,6 +138,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
   onOpenAddWidget,
   onOpenAddCanvas,
   onOpenCreateNote,
+  onOpenQuickStart,
   onOpenTrash,
   trashCount = 0,
   onAutoOrganize,
@@ -381,6 +384,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
             onToggleFullscreen={onToggleFullscreen}
             isFullscreen={isFullscreen}
             onToggleMobileCompanion={onToggleMobileCompanion}
+            onOpenQuickStart={onOpenQuickStart}
           />
         </div>
 
@@ -788,6 +792,20 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
                     ) : (
                       <Eye className="w-4 h-4" />
                     )}
+                  </button>
+                )}
+
+                {onOpenQuickStart && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActivePopout(null);
+                      onOpenQuickStart();
+                    }}
+                    title="Quick Start & How-To Guide"
+                    className="flex items-center justify-center w-10 h-10 rounded-xl text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 transition-all cursor-pointer"
+                  >
+                    <HelpCircle className="w-4 h-4" />
                   </button>
                 )}
               </div>

@@ -53,6 +53,9 @@ const ChoreDashboardView = lazy(() =>
 const ParentChoreDrawer = lazy(() =>
   import('./components/chores/ParentChoreDrawer').then((m) => ({ default: m.ParentChoreDrawer }))
 );
+const QuickStartModal = lazy(() =>
+  import('./components/settings/QuickStartModal').then((m) => ({ default: m.QuickStartModal }))
+);
 
 export function App() {
   const {
@@ -103,6 +106,13 @@ export function App() {
   const [isTrashOpen, setIsTrashOpen] = useState(false);
   const [isPlexPairingModalOpen, setIsPlexPairingModalOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
+  const [isQuickStartOpen, setIsQuickStartOpen] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('ambiently_quickstart_dismissed_v1') !== 'true';
+    } catch {
+      return false;
+    }
+  });
   const fileSync = useFileSync();
   const hasFileBound = fileSync.status === 'connected';
   const syncRemoteNoteChange = useDashboardStore((s) => s.syncRemoteNoteChange);
@@ -291,6 +301,7 @@ export function App() {
         isChoreFullScreenOpen ||
         isSettingsOpen ||
         isShareOpen ||
+        isQuickStartOpen ||
         isAddWidgetOpen ||
         isCreateCanvasOpen ||
         isBackupModalOpen ||
@@ -333,6 +344,7 @@ export function App() {
     isChoreFullScreenOpen,
     isSettingsOpen,
     isShareOpen,
+    isQuickStartOpen,
     isAddWidgetOpen,
     isCreateCanvasOpen,
     isBackupModalOpen,
@@ -646,6 +658,7 @@ export function App() {
     isChoreFullScreenOpen ||
       isParentDrawerOpen ||
       isSettingsOpen ||
+      isQuickStartOpen ||
       isAddWidgetOpen ||
       isCreateCanvasOpen ||
       isNoteCreatorOpen ||
@@ -725,6 +738,17 @@ export function App() {
             <SettingsModal
               isOpen={isSettingsOpen}
               onClose={() => setIsSettingsOpen(false)}
+              onOpenQuickStart={() => setIsQuickStartOpen(true)}
+            />
+          </Suspense>
+        )}
+        {isQuickStartOpen && (
+          <Suspense fallback={null}>
+            <QuickStartModal
+              isOpen={isQuickStartOpen}
+              onClose={() => setIsQuickStartOpen(false)}
+              onOpenSettings={handleOpenSettings}
+              onOpenChoresHub={() => setChoreFullScreenOpen(true)}
             />
           </Suspense>
         )}
@@ -824,6 +848,7 @@ export function App() {
         onOpenAddWidget={() => setIsAddWidgetOpen(true)}
         onOpenAddCanvas={() => setIsCreateCanvasOpen(true)}
         onOpenCreateNote={() => setIsNoteCreatorOpen(true)}
+        onOpenQuickStart={() => setIsQuickStartOpen(true)}
         onOpenTrash={() => setIsTrashOpen(true)}
         trashCount={trashCount}
         onAutoOrganize={(mode) => autoOrganizeCanvas(activeTabIdResolved, mode)}
@@ -925,6 +950,19 @@ export function App() {
           <SettingsModal
             isOpen={isSettingsOpen}
             onClose={() => setIsSettingsOpen(false)}
+            onOpenQuickStart={() => setIsQuickStartOpen(true)}
+          />
+        )}
+
+        {/* Quick Start & How-To Carousel Walkthrough */}
+        {isQuickStartOpen && (
+          <QuickStartModal
+            isOpen={isQuickStartOpen}
+            onClose={() => setIsQuickStartOpen(false)}
+            onOpenSettings={handleOpenSettings}
+            onOpenAddWidget={() => setIsAddWidgetOpen(true)}
+            onOpenCreateNote={() => setIsNoteCreatorOpen(true)}
+            onOpenChoresHub={() => setChoreFullScreenOpen(true)}
           />
         )}
 

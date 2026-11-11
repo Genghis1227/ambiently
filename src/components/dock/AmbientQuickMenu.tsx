@@ -16,6 +16,7 @@ import {
   Grid,
   Eye,
   EyeOff,
+  HelpCircle,
 } from 'lucide-react';
 import type { DockPosition } from '../../types/dashboard';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -36,6 +37,7 @@ interface AmbientQuickMenuProps {
   onToggleFullscreen: () => void;
   isFullscreen: boolean;
   onToggleMobileCompanion?: () => void;
+  onOpenQuickStart?: () => void;
 }
 
 export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
@@ -48,6 +50,7 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
   onToggleFullscreen,
   isFullscreen,
   onToggleMobileCompanion,
+  onOpenQuickStart,
 }) => {
   const [isChangelogOpen, setIsChangelogOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState('');
@@ -328,6 +331,24 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
             </div>
             <span className="text-[10px] text-gray-500">Invite</span>
           </button>
+
+          {/* Quick Start & How-To Tour */}
+          {onOpenQuickStart && (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onOpenQuickStart();
+              }}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-xs font-medium text-emerald-300 transition-all cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <HelpCircle className="w-4 h-4 text-emerald-400" />
+                <span>Quick Start & How-To Tour</span>
+              </div>
+              <span className="text-[10px] text-emerald-400/80 font-semibold">7 Steps</span>
+            </button>
+          )}
 
           {/* Full Settings Modal */}
           <button

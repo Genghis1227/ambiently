@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.4.19",
+    date: "November 10, 2026",
+    title: "Interactive Quick Start & How-To Walkthrough Tour",
+    highlights: [
+      "7-Step Interactive Quick Start Carousel: Added a guided step-by-step walkthrough covering Welcome & Household Setup, Canvases & Auto-Organize, Calendar Feeds, Chores & Rewards, Sticky Notes, Shared Photos & Kiosk Mode, and Cloud Sync & Mobile Companion.",
+      "Direct Feature Launchers & Topic Jump Pills: Jump directly to any guide section with top navigation pills or launch the Widget Catalog, Chore Hub, Note Creator, or Settings directly from each slide.",
+      "Accessible Everywhere & First-Visit Auto-Launch: Opens automatically once on new devices (with a startup toggle) and can be reopened anytime from the Ambiently Dock menu, Quick Utilities pop-out, or Settings header/footer.",
+    ],
+  },
+  {
     version: "v0.4.18",
     date: "November 10, 2026",
     title: "Delete All for Archived & Expired Notes & Permanent Reward Store Deletion Fix",
