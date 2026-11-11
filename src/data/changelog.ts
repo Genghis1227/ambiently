@@ -11,6 +11,17 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.5.0",
+    date: "November 11, 2026",
+    title: "Family Meal Planner, Smart Grocery Aggregator, Cooking Mode & Profile Studio",
+    highlights: [
+      "Adaptive Family Meal Planner Widget: Added 'Tomorrow', '3-Day Outlook', and '7-Box Full Week' scopes with Sunday/Monday toggle, Breakfast/Lunch/Dinner slot pills, and cook ProfileAvatar badges.",
+      "Dual-Mode Meal Scheduling & Recipe Scraper: Schedule quick-text meals in one tap or link recipes from your Household Recipe Book, URL JSON-LD Recipe scraper (/api/metadata), or TheMealDB fallback.",
+      "Smart Ingredient Aggregator & Google Keep Export: Selectively import scaled recipe ingredients (0.5x / 1x / 2x) with automatic volume/weight/count merging, lossless mismatched-unit labels, 8-zone store categorization, and 1-tap Google Keep checklist/indented export.",
+      "Counter-Readable Cooking Mode & Profile Avatar Studio: Added full-screen Cooking Mode with Screen Wake Lock + interactive prep steps, HouseholdProfilesModal with 256x256 WebP avatar cropper, whole-number shared chore split steppers, and strict Night Mode glow/confetti suppression.",
+    ],
+  },
+  {
     version: "v0.4.20",
     date: "November 10, 2026",
     title: "Backup & System Settings Organization & Inline Auto-Organize Dock Pop-Out",

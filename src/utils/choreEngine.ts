@@ -1,5 +1,6 @@
 import type {
   ActiveChoreInstance,
+  ChoreCompletionSplit,
   ChoreEngineSnapshot,
   ChoreTemplate,
   LedgerEntry,
@@ -7,7 +8,7 @@ import type {
   TrophyItem,
   WishlistReward,
 } from '../types/chores';
-import { localDateKey } from './timePrefs';
+import { localDateKey } from './dateKey';
 
 /**
  * Calming, desaturated low-arousal profile palette matching Ambiently's design language
@@ -121,6 +122,82 @@ export function recalculateProfilesFromLedger(profiles: Profile[], ledger: Ledge
     balance: Math.max(0, Math.round(balanceMap.get(p.id) ?? 0)),
     lifetimePoints: Math.max(0, Math.round(lifetimeMap.get(p.id) ?? 0)),
   }));
+}
+
+/**
+ * Pure append-only ledger selector deriving `{ balance, lifetimePoints }` for a single `profileId`.
+ */
+export function selectProfilePointsFromLedger(
+  ledger: LedgerEntry[],
+  profileId: string
+): { balance: number; lifetimePoints: number } {
+  const [derived] = recalculateProfilesFromLedger(
+    [{ id: profileId, name: profileId, color: '#6b8f71', balance: 0, lifetimePoints: 0 }],
+    ledger
+  );
+  return {
+    balance: derived?.balance ?? 0,
+    lifetimePoints: derived?.lifetimePoints ?? 0,
+  };
+}
+
+/**
+ * Validates shared chore point splits, enforcing whole-number non-negative awards
+ * whose sum strictly equals `expectedTotalPoints`.
+ */
+export function validateChoreSplits(
+  splits: ChoreCompletionSplit[],
+  expectedTotalPoints: number
+):
+  | { valid: true; normalizedSplits: ChoreCompletionSplit[] }
+  | { valid: false; error: string } {
+  if (!Array.isArray(splits) || splits.length === 0) {
+    return { valid: false, error: 'At least one profile split is required.' };
+  }
+
+  const normalized: ChoreCompletionSplit[] = [];
+  for (const s of splits) {
+    if (!s || typeof s.profileId !== 'string' || !s.profileId.trim()) {
+      return { valid: false, error: 'Every split entry must reference a valid profileId.' };
+    }
+    if (
+      typeof s.pointsAwarded !== 'number' ||
+      !Number.isFinite(s.pointsAwarded) ||
+      !Number.isInteger(s.pointsAwarded) ||
+      s.pointsAwarded < 0
+    ) {
+      return {
+        valid: false,
+        error: 'Point splits must be non-negative whole numbers.',
+      };
+    }
+    normalized.push({
+      profileId: s.profileId.trim(),
+      pointsAwarded: s.pointsAwarded,
+    });
+  }
+
+  const filtered =
+    expectedTotalPoints === 0
+      ? [normalized[0]]
+      : normalized.filter((c) => c.pointsAwarded > 0);
+
+  if (filtered.length === 0) {
+    return {
+      valid: false,
+      error: `Point split (0) must equal ${expectedTotalPoints} pts`,
+    };
+  }
+
+  const sumSplits = filtered.reduce((acc, s) => acc + s.pointsAwarded, 0);
+  if (sumSplits !== expectedTotalPoints) {
+    return {
+      valid: false,
+      error: `Point split (${sumSplits}) must equal ${expectedTotalPoints} pts`,
+    };
+  }
+
+  return { valid: true, normalizedSplits: filtered };
 }
 
 /**
@@ -272,19 +349,22 @@ export function isTemplateDueOnDate(
 
 /**
  * Checks if an instance can be self-reverted by a child on the kiosk.
- * Kids can only check and uncheck a chore freely within the SAME calendar day.
- * Past-day chores lock permanently at midnight.
+ * Kids can only check and uncheck a chore freely if `dateScheduled === todayLocalYYYYMMDD`
+ * (and within the same calendar day). Past-day instances lock permanently at midnight.
  */
 export function canSelfRevertInstance(instance: ActiveChoreInstance, now: Date): boolean {
   if (instance.status !== 'completed' && instance.status !== 'awaiting_approval') {
     return false;
   }
   const todayKey = localDateKey(now);
+  if (instance.dateScheduled !== todayKey) {
+    return false;
+  }
   if (instance.completedAt) {
     const completedDateKey = localDateKey(new Date(instance.completedAt));
     return completedDateKey === todayKey;
   }
-  return instance.dateScheduled === todayKey;
+  return true;
 }
 
 /**
@@ -587,8 +667,16 @@ export function mergeChoreSnapshotsAuthoritative(
   }
 
   const trophyMap = new Map<string, TrophyItem>();
-  for (const t of local.trophies) trophyMap.set(t.id, t);
-  for (const t of remote.trophies) trophyMap.set(t.id, t);
+  for (const t of baseSource.trophies) {
+    trophyMap.set(t.id, t);
+  }
+  for (const t of otherSource.trophies) {
+    if (trophyMap.has(t.id)) continue;
+    const fulfilledTime = Date.parse(t.dateFulfilled || '') || 0;
+    if (fulfilledTime > baseAuthTime) {
+      trophyMap.set(t.id, t);
+    }
+  }
 
   const mergedTemplates = baseSource.templates.filter((t) => !deletedTemplateSet.has(t.id));
   const mergedProfiles = recalculateProfilesFromLedger(baseSource.profiles, mergedLedger);

@@ -26,6 +26,7 @@ import {
   Sparkles,
   Cloud,
   Smartphone,
+  Utensils,
 } from 'lucide-react';
 import type { DashboardTab, DashboardWidget, StickyNoteItem, WidgetThemeMode } from '../../types/dashboard';
 import { getCurrentUser } from '../../services/supabase';
@@ -60,6 +61,7 @@ const AddWidgetModal = React.lazy(() =>
 import { TextBoxWidget } from '../widgets/TextBoxWidget';
 import { ImageWidget } from '../widgets/ImageWidget';
 import { ChoreWidget } from '../widgets/ChoreWidget';
+import { MealPlannerWidget } from '../widgets/MealPlannerWidget';
 
 interface MobileCompanionProps {
   tabs: DashboardTab[];
@@ -262,6 +264,8 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return StickyNote;
       case 'chores':
         return CheckSquare;
+      case 'meals':
+        return Utensils;
       default:
         return LayoutGrid;
     }
@@ -295,6 +299,8 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return 'Notes Tile';
       case 'chores':
         return 'Chores & Rewards';
+      case 'meals':
+        return 'Meal Planner';
       default:
         return 'Widget';
     }
@@ -456,6 +462,19 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
               config={widget.config}
               isLight={isLight}
               variant="tile"
+              onUpdateConfig={(updates) =>
+                onUpdateWidget?.(widget.id, { config: { ...widget.config, ...updates } })
+              }
+            />
+          </div>
+        );
+      case 'meals':
+        return (
+          <div className="max-h-96 overflow-y-auto">
+            <MealPlannerWidget
+              title={widget.title}
+              config={widget.config}
+              isLight={isLight}
               onUpdateConfig={(updates) =>
                 onUpdateWidget?.(widget.id, { config: { ...widget.config, ...updates } })
               }

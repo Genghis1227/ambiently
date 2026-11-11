@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.0] - 2026-11-11
+
+### Family Meal Planner, Smart Grocery Aggregator, Cooking Mode & Profile Studio
+* **Adaptive Family Meal Planner (`src/components/widgets/MealPlannerWidget.tsx`, `src/stores/useMealStore.ts`, `src/types/meals.ts`):**
+  * Added the **Family Meal Planner** Bento widget supporting **Tomorrow**, **3-Day Outlook**, and **7-Box Full Week** scopes (`sunday`/`monday` week start toggle and week navigation), color-coded `Breakfast`, `Lunch`, and `Dinner` pills, and cook `<ProfileAvatar />` badges.
+* **Dual-Mode Meal Entry, Recipe Scraper & Selective Shopping Import (`src/components/meals/MealEntryModal.tsx`, `functions/api/metadata.ts`, `src/utils/ingredientAggregator.ts`):**
+  * Added **Quick-Text** 1-tap meal scheduling alongside **Recipe-Linked** mode supporting the tag-filterable **Household Recipe Book**, Schema.org `Recipe` JSON-LD URL scraping via `/api/metadata`, and **TheMealDB** search fallback.
+  * Wired selective `0.5x / 1x / 2x` ingredient import into the smart grocery aggregator (unit conversion, lossless mismatched-unit merging, 8-zone store auto-categorization, seeded household staples, and **Google Keep** `checklist` & `indented` export).
+* **Full-Screen Counter Cooking Mode (`src/components/meals/CookingModeModal.tsx`):**
+  * Added a counter-readable full-screen modal with scaled prep ingredient checkboxes, large-typography tap-to-advance instructions, and automatic **Screen Wake Lock** (`navigator.wakeLock.request('screen')`).
+* **Household Profile Studio, Shared Split Steppers & Night Mode Polish (`src/components/settings/HouseholdProfilesModal.tsx`, `src/components/common/ProfileAvatar.tsx`, `src/components/common/ConfettiCelebration.tsx`, `src/components/chores/SharedSplitModal.tsx`, `src/components/widgets/ChoreWidget.tsx`, `src/components/dock/NavigationDock.tsx`):**
+  * Added `HouseholdProfilesModal` with `256x256` WebP avatar cropping, whole-number `-`/`+` steppers on shared chores, calm overdue styling, and strict Night Mode suppression of confetti, audio, and dock/header notification glows.
+
+---
+
 ## [0.4.20] - 2026-11-10
 
 ### Backup & System Settings Organization & Inline Auto-Organize Dock Pop-Out

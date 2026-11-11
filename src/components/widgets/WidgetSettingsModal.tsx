@@ -38,8 +38,10 @@ import { DEFAULT_WORLD_CITIES, type WorldClockCity, getZoneOffsetMinutes } from 
 import type { TextBoxConfig } from './TextBoxWidget';
 import { CURATED_RSS_FEEDS, RSS_FEED_CATEGORIES, type RssFeedCategory } from '../../data/curatedFeeds';
 import { MediaSearchModal } from './MediaSearchModal';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Utensils } from 'lucide-react';
 import { useChoreStore } from '../../store/choreStore';
+import { useMealStore } from '../../stores/useMealStore';
+import type { MealSlot, WeekStartDay, WidgetMealScope } from '../../types/meals';
 import { HouseholdAvatar } from '../common/HouseholdAvatar';
 
 interface WidgetSettingsModalProps {
@@ -186,10 +188,21 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const setChoreParentDrawerOpen = useChoreStore((s) => s.setParentDrawerOpen);
   const [choreDisplayMode, setChoreDisplayMode] = useState<'tile' | 'hub'>('tile');
   const [choreScope, setChoreScope] = useState<string>('household');
+  const [choreIncludeParents, setChoreIncludeParents] = useState<boolean>(false);
   const [choreExpandedSections, setChoreExpandedSections] = useState<('today' | 'review' | 'completed')[]>([
     'today',
     'review',
   ]);
+
+  // Meal Planner widget states
+  const [mealScope, setMealScope] = useState<WidgetMealScope>('three_day');
+  const [mealWeekStartsOn, setMealWeekStartsOn] = useState<WeekStartDay>('sunday');
+  const [mealVisibleSlots, setMealVisibleSlots] = useState<MealSlot[]>([
+    'breakfast',
+    'lunch',
+    'dinner',
+  ]);
+  const [mealShowCookAvatar, setMealShowCookAvatar] = useState<boolean>(true);
   const [rssCategoryFilter, setRssCategoryFilter] = useState<'All' | RssFeedCategory>('All');
   const [rssSearchQuery, setRssSearchQuery] = useState('');
 
@@ -314,11 +327,27 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
         widget.config?.displayMode === 'hub' || widget.freeformPos?.isFullScreen ? 'hub' : 'tile'
       );
       setChoreScope(widget.config?.scope || 'household');
+      setChoreIncludeParents(Boolean(widget.config?.includeParents));
       setChoreExpandedSections(
         Array.isArray(widget.config?.defaultExpandedSections)
           ? widget.config.defaultExpandedSections
           : ['today', 'review']
       );
+    } else if (widget.type === 'meals') {
+      const cfgScope = widget.config?.scope;
+      setMealScope(
+        cfgScope === 'tomorrow' || cfgScope === 'three_day' || cfgScope === 'full_week'
+          ? cfgScope
+          : 'three_day'
+      );
+      const cfgWeekStart = widget.config?.weekStartsOn || useMealStore.getState().weekStartsOn;
+      setMealWeekStartsOn(cfgWeekStart === 'monday' ? 'monday' : 'sunday');
+      const validSlots: MealSlot[] = ['breakfast', 'lunch', 'dinner'];
+      const cfgSlots = Array.isArray(widget.config?.visibleSlots)
+        ? (widget.config.visibleSlots as MealSlot[]).filter((s) => validSlots.includes(s))
+        : validSlots;
+      setMealVisibleSlots(cfgSlots.length > 0 ? cfgSlots : validSlots);
+      setMealShowCookAvatar(widget.config?.showCookAvatar !== false);
     }
   }, [widget, isOpen, settings.commonPhotos]);
 
@@ -552,6 +581,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     if (widget.type === 'chores') {
       configUpdates.displayMode = choreDisplayMode;
       configUpdates.scope = choreScope;
+      configUpdates.includeParents = choreIncludeParents;
       configUpdates.defaultExpandedSections = choreExpandedSections;
 
       const existingPos = widget.freeformPos || {
@@ -586,6 +616,16 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
           isFullScreen: false,
         };
       }
+    } else if (widget.type === 'meals') {
+      const orderedSlots: MealSlot[] = (['breakfast', 'lunch', 'dinner'] as const).filter((s) =>
+        mealVisibleSlots.includes(s)
+      );
+      configUpdates.scope = mealScope;
+      configUpdates.weekStartsOn = mealWeekStartsOn;
+      configUpdates.visibleSlots =
+        orderedSlots.length > 0 ? orderedSlots : ['breakfast', 'lunch', 'dinner'];
+      configUpdates.showCookAvatar = mealShowCookAvatar;
+      void useMealStore.getState().setWeekStartsOn(mealWeekStartsOn);
     }
 
     onSave(widget.id, {
@@ -2883,6 +2923,34 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                     </button>
                   ))}
                 </div>
+
+                {choreScope === 'household' && (
+                  <div className="mt-2.5 flex items-center justify-between gap-3 p-3 rounded-xl bg-gray-950/80 border border-gray-800">
+                    <div>
+                      <span className="text-xs font-semibold text-gray-200 block">
+                        Include Parent Profiles in Household View
+                      </span>
+                      <span className="text-[10px] text-gray-400 block mt-0.5">
+                        By default, Household View focuses on kids. Enable to display parent chores too.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={choreIncludeParents}
+                      onClick={() => setChoreIncludeParents((prev) => !prev)}
+                      className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer shrink-0 ${
+                        choreIncludeParents ? 'bg-emerald-600' : 'bg-gray-700'
+                      }`}
+                    >
+                      <div
+                        className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                          choreIncludeParents ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -2924,19 +2992,155 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                 <span className="text-[11px] text-gray-400">
                   Manage chore templates, profiles, avatars, and point pricing in the Parent Drawer.
                 </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    setChoreParentDrawerOpen(true, 'templates');
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-medium text-gray-200 border border-gray-700 transition-colors cursor-pointer"
-                >
-                  Manage Chores &amp; Profiles
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      setChoreParentDrawerOpen(true, 'templates');
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-medium text-gray-200 border border-gray-700 transition-colors cursor-pointer"
+                  >
+                    Manage Chores &amp; Profiles
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+
+            {/* Family Meal Planner Settings */}
+            {widget.type === 'meals' && (
+              <div className="space-y-4 pt-2 border-t border-gray-800">
+                <div>
+                  <label className="text-xs font-semibold text-gray-300 flex items-center gap-1.5 mb-1.5">
+                    <Utensils className="w-3.5 h-3.5 text-amber-300" />
+                    <span>Meal Outlook Scope</span>
+                  </label>
+                  <p className="text-[11px] text-gray-400 mb-2.5">
+                    Choose how many upcoming days this Bento tile displays at a glance.
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(
+                      [
+                        { id: 'tomorrow', label: 'Tomorrow', desc: 'Compact next-day' },
+                        { id: 'three_day', label: '3-Day Outlook', desc: 'Today + 2 days' },
+                        { id: 'full_week', label: 'Full Week', desc: '7-box weekly grid' },
+                      ] as const
+                    ).map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setMealScope(opt.id)}
+                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                          mealScope === opt.id
+                            ? 'bg-amber-500/15 border-amber-400/60 text-amber-200 font-semibold'
+                            : 'bg-gray-950 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'
+                        }`}
+                      >
+                        <span className="text-xs block font-semibold">{opt.label}</span>
+                        <span className="text-[10px] text-gray-400 font-normal block mt-0.5">
+                          {opt.desc}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-gray-300 block mb-1.5">
+                    Week Starts On
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(
+                      [
+                        { id: 'sunday', label: 'Sunday' },
+                        { id: 'monday', label: 'Monday' },
+                      ] as const
+                    ).map((dayOpt) => (
+                      <button
+                        key={dayOpt.id}
+                        type="button"
+                        onClick={() => {
+                          setMealWeekStartsOn(dayOpt.id);
+                          void useMealStore.getState().setWeekStartsOn(dayOpt.id);
+                        }}
+                        className={`py-2 px-3 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                          mealWeekStartsOn === dayOpt.id
+                            ? 'bg-emerald-600/20 border-emerald-500/60 text-emerald-200 font-semibold'
+                            : 'bg-gray-950 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'
+                        }`}
+                      >
+                        {dayOpt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-gray-300 block mb-1.5">
+                    Visible Meal Slots
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(
+                      [
+                        { id: 'breakfast', label: 'Breakfast' },
+                        { id: 'lunch', label: 'Lunch' },
+                        { id: 'dinner', label: 'Dinner' },
+                      ] as const
+                    ).map((slotOpt) => {
+                      const isActive = mealVisibleSlots.includes(slotOpt.id);
+                      return (
+                        <button
+                          key={slotOpt.id}
+                          type="button"
+                          onClick={() => {
+                            setMealVisibleSlots((prev) => {
+                              if (prev.includes(slotOpt.id)) {
+                                return prev.length > 1
+                                  ? prev.filter((s) => s !== slotOpt.id)
+                                  : prev;
+                              }
+                              return [...prev, slotOpt.id];
+                            });
+                          }}
+                          className={`p-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                            isActive
+                              ? 'bg-emerald-600/20 border-emerald-500/60 text-emerald-200 font-semibold'
+                              : 'bg-gray-950 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'
+                          }`}
+                        >
+                          {slotOpt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-gray-950/80 border border-gray-800">
+                  <div>
+                    <span className="text-xs font-semibold text-gray-200 block">
+                      Show Assigned Cook Avatar
+                    </span>
+                    <span className="text-[10px] text-gray-400 block mt-0.5">
+                      Display mini profile badge on scheduled meal pills when a cook is assigned.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={mealShowCookAvatar}
+                    onClick={() => setMealShowCookAvatar((prev) => !prev)}
+                    className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer shrink-0 ${
+                      mealShowCookAvatar ? 'bg-emerald-600' : 'bg-gray-700'
+                    }`}
+                  >
+                    <div
+                      className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                        mealShowCookAvatar ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+            )}
         </div>
 
         {/* Footer Actions */}

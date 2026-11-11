@@ -47,6 +47,7 @@ import { StickyNotesWidget } from '../widgets/StickyNotesWidget';
 import { MediaEmbedWidget } from '../widgets/MediaEmbedWidget';
 import { ImageWidget } from '../widgets/ImageWidget';
 import { ChoreWidget } from '../widgets/ChoreWidget';
+import { MealPlannerWidget } from '../widgets/MealPlannerWidget';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { CANVAS_THEMES, isCanvasThemeLight } from '../../data/canvasThemes';
 import { findOpenCanvasSpot } from '../../utils/autoLayout';
@@ -1298,7 +1299,9 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             }
             className={`group ${
               isFullScreen
-                ? 'rounded-none border-0 p-0 overflow-hidden'
+                ? widget.type === 'meals'
+                  ? 'rounded-none border-0 p-4 overflow-hidden'
+                  : 'rounded-none border-0 p-0 overflow-hidden'
                 : isFramelessWidget
                 ? 'rounded-2xl border border-dashed border-transparent hover:border-white/20 p-1'
                 : widget.type === 'image'
@@ -1723,6 +1726,19 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                     }}
                   />
                 )
+              ) : widget.type === 'meals' ? (
+                <MealPlannerWidget
+                  title={widget.title}
+                  config={widget.config}
+                  isLight={isWidgetLight}
+                  onUpdateConfig={(updates) => {
+                    if (onUpdateWidget) {
+                      onUpdateWidget(widget.id, {
+                        config: { ...widget.config, ...updates },
+                      });
+                    }
+                  }}
+                />
               ) : null}
               </TileErrorBoundary>
             </div>

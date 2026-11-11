@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Check,
   ChevronDown,
@@ -6,41 +6,48 @@ import {
   Clock,
   Inbox,
   Lock,
+  Maximize2,
   Palmtree,
   Plus,
   RotateCcw,
   Shield,
   Sparkles,
   Trophy,
+  UserPlus,
   Users,
 } from 'lucide-react';
-import { useChoreStore, getPendingParentActionCounts } from '../../store/choreStore';
+import { useChoreStore, getPendingParentActionCounts } from '../../stores/useChoreStore';
+import { useProfileStore } from '../../stores/useProfileStore';
+import { useDashboardStore } from '../../store/dashboardStore';
 import type {
   ActiveChoreInstance,
   ChoreTemplate,
   ChoreWidgetConfig,
   Profile,
 } from '../../types/chores';
+import { resolveProfileColorHex } from '../../types/profiles';
 import {
   calculateEffectiveChorePoints,
   canSelfRevertInstance,
   daysBetweenDateKeys,
   isDateMatchingTemplateCadence,
+  selectProfilePointsFromLedger,
 } from '../../utils/choreEngine';
 import { localDateKey } from '../../utils/timePrefs';
-import { HouseholdAvatar } from '../common/HouseholdAvatar';
-import { PointSplitModal } from '../chores/PointSplitModal';
+import { isAmbientlyInNightMode } from '../../utils/confetti';
+import { ProfileAvatar } from '../common/ProfileAvatar';
+import { fireConfettiCelebration } from '../common/ConfettiCelebration';
+import { SharedSplitModal } from '../chores/SharedSplitModal';
 import { ProposeRewardModal } from '../chores/ProposeRewardModal';
 import { ProposalsTrayModal } from '../chores/ProposalsTrayModal';
 import { TrophyCaseModal } from '../chores/TrophyCaseModal';
-import { triggerChoreCelebration } from '../../utils/confetti';
 
 export interface ChoreWidgetProps {
   title?: string;
-  config?: ChoreWidgetConfig;
+  config?: ChoreWidgetConfig & { includeParents?: boolean };
   isLight?: boolean;
   variant?: 'tile' | 'view';
-  onUpdateConfig?: (updates: Partial<ChoreWidgetConfig>) => void;
+  onUpdateConfig?: (updates: Partial<ChoreWidgetConfig> & { includeParents?: boolean }) => void;
 }
 
 type AccordionSectionId = 'today' | 'review' | 'completed';
@@ -58,35 +65,67 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
   title = 'Family Chores',
   config,
   isLight = false,
+  variant = 'tile',
+  onUpdateConfig,
 }) => {
   const snapshot = useChoreStore((s) => s.snapshot);
+  const pendingParentActionsCount = useChoreStore((s) => s.pendingParentActionsCount);
   const completeChore = useChoreStore((s) => s.completeChore);
   const revertChoreSameDay = useChoreStore((s) => s.revertChoreSameDay);
   const dismissChoreInstance = useChoreStore((s) => s.dismissChoreInstance);
   const proposeWishlistReward = useChoreStore((s) => s.proposeWishlistReward);
   const setParentDrawerOpen = useChoreStore((s) => s.setParentDrawerOpen);
 
+  const householdProfiles = useProfileStore((s) => s.profiles);
+  const isProfileStoreInitialized = useProfileStore((s) => s.isInitialized);
+
+  const dashboardSettings = useDashboardStore((s) => s.settings);
+  const [now, setNow] = useState<Date>(() => new Date());
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setNow(new Date());
+    }, 30_000);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        setNow(new Date());
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, []);
+
+  const isNightMode = useMemo(() => {
+    void now;
+    return (
+      Boolean(dashboardSettings?.nightModeEnabled) ||
+      isAmbientlyInNightMode(dashboardSettings)
+    );
+  }, [dashboardSettings, now]);
+
   const [isProposeModalOpen, setIsProposeModalOpen] = useState(false);
   const [isProposalsTrayOpen, setIsProposalsTrayOpen] = useState(false);
   const [isTrophyCaseOpen, setIsTrophyCaseOpen] = useState(false);
 
   const configuredScope = config?.scope || 'household';
-  const [activeScope, setActiveScope] = useState<string>(configuredScope);
-
-  // Sync local scope filter if widget settings change
-  React.useEffect(() => {
-    setActiveScope(config?.scope || 'household');
-  }, [config?.scope]);
+  const [householdFilterId, setHouseholdFilterId] = useState<string>('household');
+  const [localIncludeParents, setLocalIncludeParents] = useState<boolean>(false);
+  const includeParents = config?.includeParents ?? localIncludeParents;
 
   // Collapsible top-level accordion state
-  const [expandedSections, setExpandedSections] = useState<Record<AccordionSectionId, boolean>>(() => {
-    const defaults = config?.defaultExpandedSections || ['today', 'review'];
-    return {
-      today: defaults.includes('today'),
-      review: defaults.includes('review'),
-      completed: defaults.includes('completed'),
-    };
-  });
+  const [expandedSections, setExpandedSections] = useState<Record<AccordionSectionId, boolean>>(
+    () => {
+      const defaults = config?.defaultExpandedSections || ['today', 'review'];
+      return {
+        today: defaults.includes('today'),
+        review: defaults.includes('review'),
+        completed: defaults.includes('completed'),
+      };
+    }
+  );
 
   // Collapsible per-child sub-group state (default expanded)
   const [collapsedChildKeys, setCollapsedChildKeys] = useState<Record<string, boolean>>({});
@@ -98,17 +137,100 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
     defaultProfileId?: string;
   } | null>(null);
 
-  const todayKey = localDateKey(new Date());
+  // Merge live HouseholdProfile metadata/order with ledger-derived point balances
+  const allProfiles: Profile[] = useMemo(() => {
+    const snapshotMap = new Map(snapshot.profiles.map((p) => [p.id, p]));
+    const activeHousehold = householdProfiles.filter((hp) => !hp.deletedAt);
+
+    if (isProfileStoreInitialized && activeHousehold.length > 0) {
+      return activeHousehold.map((hp) => {
+        const snapProfile = snapshotMap.get(hp.id);
+        const derived = snapProfile
+          ? { balance: snapProfile.balance, lifetimePoints: snapProfile.lifetimePoints }
+          : selectProfilePointsFromLedger(snapshot.ledger, hp.id);
+        return {
+          id: hp.id,
+          name: hp.name,
+          role: hp.role,
+          color: resolveProfileColorHex(hp.color),
+          avatarDataUrl: hp.avatarDataUrl,
+          avatarUrl: hp.avatarDataUrl,
+          emoji: hp.emoji,
+          balance: derived.balance,
+          lifetimePoints: derived.lifetimePoints,
+        };
+      });
+    }
+
+    const householdMap = new Map(activeHousehold.map((hp) => [hp.id, hp]));
+    return snapshot.profiles.map((p) => {
+      const hp = householdMap.get(p.id);
+      return {
+        ...p,
+        name: hp?.name ?? p.name,
+        role: hp?.role ?? p.role,
+        color: resolveProfileColorHex(hp?.color ?? p.color),
+        avatarDataUrl: hp?.avatarDataUrl ?? p.avatarDataUrl,
+        avatarUrl: hp?.avatarDataUrl ?? p.avatarUrl,
+        emoji: hp?.emoji ?? p.emoji,
+      };
+    });
+  }, [householdProfiles, isProfileStoreInitialized, snapshot.profiles, snapshot.ledger]);
+
+  const hasParentProfiles = useMemo(
+    () => allProfiles.some((p) => p.role === 'parent'),
+    [allProfiles]
+  );
+
+  // Profiles eligible for the configured widget scope
+  const scopeProfiles: Profile[] = useMemo(() => {
+    if (configuredScope !== 'household') {
+      const pinned = allProfiles.filter((p) => p.id === configuredScope);
+      if (pinned.length > 0) return pinned;
+    }
+    if (includeParents) {
+      return allProfiles;
+    }
+    const kidsOnly = allProfiles.filter((p) => p.role !== 'parent');
+    return kidsOnly.length > 0 ? kidsOnly : allProfiles;
+  }, [configuredScope, includeParents, allProfiles]);
+
+  // Active scope without synchronous setState in useEffect
+  const activeScope = useMemo(() => {
+    if (configuredScope !== 'household') {
+      return allProfiles.some((p) => p.id === configuredScope) ? configuredScope : 'household';
+    }
+    if (
+      householdFilterId !== 'household' &&
+      scopeProfiles.some((p) => p.id === householdFilterId)
+    ) {
+      return householdFilterId;
+    }
+    return 'household';
+  }, [configuredScope, allProfiles, householdFilterId, scopeProfiles]);
+
+  const visibleProfiles = useMemo(() => {
+    if (activeScope === 'household') return scopeProfiles;
+    const matched = scopeProfiles.filter((p) => p.id === activeScope);
+    return matched.length > 0 ? matched : scopeProfiles;
+  }, [scopeProfiles, activeScope]);
+
+  const splitModalProfiles = useMemo(() => {
+    if (includeParents) return allProfiles;
+    const kids = allProfiles.filter((p) => p.role !== 'parent');
+    if (kids.length === 0) return allProfiles;
+    if (activeScope !== 'household' && !kids.some((k) => k.id === activeScope)) {
+      const pinned = allProfiles.find((p) => p.id === activeScope);
+      return pinned ? [...kids, pinned] : kids;
+    }
+    return kids;
+  }, [includeParents, allProfiles, activeScope]);
+
+  const todayKey = useMemo(() => localDateKey(now), [now]);
   const templateMap = useMemo(
     () => new Map(snapshot.templates.map((t) => [t.id, t])),
     [snapshot.templates]
   );
-
-  const visibleProfiles = useMemo(() => {
-    if (activeScope === 'household') return snapshot.profiles;
-    const matched = snapshot.profiles.filter((p) => p.id === activeScope);
-    return matched.length > 0 ? matched : snapshot.profiles;
-  }, [snapshot.profiles, activeScope]);
 
   const pendingCounts = useMemo(
     () => getPendingParentActionCounts(snapshot),
@@ -125,7 +247,6 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
     reviewTotalCount,
     completedTotalCount,
   } = useMemo(() => {
-    const now = new Date();
     const tByChild = new Map<string, ChildChoreRowItem[]>();
     const rByChild = new Map<string, ChildChoreRowItem[]>();
     const cByChild = new Map<string, ChildChoreRowItem[]>();
@@ -152,12 +273,18 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
             (inst.isOverdue && daysBetweenDateKeys(inst.dateScheduled, todayKey) <= 1)));
       if (!isValidPending) continue;
 
-      const isRelevantDate = inst.dateScheduled === todayKey || inst.isOverdue;
+      const completedToday =
+        Boolean(inst.completedAt) &&
+        localDateKey(new Date(inst.completedAt as string)) === todayKey;
+
+      const isRelevantDate =
+        inst.dateScheduled === todayKey || inst.isOverdue || completedToday;
       if (!isRelevantDate && inst.status !== 'awaiting_approval') continue;
 
       const effectivePoints = calculateEffectiveChorePoints(tpl, inst.isOverdue);
       const isShared = tpl.assignedTo === 'shared';
-      const canUndo = canSelfRevertInstance(inst, now);
+      const canUndo =
+        inst.dateScheduled === todayKey && canSelfRevertInstance(inst, now);
 
       if (inst.status === 'pending') {
         if (isShared) {
@@ -213,7 +340,10 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
           }
         }
         if (matchedAny) rCount += 1;
-      } else if (inst.status === 'completed' && inst.dateScheduled === todayKey) {
+      } else if (
+        inst.status === 'completed' &&
+        (inst.dateScheduled === todayKey || completedToday)
+      ) {
         const completers =
           inst.completedBy && inst.completedBy.length > 0
             ? inst.completedBy
@@ -248,7 +378,7 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
       reviewTotalCount: rCount,
       completedTotalCount: cCount,
     };
-  }, [snapshot.instances, templateMap, visibleProfiles, todayKey, activeScope]);
+  }, [snapshot.instances, templateMap, visibleProfiles, todayKey, now, activeScope]);
 
   const toggleSection = (section: AccordionSectionId) => {
     setExpandedSections((prev) => ({
@@ -265,6 +395,38 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
     }));
   };
 
+  const handleToggleIncludeParents = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const next = !includeParents;
+    setLocalIncludeParents(next);
+    onUpdateConfig?.({ includeParents: next });
+  };
+
+  const handleMaximizeFullScreen = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    useChoreStore.getState().setFullScreenOpen(true);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ambiently:open-chores-fullscreen'));
+    }
+  };
+
+  const maybeCelebrateCompletion = (
+    accentColor?: string,
+    originX?: number,
+    originY?: number
+  ) => {
+    const currentlyNight = isNightMode || isAmbientlyInNightMode();
+    if (currentlyNight) return;
+
+    const soundEnabled = Boolean(snapshot.householdSettings?.soundEffectsEnabled);
+    fireConfettiCelebration({
+      originX,
+      originY,
+      accentColor: accentColor ? resolveProfileColorHex(accentColor) : undefined,
+      playSound: soundEnabled,
+    });
+  };
+
   const handleTapPendingChore = async (
     item: ChildChoreRowItem,
     defaultProfileId?: string,
@@ -273,8 +435,8 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
     e?.stopPropagation();
     const { instance, template, effectivePoints } = item;
 
-    // If shared chore and household has more than 1 kid profile, open the interactive PointSplitModal
-    if (template.assignedTo === 'shared' && snapshot.profiles.length > 1) {
+    // Single tap on a pending 'shared' chore opens SharedSplitModal
+    if (template.assignedTo === 'shared') {
       setSplitTarget({
         instance,
         template,
@@ -283,32 +445,27 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
       return;
     }
 
-    const targetProfileId =
-      template.assignedTo === 'shared'
-        ? defaultProfileId || snapshot.profiles[0]?.id
-        : template.assignedTo;
-
+    const targetProfileId = template.assignedTo;
     if (!targetProfileId) return;
 
-    const profileObj = snapshot.profiles.find((p) => p.id === targetProfileId);
+    const profileObj = allProfiles.find((p) => p.id === targetProfileId);
     const rect = (e?.currentTarget as HTMLElement | undefined)?.getBoundingClientRect();
+    const originX = rect ? rect.left + rect.width / 2 : undefined;
+    const originY = rect ? rect.top + rect.height / 2 : undefined;
 
     const res = await completeChore(instance.instanceId, [
       { profileId: targetProfileId, pointsAwarded: effectivePoints },
     ]);
 
-    if (res.success) {
-      triggerChoreCelebration({
-        originX: rect ? rect.left + rect.width / 2 : undefined,
-        originY: rect ? rect.top + rect.height / 2 : undefined,
-        accentColor: profileObj?.color,
-      });
+    // Trigger celebration ONLY if auto-approved (!template.requiresApproval) and not in Night Mode
+    if (res.success && !res.requiresApproval && !template.requiresApproval) {
+      maybeCelebrateCompletion(profileObj?.color, originX, originY);
     }
   };
 
   const handleTapUndoChore = async (item: ChildChoreRowItem, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    if (!item.canUndo) return;
+    if (!item.canUndo || item.instance.dateScheduled !== todayKey) return;
     await revertChoreSameDay(item.instance.instanceId);
   };
 
@@ -345,10 +502,10 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
             }
           }
         }}
-        className={`group/row flex items-center justify-between gap-2.5 px-2.5 py-2 rounded-xl border transition-all select-none ${
+        className={`group/row flex items-center justify-between gap-2.5 px-2.5 py-2 rounded-xl border transition-colors select-none ${
           isOverdue
             ? isLight
-              ? 'border-amber-400/50 bg-amber-50/60 hover:bg-amber-50/90'
+              ? 'border-amber-400/40 bg-amber-50/55 hover:bg-amber-50/85'
               : 'border-amber-400/40 bg-amber-950/15 hover:bg-amber-950/25'
             : isLight
               ? 'border-slate-200/80 bg-white/80 hover:bg-slate-50'
@@ -395,12 +552,12 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
                 {template.title}
               </span>
 
-              {/* Subtle "Yesterday" overdue pill */}
+              {/* Quiet "Yesterday" overdue pill (zero harsh red, zero flashing) */}
               {instance.isOverdue && (
                 <span
                   className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium border ${
                     isLight
-                      ? 'bg-amber-100/80 text-amber-800 border-amber-300/60'
+                      ? 'bg-amber-100/75 text-amber-800 border-amber-300/60'
                       : 'bg-amber-500/15 text-amber-300/90 border-amber-400/30'
                   }`}
                 >
@@ -437,7 +594,7 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
           </div>
         </div>
 
-        {/* Right Side: Points Pill & Same-Day Undo Hint */}
+        {/* Right Side: Points Pill & Same-Day Undo / Past-Day Lock */}
         <div className="flex items-center gap-1.5 shrink-0">
           {section === 'today' && instance.isOverdue && (
             <button
@@ -449,30 +606,31 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
               title="Dismiss overdue task"
               className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer ${
                 isLight
-                  ? 'text-slate-500 hover:text-rose-600 hover:bg-rose-50'
-                  : 'text-slate-400 hover:text-rose-300 hover:bg-rose-500/15'
+                  ? 'text-slate-500 hover:text-slate-800 hover:bg-slate-200/70'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/80'
               }`}
             >
               Dismiss
             </button>
           )}
-          {section !== 'today' && (
-            canUndo ? (
+          {section !== 'today' &&
+            (canUndo ? (
               <span
                 title="Tap to undo (same-day self-revert)"
-                className={`inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded opacity-60 group-hover/row:opacity-100 transition-opacity ${
-                  isLight ? 'text-slate-500 hover:bg-slate-200/70' : 'text-slate-400 hover:bg-slate-800'
+                className={`inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded opacity-65 group-hover/row:opacity-100 transition-opacity ${
+                  isLight
+                    ? 'text-slate-500 hover:bg-slate-200/70'
+                    : 'text-slate-400 hover:bg-slate-800'
                 }`}
               >
                 <RotateCcw className="w-2.5 h-2.5" />
                 Undo
               </span>
             ) : (
-              <span title="Locked past midnight">
-                <Lock className="w-3 h-3 text-slate-500 opacity-50" />
+              <span title="Locked past midnight" className="inline-flex items-center">
+                <Lock className="w-3 h-3 text-slate-500 opacity-55" />
               </span>
-            )
-          )}
+            ))}
 
           <span
             className={`px-2 py-0.5 rounded-full text-[11px] font-semibold tabular-nums border ${
@@ -524,23 +682,24 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
 
     return (
       <div className="space-y-2">
-        {visibleProfiles.map((profile) => {
-          const items = byChildMap.get(profile.id) || [];
+        {visibleProfiles.map((child) => {
+          const items = byChildMap.get(child.id) || [];
           const hasPersonalTemplates = snapshot.templates.some(
-            (t) => t.assignedTo === profile.id
+            (t) => t.assignedTo === child.id
           );
           if (
             items.length === 0 &&
             (section !== 'today' ||
-              (profile.role === 'parent' &&
+              (child.role === 'parent' &&
                 !hasPersonalTemplates &&
-                activeScope !== profile.id))
+                activeScope !== child.id))
           ) {
             return null;
           }
 
-          const subKey = `${section}_${profile.id}`;
+          const subKey = `${section}_${child.id}`;
           const isCollapsed = Boolean(collapsedChildKeys[subKey]);
+          const accentHex = resolveProfileColorHex(child.color);
 
           return (
             <div
@@ -552,28 +711,28 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
               }`}
               style={{
                 borderLeftWidth: '3px',
-                borderLeftColor: profile.color || '#6B8E7B',
+                borderLeftColor: accentHex,
               }}
             >
-              {/* Child Sub-Header */}
+              {/* Collapsible Child Sub-Header */}
               <button
                 type="button"
-                onClick={() => toggleChildSubGroup(section, profile.id)}
-                className={`w-full flex items-center justify-between px-2.5 py-1.5 text-left transition-colors ${
+                onClick={() => toggleChildSubGroup(section, child.id)}
+                className={`w-full flex items-center justify-between px-2.5 py-1.5 text-left transition-colors cursor-pointer ${
                   isLight ? 'hover:bg-slate-100/80' : 'hover:bg-slate-900/60'
                 }`}
               >
                 <div className="flex items-center gap-2 min-w-0">
-                  <HouseholdAvatar profile={profile} size="xs" showRing={false} />
+                  <ProfileAvatar profile={child} size="xs" showRing={false} />
                   <span
                     className={`text-xs font-semibold truncate ${
                       isLight ? 'text-slate-800' : 'text-slate-200'
                     }`}
                   >
-                    {profile.name}
+                    {child.name}
                   </span>
                   <span
-                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-medium ${
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-medium tabular-nums ${
                       isLight
                         ? 'bg-slate-200/80 text-slate-600'
                         : 'bg-slate-800 text-slate-400'
@@ -586,9 +745,9 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
                 <div className="flex items-center gap-2 shrink-0">
                   <span
                     className="text-[11px] font-medium tabular-nums"
-                    style={{ color: profile.color || '#8FA89B' }}
+                    style={{ color: accentHex }}
                   >
-                    {profile.balance} pts
+                    {child.balance} pts
                   </span>
                   {isCollapsed ? (
                     <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
@@ -610,7 +769,7 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
                       All personal chores done!
                     </div>
                   ) : (
-                    items.map((item) => renderChoreItemRow(item, section, profile))
+                    items.map((item) => renderChoreItemRow(item, section, child))
                   )}
                 </div>
               )}
@@ -628,13 +787,13 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
             }`}
             style={{
               borderLeftWidth: '3px',
-              borderLeftColor: '#648296', // Calming Slate Blue
+              borderLeftColor: '#648296', // Calm Science Slate Blue
             }}
           >
             <button
               type="button"
               onClick={() => toggleChildSubGroup(section, '__shared__')}
-              className={`w-full flex items-center justify-between px-2.5 py-1.5 text-left transition-colors ${
+              className={`w-full flex items-center justify-between px-2.5 py-1.5 text-left transition-colors cursor-pointer ${
                 isLight ? 'hover:bg-slate-100/80' : 'hover:bg-slate-900/60'
               }`}
             >
@@ -647,10 +806,10 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
                     isLight ? 'text-slate-800' : 'text-slate-200'
                   }`}
                 >
-                  Shared & Bounties
+                  Shared &amp; Bounties
                 </span>
                 <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-medium ${
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-medium tabular-nums ${
                     isLight
                       ? 'bg-slate-200/80 text-slate-600'
                       : 'bg-slate-800 text-slate-400'
@@ -713,8 +872,18 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
     },
   ];
 
+  // Review pill styling: warm amber in daytime, zero glow (shadow-none ring-0) in Night Mode
+  const reviewPillClass = isNightMode
+    ? isLight
+      ? 'bg-amber-50/70 hover:bg-amber-100/70 text-amber-800/80 border-amber-200/70 shadow-none ring-0'
+      : 'bg-slate-900/75 hover:bg-slate-800/80 text-amber-300/75 border-slate-700/70 shadow-none ring-0'
+    : isLight
+      ? 'bg-amber-100/90 hover:bg-amber-200 text-amber-900 border-amber-300 shadow-sm ring-1 ring-amber-300/50'
+      : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border-amber-400/35 shadow-sm shadow-amber-500/10 ring-1 ring-amber-400/20';
+
   return (
     <div
+      data-variant={variant}
       className={`w-full h-full flex flex-col overflow-hidden select-none ${
         isLight ? 'text-slate-800' : 'text-slate-100'
       }`}
@@ -739,76 +908,116 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
             <h3 className="text-xs font-semibold tracking-tight truncate">{title}</h3>
             <p className={`text-[10px] truncate ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
               {activeScope === 'household'
-                ? 'Household View'
-                : `${visibleProfiles[0]?.name || 'Child'}'s Chores`}
+                ? includeParents && hasParentProfiles
+                  ? 'Household View • Kids & Parents'
+                  : 'Household View'
+                : `${visibleProfiles[0]?.name || 'Member'}'s Chores`}
             </p>
           </div>
         </div>
 
-        {/* Right Controls: 🛡️ X Review Pill */}
-        {pendingCounts.totalPendingCount > 0 && (
-          <div className="flex items-center gap-1.5 shrink-0 pr-12">
+        {/* Right Controls: 🛡️ X Review Pill & Maximize Hub Button */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {pendingParentActionsCount > 0 && (
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                setParentDrawerOpen(true, 'approvals');
+                setParentDrawerOpen(true);
               }}
               title="Open Parent Review & Approvals (PIN Protected)"
-              className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-semibold border transition-all cursor-pointer ${
-                isLight
-                  ? 'bg-amber-100/90 hover:bg-amber-200 text-amber-900 border-amber-300'
-                  : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border-amber-400/35'
-              }`}
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-semibold border transition-colors cursor-pointer ${reviewPillClass}`}
             >
               <Shield className="w-3 h-3 text-amber-400" />
-              <span>{pendingCounts.totalPendingCount} Review</span>
+              <span>{pendingParentActionsCount} Review</span>
             </button>
-          </div>
-        )}
+          )}
+
+          <button
+            type="button"
+            onClick={handleMaximizeFullScreen}
+            title="Open Full-Screen Chore & Reward Hub"
+            aria-label="Maximize Chore Hub"
+            className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+              isLight
+                ? 'bg-slate-100/80 hover:bg-slate-200 text-slate-600 hover:text-slate-900 border-slate-200'
+                : 'bg-slate-900/70 hover:bg-slate-800 text-slate-300 hover:text-white border-slate-800'
+            }`}
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
       {/* Scope Filter Strip (when configured as Household View) */}
-      {configuredScope === 'household' && snapshot.profiles.length > 1 && (
+      {configuredScope === 'household' && (scopeProfiles.length > 1 || hasParentProfiles) && (
         <div className="flex items-center gap-1.5 pb-2 overflow-x-auto no-scrollbar shrink-0">
-          <button
-            type="button"
-            onClick={() => setActiveScope('household')}
-            className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors shrink-0 cursor-pointer ${
-              activeScope === 'household'
-                ? isLight
-                  ? 'bg-slate-800 text-white'
-                  : 'bg-slate-700/90 text-white border border-slate-600'
-                : isLight
-                  ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  : 'bg-slate-900/70 text-slate-400 hover:text-slate-200 border border-slate-800'
-            }`}
-          >
-            Everyone
-          </button>
-          {snapshot.profiles.map((profile) => {
-            const isSelected = activeScope === profile.id;
-            return (
+          {scopeProfiles.length > 1 && (
+            <>
               <button
-                key={profile.id}
                 type="button"
-                onClick={() => setActiveScope(profile.id)}
-                className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-medium transition-colors shrink-0 cursor-pointer border ${
-                  isSelected
+                onClick={() => setHouseholdFilterId('household')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors shrink-0 cursor-pointer ${
+                  activeScope === 'household'
                     ? isLight
-                      ? 'bg-slate-800 text-white border-slate-800'
-                      : 'bg-slate-800 text-white border-slate-600'
+                      ? 'bg-slate-800 text-white'
+                      : 'bg-slate-700/90 text-white border border-slate-600'
                     : isLight
-                      ? 'bg-slate-100/80 text-slate-700 border-slate-200 hover:bg-slate-200/70'
-                      : 'bg-slate-900/60 text-slate-300 border-slate-800/80 hover:bg-slate-800/60'
+                      ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      : 'bg-slate-900/70 text-slate-400 hover:text-slate-200 border border-slate-800'
                 }`}
               >
-                <HouseholdAvatar profile={profile} size="xs" showRing={false} />
-                <span>{profile.name}</span>
-                <span className="opacity-75 tabular-nums">({profile.balance})</span>
+                Everyone
               </button>
-            );
-          })}
+              {scopeProfiles.map((profile) => {
+                const isSelected = activeScope === profile.id;
+                return (
+                  <button
+                    key={profile.id}
+                    type="button"
+                    onClick={() => setHouseholdFilterId(profile.id)}
+                    className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-medium transition-colors shrink-0 cursor-pointer border ${
+                      isSelected
+                        ? isLight
+                          ? 'bg-slate-800 text-white border-slate-800'
+                          : 'bg-slate-800 text-white border-slate-600'
+                        : isLight
+                          ? 'bg-slate-100/80 text-slate-700 border-slate-200 hover:bg-slate-200/70'
+                          : 'bg-slate-900/60 text-slate-300 border-slate-800/80 hover:bg-slate-800/60'
+                    }`}
+                  >
+                    <ProfileAvatar profile={profile} size="xs" showRing={false} />
+                    <span>{profile.name}</span>
+                    <span className="opacity-75 tabular-nums">({profile.balance})</span>
+                  </button>
+                );
+              })}
+            </>
+          )}
+
+          {hasParentProfiles && (
+            <button
+              type="button"
+              onClick={handleToggleIncludeParents}
+              title={
+                includeParents
+                  ? 'Hide parent profiles in Household View'
+                  : 'Include parent profiles in Household View'
+              }
+              className={`ml-auto inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium border transition-colors shrink-0 cursor-pointer ${
+                includeParents
+                  ? isLight
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                    : 'bg-emerald-950/50 text-emerald-300 border-emerald-700/50'
+                  : isLight
+                    ? 'bg-slate-50 text-slate-500 border-slate-200 hover:text-slate-700'
+                    : 'bg-slate-950/50 text-slate-400 border-slate-800/80 hover:text-slate-200'
+              }`}
+            >
+              <UserPlus className="w-3 h-3" />
+              <span>Parents</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -827,7 +1036,7 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
       )}
 
       {/* Internal Scrollable Accordion Container */}
-      <div className="flex-1 overflow-y-auto pr-1 space-y-2">
+      <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-2">
         {sections.map((sec) => {
           const isOpen = expandedSections[sec.id];
           return (
@@ -842,18 +1051,22 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
               <button
                 type="button"
                 onClick={() => toggleSection(sec.id)}
+                aria-expanded={isOpen}
+                aria-label={`${sec.label} (${sec.count})`}
                 className="w-full flex items-center justify-between px-3 py-2 text-left cursor-pointer"
               >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 min-w-0">
                   {isOpen ? (
-                    <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                   ) : (
-                    <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                   )}
-                  <span className="text-xs font-semibold tracking-tight">{sec.label}</span>
+                  <span className="text-xs font-semibold tracking-tight truncate">
+                    {sec.label}
+                  </span>
                 </div>
                 <span
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-semibold tabular-nums ${sec.badgeTone}`}
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-semibold tabular-nums shrink-0 ${sec.badgeTone}`}
                 >
                   {sec.count}
                 </span>
@@ -865,7 +1078,7 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
         })}
       </div>
 
-      {/* Compact Footer Strip: + Wish, Proposals Tray, Trophy Case */}
+      {/* Compact Footer Strip: Proposals Tray, Trophy Case, + Wish */}
       <div
         className={`pt-2 mt-2 border-t flex items-center justify-between gap-1.5 shrink-0 ${
           isLight ? 'border-slate-200/80' : 'border-slate-800/80'
@@ -911,31 +1124,33 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
             e.stopPropagation();
             setIsProposeModalOpen(true);
           }}
-          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-emerald-600/90 hover:bg-emerald-500 text-white shadow-sm transition-colors cursor-pointer"
+          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-emerald-600/90 hover:bg-emerald-500 text-white transition-colors cursor-pointer ${
+            isNightMode ? 'shadow-none' : 'shadow-sm'
+          }`}
         >
           <Plus className="w-3 h-3" />
           <span>Wish</span>
         </button>
       </div>
 
-      {/* Interactive Shared Chore Point Split Modal */}
+      {/* Interactive Shared Chore Split Modal */}
       {splitTarget && (
-        <PointSplitModal
+        <SharedSplitModal
+          key={splitTarget.instance.instanceId}
           isOpen={Boolean(splitTarget)}
           instance={splitTarget.instance}
           template={splitTarget.template}
-          profiles={snapshot.profiles}
+          profiles={splitModalProfiles}
           defaultSelectedProfileId={splitTarget.defaultProfileId}
+          isLight={isLight}
           onClose={() => setSplitTarget(null)}
           onConfirmSplit={async (splits) => {
-            const res = await completeChore(splitTarget.instance.instanceId, splits);
-            if (res.success) {
-              const firstProfile = snapshot.profiles.find(
-                (p) => p.id === splits[0]?.profileId
-              );
-              triggerChoreCelebration({
-                accentColor: firstProfile?.color,
-              });
+            const targetInstance = splitTarget.instance;
+            const targetTemplate = splitTarget.template;
+            const res = await completeChore(targetInstance.instanceId, splits);
+            if (res.success && !res.requiresApproval && !targetTemplate.requiresApproval) {
+              const firstProfile = allProfiles.find((p) => p.id === splits[0]?.profileId);
+              maybeCelebrateCompletion(firstProfile?.color);
             }
           }}
         />
@@ -945,7 +1160,7 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
       {isProposeModalOpen && (
         <ProposeRewardModal
           isOpen={isProposeModalOpen}
-          profiles={snapshot.profiles}
+          profiles={scopeProfiles}
           defaultProfileId={activeScope}
           onClose={() => setIsProposeModalOpen(false)}
           onSubmitProposal={async (proposal) => {
@@ -958,7 +1173,7 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
       {isProposalsTrayOpen && (
         <ProposalsTrayModal
           isOpen={isProposalsTrayOpen}
-          profiles={snapshot.profiles}
+          profiles={allProfiles}
           rewards={snapshot.rewards}
           activeScope={activeScope}
           onClose={() => setIsProposalsTrayOpen(false)}
@@ -971,7 +1186,7 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
       {isTrophyCaseOpen && (
         <TrophyCaseModal
           isOpen={isTrophyCaseOpen}
-          profiles={snapshot.profiles}
+          profiles={allProfiles}
           trophies={snapshot.trophies}
           defaultScope={activeScope}
           onClose={() => setIsTrophyCaseOpen(false)}
@@ -980,3 +1195,5 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
     </div>
   );
 };
+
+export default ChoreWidget;

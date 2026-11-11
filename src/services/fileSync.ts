@@ -4,8 +4,10 @@ import { db } from './db';
 import type { AppSettings, DashboardTab, DashboardWidget, StickyNoteItem } from '../types/dashboard';
 import type { ChoreEngineSnapshot } from '../types/chores';
 import type { HouseholdProfile } from '../types/profiles';
+import type { MealPlannerSnapshot } from '../types/meals';
 import { useChoreStore } from '../store/choreStore';
 import { useProfileStore } from '../stores/useProfileStore';
+import { useMealStore } from '../stores/useMealStore';
 
 export interface LocalExportPayload {
   version: 1;
@@ -16,6 +18,7 @@ export interface LocalExportPayload {
   notes: StickyNoteItem[];
   profiles?: HouseholdProfile[];
   chores?: ChoreEngineSnapshot;
+  meals?: MealPlannerSnapshot;
 }
 
 export type FileSyncStatus = 'connected' | 'needs_permission' | 'unbound' | 'unsupported';
@@ -145,6 +148,7 @@ export function downloadBackupFile(
     notes,
     profiles: useProfileStore.getState().profiles,
     chores: useChoreStore.getState().snapshot,
+    meals: useMealStore.getState().snapshot,
   };
 
   const jsonStr = JSON.stringify(payload, null, 2);
@@ -235,6 +239,12 @@ export async function restoreBackupToDatabase(
     if (payload.chores && payload.chores.id === 'household_chores') {
       await db.chores.put(payload.chores);
       await useChoreStore.getState().initChoreStore();
+    }
+
+    // 7. Restore Meals if present
+    if (payload.meals && payload.meals.id === 'household_meals') {
+      await db.meals.put(payload.meals);
+      await useMealStore.getState().initMealStore();
     }
 
     return { success: true };

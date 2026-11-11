@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { getProfileInitials } from '../../utils/avatarCompressor';
+import { resolveProfileColorHex } from '../../types/profiles';
 
 export interface HouseholdAvatarProfileLike {
   name: string;
@@ -33,14 +34,15 @@ export const HouseholdAvatar: React.FC<HouseholdAvatarProps> = ({
   const [imgFailed, setImgFailed] = useState(false);
   const src = profile.avatarDataUrl || profile.avatarUrl;
   const sizeClass = SIZE_CLASSES[size];
+  const resolvedColor = resolveProfileColorHex(profile.color);
 
   if (src && !imgFailed) {
     return (
       <span
         className={`${sizeClass} shrink-0 rounded-full overflow-hidden inline-flex items-center justify-center select-none ${className}`}
         style={{
-          backgroundColor: profile.color || '#6b8f71',
-          boxShadow: showRing ? `0 0 0 2px ${profile.color || '#6b8f71'}66` : undefined,
+          backgroundColor: resolvedColor,
+          boxShadow: showRing ? `0 0 0 2px ${resolvedColor}66` : undefined,
         }}
         title={profile.name}
       >
@@ -58,8 +60,8 @@ export const HouseholdAvatar: React.FC<HouseholdAvatarProps> = ({
     <span
       className={`${sizeClass} shrink-0 rounded-full inline-flex items-center justify-center font-semibold text-white tracking-tight select-none ${className}`}
       style={{
-        backgroundColor: profile.color || '#6b8f71',
-        boxShadow: showRing ? `0 0 0 2px ${profile.color || '#6b8f71'}55` : undefined,
+        backgroundColor: resolvedColor,
+        boxShadow: showRing ? `0 0 0 2px ${resolvedColor}55` : undefined,
       }}
       title={profile.name}
     >
