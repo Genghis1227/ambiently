@@ -46,7 +46,14 @@ interface WidgetSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   widget: DashboardWidget | null;
-  onSave: (widgetId: string, updates: { title?: string; config: Record<string, any> }) => void;
+  onSave: (
+    widgetId: string,
+    updates: {
+      title?: string;
+      config: Record<string, any>;
+      freeformPos?: DashboardWidget['freeformPos'];
+    }
+  ) => void;
   onOpenPhotoSources?: (asCommonSource?: boolean) => void;
 }
 
@@ -176,8 +183,8 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
 
   // Chores widget states
   const choreProfiles = useChoreStore((s) => s.snapshot.profiles);
-  const setChoreFullScreenOpen = useChoreStore((s) => s.setFullScreenOpen);
   const setChoreParentDrawerOpen = useChoreStore((s) => s.setParentDrawerOpen);
+  const [choreDisplayMode, setChoreDisplayMode] = useState<'tile' | 'hub'>('tile');
   const [choreScope, setChoreScope] = useState<string>('household');
   const [choreExpandedSections, setChoreExpandedSections] = useState<('today' | 'review' | 'completed')[]>([
     'today',
@@ -303,6 +310,9 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setImageTransparentBg(Boolean(widget.config?.transparentBg));
       setImageLinkUrl(widget.config?.linkUrl || '');
     } else if (widget.type === 'chores') {
+      setChoreDisplayMode(
+        widget.config?.displayMode === 'hub' || widget.freeformPos?.isFullScreen ? 'hub' : 'tile'
+      );
       setChoreScope(widget.config?.scope || 'household');
       setChoreExpandedSections(
         Array.isArray(widget.config?.defaultExpandedSections)
@@ -535,14 +545,53 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.caption = imageCaption.trim();
       configUpdates.transparentBg = imageTransparentBg;
       configUpdates.linkUrl = imageLinkUrl.trim();
-    } else if (widget.type === 'chores') {
+    }
+
+    let freeformPosUpdate: DashboardWidget['freeformPos'] | undefined;
+
+    if (widget.type === 'chores') {
+      configUpdates.displayMode = choreDisplayMode;
       configUpdates.scope = choreScope;
       configUpdates.defaultExpandedSections = choreExpandedSections;
+
+      const existingPos = widget.freeformPos || {
+        xRatio: 0.1,
+        yRatio: 0.1,
+        wRatio: 0.45,
+        hRatio: 0.55,
+        zIndex: 5,
+        rotation: 0,
+      };
+      const wasFullScreen =
+        Boolean(widget.freeformPos?.isFullScreen) || widget.config?.displayMode === 'hub';
+
+      if (choreDisplayMode === 'hub') {
+        freeformPosUpdate = {
+          ...existingPos,
+          xRatio: 0,
+          yRatio: 0,
+          wRatio: 1,
+          hRatio: 1,
+          rotation: 0,
+          isFullScreen: true,
+        };
+      } else if (wasFullScreen) {
+        freeformPosUpdate = {
+          ...existingPos,
+          xRatio: 0.1,
+          yRatio: 0.1,
+          wRatio: 0.45,
+          hRatio: 0.55,
+          rotation: 0,
+          isFullScreen: false,
+        };
+      }
     }
 
     onSave(widget.id, {
       title: title.trim() || widget.title,
       config: configUpdates,
+      ...(freeformPosUpdate ? { freeformPos: freeformPosUpdate } : {}),
     });
     onClose();
   };
@@ -2737,10 +2786,60 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
             <div className="space-y-4">
               <div>
                 <label className="text-xs font-semibold text-gray-300 block mb-1.5">
+                  Canvas Presentation Mode
+                </label>
+                <p className="text-[11px] text-gray-400 mb-2.5">
+                  Choose a resizable Bento checklist card or make this canvas a dedicated full-screen 3-column Chore &amp; Reward Hub in your board rotation.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setChoreDisplayMode('tile')}
+                    className={`flex items-start gap-2.5 p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                      choreDisplayMode === 'tile'
+                        ? 'bg-emerald-600/20 border-emerald-500 text-emerald-300 font-semibold'
+                        : 'bg-gray-950 border-gray-800 text-gray-300 hover:border-gray-700'
+                    }`}
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/35 flex items-center justify-center shrink-0 mt-0.5">
+                      <Sparkles className="w-4 h-4 text-emerald-400" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-xs block font-semibold">Compact Bento Tile</span>
+                      <span className="text-[10px] text-gray-400 font-normal leading-snug block mt-0.5">
+                        Resizable checklist card alongside other tiles
+                      </span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setChoreDisplayMode('hub')}
+                    className={`flex items-start gap-2.5 p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                      choreDisplayMode === 'hub'
+                        ? 'bg-emerald-600/20 border-emerald-500 text-emerald-300 font-semibold'
+                        : 'bg-gray-950 border-gray-800 text-gray-300 hover:border-gray-700'
+                    }`}
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/35 flex items-center justify-center shrink-0 mt-0.5">
+                      <Columns className="w-4 h-4 text-emerald-400" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-xs block font-semibold">Full-Screen Hub on Canvas</span>
+                      <span className="text-[10px] text-gray-400 font-normal leading-snug block mt-0.5">
+                        3-column Point Banks, Chores &amp; Reward Store (rotates with canvases)
+                      </span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-300 block mb-1.5">
                   Widget View Scope
                 </label>
                 <p className="text-[11px] text-gray-400 mb-2.5">
-                  Show all children grouped together (Household View) or pin this Bento tile to a single child profile.
+                  Show all children grouped together (Household View) or pin this view to a single child profile.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <button
@@ -2825,28 +2924,16 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                 <span className="text-[11px] text-gray-400">
                   Manage chore templates, profiles, avatars, and point pricing in the Parent Drawer.
                 </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onClose();
-                      setChoreFullScreenOpen(true);
-                    }}
-                    className="px-3 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-medium text-gray-200 border border-gray-700 transition-colors cursor-pointer"
-                  >
-                    Open Full-Screen Hub
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onClose();
-                      setChoreParentDrawerOpen(true, 'templates');
-                    }}
-                    className="px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-xs font-semibold text-emerald-300 border border-emerald-500/40 transition-colors cursor-pointer"
-                  >
-                    Manage Chores & Profiles
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    setChoreParentDrawerOpen(true, 'templates');
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-medium text-gray-200 border border-gray-700 transition-colors cursor-pointer"
+                >
+                  Manage Chores &amp; Profiles
+                </button>
               </div>
             </div>
           )}

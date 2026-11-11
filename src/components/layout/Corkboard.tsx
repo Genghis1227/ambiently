@@ -51,6 +51,10 @@ import { useDashboardStore } from '../../store/dashboardStore';
 import { CANVAS_THEMES, isCanvasThemeLight } from '../../data/canvasThemes';
 import { findOpenCanvasSpot } from '../../utils/autoLayout';
 
+const ChoreDashboardView = React.lazy(() =>
+  import('../chores/ChoreDashboardView').then((m) => ({ default: m.ChoreDashboardView }))
+);
+
 const WidgetSettingsModal = React.lazy(() =>
   import('../widgets/WidgetSettingsModal').then((m) => ({ default: m.WidgetSettingsModal }))
 );
@@ -1202,7 +1206,9 @@ export const Corkboard: React.FC<CorkboardProps> = ({
           rotation: 0,
         };
 
-        const isFullScreen = Boolean(pos.isFullScreen);
+        const isFullScreen =
+          Boolean(pos.isFullScreen) ||
+          (widget.type === 'chores' && widget.config?.displayMode === 'hub');
         const isDragging = draggingId === widget.id;
         const isRotating = rotatingId === widget.id;
         const isResizing = resizingId === widget.id;
@@ -1261,7 +1267,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                     width: '100%',
                     height: '100%',
                     zIndex: isActiveManipulating ? 50 : (pos.zIndex || 1),
-                    touchAction: 'none',
+                    touchAction: 'auto',
                     WebkitTouchCallout: 'none',
                     userSelect: 'none',
                     WebkitUserSelect: 'none',
@@ -1301,7 +1307,9 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 : isWidgetLight
                 ? 'bg-white/95 backdrop-blur-md shadow-xl text-slate-800'
                 : 'bg-gray-900/80 backdrop-blur-md shadow-2xl text-white'
-            } ${isCanvasLocked ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'} touch-none select-none transition-shadow ${
+            } ${
+              isCanvasLocked || isFullScreen ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
+            } ${isFullScreen ? '' : 'touch-none'} select-none transition-shadow ${
               isDragging || isRotating
                 ? 'ring-2 ring-blue-500 shadow-blue-500/20'
                 : isFramelessWidget
@@ -1348,7 +1356,11 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   : 'bg-gray-950/90 border border-gray-700/80 shadow-2xl text-gray-300'
               } ${
                 isFullScreen
-                  ? 'top-3 right-3'
+                  ? dockPaddingClass === 'pr-20'
+                    ? 'top-3.5 right-24'
+                    : dockPaddingClass === 'pt-20'
+                      ? 'top-24 right-4'
+                      : 'top-3.5 right-4'
                   : isNearTopEdge
                   ? 'top-2 right-2'
                   : '-top-3.5 right-3'
@@ -1420,7 +1432,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   onClick={(e) => {
                     e.stopPropagation();
                     if (isFullScreen) {
-                      onUpdateWidgetPos(widget.id, widget.gridPos, {
+                      const nextPos = {
                         ...pos,
                         xRatio: 0.1,
                         yRatio: 0.1,
@@ -1428,9 +1440,17 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                         hRatio: 0.5,
                         rotation: 0,
                         isFullScreen: false,
-                      });
+                      };
+                      if (widget.type === 'chores' && onUpdateWidget) {
+                        onUpdateWidget(widget.id, {
+                          freeformPos: nextPos,
+                          config: { ...widget.config, displayMode: 'tile' },
+                        });
+                      } else {
+                        onUpdateWidgetPos(widget.id, widget.gridPos, nextPos);
+                      }
                     } else {
-                      onUpdateWidgetPos(widget.id, widget.gridPos, {
+                      const nextPos = {
                         ...pos,
                         xRatio: 0,
                         yRatio: 0,
@@ -1438,7 +1458,15 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                         hRatio: 1,
                         rotation: 0,
                         isFullScreen: true,
-                      });
+                      };
+                      if (widget.type === 'chores' && onUpdateWidget) {
+                        onUpdateWidget(widget.id, {
+                          freeformPos: nextPos,
+                          config: { ...widget.config, displayMode: 'hub' },
+                        });
+                      } else {
+                        onUpdateWidgetPos(widget.id, widget.gridPos, nextPos);
+                      }
                     }
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
@@ -1659,19 +1687,37 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   isLight={isWidgetLight}
                 />
               ) : widget.type === 'chores' ? (
-                <ChoreWidget
-                  title={widget.title}
-                  config={widget.config}
-                  isLight={isWidgetLight}
-                  variant="tile"
-                  onUpdateConfig={(updates) => {
-                    if (onUpdateWidget) {
-                      onUpdateWidget(widget.id, {
-                        config: { ...widget.config, ...updates },
-                      });
-                    }
-                  }}
-                />
+                isFullScreen ? (
+                  <React.Suspense fallback={null}>
+                    <ChoreDashboardView
+                      isOpen={true}
+                      mode="canvas"
+                      title={widget.title}
+                      config={widget.config}
+                      isLight={isWidgetLight}
+                      dockPaddingClass={dockPaddingClass}
+                      onOpenWidgetSettings={
+                        !isCanvasLocked && onUpdateWidget
+                          ? () => setEditingWidget(widget)
+                          : undefined
+                      }
+                    />
+                  </React.Suspense>
+                ) : (
+                  <ChoreWidget
+                    title={widget.title}
+                    config={widget.config}
+                    isLight={isWidgetLight}
+                    variant="tile"
+                    onUpdateConfig={(updates) => {
+                      if (onUpdateWidget) {
+                        onUpdateWidget(widget.id, {
+                          config: { ...widget.config, ...updates },
+                        });
+                      }
+                    }}
+                  />
+                )
               ) : null}
               </TileErrorBoundary>
             </div>

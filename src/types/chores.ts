@@ -104,4 +104,5 @@ export interface ChoreEngineSnapshot {
 export interface ChoreWidgetConfig {
   scope?: 'household' | string; // 'household' or a specific Profile.id
   defaultExpandedSections?: ('today' | 'review' | 'completed')[];
+  displayMode?: 'tile' | 'hub'; // 'tile' = compact Bento card, 'hub' = full-screen 3-column Chore & Reward Hub on canvas
 }

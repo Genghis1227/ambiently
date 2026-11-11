@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.15] - 2026-11-10
+
+### Full-Screen Chore & Reward Hub on Canvas Rotation & Tile Settings Polish
+* **Full-Screen Chore & Reward Hub on Canvas (`src/components/widgets/WidgetSettingsModal.tsx`, `src/components/chores/ChoreDashboardView.tsx`, `src/components/layout/Corkboard.tsx`, `src/types/chores.ts`):**
+  * Replaced the one-off overlay launcher button in Tile Settings with a persistent **Canvas Presentation Mode** (`Compact Bento Tile` vs `Full-Screen Hub on Canvas`) synced via `config.displayMode` and `freeformPos.isFullScreen`.
+  * Added `mode="canvas"` to `ChoreDashboardView` so maximizing a Chores widget or selecting **Full-Screen Hub on Canvas** embeds the 3-column **Point Banks + Daily Chores + Reward Store** Hub directly onto that canvas in the board rotation loop.
+  * Added Navigation Dock safe-area padding (`dockPaddingClass`), full Light & Dark canvas theme styling, and native touch scrolling across all three columns when embedded on a canvas.
+* **Tile Settings Action Styling (`src/components/widgets/WidgetSettingsModal.tsx`):**
+  * Updated the **Manage Chores & Profiles** action button to use neutral secondary styling instead of the emerald selected-state highlight.
+
+---
+
 ## [0.4.14] - 2026-11-10
 
 ### Canvas Carousel Rotation Fix, Order Self-Healing & Realtime Sync Reliability
