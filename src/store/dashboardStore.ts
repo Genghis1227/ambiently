@@ -170,6 +170,7 @@ interface DashboardState {
   updateNote: (noteId: string, updates: Partial<StickyNoteItem>) => Promise<void>;
   deleteNote: (noteId: string) => Promise<void>;
   permanentlyDeleteNote: (noteId: string) => Promise<void>;
+  permanentlyDeleteNotes: (noteIds: string[]) => Promise<void>;
   updateWidgetPosition: (
     widgetId: string,
     gridPos?: DashboardWidget['gridPos'],
@@ -1087,6 +1088,28 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     await db.notes.put(updated);
     set({
       notes: get().notes.filter((n) => n.id !== noteId),
+    });
+    get().saveLocalBackup();
+  },
+
+  permanentlyDeleteNotes: async (noteIds) => {
+    if (!noteIds || noteIds.length === 0) return;
+    const idSet = new Set(noteIds);
+    const nowIso = new Date().toISOString();
+    const tombstones: StickyNoteItem[] = [];
+    for (const n of get().notes) {
+      if (idSet.has(n.id)) {
+        tombstones.push({
+          ...n,
+          deleted_at: nowIso,
+          updated_at: nowIso,
+        });
+      }
+    }
+    if (tombstones.length === 0) return;
+    await db.notes.bulkPut(tombstones);
+    set({
+      notes: get().notes.filter((n) => !idSet.has(n.id)),
     });
     get().saveLocalBackup();
   },

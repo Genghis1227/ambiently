@@ -97,6 +97,8 @@ export interface ChoreEngineSnapshot {
   trophies: TrophyItem[];
   ledger: LedgerEntry[];
   householdSettings: ChoreHouseholdSettings;
+  deletedRewardIds?: string[];
+  deletedTemplateIds?: string[];
   lastParentActionAt?: string;
   updated_at: string;
 }

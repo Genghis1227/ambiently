@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.4.18",
+    date: "November 10, 2026",
+    title: "Delete All for Archived & Expired Notes & Permanent Reward Store Deletion Fix",
+    highlights: [
+      "Delete All for Archived & Expired Notes: Added a 'Delete All' action with inline two-tap confirmation to the Archived & Expired Notes modal and the Sticky Notes tile Trash tab, backed by atomic batch tombstoning.",
+      "Permanent Reward & Chore Template Deletion: Added deletion tombstones (deletedRewardIds & deletedTemplateIds) and authoritative reward merging so removed Reward Store goals never reappear after cloud sync or page reloads.",
+      "IndexedDB-First Boot Merge & Faster Sync: Prevented startup cloud pulls from merging against uninitialized default rewards and reduced chore cloud-push debounce latency.",
+    ],
+  },
+  {
     version: "v0.4.17",
     date: "November 10, 2026",
     title: "Calendar Feed HTTP 429 Resilience, Private Feed Caching & US Holidays Fallback",

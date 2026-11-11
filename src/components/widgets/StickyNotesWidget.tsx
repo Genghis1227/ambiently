@@ -17,6 +17,8 @@ interface StickyNotesWidgetProps {
   onAddNote: (note: Partial<StickyNoteItem>) => void;
   onUpdateNote: (noteId: string, updates: Partial<StickyNoteItem>) => void;
   onDeleteNote: (noteId: string) => void;
+  onPermanentlyDeleteNote?: (noteId: string) => void;
+  onPermanentlyDeleteNotes?: (noteIds: string[]) => void;
   onToggleArchive?: (noteId: string) => void;
   onPinNoteToCanvas?: (noteId: string) => void;
   onUnpinNoteFromCanvas?: (noteId: string) => void;
@@ -37,11 +39,14 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
   onAddNote,
   onUpdateNote,
   onDeleteNote,
+  onPermanentlyDeleteNote,
+  onPermanentlyDeleteNotes,
   onPinNoteToCanvas,
   onUnpinNoteFromCanvas,
   isLight = false,
 }) => {
   const [activeTab, setActiveTab] = useState<'active' | 'trash'>('active');
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
@@ -169,7 +174,10 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
           isLight ? 'bg-slate-100 border-slate-300' : 'bg-gray-950/60 border-gray-800'
         }`}>
           <button
-            onClick={() => setActiveTab('active')}
+            onClick={() => {
+              setConfirmDeleteAll(false);
+              setActiveTab('active');
+            }}
             className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all cursor-pointer ${
               activeTab === 'active'
                 ? 'bg-blue-600 text-white shadow-sm'
@@ -181,7 +189,10 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
             Notes ({activeNotes.length})
           </button>
           <button
-            onClick={() => setActiveTab('trash')}
+            onClick={() => {
+              setConfirmDeleteAll(false);
+              setActiveTab('trash');
+            }}
             className={`px-2 py-1 text-xs rounded-md font-medium transition-all flex items-center gap-1 cursor-pointer ${
               activeTab === 'trash'
                 ? isLight
@@ -205,6 +216,51 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
             <Plus className="w-3.5 h-3.5" />
             New Note
           </button>
+        )}
+
+        {activeTab === 'trash' && trashNotes.length > 0 && (onPermanentlyDeleteNotes || onPermanentlyDeleteNote) && (
+          confirmDeleteAll ? (
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteAll(false)}
+                className={`px-2 py-1 rounded-lg text-xs font-medium cursor-pointer transition-all ${
+                  isLight ? 'bg-slate-200 hover:bg-slate-300 text-slate-700' : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
+                }`}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const ids = trashNotes.map((n) => n.id);
+                  if (onPermanentlyDeleteNotes) {
+                    onPermanentlyDeleteNotes(ids);
+                  } else if (onPermanentlyDeleteNote) {
+                    ids.forEach((id) => onPermanentlyDeleteNote(id));
+                  }
+                  setConfirmDeleteAll(false);
+                }}
+                className="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold cursor-pointer transition-all"
+              >
+                Confirm ({trashNotes.length})
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmDeleteAll(true)}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer shrink-0 ${
+                isLight
+                  ? 'bg-red-50 hover:bg-red-100 border-red-300 text-red-700'
+                  : 'bg-red-500/15 hover:bg-red-500/25 border-red-500/30 text-red-300 hover:text-red-200'
+              }`}
+              title="Permanently delete all archived and expired notes"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete All</span>
+            </button>
+          )
         )}
       </div>
 
@@ -487,20 +543,41 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
             trashNotes.map((note) => (
               <div
                 key={note.id}
-                className="rounded-xl p-3 bg-gray-900 border border-gray-800 text-gray-300 flex items-center justify-between text-xs"
+                className={`rounded-xl p-3 border flex items-center justify-between gap-2 text-xs ${
+                  isLight ? 'bg-slate-50 border-slate-200 text-slate-800' : 'bg-gray-900 border-gray-800 text-gray-300'
+                }`}
               >
-                <div>
-                  <div className="font-semibold">{note.title || 'Untitled Note'}</div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-semibold truncate">{note.title || note.content || 'Checklist Note'}</div>
                   <div className="text-[10px] text-gray-500">
-                    {note.expiresAt ? `Expired on ${new Date(note.expiresAt).toLocaleDateString()}` : 'Archived'}
+                    {note.expiresAt && new Date(note.expiresAt) <= now
+                      ? `Expired on ${new Date(note.expiresAt).toLocaleDateString()}`
+                      : 'Archived'}
                   </div>
                 </div>
-                <button
-                  onClick={() => onUpdateNote(note.id, { archivedAt: null, expiresAt: null })}
-                  className="text-xs text-blue-400 hover:underline"
-                >
-                  Restore
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => onUpdateNote(note.id, { archivedAt: null, expiresAt: null })}
+                    className={`px-2 py-1 rounded-lg border text-xs font-semibold cursor-pointer transition-all ${
+                      isLight
+                        ? 'bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700'
+                        : 'bg-blue-600/20 hover:bg-blue-600/30 border-blue-500/40 text-blue-300'
+                    }`}
+                  >
+                    Restore
+                  </button>
+                  {onPermanentlyDeleteNote && (
+                    <button
+                      type="button"
+                      onClick={() => onPermanentlyDeleteNote(note.id)}
+                      className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 cursor-pointer transition-all"
+                      title="Delete permanently"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
             ))
           )}
