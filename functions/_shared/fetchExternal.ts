@@ -92,6 +92,27 @@ export interface ExternalFetchResult {
   url: string; // the address the answer finally came from
   text: string; // empty unless ok
   canEmbedDirectly?: boolean; // true if no X-Frame-Options or CSP frame-ancestors header blocks iframes
+  etag?: string;
+  lastModified?: string;
+  retryAfterSeconds?: number;
+}
+
+function parseRetryAfterSeconds(headerVal: string | null): number | undefined {
+  if (!headerVal) return undefined;
+  const trimmed = headerVal.trim();
+  if (!trimmed) return undefined;
+  const numeric = Number(trimmed);
+  if (Number.isFinite(numeric) && numeric >= 0) {
+    return Math.min(3600, Math.max(60, Math.round(numeric)));
+  }
+  const parsedDate = Date.parse(trimmed);
+  if (!Number.isNaN(parsedDate)) {
+    const deltaSec = Math.round((parsedDate - Date.now()) / 1000);
+    if (deltaSec > 0) {
+      return Math.min(3600, Math.max(60, deltaSec));
+    }
+  }
+  return undefined;
 }
 
 async function readCapped(res: Response, maxBytes: number, signal: AbortSignal): Promise<string> {
@@ -172,9 +193,22 @@ export async function fetchExternal(rawUrl: string, options: ExternalFetchOption
         continue;
       }
 
+      const etag = (res.headers.get('etag') || '').trim() || undefined;
+      const lastModified = (res.headers.get('last-modified') || '').trim() || undefined;
+      const retryAfterSeconds = parseRetryAfterSeconds(res.headers.get('retry-after'));
+
       if (!res.ok) {
         await res.body?.cancel();
-        return { ok: false, status: res.status, statusText: res.statusText, url: url.toString(), text: '' };
+        return {
+          ok: false,
+          status: res.status,
+          statusText: res.statusText,
+          url: url.toString(),
+          text: '',
+          etag,
+          lastModified,
+          retryAfterSeconds,
+        };
       }
       const xfo = (res.headers.get('x-frame-options') || '').trim();
       const csp = (res.headers.get('content-security-policy') || '').trim();
@@ -187,6 +221,9 @@ export async function fetchExternal(rawUrl: string, options: ExternalFetchOption
         url: url.toString(),
         text,
         canEmbedDirectly: !hasFrameBlock,
+        etag,
+        lastModified,
+        retryAfterSeconds,
       };
     }
   } catch (err) {

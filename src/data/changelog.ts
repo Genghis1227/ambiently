@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.4.17",
+    date: "November 10, 2026",
+    title: "Calendar Feed HTTP 429 Resilience, Private Feed Caching & US Holidays Fallback",
+    highlights: [
+      "Built-In US Holidays Fallback: Automatically serves US federal and major cultural holidays whenever Google Calendar rate-limits shared edge IPs (HTTP 429) on the default US Holidays feed.",
+      "Private Calendar Edge Protection & 304 Revalidation: Added 15-minute SHA-256-keyed server caching, ETag/Last-Modified conditional checks, 12-hour stale-if-error retention, and Retry-After cooldowns to keep private Google, iCloud, and Outlook .ics feeds safe from throttling.",
+      "Shared Per-URL Multi-Canvas Cache & Calm Sync Status: Reuses fetched calendar data across Settings checks, color edits, and rotating canvases with exponential backoff and a 12-hour grace window for transient blips.",
+    ],
+  },
+  {
     version: "v0.4.16",
     date: "November 10, 2026",
     title: "Parent Participation, Point Banks & Equal Point Splitting on Shared Family Tasks",

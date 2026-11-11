@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.17] - 2026-11-10
+
+### Calendar Feed HTTP 429 Resilience, Private Feed Caching & US Holidays Fallback
+* **Built-In US Holidays Fallback (`functions/_shared/usHolidaysFallback.ts`, `functions/api/ical.ts`):**
+  * Added deterministic generation of US federal and major cultural holidays so Google's `en.usa#holiday` public feed seamlessly serves holidays (`200 OK`) whenever shared Cloudflare egress IPs are throttled (`HTTP 429` / `403` / `5xx`) or time out.
+* **Private & Public Edge Caching, `304` Revalidation & `stale-if-error` (`functions/api/ical.ts`, `functions/_shared/fetchExternal.ts`):**
+  * Added SHA-256-keyed Edge + server caching (15 minutes for private `.ics` feeds, 6 hours for public feeds, 60s manual-refresh floor), conditional `ETag` (`If-None-Match`) and `Last-Modified` (`If-Modified-Since`) `304 Not Modified` revalidation, 12-hour `stale-if-error` retention, and upstream `Retry-After` cooldown enforcement while keeping `Cache-Control: private, no-store` on browser responses.
+* **Shared Per-URL Client Cache & Cross-Canvas Cooldown (`src/services/feeds.ts`, `src/components/widgets/CalendarWidget.tsx`):**
+  * Added hashed per-URL client caching across up to 16 feeds and 12 multi-canvas Calendar widgets so testing/adding private calendars in Settings, changing colors, or rotating across canvases never triggers duplicate fetches.
+  * Added per-URL exponential backoff with jitter (`15m -> 30m -> 60m` on `429`) and a 12-hour transient warning grace window so temporary rate limits never spam `/api/ical` on 30s canvas rotations or display false broken-link banners over fresh cached events.
+
+---
+
 ## [0.4.16] - 2026-11-10
 
 ### Parent Participation, Point Banks & Equal Point Splitting on Shared Family Tasks
