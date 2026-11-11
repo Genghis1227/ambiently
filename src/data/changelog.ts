@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.5.2",
+    date: "November 11, 2026",
+    title: "Streamlined Navigation Dock, 8-Step Getting Started Wizard & Documentation Refresh",
+    highlights: [
+      "Streamlined Navigation Dock: Removed the redundant middle Family Hub icon from the toolbar since both Chores & Rewards and Family Meal Planner operate directly as customizable canvas widgets.",
+      "Expanded 8-Step Getting Started Wizard: Added a dedicated 'Meals & Grocery' walkthrough slide and updated the 'Chores & Rewards' and 'Notes & Lists' slides to cover Cooking Mode, Recipe URL scraping, and the 3rd '🛒 Shopping List' sticky note type.",
+      "Comprehensive Documentation Refresh: Updated README.md, FEATURES.md, and ARCHITECTURE.md with the Family Meal Planner, Smart Grocery Aggregator, Dexie v6 schema, and Phase 1 Supabase migration guide.",
+    ],
+  },
+  {
     version: "v0.5.1",
     date: "November 11, 2026",
     title: "Dedicated Shopping List Sticky Note, Recent Meal Chips & 21-Day Schedule Pruning",

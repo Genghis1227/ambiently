@@ -7,9 +7,9 @@ Ambiently is engineered as a **Local-First Progressive Web App (PWA)** hosted on
 ```mermaid
 flowchart TB
     subgraph Client ["Browser / Kiosk Client (React 19 + Vite PWA)"]
-        UI["UI Layer (Pure Corkboard Canvases, Widgets, Chore Hub, Mobile Companion)"]
-        Store["Zustand State Stores\n(dashboardStore.ts, choreStore.ts, useProfileStore.ts)"]
-        IDB[("IndexedDB (Dexie.js v5)\nSettings, Tabs, Widgets, Notes, Chores, Profiles, Vault")]
+        UI["UI Layer (Pure Corkboard Canvases, Widgets, Chore Hub, Meal Planner, Mobile Companion)"]
+        Store["Zustand State Stores\n(dashboardStore.ts, choreStore.ts, useMealStore.ts, useProfileStore.ts)"]
+        IDB[("IndexedDB (Dexie.js v6)\nSettings, Tabs, Widgets, Notes, Chores, Meals, Profiles, Vault")]
         Cache[("CacheStorage API\nOffline Photos & Assets")]
         FSA["File System Access API\n(ambiently-data.json Auto-Backup)"]
     end
@@ -18,7 +18,7 @@ flowchart TB
         ICalProxy["/api/ical\n(RFC 5545 & IANA Timezone Parser)"]
         RssProxy["/api/rss\n(RSS 2.0 / Atom XML Parser)"]
         ReaderProxy["/api/reader & /api/web-proxy\n(Readability Article Extractor & Iframe Proxy)"]
-        MetadataProxy["/api/metadata\n(OpenGraph Wishlist URL Scraper)"]
+        MetadataProxy["/api/metadata\n(OpenGraph Wishlist & Recipe JSON-LD Scraper)"]
         GPhotosProxy["/api/gphotos\n(Google Photos batchexecute RPC Paginator)"]
         GDriveProxy["/api/gdrive\n(Google Drive Shared Folder Ingestion)"]
     end
@@ -46,14 +46,15 @@ flowchart TB
 
 ## 2. Local-First Data Layer (`src/services/db.ts`)
 
-Ambiently uses **Dexie.js** over browser `IndexedDB` (`AmbientlyDB` schema version `5`) with 7 core object stores:
+Ambiently uses **Dexie.js** over browser `IndexedDB` (`AmbientlyDB` schema version `6`) with 8 core object stores:
 1. `settings`: Global kiosk configuration (`dockPosition`, `carouselEnabled`, `nightModeStyle`, `nightModeStart`, `nightModeEnd`, `wakeLockEnabled`, `pinHash`, `clockFormat`, `weekStartsOn`).
 2. `tabs`: Ordered canvas definitions (`id`, `name`, `icon`, `order`, `autoRotateDurationSec`, `isHome`, `enabled`).
-3. `widgets`: Widget instances scoped by `tabId`, storing normalized freeform canvas coordinates (`freeformPos: { xRatio, yRatio, wRatio, hRatio, zIndex, rotation, isFullScreen }`), mobile display ordering (`mobileOrder`), and widget-specific `config` (e.g., calendar `.ics` sources, weather coordinates, photo settings, quote intervals, chore widget scope).
-4. `notes`: Sticky notes & checklists scoped by `tabId`, supporting soft-deletion (`archivedAt`), automatic expiration (`expiresAt`), canvas pinning status (`isPinnedToCanvas`), and freeform coordinates.
+3. `widgets`: Widget instances scoped by `tabId`, storing normalized freeform canvas coordinates (`freeformPos: { xRatio, yRatio, wRatio, hRatio, zIndex, rotation, isFullScreen }`), mobile display ordering (`mobileOrder`), and widget-specific `config` (e.g., calendar `.ics` sources, weather coordinates, photo settings, quote intervals, chore widget scope, meal planner scope).
+4. `notes`: Sticky notes, checklists, & shopping lists (`isShoppingList: true`) scoped by `tabId`, supporting soft-deletion (`archivedAt`), automatic expiration (`expiresAt`), canvas pinning status (`isPinnedToCanvas`), and freeform coordinates.
 5. `localDeviceVault`: Device-only key-value store for sensitive local tokens and file handles that are never pushed to cloud sync.
 6. `choreEngineState`: Singleton household snapshot (`id: 'household_chores'`) storing chore templates, active instances, wishlist rewards, trophy case records, the immutable append-only point audit ledger, and household chore settings.
 7. `householdProfiles`: Global family member profiles (`id`, `name`, `role`, `color`, `avatarDataUrl`, `icon`) shared across the Chore Engine and household planners.
+8. `meals`: Singleton household meal planner snapshot (`id: 'household_meals'`) storing saved recipes (`recipes`), scheduled calendar meals (`scheduledMeals`, automatically pruned after 21 days in the past), checked grocery item keys (`checkedGroceryKeys`), and deletion tombstones for conflict-free cloud merging.
 
 ---
 
@@ -73,7 +74,7 @@ Cloudflare Pages Functions handle CORS-free feeds, media parsing, and deep pagin
 * **`functions/api/rss.ts` (`/api/rss`)**: Fetches RSS 2.0 `<item>` and Atom `<entry>` XML feeds, strips HTML/CDATA tags, extracts lead images and content snippets, and returns normalized JSON headlines cached for 15 minutes.
 * **`functions/api/reader.ts` (`/api/reader`)**: Extracts clean, distraction-free article HTML, headlines, bylines, and hero images using `@mozilla/readability` and `linkedom` with semantic `<article>` and JSON-LD fallbacks.
 * **`functions/api/web-proxy.ts` (`/api/web-proxy`)**: Proxies external web pages for in-app kiosk viewing when sites block direct iframe embedding via `X-Frame-Options` or `CSP frame-ancestors`.
-* **`functions/api/metadata.ts` (`/api/metadata`)**: Extracts OpenGraph (`og:title`, `og:image`) and product price metadata (`product:price:amount`, JSON-LD `Offer`) for the Chore & Reward Engine's Wishlist URL scraper.
+* **`functions/api/metadata.ts` (`/api/metadata`)**: Extracts OpenGraph (`og:title`, `og:image`), product price metadata (`product:price:amount`, JSON-LD `Offer`) for the Chore & Reward Engine's Wishlist URL scraper, and Schema.org `Recipe` JSON-LD (`recipeIngredient`, `recipeInstructions` including `HowToStep`/`HowToSection`, `recipeYield`, and ISO 8601 `prepTime`/`cookTime`) for the Family Meal Planner's Recipe URL importer.
 * **`functions/api/gphotos.ts` (`/api/gphotos`)**: Resolves public Google Photos shared albums (`photos.app.goo.gl` / `photos.google.com/share`). Extracts album metadata (`AF_initDataCallback 'ds:1'`) and automates subsequent `snAcKc` batchexecute RPC pagination to retrieve full photo collections (tested up to 7,500+ photos in ~11s, at most 10,000), kept in the browser's cache for 1 hour.
 * **`functions/api/gdrive.ts` (`/api/gdrive`)**: Resolves public Google Drive shared folders (`drive.google.com/drive/folders/...`) into high-resolution streamable photos (`=w1920-h1080`), skipping video/document formats and validating public access permissions.
 * **`functions/_shared/fetchExternal.ts`**: Every function fetches through this. It allows only public HTTPS addresses and checks each redirect too, caps the wait and the size of the answer, and refuses requests from other websites. The photo functions also only follow redirects within Google's hosts.

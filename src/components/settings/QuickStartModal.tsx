@@ -19,6 +19,8 @@ import {
   HelpCircle,
   Check,
   ExternalLink,
+  Utensils,
+  ShoppingCart,
 } from 'lucide-react';
 
 export const QUICKSTART_STORAGE_KEY = 'ambiently_quickstart_dismissed_v1';
@@ -74,7 +76,7 @@ const SLIDES: WalkthroughSlide[] = [
   {
     id: 'welcome',
     shortTitle: 'Welcome',
-    badge: 'Step 1 of 7 • Getting Started',
+    badge: 'Step 1 of 8 • Getting Started',
     title: 'Welcome to Ambiently',
     subtitle:
       'Your calm, offline-first smart wall display and digital family command center. Here is how your board works in 60 seconds.',
@@ -89,7 +91,7 @@ const SLIDES: WalkthroughSlide[] = [
       {
         icon: <LayoutGrid className="w-4 h-4 text-blue-400" />,
         heading: 'Add Widget Tiles & Sticky Notes',
-        body: 'When the canvas is unlocked, tap the blue "+" button on the Dock to add Clocks, Weather, Calendars, Chores, Photo Frames, Sticky Notes, Countdown timers, or RSS feeds.',
+        body: 'When the canvas is unlocked, tap the blue "+" button on the Dock to add Clocks, Weather, Calendars, Chores & Rewards, Family Meal Planner, Photo Frames, Sticky Notes, or RSS feeds.',
       },
       {
         icon: <Wand2 className="w-4 h-4 text-purple-400" />,
@@ -105,16 +107,16 @@ const SLIDES: WalkthroughSlide[] = [
   {
     id: 'canvases',
     shortTitle: 'Canvases',
-    badge: 'Step 2 of 7 • Multi-Canvas Loop',
+    badge: 'Step 2 of 8 • Multi-Canvas Loop',
     title: 'Canvases, Themes & Auto-Rotation',
     subtitle:
-      'Organize your display into dedicated boards—like Family Overview, Weekly Calendar, Chores Hub, and Photo Frame.',
+      'Organize your display into dedicated boards—like Family Overview, Weekly Calendar, Chores & Meals, and Photo Frame.',
     accentColor: 'from-indigo-500/20 to-purple-600/20 border-indigo-500/30 text-indigo-300',
     icon: <LayoutGrid className="w-6 h-6 text-indigo-400" />,
     steps: [
       {
         icon: <LayoutGrid className="w-4 h-4 text-indigo-400" />,
-        heading: 'Up to 8 Custom Canvases',
+        heading: 'Up to 10 Custom Canvases',
         body: 'Switch canvases from the Dock or create new ones via "+" → New Canvas (or Settings → Canvases). Each canvas has its own icon, dark or light theme, and optional custom background wallpaper.',
       },
       {
@@ -125,7 +127,7 @@ const SLIDES: WalkthroughSlide[] = [
       {
         icon: <Check className="w-4 h-4 text-cyan-400" />,
         heading: 'Touch-Aware Pause',
-        body: 'Touching the screen or opening any modal automatically pauses carousel rotation so the board never switches while someone is reading or checking off a chore.',
+        body: 'Touching the screen or opening any modal automatically pauses carousel rotation so the board never switches while someone is reading, cooking, or checking off a chore.',
       },
     ],
     proTip:
@@ -136,7 +138,7 @@ const SLIDES: WalkthroughSlide[] = [
   {
     id: 'calendar',
     shortTitle: 'Calendar',
-    badge: 'Step 3 of 7 • Family Schedule',
+    badge: 'Step 3 of 8 • Family Schedule',
     title: 'Connecting Google, iCloud & Outlook Calendars',
     subtitle:
       'Merge multiple family, work, school, and holiday calendars onto a single color-coded schedule.',
@@ -165,7 +167,7 @@ const SLIDES: WalkthroughSlide[] = [
   {
     id: 'chores',
     shortTitle: 'Chores & Rewards',
-    badge: 'Step 4 of 7 • Family Gamification',
+    badge: 'Step 4 of 8 • Family Gamification',
     title: 'Chores, Point Banks & Reward Store',
     subtitle:
       'Turn daily routines into an engaging family game with custom avatars, point splitting, and a wishlist Reward Store.',
@@ -175,17 +177,17 @@ const SLIDES: WalkthroughSlide[] = [
       {
         icon: <CheckSquare className="w-4 h-4 text-emerald-400" />,
         heading: 'Kid & Parent Profiles + Shared Tasks',
-        body: 'Add Kids and Parents in Settings → Household (with photo crop or emoji avatars). Personal chores go to one person; Shared Family Tasks let solo helpers claim full points or split points equally via "Who helped?".',
+        body: 'Add Kids and Parents in Settings → Household (with circular 256×256 WebP photo crop or emoji avatars). Personal chores go to one person; Shared Family Tasks let solo helpers claim full points or split points via "Who helped?".',
       },
       {
         icon: <LayoutGrid className="w-4 h-4 text-teal-400" />,
-        heading: 'Compact Tile or Full-Screen Canvas Hub',
-        body: 'Open the Family Hub from the Checklist icon on the Dock—or open a Chores tile\'s Settings and select "Full-Screen Hub on Canvas" so the 3-column Hub (Point Banks + Daily Chores + Reward Store) rotates with your canvases.',
+        heading: 'Compact Bento Tile or Full-Screen Chore Hub',
+        body: 'Add a Chores & Rewards tile from "+" → Add Widget Tile. Tap the Maximize icon in the tile header anytime to open the 3-column Full-Screen Hub (Point Banks + Daily Chores + Reward Store), or pin it as a Full-Screen Hub on a dedicated canvas.',
       },
       {
         icon: <Trophy className="w-4 h-4 text-amber-400" />,
         heading: 'Wishlist Proposals, Parent Drawer & Trophy Case',
-        body: 'Family members propose wishes with "+ Wish". Parents tap the Shield icon in the Hub to approve chores, price wishes in points, and fulfill redeemed prizes into the permanent Trophy Case.',
+        body: 'Family members propose wishes with "+ Wish". Parents tap the Shield review badge on the tile or Hub to approve chores, price wishes in points, and fulfill redeemed prizes into the permanent Trophy Case.',
       },
     ],
     proTip:
@@ -194,24 +196,55 @@ const SLIDES: WalkthroughSlide[] = [
     ctaAction: 'chores_hub',
   },
   {
+    id: 'meals',
+    shortTitle: 'Meals & Grocery',
+    badge: 'Step 5 of 8 • Kitchen & Recipes',
+    title: 'Family Meal Planner, Recipes & Smart Grocery List',
+    subtitle:
+      'Plan the week\'s meals, import recipes from any cooking URL, cook hands-free, and auto-build your aisle-sorted shopping list.',
+    accentColor: 'from-amber-500/20 to-emerald-600/20 border-amber-500/30 text-amber-300',
+    icon: <Utensils className="w-6 h-6 text-amber-400" />,
+    steps: [
+      {
+        icon: <Utensils className="w-4 h-4 text-amber-400" />,
+        heading: 'Tomorrow, 3-Day Outlook or 7-Box Full Week',
+        body: 'Add a Family Meal Planner tile from "+" → Add Widget Tile. Use the tile\'s Gear settings to choose Tomorrow, 3-Day Outlook, or Full Week grid, toggle Sunday/Monday start, and show assigned cook avatars.',
+      },
+      {
+        icon: <Sparkles className="w-4 h-4 text-emerald-400" />,
+        heading: 'Quick-Text Chips, Recipe Scraper & Cooking Mode',
+        body: 'Tap "+" on any day to schedule a quick meal in one tap (with recent meal autocomplete chips) or link a recipe from your Household Recipe Book, any recipe URL, or TheMealDB. Tap a recipe pill to open full-screen Cooking Mode with Screen Wake Lock.',
+      },
+      {
+        icon: <ShoppingCart className="w-4 h-4 text-cyan-400" />,
+        heading: 'Smart Ingredient Aggregator & Shopping List Note',
+        body: 'Import scaled recipe ingredients (0.5× / 1× / 2×) to automatically merge quantities across 8 store aisles. Export to Google Keep in one tap or press "To Sticky Note" to sync straight to your canvas 🛒 Shopping List sticky note.',
+      },
+    ],
+    proTip:
+      'Scheduled meals older than 21 days are automatically pruned to keep your planner fast and clean, while recipes saved in your Household Recipe Book stay forever.',
+    ctaLabel: 'Add Meal Planner Tile',
+    ctaAction: 'add_widget',
+  },
+  {
     id: 'notes',
     shortTitle: 'Sticky Notes',
-    badge: 'Step 5 of 7 • Reminders & Lists',
-    title: 'Sticky Notes, Checklists & Expiration',
+    badge: 'Step 6 of 8 • Reminders & Lists',
+    title: 'Sticky Notes, Checklists & 🛒 Shopping List Notes',
     subtitle:
-      'Leave quick reminders, grocery checklists, or temporary family announcements right on the board.',
+      'Leave quick reminders, standard checklists, or an aisle-grouped Shopping List right on the board.',
     accentColor: 'from-amber-500/20 to-orange-600/20 border-amber-500/30 text-amber-300',
     icon: <StickyNote className="w-6 h-6 text-amber-400" />,
     steps: [
       {
         icon: <StickyNote className="w-4 h-4 text-amber-400" />,
-        heading: 'Freeform Corkboard Notes or Tile Notes',
-        body: 'Use "+" → New Sticky Note to pin a freeform note anywhere on a canvas (or set it to show on "All Canvases"), or use a Sticky Notes tile for a neat scrollable list.',
+        heading: '3 Sticky Note Types: Text, Checklist & 🛒 Shopping List',
+        body: 'Use "+" → New Sticky Note to create a free-text note, a standard Checklist, or a dedicated 🛒 Shopping List sticky note that automatically groups items by grocery store aisle.',
       },
       {
         icon: <CheckSquare className="w-4 h-4 text-emerald-400" />,
-        heading: 'Interactive Checklists & Duplicate',
-        body: 'Switch any note to Checklist mode to check off items with a tap. Duplicate recurring lists in one click—all checkboxes automatically reset on the copy.',
+        heading: 'Inline Grocery Quick-Add & 1-Tap Clear',
+        body: 'On a 🛒 Shopping List sticky note, type directly into "+ Add grocery item..." on the canvas (e.g., "2 avocados") to auto-sort it into the right aisle, and tap "Clear (X)" to sweep away checked items.',
       },
       {
         icon: <Archive className="w-4 h-4 text-orange-400" />,
@@ -220,14 +253,14 @@ const SLIDES: WalkthroughSlide[] = [
       },
     ],
     proTip:
-      'Double-tap any freeform sticky note on an unlocked canvas to edit its title, checklist items, font size, or color.',
+      'Double-tap any freeform sticky note on an unlocked canvas to edit its title, switch its format (Text / Checklist / Shopping List), change font size, or pick a new color.',
     ctaLabel: 'Create a Sticky Note',
     ctaAction: 'create_note',
   },
   {
     id: 'photos',
     shortTitle: 'Photos & Kiosk',
-    badge: 'Step 6 of 7 • Ambient Display',
+    badge: 'Step 7 of 8 • Ambient Display',
     title: 'Shared Photos, Night Mode & Kiosk Lock',
     subtitle:
       'Designed to run 24/7 on wall monitors, kitchen tablets, and Raspberry Pi displays without glare or burn-in.',
@@ -247,7 +280,7 @@ const SLIDES: WalkthroughSlide[] = [
       {
         icon: <Lock className="w-4 h-4 text-blue-400" />,
         heading: 'Parent PIN Lock & Auto-Hide Toolbar',
-        body: 'Set a 4-digit PIN in Settings → Display & Kiosk to protect Settings and Parent Chore approvals. Press "\\" (or tap the Eye icon in Quick Utilities) to hide the Dock for full-screen immersion.',
+        body: 'Set a 4-digit PIN in Settings → Household to protect Settings and Parent Chore approvals. Press "\\" (or tap the Eye icon in Quick Utilities) to hide the Dock for full-screen immersion.',
       },
     ],
     proTip:
@@ -258,7 +291,7 @@ const SLIDES: WalkthroughSlide[] = [
   {
     id: 'sync',
     shortTitle: 'Sync & Mobile',
-    badge: 'Step 7 of 7 • Multi-Device & Backups',
+    badge: 'Step 8 of 8 • Multi-Device & Backups',
     title: 'Cloud Sync, Backups & Mobile Companion',
     subtitle:
       'Keep your wall display, family tablets, and phones synchronized in real time while retaining full local ownership.',
@@ -268,12 +301,12 @@ const SLIDES: WalkthroughSlide[] = [
       {
         icon: <Cloud className="w-4 h-4 text-cyan-400" />,
         heading: 'Live Cloud Sync & Household Board Sharing',
-        body: 'Sign in under Settings → Backup & System to enable instant WebSocket sync across devices. Use the QR/Share button on the Dock to invite family members or pair a wall display.',
+        body: 'Sign in under Settings → Backup & System to enable instant WebSocket sync across devices. Use the Share Board button in Settings or Quick Hub to invite family members.',
       },
       {
         icon: <Smartphone className="w-4 h-4 text-emerald-400" />,
         heading: 'Mobile Companion View',
-        body: 'On phones, tap the Smartphone icon on the Dock to switch to the pocket-friendly Mobile Companion for checking chores, calendars, and posting notes on the go.',
+        body: 'On phones, switch to the pocket-friendly Mobile Companion for checking chores, meal plans, calendars, and adding items to your 🛒 Shopping List note on the go.',
       },
       {
         icon: <Check className="w-4 h-4 text-amber-400" />,
