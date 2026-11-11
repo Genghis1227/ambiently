@@ -11,7 +11,14 @@ import {
   X,
   HelpCircle,
 } from 'lucide-react';
-import { fetchCalendarEvents, getCachedCalendarEvents, type CalendarEvent, type CalendarSource, getCalendarFeedStatuses, type CalendarFeedStatus } from '../../services/feeds';
+import {
+  fetchCalendarEvents,
+  getCachedCalendarEvents,
+  type CalendarEvent,
+  type CalendarSource,
+  getVisibleCalendarFeedProblems,
+  type CalendarFeedStatus,
+} from '../../services/feeds';
 import { CalendarUrlGuideModal } from '../calendar/CalendarUrlGuideModal';
 
 export type CalendarViewMode = 'agenda' | '3day' | 'week' | 'month';
@@ -431,7 +438,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<number | null>(() => getCachedCalendarEvents(sources)?.lastFetched || null);
   const [feedProblems, setFeedProblems] = useState<CalendarFeedStatus[]>(() =>
-    getCalendarFeedStatuses(sources).filter((f) => !f.ok)
+    getVisibleCalendarFeedProblems(sources)
   );
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [baseDate, setBaseDate] = useState(new Date());
@@ -468,9 +475,10 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
     }
     setIsSyncing(true);
     try {
-      const data = await fetchCalendarEvents(sources, force);
+      const manualRefresh = force && !background;
+      const data = await fetchCalendarEvents(sources, force, manualRefresh);
       setEvents(data);
-      setFeedProblems(getCalendarFeedStatuses(sources).filter((f) => !f.ok));
+      setFeedProblems(getVisibleCalendarFeedProblems(sources));
       setLastUpdated(getCachedCalendarEvents(sources)?.lastFetched ?? Date.now());
     } catch (err) {
       console.warn('Failed to load events:', err);
@@ -484,7 +492,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
     const cached = getCachedCalendarEvents(sources);
     if (cached) {
       setEvents(cached.events);
-      setFeedProblems(getCalendarFeedStatuses(sources).filter((f) => !f.ok));
+      setFeedProblems(getVisibleCalendarFeedProblems(sources));
       setLastUpdated(cached.lastFetched);
       if (cached.isStale) {
         // Silently revalidate in background if older than 15 minutes
