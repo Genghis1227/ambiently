@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.4] - 2026-11-11
+
+### Prominent Cook Avatars Alongside Scheduled Meals & Auto-Organize Toolbar Toggle
+* **Prominent Cook Profile Pictures Alongside Meal Pills (`src/components/widgets/MealPlannerWidget.tsx`, `src/components/meals/MealEntryModal.tsx`, `src/components/common/ProfileAvatar.tsx`):**
+  * Upgraded cook avatars on **3-Day** and **Full Week** meal pills to a crisp leading `28px` (`size="sm"`) circular photo badge (`shrink-0`) right alongside the meal slot and title, and displayed the cook's `28px` photo + name badge (plus linked recipe thumbnail) on **Tomorrow** meal cards.
+  * Enabled 1-click **Schedule Meal** directly from an open recipe draft (`isEditingDraft`) so creating/importing a recipe and assigning a cook schedules both in a single step.
+  * Added cook picture + name preview to the **Schedule Family Meal** modal header, `28px` avatars on **Assigned Cook** selector chips, cook avatars on recent quick-meal suggestion chips, and custom `emoji` fallback support in `ProfileAvatar`.
+* **Auto-Organize Toolbar Toggle Fix (`src/components/dock/NavigationDock.tsx`):**
+  * Fixed the **Auto-Organize (`Wand2`)** button on the Navigation Dock so clicking it again while open toggles the pop-out menu closed, and ensured switching canvas tabs or opening Archived Notes also dismisses the pop-out.
+
+---
+
 ## [0.5.3] - 2026-11-11
 
 ### Auto-Carousel Pause Guard for Widget Modals, Portals & Active Form Inputs

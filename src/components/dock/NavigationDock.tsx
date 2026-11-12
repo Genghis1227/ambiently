@@ -410,6 +410,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
                 onClick={() => {
                   setIsQuickMenuOpen(false);
                   setActivePopout(null);
+                  setShowOrganizeMenu(false);
                   onSelectTab(tab.id);
                 }}
                 title={
@@ -566,8 +567,12 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
                   onClick={() => {
                     setActivePopout(null);
                     setIsQuickMenuOpen(false);
-                    onAutoOrganize(activeMode);
-                    setShowOrganizeMenu(true);
+                    if (showOrganizeMenu) {
+                      setShowOrganizeMenu(false);
+                    } else {
+                      onAutoOrganize(activeMode);
+                      setShowOrganizeMenu(true);
+                    }
                   }}
                   title="Auto-Organize / Auto-Tile (Zero Overlap)"
                   className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all cursor-pointer border ${
@@ -635,6 +640,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
               <button
                 onClick={() => {
                   setActivePopout(null);
+                  setShowOrganizeMenu(false);
                   onOpenTrash();
                 }}
                 title={`Archived & Expired Notes (${trashCount})`}

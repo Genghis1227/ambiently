@@ -11,6 +11,8 @@ export interface ProfileAvatarLike {
   color: string;
   avatarDataUrl?: string;
   avatarUrl?: string;
+  emoji?: string;
+  icon?: string;
 }
 
 export interface ProfileAvatarProps {
@@ -102,7 +104,9 @@ export const ProfileAvatar: React.FC<ProfileAvatarProps> = ({
         style={ringStyle}
         title={resolvedProfile.name}
       >
-        {getProfileInitials(resolvedProfile.name)}
+        {resolvedProfile.emoji ||
+          resolvedProfile.icon ||
+          getProfileInitials(resolvedProfile.name)}
       </span>
     );
 
