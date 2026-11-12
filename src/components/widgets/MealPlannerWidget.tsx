@@ -408,9 +408,7 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
       'dinner';
 
     const existingInChosen =
-      preferredSlot
-        ? existingForDay.find((m) => m.slot === preferredSlot) || null
-        : null;
+      existingForDay.find((m) => m.slot === chosenSlot) || null;
 
     setEntryModalState({
       isOpen: true,
@@ -1234,15 +1232,74 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
                             </div>
                           </div>
 
-                          {showCookAvatar && meal.cookProfileId && (
-                            <ProfileAvatar
-                              profileId={meal.cookProfileId}
-                              size="sm"
-                              showName
-                              showRing={!isNightMode}
-                              className="shrink-0"
-                            />
-                          )}
+                          {showCookAvatar &&
+                            (meal.cookProfileId ? (
+                              <span
+                                role="button"
+                                tabIndex={0}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEntryModalState({
+                                    isOpen: true,
+                                    date: meal.date,
+                                    slot: meal.slot,
+                                    editingMeal: meal,
+                                  });
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setEntryModalState({
+                                      isOpen: true,
+                                      date: meal.date,
+                                      slot: meal.slot,
+                                      editingMeal: meal,
+                                    });
+                                  }
+                                }}
+                                title="Tap to change assigned cook"
+                                className="shrink-0 inline-flex items-center"
+                              >
+                                <ProfileAvatar
+                                  profileId={meal.cookProfileId}
+                                  size="sm"
+                                  showName
+                                  showRing={!isNightMode}
+                                  className="shrink-0"
+                                />
+                              </span>
+                            ) : (
+                              <span
+                                role="button"
+                                tabIndex={0}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEntryModalState({
+                                    isOpen: true,
+                                    date: meal.date,
+                                    slot: meal.slot,
+                                    editingMeal: meal,
+                                  });
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setEntryModalState({
+                                      isOpen: true,
+                                      date: meal.date,
+                                      slot: meal.slot,
+                                      editingMeal: meal,
+                                    });
+                                  }
+                                }}
+                                title="Assign a cook to this meal"
+                                className="shrink-0 px-2 py-0.5 rounded-full border border-current/30 text-[10px] font-medium opacity-70 hover:opacity-100 transition-opacity"
+                              >
+                                + Cook
+                              </span>
+                            ))}
                         </button>
                       );
                     })}
@@ -1353,12 +1410,41 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
                               }
                             >
                               {showCookAvatar && meal.cookProfileId && (
-                                <ProfileAvatar
-                                  profileId={meal.cookProfileId}
-                                  size="sm"
-                                  showRing={!isNightMode}
-                                  className="shrink-0"
-                                />
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEntryModalState({
+                                      isOpen: true,
+                                      date: meal.date,
+                                      slot: meal.slot,
+                                      editingMeal: meal,
+                                    });
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      setEntryModalState({
+                                        isOpen: true,
+                                        date: meal.date,
+                                        slot: meal.slot,
+                                        editingMeal: meal,
+                                      });
+                                    }
+                                  }}
+                                  title="Tap to change assigned cook"
+                                  className="shrink-0 inline-flex items-center"
+                                >
+                                  <ProfileAvatar
+                                    profileId={meal.cookProfileId}
+                                    size="sm"
+                                    showName={effectiveScope === 'three_day'}
+                                    showRing={!isNightMode}
+                                    className="shrink-0"
+                                  />
+                                </span>
                               )}
                               <span className="text-[10px] font-semibold uppercase tracking-wide opacity-65 shrink-0">
                                 {SLOT_SHORT_LABELS[meal.slot]}
@@ -1369,6 +1455,37 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
                               <span className="font-medium truncate">
                                 {meal.title}
                               </span>
+                              {showCookAvatar && !meal.cookProfileId && (
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEntryModalState({
+                                      isOpen: true,
+                                      date: meal.date,
+                                      slot: meal.slot,
+                                      editingMeal: meal,
+                                    });
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      setEntryModalState({
+                                        isOpen: true,
+                                        date: meal.date,
+                                        slot: meal.slot,
+                                        editingMeal: meal,
+                                      });
+                                    }
+                                  }}
+                                  title="Assign a cook to this meal"
+                                  className="shrink-0 ml-0.5 px-1.5 py-0.5 rounded-full border border-current/25 text-[10px] font-medium opacity-65 hover:opacity-100 transition-opacity"
+                                >
+                                  + Cook
+                                </span>
+                              )}
                             </button>
                           );
                         })}
@@ -1439,7 +1556,13 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
       <CookingModeModal
         isOpen={cookingModalState.isOpen}
         recipe={cookingModalState.recipe}
-        scheduledMeal={cookingModalState.scheduledMeal}
+        scheduledMeal={
+          cookingModalState.scheduledMeal
+            ? scheduledMeals.find(
+                (m) => m.id === cookingModalState.scheduledMeal?.id
+              ) || cookingModalState.scheduledMeal
+            : null
+        }
         isLight={isLight}
         onClose={() =>
           setCookingModalState({

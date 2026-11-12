@@ -9,7 +9,6 @@ import {
   Play,
   Pause,
   Home,
-  QrCode,
   Sparkles,
   Layers,
   Smartphone,
@@ -17,9 +16,11 @@ import {
   Eye,
   EyeOff,
   HelpCircle,
+  Cloud,
 } from 'lucide-react';
 import type { DockPosition } from '../../types/dashboard';
 import { useDashboardStore } from '../../store/dashboardStore';
+import { getCurrentUser, onAuthStateChange } from '../../services/supabase';
 import { APP_VERSION } from '../../data/version';
 
 const ChangelogModal = React.lazy(() =>
@@ -33,7 +34,7 @@ interface AmbientQuickMenuProps {
   onSelectTab: (tabId: string) => void;
   onOpenSettings: () => void;
   /** Opens household sharing through App, which asks for the PIN when settings need it */
-  onOpenShare: () => void;
+  onOpenShare?: () => void;
   onToggleFullscreen: () => void;
   isFullscreen: boolean;
   onToggleMobileCompanion?: () => void;
@@ -46,7 +47,6 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
   onClose,
   onSelectTab,
   onOpenSettings,
-  onOpenShare,
   onToggleFullscreen,
   isFullscreen,
   onToggleMobileCompanion,
@@ -54,6 +54,7 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
 }) => {
   const [isChangelogOpen, setIsChangelogOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState('');
+  const [cloudEmail, setCloudEmail] = useState<string | null>(null);
 
   const settings = useDashboardStore((s) => s.settings);
   const toggleNightModeManual = useDashboardStore((s) => s.toggleNightModeManual);
@@ -61,6 +62,21 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
   const toggleSnapToGrid = useDashboardStore((s) => s.toggleSnapToGrid);
   const toggleDockHidden = useDashboardStore((s) => s.toggleDockHidden);
   const tabs = useDashboardStore((s) => s.tabs);
+
+  // Sync cloud authentication state
+  useEffect(() => {
+    let active = true;
+    void getCurrentUser().then((user) => {
+      if (active) setCloudEmail(user?.email ?? null);
+    });
+    const unsubscribe = onAuthStateChange((user) => {
+      if (active) setCloudEmail(user?.email ?? null);
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [isOpen]);
 
   // Live clock display in header (only active while quick menu is open)
   useEffect(() => {
@@ -152,12 +168,32 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
         </div>
 
         {/* System Status Pill */}
-        <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-gray-900/80 border border-gray-800/80 text-xs text-gray-400 mb-3">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-gray-300 font-medium">Local-First Engine</span>
+        <div
+          className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-gray-900/80 border border-gray-800/80 text-xs text-gray-400 mb-3"
+          title={
+            cloudEmail
+              ? `Synced to Cloud (${cloudEmail})`
+              : 'Stored locally on this device'
+          }
+        >
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+            {cloudEmail ? (
+              <>
+                <Cloud className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span className="text-emerald-300 font-medium truncate">
+                  Cloud Connected
+                </span>
+              </>
+            ) : (
+              <span className="text-gray-300 font-medium">
+                Local-First Engine
+              </span>
+            )}
           </div>
-          <span className="font-mono text-gray-400 text-[11px]">{currentTime}</span>
+          <span className="font-mono text-gray-400 text-[11px] shrink-0 ml-2">
+            {currentTime}
+          </span>
         </div>
 
         {/* Kiosk Quick Controls Grid */}
@@ -316,22 +352,6 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
             <span className="text-[10px] text-gray-500 font-mono">\</span>
           </button>
 
-          {/* Share Board / Mobile QR */}
-          <button
-            type="button"
-            onClick={() => {
-              onClose();
-              onOpenShare();
-            }}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-gray-900/80 hover:bg-gray-800/90 border border-gray-800 text-xs font-medium text-gray-200 transition-all cursor-pointer"
-          >
-            <div className="flex items-center gap-2">
-              <QrCode className="w-4 h-4 text-cyan-400" />
-              <span>Connect Phone (QR Code)</span>
-            </div>
-            <span className="text-[10px] text-gray-500">Invite</span>
-          </button>
-
           {/* Quick Start & How-To Tour */}
           {onOpenQuickStart && (
             <button
@@ -346,7 +366,7 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
                 <HelpCircle className="w-4 h-4 text-emerald-400" />
                 <span>Quick Start & How-To Tour</span>
               </div>
-              <span className="text-[10px] text-emerald-400/80 font-semibold">7 Steps</span>
+              <span className="text-[10px] text-emerald-400/80 font-semibold">8 Steps</span>
             </button>
           )}
 
