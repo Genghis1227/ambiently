@@ -128,6 +128,7 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
   const storeWeekStartsOn = useMealStore((s) => s.weekStartsOn);
 
   const setWeekStartsOn = useMealStore((s) => s.setWeekStartsOn);
+  const updateScheduledMeal = useMealStore((s) => s.updateScheduledMeal);
   const addShoppingItem = useMealStore((s) => s.addShoppingItem);
   const addStapleToShoppingList = useMealStore(
     (s) => s.addStapleToShoppingList
@@ -155,7 +156,17 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
   }, []);
 
   // Ensure store hydration if mounted standalone
+  const profiles = useProfileStore((s) => s.profiles);
   const isProfileStoreInitialized = useProfileStore((s) => s.isInitialized);
+  const activeProfiles = useMemo(
+    () => profiles.filter((p) => !p.deletedAt),
+    [profiles]
+  );
+  const [selectedCookFilter, setSelectedCookFilter] = useState<'all' | string>(
+    'all'
+  );
+  const [cookPickerMealId, setCookPickerMealId] = useState<string | null>(null);
+
   useEffect(() => {
     if (!isMealStoreInitialized) {
       void useMealStore.getState().initMealStore();
@@ -331,6 +342,43 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
 
     return map;
   }, [scheduledMeals, visibleSlots]);
+
+  const visibleMealCountsByProfile = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const day of dayBoxes) {
+      const dayMeals = mealsByDate.get(day.dateKey) || [];
+      for (const meal of dayMeals) {
+        if (meal.cookProfileId) {
+          counts.set(
+            meal.cookProfileId,
+            (counts.get(meal.cookProfileId) || 0) + 1
+          );
+        }
+      }
+    }
+    return counts;
+  }, [dayBoxes, mealsByDate]);
+
+  const handleCookBadgeTap = (meal: ScheduledMeal) => {
+    if (
+      selectedCookFilter !== 'all' &&
+      meal.cookProfileId !== selectedCookFilter
+    ) {
+      void updateScheduledMeal(meal.id, { cookProfileId: selectedCookFilter });
+      setCookPickerMealId(null);
+      return;
+    }
+    if (activeProfiles.length > 0) {
+      setCookPickerMealId((cur) => (cur === meal.id ? null : meal.id));
+      return;
+    }
+    setEntryModalState({
+      isOpen: true,
+      date: meal.date,
+      slot: meal.slot,
+      editingMeal: meal,
+    });
+  };
 
   // Shopping list counts & grouped sections
   const uncheckedShoppingCount = useMemo(
@@ -778,6 +826,81 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Household Profile Strip (Quick Filter & 1-Tap Cook Assignment) */}
+      {!isShoppingOpen && activeProfiles.length > 0 && (
+        <div
+          data-no-drag="true"
+          className="shrink-0 flex items-center gap-1.5 overflow-x-auto pt-2 pb-1 no-scrollbar"
+          role="group"
+          aria-label="Household cooks"
+        >
+          <button
+            type="button"
+            onClick={() => setSelectedCookFilter('all')}
+            className={`min-h-[28px] px-2.5 py-0.5 rounded-full text-[11px] font-medium border shrink-0 transition-colors cursor-pointer ${
+              selectedCookFilter === 'all'
+                ? isLight
+                  ? 'bg-emerald-700 text-white border-emerald-700'
+                  : 'bg-emerald-900/70 text-emerald-100 border-emerald-700/70'
+                : isLight
+                  ? 'bg-stone-100/80 text-slate-600 border-stone-300/80 hover:bg-stone-200/70'
+                  : 'bg-slate-900/60 text-slate-300 border-slate-800 hover:bg-slate-800/70'
+            }`}
+          >
+            Everyone
+          </button>
+          {activeProfiles.map((profile) => {
+            const isSelected = selectedCookFilter === profile.id;
+            const mealCount = visibleMealCountsByProfile.get(profile.id) || 0;
+            return (
+              <button
+                key={profile.id}
+                type="button"
+                onClick={() =>
+                  setSelectedCookFilter((cur) =>
+                    cur === profile.id ? 'all' : profile.id
+                  )
+                }
+                title={
+                  isSelected
+                    ? `${profile.name} selected — tap + Cook on any meal to assign ${profile.name}`
+                    : `Select ${profile.name} as active cook`
+                }
+                className={`min-h-[28px] pl-1 pr-2.5 py-0.5 rounded-full text-[11px] font-medium border inline-flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer ${
+                  isSelected
+                    ? isLight
+                      ? 'bg-emerald-700 text-white border-emerald-700'
+                      : 'bg-emerald-900/70 text-emerald-100 border-emerald-700/70'
+                    : isLight
+                      ? 'bg-stone-100/80 text-slate-700 border-stone-300/80 hover:bg-stone-200/70'
+                      : 'bg-slate-900/60 text-slate-200 border-slate-800 hover:bg-slate-800/70'
+                }`}
+              >
+                <ProfileAvatar
+                  profile={profile}
+                  size="xs"
+                  showRing={isSelected && !isNightMode}
+                />
+                <span className="truncate max-w-[90px]">{profile.name}</span>
+                {mealCount > 0 && (
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-semibold tabular-nums ${
+                      isSelected
+                        ? 'bg-white/20 text-white'
+                        : isLight
+                          ? 'bg-stone-200/90 text-slate-700'
+                          : 'bg-slate-800 text-slate-300'
+                    }`}
+                  >
+                    {mealCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Full-Week Navigation Sub-Bar */}
       {!isShoppingOpen && effectiveScope === 'full_week' && (
@@ -1232,66 +1355,46 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
                             </div>
                           </div>
 
-                          {showCookAvatar &&
-                            (meal.cookProfileId ? (
+                          {meal.cookProfileId ? (
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCookBadgeTap(meal);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleCookBadgeTap(meal);
+                                }
+                              }}
+                              title="Tap to change assigned cook"
+                              className="shrink-0 inline-flex items-center"
+                            >
+                              <ProfileAvatar
+                                profileId={meal.cookProfileId}
+                                size="sm"
+                                showName
+                                showRing={!isNightMode}
+                                className="shrink-0"
+                              />
+                            </span>
+                          ) : (
+                            showCookAvatar && (
                               <span
                                 role="button"
                                 tabIndex={0}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setEntryModalState({
-                                    isOpen: true,
-                                    date: meal.date,
-                                    slot: meal.slot,
-                                    editingMeal: meal,
-                                  });
+                                  handleCookBadgeTap(meal);
                                 }}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter' || e.key === ' ') {
                                     e.preventDefault();
                                     e.stopPropagation();
-                                    setEntryModalState({
-                                      isOpen: true,
-                                      date: meal.date,
-                                      slot: meal.slot,
-                                      editingMeal: meal,
-                                    });
-                                  }
-                                }}
-                                title="Tap to change assigned cook"
-                                className="shrink-0 inline-flex items-center"
-                              >
-                                <ProfileAvatar
-                                  profileId={meal.cookProfileId}
-                                  size="sm"
-                                  showName
-                                  showRing={!isNightMode}
-                                  className="shrink-0"
-                                />
-                              </span>
-                            ) : (
-                              <span
-                                role="button"
-                                tabIndex={0}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEntryModalState({
-                                    isOpen: true,
-                                    date: meal.date,
-                                    slot: meal.slot,
-                                    editingMeal: meal,
-                                  });
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter' || e.key === ' ') {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    setEntryModalState({
-                                      isOpen: true,
-                                      date: meal.date,
-                                      slot: meal.slot,
-                                      editingMeal: meal,
-                                    });
+                                    handleCookBadgeTap(meal);
                                   }
                                 }}
                                 title="Assign a cook to this meal"
@@ -1299,11 +1402,102 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
                               >
                                 + Cook
                               </span>
-                            ))}
+                            )
+                          )}
                         </button>
                       );
                     })}
                   </div>
+
+                  {/* Inline 1-Tap Cook Picker for Tomorrow Scope */}
+                  {(() => {
+                    const activePickerMeal = dayMeals.find(
+                      (m) => m.id === cookPickerMealId
+                    );
+                    if (!activePickerMeal || activeProfiles.length === 0) {
+                      return null;
+                    }
+                    return (
+                      <div
+                        className={`p-2 rounded-xl border flex flex-wrap items-center justify-between gap-1.5 text-[11px] ${
+                          isLight
+                            ? 'bg-stone-100/90 border-stone-300/80 text-slate-700'
+                            : 'bg-slate-950/80 border-slate-700/80 text-slate-200'
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-semibold opacity-75 mr-0.5">
+                            Cook for {activePickerMeal.title}:
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void updateScheduledMeal(activePickerMeal.id, {
+                                cookProfileId: undefined,
+                              });
+                              setCookPickerMealId(null);
+                            }}
+                            className={`min-h-[26px] px-2 py-0.5 rounded-full border font-medium transition-colors cursor-pointer ${
+                              !activePickerMeal.cookProfileId
+                                ? isLight
+                                  ? 'bg-stone-200 border-stone-400 text-slate-900 font-semibold'
+                                  : 'bg-slate-800 border-slate-600 text-slate-100 font-semibold'
+                                : isLight
+                                  ? 'bg-white border-stone-300/80 text-slate-600 hover:bg-stone-100'
+                                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                            }`}
+                          >
+                            Anyone
+                          </button>
+                          {activeProfiles.map((profile) => {
+                            const selected =
+                              activePickerMeal.cookProfileId === profile.id;
+                            return (
+                              <button
+                                key={profile.id}
+                                type="button"
+                                onClick={() => {
+                                  void updateScheduledMeal(
+                                    activePickerMeal.id,
+                                    {
+                                      cookProfileId: selected
+                                        ? undefined
+                                        : profile.id,
+                                    }
+                                  );
+                                  setCookPickerMealId(null);
+                                }}
+                                className={`min-h-[26px] pl-1 pr-2 py-0.5 rounded-full border font-medium inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
+                                  selected
+                                    ? isLight
+                                      ? 'bg-emerald-100 border-emerald-500 text-emerald-950 font-semibold'
+                                      : 'bg-emerald-950/60 border-emerald-600 text-emerald-100 font-semibold'
+                                    : isLight
+                                      ? 'bg-white border-stone-300/80 text-slate-700 hover:bg-stone-100'
+                                      : 'bg-slate-900 border-slate-800 text-slate-200 hover:border-slate-700'
+                                }`}
+                              >
+                                <ProfileAvatar
+                                  profile={profile}
+                                  size="xs"
+                                  showRing={selected && !isNightMode}
+                                />
+                                <span>{profile.name}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setCookPickerMealId(null)}
+                          className="p-1 rounded opacity-60 hover:opacity-100 cursor-pointer"
+                          aria-label="Close cook picker"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })()
@@ -1318,6 +1512,9 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
             >
               {dayBoxes.map((day) => {
                 const dayMeals = mealsByDate.get(day.dateKey) || [];
+                const activePickerMeal = dayMeals.find(
+                  (m) => m.id === cookPickerMealId
+                );
                 return (
                   <div
                     key={day.dateKey}
@@ -1394,6 +1591,9 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
                             ? recipeById.get(meal.recipeId)
                             : undefined;
                           const isRecipeLinked = Boolean(linkedRecipe);
+                          const isHighlightedByFilter =
+                            selectedCookFilter !== 'all' &&
+                            meal.cookProfileId === selectedCookFilter;
                           return (
                             <button
                               key={meal.id}
@@ -1402,36 +1602,30 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
                               className={`max-w-full min-h-[34px] px-2.5 py-1 rounded-lg border inline-flex items-center gap-1.5 text-xs transition-colors cursor-pointer ${getSlotPillClasses(
                                 meal.slot,
                                 isLight
-                              )}`}
+                              )} ${
+                                isHighlightedByFilter && !isNightMode
+                                  ? 'ring-1 ring-emerald-500/70'
+                                  : ''
+                              }`}
                               title={
                                 isRecipeLinked
                                   ? `${SLOT_FULL_LABELS[meal.slot]}: ${meal.title} (Tap for Cooking Mode)`
                                   : `${SLOT_FULL_LABELS[meal.slot]}: ${meal.title} (Tap to edit)`
                               }
                             >
-                              {showCookAvatar && meal.cookProfileId && (
+                              {meal.cookProfileId && (
                                 <span
                                   role="button"
                                   tabIndex={0}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setEntryModalState({
-                                      isOpen: true,
-                                      date: meal.date,
-                                      slot: meal.slot,
-                                      editingMeal: meal,
-                                    });
+                                    handleCookBadgeTap(meal);
                                   }}
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter' || e.key === ' ') {
                                       e.preventDefault();
                                       e.stopPropagation();
-                                      setEntryModalState({
-                                        isOpen: true,
-                                        date: meal.date,
-                                        slot: meal.slot,
-                                        editingMeal: meal,
-                                      });
+                                      handleCookBadgeTap(meal);
                                     }
                                   }}
                                   title="Tap to change assigned cook"
@@ -1461,23 +1655,13 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
                                   tabIndex={0}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setEntryModalState({
-                                      isOpen: true,
-                                      date: meal.date,
-                                      slot: meal.slot,
-                                      editingMeal: meal,
-                                    });
+                                    handleCookBadgeTap(meal);
                                   }}
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter' || e.key === ' ') {
                                       e.preventDefault();
                                       e.stopPropagation();
-                                      setEntryModalState({
-                                        isOpen: true,
-                                        date: meal.date,
-                                        slot: meal.slot,
-                                        editingMeal: meal,
-                                      });
+                                      handleCookBadgeTap(meal);
                                     }
                                   }}
                                   title="Assign a cook to this meal"
@@ -1489,6 +1673,88 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
                             </button>
                           );
                         })}
+                      </div>
+                    )}
+
+                    {/* Inline 1-Tap Cook Picker for 3-Day / Full-Week Box */}
+                    {activePickerMeal && activeProfiles.length > 0 && (
+                      <div
+                        className={`p-2 rounded-lg border flex flex-wrap items-center justify-between gap-1.5 text-[11px] ${
+                          isLight
+                            ? 'bg-stone-100/95 border-stone-300/80 text-slate-700'
+                            : 'bg-slate-950/85 border-slate-700/80 text-slate-200'
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-semibold opacity-75 mr-0.5">
+                            Cook for {activePickerMeal.title}:
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void updateScheduledMeal(activePickerMeal.id, {
+                                cookProfileId: undefined,
+                              });
+                              setCookPickerMealId(null);
+                            }}
+                            className={`min-h-[26px] px-2 py-0.5 rounded-full border font-medium transition-colors cursor-pointer ${
+                              !activePickerMeal.cookProfileId
+                                ? isLight
+                                  ? 'bg-stone-200 border-stone-400 text-slate-900 font-semibold'
+                                  : 'bg-slate-800 border-slate-600 text-slate-100 font-semibold'
+                                : isLight
+                                  ? 'bg-white border-stone-300/80 text-slate-600 hover:bg-stone-100'
+                                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                            }`}
+                          >
+                            Anyone
+                          </button>
+                          {activeProfiles.map((profile) => {
+                            const selected =
+                              activePickerMeal.cookProfileId === profile.id;
+                            return (
+                              <button
+                                key={profile.id}
+                                type="button"
+                                onClick={() => {
+                                  void updateScheduledMeal(
+                                    activePickerMeal.id,
+                                    {
+                                      cookProfileId: selected
+                                        ? undefined
+                                        : profile.id,
+                                    }
+                                  );
+                                  setCookPickerMealId(null);
+                                }}
+                                className={`min-h-[26px] pl-1 pr-2 py-0.5 rounded-full border font-medium inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
+                                  selected
+                                    ? isLight
+                                      ? 'bg-emerald-100 border-emerald-500 text-emerald-950 font-semibold'
+                                      : 'bg-emerald-950/60 border-emerald-600 text-emerald-100 font-semibold'
+                                    : isLight
+                                      ? 'bg-white border-stone-300/80 text-slate-700 hover:bg-stone-100'
+                                      : 'bg-slate-900 border-slate-800 text-slate-200 hover:border-slate-700'
+                                }`}
+                              >
+                                <ProfileAvatar
+                                  profile={profile}
+                                  size="xs"
+                                  showRing={selected && !isNightMode}
+                                />
+                                <span>{profile.name}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setCookPickerMealId(null)}
+                          className="p-1 rounded opacity-60 hover:opacity-100 cursor-pointer"
+                          aria-label="Close cook picker"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     )}
                   </div>
@@ -1542,6 +1808,9 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
         initialSlot={entryModalState.slot}
         editingMeal={entryModalState.editingMeal}
         initialMode={entryModalState.initialMode}
+        defaultCookProfileId={
+          selectedCookFilter !== 'all' ? selectedCookFilter : undefined
+        }
         isLight={isLight}
         onClose={() =>
           setEntryModalState((prev) => ({

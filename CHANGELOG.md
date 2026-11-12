@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.6] - 2026-11-11
+
+### Household Profile Strip & Inline 1-Tap Cook Picker Directly on the Meal Planner Widget
+* **Household Profile Strip on the Meal Planner Widget (`src/components/widgets/MealPlannerWidget.tsx`, `src/components/meals/MealEntryModal.tsx`):**
+  * Added a horizontal **Household Profile Strip** directly below the `Family Meal Planner` widget header (matching `ChoreWidget.tsx`), showing `Everyone` plus each family member's `ProfileAvatar` photo, name, and count of meals assigned to them in the current view.
+  * Selecting a family member on the widget's profile strip highlights their scheduled meals, sets them as the default cook (`defaultCookProfileId`) when scheduling new meals, and allows 1-tap cook assignment when tapping `+ Cook` on any meal pill.
+* **Inline 1-Tap Cook Picker on Meal Cards (`src/components/widgets/MealPlannerWidget.tsx`):**
+  * Tapping `+ Cook` or an existing cook's avatar on any meal pill (`Tomorrow`, `3-Day`, or `Full Week`) now opens an inline Cook Picker row (`Cook for [Meal]: [Anyone] [👤 Member 1] [👤 Member 2] ...`) directly inside the day box on the widget so cooks can be assigned or switched without opening the full-screen modal.
+* **PWA Version Manifest Sync (`public/version.json`, `index.html`):**
+  * Regenerated `public/version.json` alongside `package.json` so `useUpdateChecker` immediately detects the new release.
+
+---
+
+## [0.5.5] - 2026-11-11
+
+### Inline Cook Assignment on Meal Pills & Cooking Mode + Cloud Status in Quick Menu
+* **1-Tap `+ Cook` & Profile Badges on Meal Pills (`src/components/widgets/MealPlannerWidget.tsx`, `src/components/meals/CookingModeModal.tsx`, `src/components/meals/MealEntryModal.tsx`):**
+  * Added interactive `+ Cook` and cook avatar badges on scheduled meal pills, an inline `Cook:` selector in **Cooking Mode**, automatic slot sync in **Schedule Family Meal**, and live **Cloud Connected** status in `AmbientQuickMenu.tsx`.
+
+---
+
 ## [0.5.4] - 2026-11-11
 
 ### Prominent Cook Avatars Alongside Scheduled Meals & Auto-Organize Toolbar Toggle
