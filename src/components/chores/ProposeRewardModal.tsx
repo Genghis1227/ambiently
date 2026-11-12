@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Sparkles,
@@ -47,6 +48,18 @@ export const ProposeRewardModal: React.FC<ProposeRewardModalProps> = ({
   >('idle');
   const [extractMessage, setExtractMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -129,17 +142,21 @@ export const ProposeRewardModal: React.FC<ProposeRewardModalProps> = ({
     }
   };
 
-  return (
+  const modalContent = (
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-[95] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4"
+      data-no-drag="true"
+      className="fixed inset-0 z-[950] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4"
+      onPointerDown={(e) => e.stopPropagation()}
       onMouseDown={(e) => {
+        e.stopPropagation();
         (e.currentTarget as any).__backdropMouseDown =
           e.target === e.currentTarget &&
           !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName || '');
       }}
       onClick={(e) => {
+        e.stopPropagation();
         if (e.target === e.currentTarget && (e.currentTarget as any).__backdropMouseDown) {
           onClose();
         }
@@ -148,6 +165,8 @@ export const ProposeRewardModal: React.FC<ProposeRewardModalProps> = ({
     >
       <div
         className="w-full max-w-lg rounded-2xl border border-slate-700/60 bg-slate-900/95 text-slate-100 shadow-2xl overflow-hidden"
+        onPointerDown={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -218,11 +237,12 @@ export const ProposeRewardModal: React.FC<ProposeRewardModalProps> = ({
               <div className="relative flex-1">
                 <Link2 className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
-                  type="url"
+                  type="text"
+                  inputMode="url"
                   value={sourceUrl}
                   onChange={(e) => setSourceUrl(e.target.value)}
                   placeholder="https://www.lego.com/... or amazon.com/..."
-                  className="w-full pl-8 pr-3 py-2 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/60"
+                  className="w-full pl-8 pr-3 py-2 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/60 select-text"
                 />
               </div>
               <button
@@ -265,10 +285,11 @@ export const ProposeRewardModal: React.FC<ProposeRewardModalProps> = ({
             <input
               type="text"
               required
+              autoFocus
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. LEGO Creator 3-in-1 Space Roller Coaster, Movie Night, Ice Cream Trip..."
-              className="w-full px-3 py-2 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/60"
+              className="w-full px-3 py-2 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/60 select-text"
             />
           </div>
 
@@ -281,11 +302,12 @@ export const ProposeRewardModal: React.FC<ProposeRewardModalProps> = ({
               <div className="relative">
                 <ImageIcon className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
-                  type="url"
+                  type="text"
+                  inputMode="url"
                   value={imageUrl}
                   onChange={(e) => setImageUrl(e.target.value)}
                   placeholder="https://.../image.jpg"
-                  className="w-full pl-8 pr-3 py-2 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/60"
+                  className="w-full pl-8 pr-3 py-2 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/60 select-text"
                 />
               </div>
             </div>
@@ -297,13 +319,12 @@ export const ProposeRewardModal: React.FC<ProposeRewardModalProps> = ({
               <div className="relative">
                 <DollarSign className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
                 <input
-                  type="number"
-                  step="0.01"
-                  min="0"
+                  type="text"
+                  inputMode="decimal"
                   value={rawPriceInput}
                   onChange={(e) => setRawPriceInput(e.target.value)}
                   placeholder="19.99"
-                  className="w-full pl-7 pr-2.5 py-2 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/60"
+                  className="w-full pl-7 pr-2.5 py-2 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/60 select-text"
                 />
               </div>
             </div>
@@ -360,4 +381,9 @@ export const ProposeRewardModal: React.FC<ProposeRewardModalProps> = ({
       </div>
     </div>
   );
+
+  if (typeof document !== 'undefined') {
+    return createPortal(modalContent, document.body);
+  }
+  return modalContent;
 };

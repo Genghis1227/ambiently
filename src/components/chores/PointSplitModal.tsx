@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Users, UserCheck, Sparkles, Minus, Plus, Equal } from 'lucide-react';
 import type { ActiveChoreInstance, ChoreTemplate, Profile } from '../../types/chores';
 import { calculateEffectiveChorePoints } from '../../utils/choreEngine';
@@ -142,13 +143,18 @@ export const PointSplitModal: React.FC<PointSplitModalProps> = ({
     }
   };
 
-  return (
+  const modalContent = (
     <div
-      className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4"
+      role="dialog"
+      aria-modal="true"
+      data-no-drag="true"
+      className="fixed inset-0 z-[920] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4"
+      onPointerDown={(e) => e.stopPropagation()}
       onClick={onClose}
     >
       <div
         className="w-full max-w-md rounded-2xl border border-slate-700/60 bg-slate-900/95 text-slate-100 shadow-2xl overflow-hidden"
+        onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -404,4 +410,9 @@ export const PointSplitModal: React.FC<PointSplitModalProps> = ({
       </div>
     </div>
   );
+
+  if (typeof document !== 'undefined') {
+    return createPortal(modalContent, document.body);
+  }
+  return modalContent;
 };

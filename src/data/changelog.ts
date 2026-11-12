@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.5.7",
+    date: "November 11, 2026",
+    title: "Portal-Mounted Wishlist & Chores Modals for Reliable Text Input Across All Browsers",
+    highlights: [
+      "Portal-Mounted Wishlist & Chores Modals: Mounted Propose a Wishlist Reward, Proposals Tray, Trophy Case, and Shared Chore Split modals directly on document.body via createPortal so Corkboard drag/pointer-capture handlers and transform stacking contexts never interfere with text boxes.",
+      "Explicit Form Input Text Selection Rules: Added global user-select: text and -webkit-user-select: text rules for all input, textarea, select, and contentEditable elements so WebKit/Safari and touch screens always allow typing and cursor placement.",
+      "Throttled Activity Listeners: Removed per-keystroke root store updates during typing while keeping the automated canvas carousel paused whenever any modal or form input is active.",
+    ],
+  },
+  {
     version: "v0.5.6",
     date: "November 11, 2026",
     title: "Household Profile Strip & Inline 1-Tap Cook Picker Directly on the Meal Planner Widget",

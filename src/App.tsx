@@ -669,15 +669,19 @@ export function App() {
       activeWebModal
   );
 
-  // Pause carousel on any pointer, touch, wheel, or keyboard activity (including inside portals)
+  // Pause carousel on any pointer, touch, or wheel activity (including inside portals)
   useEffect(() => {
     if (!settings.carouselEnabled) return;
 
+    let lastActivityPauseAt = 0;
     const handleUserActivity = () => {
+      const nowMs = Date.now();
+      if (nowMs - lastActivityPauseAt < 4000) return;
+      lastActivityPauseAt = nowMs;
       pauseCarouselTemporarily(20000);
     };
 
-    const events = ['pointerdown', 'touchstart', 'keydown', 'input', 'wheel'] as const;
+    const events = ['pointerdown', 'touchstart', 'wheel'] as const;
     events.forEach((evt) =>
       window.addEventListener(evt, handleUserActivity, { capture: true, passive: true })
     );

@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Inbox,
@@ -39,13 +40,18 @@ export const ProposalsTrayModal: React.FC<ProposalsTrayModalProps> = ({
       (activeScope === 'household' || r.profileId === activeScope)
   );
 
-  return (
+  const modalContent = (
     <div
-      className="fixed inset-0 z-[94] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4"
+      role="dialog"
+      aria-modal="true"
+      data-no-drag="true"
+      className="fixed inset-0 z-[940] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4"
+      onPointerDown={(e) => e.stopPropagation()}
       onClick={onClose}
     >
       <div
         className="w-full max-w-lg rounded-2xl border border-slate-700/60 bg-slate-900/95 text-slate-100 shadow-2xl overflow-hidden flex flex-col max-h-[82vh]"
+        onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -188,4 +194,9 @@ export const ProposalsTrayModal: React.FC<ProposalsTrayModalProps> = ({
       </div>
     </div>
   );
+
+  if (typeof document !== 'undefined') {
+    return createPortal(modalContent, document.body);
+  }
+  return modalContent;
 };

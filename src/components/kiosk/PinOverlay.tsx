@@ -100,6 +100,15 @@ export const PinOverlay: React.FC<PinOverlayProps> = ({
   useEffect(() => {
     if (recovery.step !== 'closed') return;
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
       let digit: string | null = null;
       if (e.key >= '0' && e.key <= '9') {
         digit = e.key;

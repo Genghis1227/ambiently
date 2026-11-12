@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, Equal, Minus, Plus, Sparkles, UserCheck, Users, X } from 'lucide-react';
 import type {
   ActiveChoreInstance,
@@ -173,12 +174,16 @@ export const SharedSplitModal: React.FC<SharedSplitModalProps> = ({
     }
   };
 
-  return (
+  if (!isOpen) return null;
+
+  const modalContent = (
     <div
       role="dialog"
       aria-modal="true"
+      data-no-drag="true"
       aria-label={`Complete shared chore: ${template.title}`}
-      className="fixed inset-0 z-[92] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4 select-none"
+      className="fixed inset-0 z-[920] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4 select-none"
+      onPointerDown={(e) => e.stopPropagation()}
       onClick={onClose}
     >
       <div
@@ -187,6 +192,7 @@ export const SharedSplitModal: React.FC<SharedSplitModalProps> = ({
             ? 'bg-white border-slate-200 text-slate-800'
             : 'bg-slate-900/95 border-slate-700/60 text-slate-100'
         }`}
+        onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -594,6 +600,11 @@ export const SharedSplitModal: React.FC<SharedSplitModalProps> = ({
       </div>
     </div>
   );
+
+  if (typeof document !== 'undefined') {
+    return createPortal(modalContent, document.body);
+  }
+  return modalContent;
 };
 
 export default SharedSplitModal;
