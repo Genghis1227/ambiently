@@ -256,14 +256,17 @@ export const ParentChoreDrawer: React.FC = () => {
   const handlePriceInputChange = (reward: WishlistReward, field: 'rawPrice' | 'pointsCost', value: string) => {
     const current = getRewardInputState(reward);
     if (field === 'rawPrice') {
-      const parsedDollar = parseFloat(value);
+      const cleaned = value.replace(/[^0-9.]/g, '');
+      const [whole, ...decimals] = cleaned.split('.');
+      const sanitizedPrice = decimals.length === 0 ? whole : `${whole}.${decimals.join('').slice(0, 2)}`;
+      const parsedDollar = parseFloat(sanitizedPrice);
       const nextPoints =
         !Number.isNaN(parsedDollar) && parsedDollar > 0
           ? String(Math.max(1, Math.round(parsedDollar * (householdSettings.pointsPerDollar || 10))))
           : current.pointsCost;
       setPriceInputs((prev) => ({
         ...prev,
-        [reward.id]: { rawPrice: value, pointsCost: nextPoints },
+        [reward.id]: { rawPrice: sanitizedPrice, pointsCost: nextPoints },
       }));
     } else {
       setPriceInputs((prev) => ({
@@ -912,15 +915,15 @@ export const ParentChoreDrawer: React.FC = () => {
                                 $
                               </span>
                               <input
-                                type="number"
-                                step="0.01"
-                                min="0"
+                                type="text"
+                                inputMode="decimal"
+                                pattern="^\d*(\.\d{0,2})?$"
                                 placeholder="0.00"
                                 value={state.rawPrice}
                                 onChange={(e) =>
                                   handlePriceInputChange(reward, 'rawPrice', e.target.value)
                                 }
-                                className="w-full pl-7 pr-3 py-1.5 rounded-xl bg-slate-950 border border-slate-700 text-xs font-mono text-white focus:outline-none focus:border-amber-400"
+                                className="w-full pl-7 pr-3 py-1.5 rounded-xl bg-slate-950 border border-slate-700 text-xs font-mono text-white focus:outline-none focus:border-amber-400 select-text"
                               />
                             </div>
                           </div>
@@ -931,14 +934,14 @@ export const ParentChoreDrawer: React.FC = () => {
                             </label>
                             <div className="relative">
                               <input
-                                type="number"
-                                min="1"
-                                step="1"
+                                type="text"
+                                inputMode="numeric"
+                                pattern="^\d*$"
                                 value={state.pointsCost}
                                 onChange={(e) =>
                                   handlePriceInputChange(reward, 'pointsCost', e.target.value)
                                 }
-                                className="w-full px-3 py-1.5 rounded-xl bg-slate-950 border border-amber-500/40 text-xs font-mono font-bold text-amber-300 focus:outline-none focus:border-amber-400"
+                                className="w-full px-3 py-1.5 rounded-xl bg-slate-950 border border-amber-500/40 text-xs font-mono font-bold text-amber-300 focus:outline-none focus:border-amber-400 select-text"
                               />
                               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-amber-400/80 font-semibold">
                                 pts
@@ -1035,15 +1038,15 @@ export const ParentChoreDrawer: React.FC = () => {
                           <div className="flex items-center gap-2 shrink-0">
                             <div className="flex items-center gap-1">
                               <input
-                                type="number"
-                                min="1"
-                                step="1"
+                                type="text"
+                                inputMode="numeric"
+                                pattern="^\d*$"
                                 value={state.pointsCost}
                                 onChange={(e) =>
                                   handlePriceInputChange(reward, 'pointsCost', e.target.value)
                                 }
                                 title="Adjust point cost"
-                                className="w-20 px-2.5 py-1 rounded-xl bg-slate-950 border border-slate-700 text-xs font-mono text-white text-center"
+                                className="w-20 px-2.5 py-1 rounded-xl bg-slate-950 border border-slate-700 text-xs font-mono text-white text-center select-text"
                               />
                               <span className="text-[11px] text-slate-400">pts</span>
                             </div>
@@ -1737,27 +1740,50 @@ export const ParentChoreDrawer: React.FC = () => {
                     )}
 
                     {/* Rollover & Overdue Policy */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-                      <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-slate-200 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={tplRequiresApproval}
-                          onChange={(e) => setTplRequiresApproval(e.target.checked)}
-                          className="rounded border-slate-700"
-                        />
-                        <span>Require Parent Approval before awarding points</span>
-                      </label>
+                    {(() => {
+                      const isOnlyParentAssignees =
+                        tplAssignees.length > 0 &&
+                        !tplAssignees.includes('shared') &&
+                        tplAssignees.every(
+                          (id) => profiles.find((p) => p.id === id)?.role === 'parent'
+                        );
+                      return (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                          <label
+                            className={`flex items-center gap-2 p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 text-xs ${
+                              isOnlyParentAssignees
+                                ? 'text-slate-500 opacity-60 cursor-not-allowed'
+                                : 'text-slate-200 cursor-pointer'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              disabled={isOnlyParentAssignees}
+                              checked={!isOnlyParentAssignees && tplRequiresApproval}
+                              onChange={(e) => setTplRequiresApproval(e.target.checked)}
+                              className="rounded border-slate-700"
+                            />
+                            <span>
+                              {isOnlyParentAssignees
+                                ? 'Parent-assigned chores auto-complete without review'
+                                : 'Require Parent Approval before awarding points (kids only)'}
+                            </span>
+                          </label>
 
-                      <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-slate-200 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={tplRolloverUntilDone}
-                          onChange={(e) => setTplRolloverUntilDone(e.target.checked)}
-                          className="rounded border-slate-700"
-                        />
-                        <span>Carry over as Overdue for 24h if unfinished at midnight (auto-dismisses after 24h)</span>
-                      </label>
-                    </div>
+                          <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-slate-200 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={tplRolloverUntilDone}
+                              onChange={(e) => setTplRolloverUntilDone(e.target.checked)}
+                              className="rounded border-slate-700"
+                            />
+                            <span>
+                              Carry over as Overdue for 24h if unfinished at midnight (auto-dismisses after 24h)
+                            </span>
+                          </label>
+                        </div>
+                      );
+                    })()}
 
                     {tplRolloverUntilDone && (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">

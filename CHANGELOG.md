@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.8] - 2026-11-12
+
+### Parent Chore Auto-Completion & Strict Currency Input Validation
+* **Parent Completions Skip Parent Review (`src/stores/useChoreStore.ts`, `src/utils/choreEngine.ts`, `src/components/widgets/ChoreWidget.tsx`):**
+  * When a chore is completed solely by parent profile(s) (`role === 'parent'`), `completeChore` now skips `awaiting_approval`, immediately marks the task `completed`, credits points in the ledger, and triggers the completion celebration.
+  * Auto-settled any existing `awaiting_approval` chore instances completed solely by parent profiles during `evaluateChoreRollover`.
+* **Strict Dollar & Point Input Sanitization (`src/components/chores/ProposeRewardModal.tsx`, `src/components/chores/ParentChoreDrawer.tsx`):**
+  * Added `sanitizeDollarInput` to strip non-numeric characters from the `Est. Price ($ USD)` field in `ProposeRewardModal.tsx`, limit cents to 2 decimal places, and format valid amounts to `0.00` on blur.
+  * Applied strict decimal/integer sanitization to the Parent Appraisal pricing inputs in `ParentChoreDrawer.tsx`.
+* **Split Modal & Template Editor Polish (`src/components/chores/SharedSplitModal.tsx`, `src/components/chores/PointSplitModal.tsx`, `src/components/chores/ParentChoreDrawer.tsx`):**
+  * Updated `SharedSplitModal` and `PointSplitModal` submit buttons to display `Complete Chore` instead of `Submit for Review` when parent profiles are selected.
+  * Automatically disabled `requiresApproval` for chore templates assigned strictly to parent profiles.
+
+---
+
 ## [0.5.7] - 2026-11-11
 
 ### Portal-Mounted Wishlist & Chores Modals for Reliable Text Input Across All Browsers

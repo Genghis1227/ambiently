@@ -431,7 +431,56 @@ export function evaluateChoreRollover(
   }
 
   const templateMap = new Map(snapshot.templates.map((t) => [t.id, t]));
+  const profileRoleMap = new Map(snapshot.profiles.map((p) => [p.id, p.role]));
   let nextInstances = [...snapshot.instances];
+  let nextLedger = [...snapshot.ledger];
+
+  // 2b. Auto-settle any awaiting_approval instances completed solely by parent profile(s)
+  nextInstances = nextInstances.map((inst) => {
+    if (inst.status === 'awaiting_approval') {
+      const tpl = templateMap.get(inst.choreId);
+      const completers =
+        inst.completedBy && inst.completedBy.length > 0
+          ? inst.completedBy
+          : tpl && tpl.assignedTo !== 'shared'
+            ? [
+                {
+                  profileId: tpl.assignedTo,
+                  pointsAwarded: calculateEffectiveChorePoints(tpl, inst.isOverdue),
+                },
+              ]
+            : [];
+      const isOnlyParents =
+        completers.length > 0 &&
+        completers.every((c) => profileRoleMap.get(c.profileId) === 'parent');
+      if (isOnlyParents) {
+        changed = true;
+        const completedIso = inst.completedAt || now.toISOString();
+        for (const split of completers) {
+          if (split.pointsAwarded > 0) {
+            nextLedger.push({
+              id: `ledger-auto-${inst.instanceId}-${split.profileId}`,
+              timestamp: completedIso,
+              type: 'chore_completion',
+              refId: inst.instanceId,
+              profileId: split.profileId,
+              pointsDelta: split.pointsAwarded,
+              note: `${tpl?.title || 'Chore'}${inst.isOverdue ? ' (Overdue)' : ''}`,
+              approvedBy: 'auto',
+              canRevert: true,
+            });
+          }
+        }
+        return {
+          ...inst,
+          status: 'completed' as const,
+          completedBy: completers,
+          completedAt: completedIso,
+        };
+      }
+    }
+    return inst;
+  });
 
   // 3. Process past-day pending instances
   // Track overdue instances per choreId so at most one active overdue carry-over exists per template
@@ -544,7 +593,7 @@ export function evaluateChoreRollover(
   }
 
   // 6. Recompute balances & reward unlock states
-  const nextProfiles = recalculateProfilesFromLedger(snapshot.profiles, snapshot.ledger);
+  const nextProfiles = recalculateProfilesFromLedger(snapshot.profiles, nextLedger);
   const nextRewards = syncRewardUnlockStates(snapshot.rewards, nextProfiles);
 
   const rolloverDateChanged = snapshot.householdSettings.lastRolloverDate !== todayKey;
@@ -559,6 +608,7 @@ export function evaluateChoreRollover(
       instances: nextInstances,
       rewards: nextRewards,
       trophies: nextTrophies,
+      ledger: nextLedger,
       householdSettings: {
         ...snapshot.householdSettings,
         lastRolloverDate: todayKey,

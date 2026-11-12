@@ -464,7 +464,21 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => {
 
       const nowIso = now.toISOString();
 
-      if (template.requiresApproval) {
+      // If every completer is a parent profile, skip parent review and auto-complete immediately
+      const householdProfiles = useProfileStore.getState().profiles;
+      const roleByProfileId = new Map<string, 'parent' | 'kid'>();
+      for (const p of current.profiles) {
+        if (p.role) roleByProfileId.set(p.id, p.role);
+      }
+      for (const hp of householdProfiles) {
+        if (!hp.deletedAt) roleByProfileId.set(hp.id, hp.role);
+      }
+      const isCompletedOnlyByParents =
+        normalizedSplits.length > 0 &&
+        normalizedSplits.every((s) => roleByProfileId.get(s.profileId) === 'parent');
+      const needsParentApproval = Boolean(template.requiresApproval && !isCompletedOnlyByParents);
+
+      if (needsParentApproval) {
         const nextInstances = current.instances.map((inst) =>
           inst.instanceId === instanceId
             ? {
@@ -1258,12 +1272,15 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => {
       const nowIso = now.toISOString();
       const todayKey = localDateKey(now);
       const id = templateInput.id || generateId('chore-tpl');
+      const assignedProfile = current.profiles.find((p) => p.id === templateInput.assignedTo);
+      const isParentAssignee = assignedProfile?.role === 'parent';
 
       const normalizedTemplate: ChoreTemplate = {
         ...templateInput,
         id,
         title: templateInput.title.trim(),
         points: Math.max(0, Math.round(templateInput.points)),
+        requiresApproval: isParentAssignee ? false : Boolean(templateInput.requiresApproval),
         intervalAnchorDate: templateInput.intervalAnchorDate || todayKey,
       };
 

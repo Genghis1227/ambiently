@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.5.8",
+    date: "November 12, 2026",
+    title: "Parent Chore Auto-Completion & Strict Currency Input Validation",
+    highlights: [
+      "Parent Completions Skip Parent Review: Chores completed solely by parent profiles now complete immediately and award points without entering the Parent Hub review queue, and any existing awaiting_approval parent tasks auto-settle on rollover.",
+      "Strict Dollar & Point Input Validation: Sanitized the Est. Price ($ USD) input in Propose a Wishlist Reward and Parent Appraisal pricing inputs so non-numeric characters are blocked and currency values format cleanly to two decimal places.",
+      "Split Modal & Template Editor Polish: SharedSplitModal and PointSplitModal now show 'Complete Chore' instead of 'Submit for Review' when a parent is selected, and parent-assigned templates automatically disable the approval toggle.",
+    ],
+  },
+  {
     version: "v0.5.7",
     date: "November 11, 2026",
     title: "Portal-Mounted Wishlist & Chores Modals for Reliable Text Input Across All Browsers",
