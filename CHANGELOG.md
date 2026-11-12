@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.9] - 2026-11-12
+
+### Interactive Month Calendar Selector for the Family Meal Planner
+* **Interactive Calendar Date Selector in Meal Entry Modal (`src/components/meals/MealEntryModal.tsx`):**
+  * Replaced the plain `<input type="date">` control with a touch-friendly **Date** selector featuring `<` / `>` 1-day steppers and a visual **Month Calendar Grid** popover with `Today` / `Tomorrow` quick chips, month navigation, Sunday/Monday start alignment, and color-coded meal slot indicator dots (amber for Breakfast, emerald for Lunch, sky for Dinner).
+* **Inline Calendar Date Jumper on the Meal Planner Widget (`src/components/widgets/MealPlannerWidget.tsx`):**
+  * Added a **Calendar Selector** button in the widget toolbar that opens an inline month calendar popover so users can jump to any date across `Tomorrow`, `3-Day`, or `Week` views and reset back to `Today` in one tap.
+
+---
+
 ## [0.5.8] - 2026-11-12
 
 ### Parent Chore Auto-Completion & Strict Currency Input Validation
