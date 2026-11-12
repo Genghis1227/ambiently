@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.7] - 2026-11-11
+
+### Portal-Mounted Wishlist & Chores Modals for Reliable Text Input Across All Browsers
+* **Portal-Mounted Chores Modals (`src/components/chores/ProposeRewardModal.tsx`, `src/components/chores/ProposalsTrayModal.tsx`, `src/components/chores/TrophyCaseModal.tsx`, `src/components/chores/SharedSplitModal.tsx`, `src/components/chores/PointSplitModal.tsx`):**
+  * Rendered all Chores & Wishlist modals directly on `document.body` via `createPortal` and isolated `onPointerDown` events so canvas drag/pointer-capture handlers and `transform` / `backdrop-filter` stacking contexts on `Corkboard.tsx` never block typing inside modal text inputs.
+* **Form Input Text Selection & Focus Fixes (`src/index.css`, `src/components/layout/Corkboard.tsx`, `src/App.tsx`, `src/components/kiosk/PinOverlay.tsx`):**
+  * Added explicit `user-select: text !important; -webkit-user-select: text !important;` rules for `input`, `textarea`, `select`, and `[contenteditable="true"]` so inherited `user-select: none` never disables text entry on WebKit/Safari or touch displays.
+  * Removed per-keystroke `pauseCarouselTemporarily` store mutations on `keydown`/`input` in `App.tsx` (relying on the existing `[role="dialog"]` and `document.activeElement` checks in the carousel timer).
+
+---
+
 ## [0.5.6] - 2026-11-11
 
 ### Household Profile Strip & Inline 1-Tap Cook Picker Directly on the Meal Planner Widget

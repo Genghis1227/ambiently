@@ -681,7 +681,12 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   ) => {
     if (isCanvasLocked) return;
     if (e.button !== 0) return;
-    if ((e.target as HTMLElement).closest('button, input, textarea, select, a, [role="button"], [data-no-drag="true"]')) return;
+    if (
+      (e.target as HTMLElement).closest(
+        'button, input, textarea, select, a, label, [role="button"], [role="dialog"], [aria-modal="true"], [data-no-drag="true"]'
+      )
+    )
+      return;
 
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
@@ -1287,7 +1292,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                     top: 0,
                     width: '100%',
                     height: '100%',
-                    zIndex: isActiveManipulating ? 50 : (pos.zIndex || 1),
+                    zIndex: 60,
                     touchAction: 'auto',
                     WebkitTouchCallout: 'none',
                     userSelect: 'none',

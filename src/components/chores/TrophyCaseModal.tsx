@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Trophy,
@@ -60,15 +61,18 @@ export const TrophyCaseModal: React.FC<TrophyCaseModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
+  const modalContent = (
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-[94] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4"
+      data-no-drag="true"
+      className="fixed inset-0 z-[940] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4"
+      onPointerDown={(e) => e.stopPropagation()}
       onClick={onClose}
     >
       <div
         className="w-full max-w-2xl rounded-2xl border border-slate-700/60 bg-slate-900/95 text-slate-100 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+        onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -276,4 +280,9 @@ export const TrophyCaseModal: React.FC<TrophyCaseModalProps> = ({
       </div>
     </div>
   );
+
+  if (typeof document !== 'undefined') {
+    return createPortal(modalContent, document.body);
+  }
+  return modalContent;
 };
