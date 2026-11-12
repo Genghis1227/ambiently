@@ -457,8 +457,8 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
       { profileId: targetProfileId, pointsAwarded: effectivePoints },
     ]);
 
-    // Trigger celebration ONLY if auto-approved (!template.requiresApproval) and not in Night Mode
-    if (res.success && !res.requiresApproval && !template.requiresApproval) {
+    // Trigger celebration ONLY if auto-approved (!res.requiresApproval) and not in Night Mode
+    if (res.success && !res.requiresApproval) {
       maybeCelebrateCompletion(profileObj?.color, originX, originY);
     }
   };
@@ -1146,9 +1146,8 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
           onClose={() => setSplitTarget(null)}
           onConfirmSplit={async (splits) => {
             const targetInstance = splitTarget.instance;
-            const targetTemplate = splitTarget.template;
             const res = await completeChore(targetInstance.instanceId, splits);
-            if (res.success && !res.requiresApproval && !targetTemplate.requiresApproval) {
+            if (res.success && !res.requiresApproval) {
               const firstProfile = allProfiles.find((p) => p.id === splits[0]?.profileId);
               maybeCelebrateCompletion(firstProfile?.color);
             }

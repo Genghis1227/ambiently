@@ -27,6 +27,14 @@ interface ProposeRewardModalProps {
   }) => Promise<void> | void;
 }
 
+function sanitizeDollarInput(value: string): string {
+  const cleaned = value.replace(/[^0-9.]/g, '');
+  if (!cleaned) return '';
+  const [whole, ...decimals] = cleaned.split('.');
+  if (decimals.length === 0) return whole;
+  return `${whole}.${decimals.join('').slice(0, 2)}`;
+}
+
 export const ProposeRewardModal: React.FC<ProposeRewardModalProps> = ({
   isOpen,
   profiles,
@@ -321,10 +329,20 @@ export const ProposeRewardModal: React.FC<ProposeRewardModalProps> = ({
                 <input
                   type="text"
                   inputMode="decimal"
+                  pattern="^\d*(\.\d{0,2})?$"
                   value={rawPriceInput}
-                  onChange={(e) => setRawPriceInput(e.target.value)}
+                  onChange={(e) => setRawPriceInput(sanitizeDollarInput(e.target.value))}
+                  onBlur={() => {
+                    if (!rawPriceInput) return;
+                    const parsed = parseFloat(rawPriceInput);
+                    if (!Number.isNaN(parsed) && parsed > 0) {
+                      setRawPriceInput(parsed.toFixed(2));
+                    } else {
+                      setRawPriceInput('');
+                    }
+                  }}
                   placeholder="19.99"
-                  className="w-full pl-7 pr-2.5 py-2 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/60 select-text"
+                  className="w-full pl-7 pr-2.5 py-2 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/60 select-text tabular-nums"
                 />
               </div>
             </div>

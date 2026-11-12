@@ -66,6 +66,16 @@ export const PointSplitModal: React.FC<PointSplitModalProps> = ({
       ? Boolean(selectedSoloId)
       : activeHelpers.length > 0 && currentSplitSum === effectivePoints;
 
+  const profileRoleMap = new Map(profiles.map((p) => [p.id, p.role]));
+  const isOnlyParentsSelected =
+    mode === 'solo'
+      ? Boolean(selectedSoloId && profileRoleMap.get(selectedSoloId) === 'parent')
+      : activeHelpers.filter((id) => (splits[id] ?? 0) > 0 || effectivePoints === 0).length > 0 &&
+        activeHelpers
+          .filter((id) => (splits[id] ?? 0) > 0 || effectivePoints === 0)
+          .every((id) => profileRoleMap.get(id) === 'parent');
+  const willRequireApproval = Boolean(template.requiresApproval && !isOnlyParentsSelected);
+
   const handleToggleHelper = (profileId: string) => {
     let nextHelpers: string[];
     if (activeHelpers.includes(profileId)) {
@@ -404,7 +414,7 @@ export const PointSplitModal: React.FC<PointSplitModalProps> = ({
             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-600/90 hover:bg-emerald-500 text-white shadow-sm disabled:opacity-40 transition-all"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            {template.requiresApproval ? 'Submit for Review' : 'Complete Chore'}
+            {willRequireApproval ? 'Submit for Review' : 'Complete Chore'}
           </button>
         </div>
       </div>

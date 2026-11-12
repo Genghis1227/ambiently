@@ -128,6 +128,15 @@ export const SharedSplitModal: React.FC<SharedSplitModalProps> = ({
     [candidateSplits, effectivePoints]
   );
 
+  const willRequireApproval = useMemo(() => {
+    if (!template.requiresApproval) return false;
+    const roleMap = new Map(profiles.map((p) => [p.id, p.role]));
+    const active = candidateSplits.filter((s) => s.pointsAwarded > 0 || effectivePoints === 0);
+    const isOnlyParents =
+      active.length > 0 && active.every((s) => roleMap.get(s.profileId) === 'parent');
+    return !isOnlyParents;
+  }, [template.requiresApproval, profiles, candidateSplits, effectivePoints]);
+
   if (!isOpen) return null;
 
   const handleToggleHelper = (profileId: string) => {
@@ -594,7 +603,7 @@ export const SharedSplitModal: React.FC<SharedSplitModalProps> = ({
             className="inline-flex items-center gap-1.5 px-4 py-2 min-h-[40px] rounded-xl text-xs font-semibold bg-emerald-600/90 hover:bg-emerald-500 text-white disabled:opacity-40 disabled:cursor-default transition-all cursor-pointer"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>{template.requiresApproval ? 'Submit for Review' : 'Complete Chore'}</span>
+            <span>{willRequireApproval ? 'Submit for Review' : 'Complete Chore'}</span>
           </button>
         </div>
       </div>
