@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.5.6",
+    date: "November 11, 2026",
+    title: "Household Profile Strip & Inline 1-Tap Cook Picker Directly on the Meal Planner Widget",
+    highlights: [
+      "Household Profile Strip on the Meal Planner Widget: Added a horizontal profile bar directly below the Family Meal Planner header showing 'Everyone' plus each family member's avatar picture, name, and count of assigned meals in the current view.",
+      "Inline 1-Tap Cook Picker on Every Meal Pill: Tapping '+ Cook' or an assigned cook's avatar on any meal pill now opens an inline profile picker right inside that day box on the widget—or immediately assigns the active profile selected on the widget's top bar in 1 tap.",
+      "Default Cook Pre-Selection & Version Manifest Sync: Selecting a family member on the widget's profile bar pre-selects them as the default cook when scheduling new meals, and synced public/version.json for immediate PWA update detection.",
+    ],
+  },
+  {
     version: "v0.5.5",
     date: "November 11, 2026",
     title: "Inline Cook Assignment on Meal Pills & Cooking Mode + Cloud Status in Quick Menu",

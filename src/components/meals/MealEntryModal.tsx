@@ -78,6 +78,7 @@ export interface MealEntryModalProps {
   initialSlot?: MealSlot;
   editingMeal?: ScheduledMeal | null;
   initialMode?: 'quick' | 'recipe';
+  defaultCookProfileId?: string;
   isLight?: boolean;
   onClose: () => void;
   onSaved?: (meal: ScheduledMeal) => void;
@@ -277,6 +278,7 @@ interface MealEntryContentProps {
   initialSlot: MealSlot;
   editingMeal?: ScheduledMeal | null;
   initialMode?: 'quick' | 'recipe';
+  defaultCookProfileId?: string;
   isLight: boolean;
   onClose: () => void;
   onSaved?: (meal: ScheduledMeal) => void;
@@ -287,6 +289,7 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
   initialSlot,
   editingMeal,
   initialMode,
+  defaultCookProfileId,
   isLight,
   onClose,
   onSaved,
@@ -335,7 +338,10 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
   const effectiveEditingMeal = editingMeal || existingMealAtSlot;
 
   const [cookProfileId, setCookProfileId] = useState<string>(
-    () => (editingMeal || existingMealAtSlot)?.cookProfileId || ''
+    () =>
+      (editingMeal || existingMealAtSlot)?.cookProfileId ||
+      defaultCookProfileId ||
+      ''
   );
   const [mealNotes, setMealNotes] = useState<string>(
     () => (editingMeal || existingMealAtSlot)?.notes || ''
@@ -1118,6 +1124,12 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
                       onClick={() =>
                         handleCookSelect(selected ? '' : profile.id)
                       }
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && selected && canSaveMeal) {
+                          e.preventDefault();
+                          void handleSaveScheduledMeal();
+                        }
+                      }}
                       className={`min-h-[40px] px-3 rounded-xl border text-xs font-medium inline-flex items-center gap-2 transition-colors cursor-pointer ${
                         selected
                           ? isLight
@@ -2280,13 +2292,14 @@ export const MealEntryModal: React.FC<MealEntryModalProps> = ({
   initialSlot = 'dinner',
   editingMeal,
   initialMode,
+  defaultCookProfileId,
   isLight = false,
   onClose,
   onSaved,
 }) => {
   if (!isOpen) return null;
 
-  const sessionKey = `${date}-${initialSlot}-${editingMeal?.id ?? 'new'}-${editingMeal?.updatedAt ?? ''}-${initialMode ?? 'auto'}`;
+  const sessionKey = `${date}-${initialSlot}-${editingMeal?.id ?? 'new'}-${editingMeal?.updatedAt ?? ''}-${initialMode ?? 'auto'}-${defaultCookProfileId ?? ''}`;
   const content = (
     <MealEntryModalContent
       key={sessionKey}
@@ -2294,6 +2307,7 @@ export const MealEntryModal: React.FC<MealEntryModalProps> = ({
       initialSlot={initialSlot}
       editingMeal={editingMeal}
       initialMode={initialMode}
+      defaultCookProfileId={defaultCookProfileId}
       isLight={isLight}
       onClose={onClose}
       onSaved={onSaved}
