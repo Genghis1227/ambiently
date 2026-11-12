@@ -305,6 +305,13 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
   );
 
   const profiles = useProfileStore((s) => s.profiles);
+  const isProfileStoreInitialized = useProfileStore((s) => s.isInitialized);
+
+  useEffect(() => {
+    if (!isProfileStoreInitialized) {
+      void useProfileStore.getState().initProfileStore();
+    }
+  }, [isProfileStoreInitialized]);
 
   // Core slot & assignment state
   const [selectedDate, setSelectedDate] = useState<string>(
@@ -313,23 +320,38 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
   const [selectedSlot, setSelectedSlot] = useState<MealSlot>(
     () => editingMeal?.slot || initialSlot
   );
+
+  const existingMealAtSlot = useMemo(
+    () =>
+      scheduledMeals.find(
+        (m) =>
+          !m.deletedAt &&
+          m.date === selectedDate &&
+          m.slot === selectedSlot
+      ) || null,
+    [scheduledMeals, selectedDate, selectedSlot]
+  );
+
+  const effectiveEditingMeal = editingMeal || existingMealAtSlot;
+
   const [cookProfileId, setCookProfileId] = useState<string>(
-    () => editingMeal?.cookProfileId || ''
+    () => (editingMeal || existingMealAtSlot)?.cookProfileId || ''
   );
   const [mealNotes, setMealNotes] = useState<string>(
-    () => editingMeal?.notes || ''
+    () => (editingMeal || existingMealAtSlot)?.notes || ''
   );
 
   // Mode state
   const [mode, setMode] = useState<EntryMode>(() => {
     if (initialMode) return initialMode;
-    return editingMeal?.recipeId ? 'recipe' : 'quick';
+    return (editingMeal || existingMealAtSlot)?.recipeId ? 'recipe' : 'quick';
   });
 
   // Quick-text state
-  const [quickTitle, setQuickTitle] = useState<string>(() =>
-    editingMeal && !editingMeal.recipeId ? editingMeal.title : ''
-  );
+  const [quickTitle, setQuickTitle] = useState<string>(() => {
+    const initialMeal = editingMeal || existingMealAtSlot;
+    return initialMeal && !initialMeal.recipeId ? initialMeal.title : '';
+  });
 
   // Dynamic recent + starter quick-meal suggestions (filters as user types)
   const dynamicQuickSuggestions = useMemo(() => {
@@ -390,10 +412,10 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
   // Recipe-linked state
   const [sourceTab, setSourceTab] = useState<RecipeSourceTab>('book');
   const [selectedRecipeId, setSelectedRecipeId] = useState<string>(
-    () => editingMeal?.recipeId || ''
+    () => (editingMeal || existingMealAtSlot)?.recipeId || ''
   );
   const [scaleFactor, setScaleFactor] = useState<number>(() => {
-    const initial = editingMeal?.scaleFactor;
+    const initial = (editingMeal || existingMealAtSlot)?.scaleFactor;
     return typeof initial === 'number' && initial > 0 ? initial : 1;
   });
 
@@ -453,13 +475,59 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
   const [selectedIngredientIndices, setSelectedIngredientIndices] = useState<
     Set<number>
   >(() => {
-    const initialRecipe = editingMeal?.recipeId
-      ? recipes.find((r) => r.id === editingMeal.recipeId)
+    const initialMeal = editingMeal || existingMealAtSlot;
+    const initialRecipe = initialMeal?.recipeId
+      ? recipes.find((r) => r.id === initialMeal.recipeId)
       : undefined;
     return computeDefaultCheckedIndices(initialRecipe);
   });
 
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  const syncFromTargetSlot = (targetDate: string, targetSlot: MealSlot) => {
+    setSelectedDate(targetDate);
+    setSelectedSlot(targetSlot);
+    if (editingMeal) return;
+
+    const slotMeal = scheduledMeals.find(
+      (m) => !m.deletedAt && m.date === targetDate && m.slot === targetSlot
+    );
+    if (!slotMeal) return;
+
+    if (slotMeal.cookProfileId) {
+      setCookProfileId(slotMeal.cookProfileId);
+    }
+    if (slotMeal.notes) {
+      setMealNotes(slotMeal.notes);
+    }
+    if (slotMeal.recipeId) {
+      setMode('recipe');
+      setSelectedRecipeId(slotMeal.recipeId);
+      setScaleFactor(
+        typeof slotMeal.scaleFactor === 'number' && slotMeal.scaleFactor > 0
+          ? slotMeal.scaleFactor
+          : 1
+      );
+      const r = recipes.find((rec) => rec.id === slotMeal.recipeId);
+      setSelectedIngredientIndices(computeDefaultCheckedIndices(r));
+    } else {
+      setMode('quick');
+      setQuickTitle(slotMeal.title);
+    }
+  };
+
+  const handleCookSelect = (nextCookId: string) => {
+    setCookProfileId(nextCookId);
+    if (
+      effectiveEditingMeal &&
+      effectiveEditingMeal.date === selectedDate &&
+      effectiveEditingMeal.slot === selectedSlot
+    ) {
+      void updateScheduledMeal(effectiveEditingMeal.id, {
+        cookProfileId: nextCookId || undefined,
+      });
+    }
+  };
 
   // Escape key closes modal
   useEffect(() => {
@@ -519,6 +587,18 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
     setSelectedRecipeId(recipe.id);
     setSelectedIngredientIndices(computeDefaultCheckedIndices(recipe));
     setIsEditingDraft(false);
+    if (!cookProfileId) {
+      const recentForRecipe = scheduledMeals
+        .filter((m) => !m.deletedAt && m.recipeId === recipe.id && m.cookProfileId)
+        .sort(
+          (a, b) =>
+            (Date.parse(b.updatedAt || '') || 0) -
+            (Date.parse(a.updatedAt || '') || 0)
+        )[0];
+      if (recentForRecipe?.cookProfileId) {
+        handleCookSelect(recentForRecipe.cookProfileId);
+      }
+    }
   };
 
   const isIngredientHouseholdStaple = (rawLine: string): boolean => {
@@ -791,7 +871,7 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
       );
 
       const saved = await scheduleMeal({
-        id: !movedSlotOrDate ? editingMeal?.id : undefined,
+        id: !movedSlotOrDate ? effectiveEditingMeal?.id : undefined,
         date: selectedDate,
         slot: selectedSlot,
         title: resolvedTitle,
@@ -841,10 +921,10 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
   };
 
   const handleRemoveMeal = async () => {
-    if (!editingMeal || isSubmitting) return;
+    if (!effectiveEditingMeal || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      await removeScheduledMeal(editingMeal.id);
+      await removeScheduledMeal(effectiveEditingMeal.id);
       onClose();
     } finally {
       setIsSubmitting(false);
@@ -862,7 +942,7 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
       onClick={onClose}
       role="dialog"
       aria-modal="true"
-      aria-label={editingMeal ? 'Edit Planned Meal' : 'Plan a Meal'}
+      aria-label={effectiveEditingMeal ? 'Edit Planned Meal' : 'Plan a Meal'}
     >
       <div
         className={`w-full max-w-2xl max-h-[92vh] rounded-2xl border flex flex-col overflow-hidden shadow-2xl ${
@@ -892,7 +972,9 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
             </div>
             <div className="min-w-0">
               <h3 className="text-base font-semibold tracking-tight truncate">
-                {editingMeal ? 'Edit Scheduled Meal' : 'Schedule Family Meal'}
+                {effectiveEditingMeal
+                  ? 'Edit Scheduled Meal'
+                  : 'Schedule Family Meal'}
               </h3>
               <p
                 className={`text-xs truncate flex items-center gap-1.5 ${
@@ -947,7 +1029,9 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
                 type="date"
                 value={selectedDate}
                 onChange={(e) => {
-                  if (e.target.value) setSelectedDate(e.target.value);
+                  if (e.target.value) {
+                    syncFromTargetSlot(e.target.value, selectedSlot);
+                  }
                 }}
                 className={`w-full min-h-[44px] px-3 rounded-xl border text-sm font-medium focus:outline-none ${
                   isLight
@@ -978,7 +1062,9 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
                     <button
                       key={slotOpt.id}
                       type="button"
-                      onClick={() => setSelectedSlot(slotOpt.id)}
+                      onClick={() =>
+                        syncFromTargetSlot(selectedDate, slotOpt.id)
+                      }
                       className={`min-h-[38px] px-2.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
                         active
                           ? isLight
@@ -1007,7 +1093,7 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={() => setCookProfileId('')}
+                onClick={() => handleCookSelect('')}
                 className={`min-h-[40px] px-3 rounded-xl border text-xs font-medium inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
                   !cookProfileId
                     ? isLight
@@ -1030,7 +1116,7 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
                       key={profile.id}
                       type="button"
                       onClick={() =>
-                        setCookProfileId(selected ? '' : profile.id)
+                        handleCookSelect(selected ? '' : profile.id)
                       }
                       className={`min-h-[40px] px-3 rounded-xl border text-xs font-medium inline-flex items-center gap-2 transition-colors cursor-pointer ${
                         selected
@@ -2133,7 +2219,7 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
           }`}
         >
           <div>
-            {editingMeal && (
+            {effectiveEditingMeal && (
               <button
                 type="button"
                 disabled={isSubmitting}
@@ -2176,7 +2262,7 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
               <span>
                 {isSubmitting
                   ? 'Saving...'
-                  : editingMeal
+                  : effectiveEditingMeal
                     ? 'Update Meal'
                     : 'Schedule Meal'}
               </span>

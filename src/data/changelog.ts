@@ -11,6 +11,17 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.5.5",
+    date: "November 11, 2026",
+    title: "Inline Cook Assignment on Meal Pills & Cooking Mode + Cloud Status in Quick Menu",
+    highlights: [
+      "1-Tap '+ Cook' & Profile Badges on Meal Pills: Scheduled meals without an assigned cook now display an interactive '+ Cook' pill directly on the meal card, and tapping an assigned cook's avatar opens the meal editor to switch the cook.",
+      "Inline Cook Selector in Cooking Mode: Added an interactive 'Cook:' profile selector bar directly in the Cooking Mode header so you can assign or change who is cooking a recipe in 1 tap.",
+      "Automatic Slot Sync & Instant Cook Persistence: Switching between Breakfast, Lunch, and Dinner in Schedule Family Meal automatically loads any existing meal in that slot, and tapping a cook chip on an existing meal saves immediately.",
+      "Live Cloud Connected Status & App Menu Cleanup: Updated the top-left app icon menu to show 'Cloud Connected' when signed into Cloud Sync (or 'Local-First Engine' when local-only) and removed the retired QR code button.",
+    ],
+  },
+  {
     version: "v0.5.4",
     date: "November 11, 2026",
     title: "Prominent Cook Avatars Alongside Scheduled Meals & Auto-Organize Toolbar Toggle",

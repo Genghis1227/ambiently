@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import type { Recipe, ScheduledMeal } from '../../types/meals';
 import { useMealStore } from '../../stores/useMealStore';
+import { useProfileStore } from '../../stores/useProfileStore';
 import {
   parseIngredient,
   formatQuantity,
@@ -113,6 +114,14 @@ const CookingModeContent: React.FC<CookingModeContentProps> = ({
 }) => {
   const updateScheduledMeal = useMealStore((s) => s.updateScheduledMeal);
   const importRecipeIngredients = useMealStore((s) => s.importRecipeIngredients);
+  const profiles = useProfileStore((s) => s.profiles);
+  const isProfileStoreInitialized = useProfileStore((s) => s.isInitialized);
+
+  useEffect(() => {
+    if (!isProfileStoreInitialized) {
+      void useProfileStore.getState().initProfileStore();
+    }
+  }, [isProfileStoreInitialized]);
 
   const [scaleFactor, setScaleFactor] = useState<number>(() => {
     const initial = scheduledMeal?.scaleFactor;
@@ -397,20 +406,52 @@ const CookingModeContent: React.FC<CookingModeContentProps> = ({
             </div>
 
             <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs md:text-sm">
-              {scheduledMeal?.cookProfileId && (
-                <span
-                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full border ${
-                    isLight
-                      ? 'bg-white/90 border-stone-300/80 text-slate-700'
-                      : 'bg-slate-800/70 border-slate-700/60 text-slate-200'
-                  }`}
-                >
-                  <ProfileAvatar
-                    profileId={scheduledMeal.cookProfileId}
-                    size="sm"
-                    showName
-                  />
-                </span>
+              {scheduledMeal && (
+                <div className="inline-flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider opacity-65">
+                    Cook:
+                  </span>
+                  {profiles
+                    .filter((p) => !p.deletedAt)
+                    .map((profile) => {
+                      const isAssigned =
+                        scheduledMeal.cookProfileId === profile.id;
+                      return (
+                        <button
+                          key={profile.id}
+                          type="button"
+                          onClick={() =>
+                            void updateScheduledMeal(scheduledMeal.id, {
+                              cookProfileId: isAssigned
+                                ? undefined
+                                : profile.id,
+                            })
+                          }
+                          title={
+                            isAssigned
+                              ? `${profile.name} is cooking (tap to unassign)`
+                              : `Assign ${profile.name} as cook`
+                          }
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-xs font-medium transition-colors cursor-pointer ${
+                            isAssigned
+                              ? isLight
+                                ? 'bg-emerald-100 border-emerald-500 text-emerald-950 font-semibold'
+                                : 'bg-emerald-950/60 border-emerald-600/80 text-emerald-100 font-semibold'
+                              : isLight
+                                ? 'bg-white/80 border-stone-300/80 text-slate-600 hover:bg-stone-100'
+                                : 'bg-slate-800/60 border-slate-700/60 text-slate-300 hover:bg-slate-800'
+                          }`}
+                        >
+                          <ProfileAvatar
+                            profile={profile}
+                            size="xs"
+                            showRing={isAssigned}
+                          />
+                          <span>{profile.name}</span>
+                        </button>
+                      );
+                    })}
+                </div>
               )}
 
               {recipe.servings && (
