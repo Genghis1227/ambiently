@@ -28,6 +28,7 @@ import type {
 import type { StickyNoteItem } from '../../types/dashboard';
 import { DEFAULT_AISLE_ORDER } from '../../types/meals';
 import { useMealStore } from '../../stores/useMealStore';
+import { useProfileStore } from '../../stores/useProfileStore';
 import { useDashboardStore } from '../../store/dashboardStore';
 import {
   aggregateIngredients,
@@ -154,11 +155,15 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
   }, []);
 
   // Ensure store hydration if mounted standalone
+  const isProfileStoreInitialized = useProfileStore((s) => s.isInitialized);
   useEffect(() => {
     if (!isMealStoreInitialized) {
       void useMealStore.getState().initMealStore();
     }
-  }, [isMealStoreInitialized]);
+    if (!isProfileStoreInitialized) {
+      void useProfileStore.getState().initProfileStore();
+    }
+  }, [isMealStoreInitialized, isProfileStoreInitialized]);
 
   const isNightMode = useMemo(
     () =>
@@ -1187,43 +1192,55 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
                         );
                       }
 
-                      const isRecipeLinked = Boolean(
-                        meal.recipeId && recipeById.has(meal.recipeId)
-                      );
+                      const linkedRecipe = meal.recipeId
+                        ? recipeById.get(meal.recipeId)
+                        : undefined;
+                      const isRecipeLinked = Boolean(linkedRecipe);
                       return (
                         <button
                           key={meal.id}
                           type="button"
                           onClick={() => handleMealPillClick(meal)}
-                          className={`w-full min-h-[44px] px-3 py-2 rounded-xl border flex items-center justify-between gap-2 text-left transition-colors cursor-pointer ${getSlotPillClasses(
+                          className={`w-full min-h-[48px] px-3 py-2 rounded-xl border flex items-center justify-between gap-2.5 text-left transition-colors cursor-pointer ${getSlotPillClasses(
                             meal.slot,
                             isLight
                           )}`}
                         >
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
-                                {SLOT_FULL_LABELS[meal.slot]}
-                              </span>
-                              {isRecipeLinked && (
-                                <BookOpen className="w-3 h-3 opacity-80 shrink-0" />
-                              )}
-                              {meal.scaleFactor && meal.scaleFactor !== 1 && (
-                                <span className="text-[10px] font-semibold opacity-75">
-                                  {meal.scaleFactor}x
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            {linkedRecipe?.imageUrl && (
+                              <img
+                                src={linkedRecipe.imageUrl}
+                                alt=""
+                                className="w-8 h-8 rounded-lg object-cover shrink-0 border border-black/10"
+                              />
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
+                                  {SLOT_FULL_LABELS[meal.slot]}
                                 </span>
-                              )}
+                                {isRecipeLinked && (
+                                  <BookOpen className="w-3 h-3 opacity-80 shrink-0" />
+                                )}
+                                {meal.scaleFactor && meal.scaleFactor !== 1 && (
+                                  <span className="text-[10px] font-semibold opacity-75">
+                                    {meal.scaleFactor}x
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs md:text-sm font-semibold truncate mt-0.5">
+                                {meal.title}
+                              </p>
                             </div>
-                            <p className="text-xs md:text-sm font-semibold truncate mt-0.5">
-                              {meal.title}
-                            </p>
                           </div>
 
                           {showCookAvatar && meal.cookProfileId && (
                             <ProfileAvatar
                               profileId={meal.cookProfileId}
-                              size="xs"
+                              size="sm"
+                              showName
                               showRing={!isNightMode}
+                              className="shrink-0"
                             />
                           )}
                         </button>
@@ -1316,15 +1333,16 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
                     ) : (
                       <div className="flex flex-wrap gap-1.5">
                         {dayMeals.map((meal) => {
-                          const isRecipeLinked = Boolean(
-                            meal.recipeId && recipeById.has(meal.recipeId)
-                          );
+                          const linkedRecipe = meal.recipeId
+                            ? recipeById.get(meal.recipeId)
+                            : undefined;
+                          const isRecipeLinked = Boolean(linkedRecipe);
                           return (
                             <button
                               key={meal.id}
                               type="button"
                               onClick={() => handleMealPillClick(meal)}
-                              className={`max-w-full min-h-[32px] px-2.5 py-1 rounded-lg border inline-flex items-center gap-1.5 text-xs transition-colors cursor-pointer ${getSlotPillClasses(
+                              className={`max-w-full min-h-[34px] px-2.5 py-1 rounded-lg border inline-flex items-center gap-1.5 text-xs transition-colors cursor-pointer ${getSlotPillClasses(
                                 meal.slot,
                                 isLight
                               )}`}
@@ -1334,6 +1352,14 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
                                   : `${SLOT_FULL_LABELS[meal.slot]}: ${meal.title} (Tap to edit)`
                               }
                             >
+                              {showCookAvatar && meal.cookProfileId && (
+                                <ProfileAvatar
+                                  profileId={meal.cookProfileId}
+                                  size="sm"
+                                  showRing={!isNightMode}
+                                  className="shrink-0"
+                                />
+                              )}
                               <span className="text-[10px] font-semibold uppercase tracking-wide opacity-65 shrink-0">
                                 {SLOT_SHORT_LABELS[meal.slot]}
                               </span>
@@ -1343,13 +1369,6 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
                               <span className="font-medium truncate">
                                 {meal.title}
                               </span>
-                              {showCookAvatar && meal.cookProfileId && (
-                                <ProfileAvatar
-                                  profileId={meal.cookProfileId}
-                                  size="xs"
-                                  showRing={!isNightMode}
-                                />
-                              )}
                             </button>
                           );
                         })}

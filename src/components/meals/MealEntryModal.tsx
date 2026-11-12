@@ -743,14 +743,44 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
     const trimmedQuick = quickTitle.trim();
 
     if (isQuick && !trimmedQuick) return;
-    if (!isQuick && !selectedRecipe) return;
+
+    let recipeForSchedule: Recipe | null = selectedRecipe;
 
     setIsSubmitting(true);
     try {
+      // If user is currently editing/adding a recipe draft and clicks Schedule Meal directly, save the recipe first
+      if (!isQuick && isEditingDraft && draft.title.trim()) {
+        const savedDraft = await upsertRecipe({
+          id: draft.id,
+          title: draft.title.trim(),
+          sourceUrl: draft.sourceUrl.trim() || undefined,
+          imageUrl: draft.imageUrl.trim() || undefined,
+          servings: draft.servings.trim() || undefined,
+          prepTime: draft.prepTime.trim() || undefined,
+          cookTime: draft.cookTime.trim() || undefined,
+          ingredients: draft.ingredientsText
+            .split(/\r?\n/)
+            .map((l) => l.trim())
+            .filter(Boolean),
+          instructions: draft.instructionsText
+            .split(/\r?\n/)
+            .map((s) => s.trim())
+            .filter(Boolean),
+          tags: draft.tags,
+          notes: draft.notes.trim() || undefined,
+          isFavorite: draft.isFavorite,
+        });
+        recipeForSchedule = savedDraft;
+        setSelectedRecipeId(savedDraft.id);
+        setIsEditingDraft(false);
+      }
+
+      if (!isQuick && !recipeForSchedule) return;
+
       const resolvedTitle = isQuick
         ? trimmedQuick
-        : selectedRecipe?.title || 'Planned Meal';
-      const desiredRecipeId = isQuick ? undefined : selectedRecipe?.id;
+        : recipeForSchedule?.title || 'Planned Meal';
+      const desiredRecipeId = isQuick ? undefined : recipeForSchedule?.id;
       const desiredCookId = cookProfileId || undefined;
       const desiredScale = isQuick ? 1 : scaleFactor;
       const desiredNotes = mealNotes.trim() || undefined;
@@ -790,12 +820,12 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
       }
 
       // Selective Ingredient Import into Shopping List
-      if (!isQuick && selectedRecipe && importToShoppingList) {
+      if (!isQuick && recipeForSchedule && importToShoppingList) {
         const orderedSelected = Array.from(selectedIngredientIndices).sort(
           (a, b) => a - b
         );
         if (orderedSelected.length > 0) {
-          await importRecipeIngredients(selectedRecipe.id, {
+          await importRecipeIngredients(recipeForSchedule.id, {
             selectedIndices: orderedSelected,
             scaleFactor: desiredScale,
             sourceMealId: saved.id,
@@ -824,7 +854,7 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
   const canSaveMeal =
     mode === 'quick'
       ? Boolean(quickTitle.trim())
-      : Boolean(selectedRecipe && !isEditingDraft);
+      : Boolean(selectedRecipe || (isEditingDraft && draft.title.trim()));
 
   return (
     <div
@@ -865,12 +895,24 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
                 {editingMeal ? 'Edit Scheduled Meal' : 'Schedule Family Meal'}
               </h3>
               <p
-                className={`text-xs truncate ${
+                className={`text-xs truncate flex items-center gap-1.5 ${
                   isLight ? 'text-slate-500' : 'text-slate-400'
                 }`}
               >
-                {formatReadableDate(selectedDate)} •{' '}
+                <span>{formatReadableDate(selectedDate)}</span>
+                <span>•</span>
                 <span className="capitalize">{selectedSlot}</span>
+                {cookProfileId && (
+                  <>
+                    <span>•</span>
+                    <ProfileAvatar
+                      profileId={cookProfileId}
+                      size="xs"
+                      showName
+                      showRing={false}
+                    />
+                  </>
+                )}
               </p>
             </div>
           </div>
@@ -1002,8 +1044,8 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
                     >
                       <ProfileAvatar
                         profile={profile}
-                        size="xs"
-                        showRing={false}
+                        size="sm"
+                        showRing={selected}
                       />
                       <span>{profile.name}</span>
                     </button>
@@ -1114,9 +1156,15 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
                               : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:text-slate-200'
                         }`}
                       >
-                        {suggestion.source === 'recent' && (
+                        {suggestion.cookProfileId ? (
+                          <ProfileAvatar
+                            profileId={suggestion.cookProfileId}
+                            size="xs"
+                            showRing={false}
+                          />
+                        ) : suggestion.source === 'recent' ? (
                           <Clock className="w-3 h-3 opacity-65 shrink-0" />
-                        )}
+                        ) : null}
                         <span>{suggestion.title}</span>
                       </button>
                     );

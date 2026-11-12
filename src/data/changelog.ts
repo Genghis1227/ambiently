@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.5.4",
+    date: "November 11, 2026",
+    title: "Prominent Cook Avatars Alongside Scheduled Meals & Auto-Organize Toolbar Toggle",
+    highlights: [
+      "Prominent Cook Pictures Alongside Meals: Upgraded cook avatars on 3-Day and Full Week meal pills to a leading 28px circular photo badge alongside the meal title, and displayed the cook's photo + name badge (plus recipe thumbnail) on Tomorrow meal cards.",
+      "One-Click Recipe Draft + Cook Scheduling: Clicking 'Schedule Meal' while editing or importing a recipe draft now saves the recipe and schedules the meal with the assigned cook in one step.",
+      "Auto-Organize Toolbar Toggle Fix: Clicking the Auto-Organize magic wand button again on the Navigation Dock now toggles its pop-out bar closed.",
+    ],
+  },
+  {
     version: "v0.5.3",
     date: "November 11, 2026",
     title: "Auto-Carousel Pause Guard for Widget Modals, Portals & Active Form Inputs",
