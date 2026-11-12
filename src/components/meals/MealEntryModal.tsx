@@ -20,6 +20,10 @@ import {
   Loader2,
   AlertCircle,
   Tag,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
 } from 'lucide-react';
 import type {
   MealSlot,
@@ -36,7 +40,7 @@ import {
   parseIngredient,
   pluralizeItemName,
 } from '../../utils/ingredientAggregator';
-import { parseDateKey } from '../../utils/dateKey';
+import { localDateKey, parseDateKey } from '../../utils/dateKey';
 import { ProfileAvatar } from '../common/ProfileAvatar';
 
 function parseIngredientLine(
@@ -316,6 +320,8 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
     }
   }, [isProfileStoreInitialized]);
 
+  const weekStartsOn = useMealStore((s) => s.weekStartsOn);
+
   // Core slot & assignment state
   const [selectedDate, setSelectedDate] = useState<string>(
     () => editingMeal?.date || date
@@ -323,6 +329,81 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
   const [selectedSlot, setSelectedSlot] = useState<MealSlot>(
     () => editingMeal?.slot || initialSlot
   );
+  const [isCalendarOpen, setIsCalendarOpen] = useState<boolean>(false);
+  const [calendarMonthDate, setCalendarMonthDate] = useState<Date>(() => {
+    try {
+      const parsed = parseDateKey(editingMeal?.date || date);
+      return new Date(parsed.getFullYear(), parsed.getMonth(), 1);
+    } catch {
+      const now = new Date();
+      return new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+  });
+
+  const [todayKey] = useState<string>(() => localDateKey(new Date()));
+  const [tomorrowKey] = useState<string>(() => {
+    const now = new Date();
+    return localDateKey(
+      new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+    );
+  });
+
+  const stepSelectedDateByDays = (deltaDays: number) => {
+    try {
+      const cur = parseDateKey(selectedDate);
+      const next = new Date(
+        cur.getFullYear(),
+        cur.getMonth(),
+        cur.getDate() + deltaDays
+      );
+      const nextKey = localDateKey(next);
+      setCalendarMonthDate(new Date(next.getFullYear(), next.getMonth(), 1));
+      syncFromTargetSlot(nextKey, selectedSlot);
+    } catch {
+      // Ignore invalid date
+    }
+  };
+
+  const calendarDaysGrid = useMemo(() => {
+    const year = calendarMonthDate.getFullYear();
+    const month = calendarMonthDate.getMonth();
+    const firstOfMonth = new Date(year, month, 1);
+    const startDayIndex = weekStartsOn === 'monday' ? 1 : 0;
+    const leadingOffset = (firstOfMonth.getDay() - startDayIndex + 7) % 7;
+    const gridStart = new Date(year, month, 1 - leadingOffset);
+
+    const slotsByDay = new Map<string, Set<MealSlot>>();
+    for (const m of scheduledMeals) {
+      if (m.deletedAt) continue;
+      const set = slotsByDay.get(m.date) || new Set<MealSlot>();
+      set.add(m.slot);
+      slotsByDay.set(m.date, set);
+    }
+
+    return Array.from({ length: 42 }, (_, idx) => {
+      const d = new Date(
+        gridStart.getFullYear(),
+        gridStart.getMonth(),
+        gridStart.getDate() + idx
+      );
+      const key = localDateKey(d);
+      return {
+        date: d,
+        dateKey: key,
+        dayNumber: d.getDate(),
+        inCurrentMonth: d.getMonth() === month,
+        isToday: key === todayKey,
+        isSelected: key === selectedDate,
+        scheduledSlots: slotsByDay.get(key) || new Set<MealSlot>(),
+      };
+    });
+  }, [
+    calendarMonthDate,
+    weekStartsOn,
+    scheduledMeals,
+    todayKey,
+    selectedDate,
+  ]);
 
   const existingMealAtSlot = useMemo(
     () =>
@@ -1023,7 +1104,7 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
         <div className="flex-1 min-h-0 overflow-y-auto p-4 md:p-5 space-y-4">
           {/* Date & Meal Slot Row */}
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-            <div className="sm:col-span-5">
+            <div className="sm:col-span-5 relative">
               <label
                 className={`block text-[11px] font-semibold uppercase tracking-wider mb-1.5 ${
                   isLight ? 'text-slate-500' : 'text-slate-400'
@@ -1031,20 +1112,297 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
               >
                 Date
               </label>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => {
-                  if (e.target.value) {
-                    syncFromTargetSlot(e.target.value, selectedSlot);
-                  }
-                }}
-                className={`w-full min-h-[44px] px-3 rounded-xl border text-sm font-medium focus:outline-none ${
-                  isLight
-                    ? 'bg-white border-stone-300 text-slate-800 focus:border-emerald-600'
-                    : 'bg-slate-950/70 border-slate-800 text-slate-100 focus:border-emerald-600/70'
-                }`}
-              />
+
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => stepSelectedDateByDays(-1)}
+                  title="Previous day"
+                  aria-label="Previous day"
+                  className={`min-h-[46px] px-2.5 rounded-xl border inline-flex items-center justify-center transition-colors cursor-pointer shrink-0 ${
+                    isLight
+                      ? 'bg-white border-stone-300 text-slate-600 hover:bg-stone-100 hover:text-slate-900'
+                      : 'bg-slate-950/70 border-slate-800 text-slate-400 hover:bg-slate-800/80 hover:text-slate-100'
+                  }`}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isCalendarOpen) {
+                      try {
+                        const d = parseDateKey(selectedDate);
+                        setCalendarMonthDate(
+                          new Date(d.getFullYear(), d.getMonth(), 1)
+                        );
+                      } catch {
+                        // Ignore
+                      }
+                    }
+                    setIsCalendarOpen((open) => !open);
+                  }}
+                  aria-expanded={isCalendarOpen}
+                  aria-label="Open calendar date selector"
+                  className={`flex-1 min-h-[46px] px-3 rounded-xl border text-left inline-flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                    isCalendarOpen
+                      ? isLight
+                        ? 'bg-emerald-50/70 border-emerald-500 text-slate-900'
+                        : 'bg-slate-900 border-emerald-500/70 text-slate-100'
+                      : isLight
+                        ? 'bg-white border-stone-300 text-slate-800 hover:border-stone-400'
+                        : 'bg-slate-950/70 border-slate-800 text-slate-100 hover:border-slate-700'
+                  }`}
+                >
+                  <span className="inline-flex items-center gap-2 min-w-0">
+                    <Calendar
+                      className={`w-4 h-4 shrink-0 ${
+                        isLight ? 'text-emerald-700' : 'text-emerald-400'
+                      }`}
+                    />
+                    <span className="text-sm font-semibold truncate">
+                      {formatReadableDate(selectedDate)}
+                    </span>
+                    {selectedDate === todayKey && (
+                      <span
+                        className={`px-1.5 py-0.2 rounded text-[10px] font-bold uppercase tracking-wider shrink-0 ${
+                          isLight
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/60'
+                        }`}
+                      >
+                        Today
+                      </span>
+                    )}
+                    {selectedDate === tomorrowKey && (
+                      <span
+                        className={`px-1.5 py-0.2 rounded text-[10px] font-semibold shrink-0 ${
+                          isLight
+                            ? 'bg-stone-200 text-slate-700'
+                            : 'bg-slate-800 text-slate-300'
+                        }`}
+                      >
+                        Tmrw
+                      </span>
+                    )}
+                  </span>
+                  <ChevronDown
+                    className={`w-4 h-4 shrink-0 transition-transform ${
+                      isCalendarOpen ? 'rotate-180' : ''
+                    } ${isLight ? 'text-slate-500' : 'text-slate-400'}`}
+                  />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => stepSelectedDateByDays(1)}
+                  title="Next day"
+                  aria-label="Next day"
+                  className={`min-h-[46px] px-2.5 rounded-xl border inline-flex items-center justify-center transition-colors cursor-pointer shrink-0 ${
+                    isLight
+                      ? 'bg-white border-stone-300 text-slate-600 hover:bg-stone-100 hover:text-slate-900'
+                      : 'bg-slate-950/70 border-slate-800 text-slate-400 hover:bg-slate-800/80 hover:text-slate-100'
+                  }`}
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Interactive Month Calendar Popover */}
+              {isCalendarOpen && (
+                <div
+                  className={`mt-2 p-3 rounded-2xl border shadow-2xl z-30 ${
+                    isLight
+                      ? 'bg-white border-stone-300 text-slate-800'
+                      : 'bg-slate-950 border-slate-700/80 text-slate-100'
+                  }`}
+                >
+                  {/* Quick Date Chips: Today / Tomorrow */}
+                  <div className="flex items-center justify-between gap-1.5 pb-2.5 mb-2.5 border-b border-slate-500/15">
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          syncFromTargetSlot(todayKey, selectedSlot);
+                          setIsCalendarOpen(false);
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors cursor-pointer ${
+                          selectedDate === todayKey
+                            ? isLight
+                              ? 'bg-emerald-700 border-emerald-700 text-white'
+                              : 'bg-emerald-600 border-emerald-500 text-white'
+                            : isLight
+                              ? 'bg-stone-100 border-stone-300 text-slate-700 hover:bg-stone-200'
+                              : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
+                        }`}
+                      >
+                        Today
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          syncFromTargetSlot(tomorrowKey, selectedSlot);
+                          setIsCalendarOpen(false);
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors cursor-pointer ${
+                          selectedDate === tomorrowKey
+                            ? isLight
+                              ? 'bg-emerald-700 border-emerald-700 text-white'
+                              : 'bg-emerald-600 border-emerald-500 text-white'
+                            : isLight
+                              ? 'bg-stone-100 border-stone-300 text-slate-700 hover:bg-stone-200'
+                              : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
+                        }`}
+                      >
+                        Tomorrow
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsCalendarOpen(false)}
+                      className={`px-2 py-1 rounded-lg text-[11px] font-medium cursor-pointer ${
+                        isLight
+                          ? 'text-slate-500 hover:bg-stone-100'
+                          : 'text-slate-400 hover:bg-slate-900'
+                      }`}
+                    >
+                      Done
+                    </button>
+                  </div>
+
+                  {/* Month Navigation Header */}
+                  <div className="flex items-center justify-between mb-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCalendarMonthDate(
+                          (prev) =>
+                            new Date(prev.getFullYear(), prev.getMonth() - 1, 1)
+                        )
+                      }
+                      aria-label="Previous month"
+                      className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                        isLight
+                          ? 'bg-stone-50 border-stone-200 text-slate-700 hover:bg-stone-100'
+                          : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
+                      }`}
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <span className="text-xs font-bold tracking-tight">
+                      {calendarMonthDate.toLocaleDateString([], {
+                        month: 'long',
+                        year: 'numeric',
+                      })}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCalendarMonthDate(
+                          (prev) =>
+                            new Date(prev.getFullYear(), prev.getMonth() + 1, 1)
+                        )
+                      }
+                      aria-label="Next month"
+                      className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                        isLight
+                          ? 'bg-stone-50 border-stone-200 text-slate-700 hover:bg-stone-100'
+                          : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
+                      }`}
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Weekday Column Headers */}
+                  <div className="grid grid-cols-7 gap-1 mb-1 text-center">
+                    {(weekStartsOn === 'monday'
+                      ? ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
+                      : ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
+                    ).map((dayLabel) => (
+                      <div
+                        key={dayLabel}
+                        className={`text-[10px] font-semibold py-0.5 ${
+                          isLight ? 'text-slate-400' : 'text-slate-500'
+                        }`}
+                      >
+                        {dayLabel}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 6-Week Calendar Days Grid */}
+                  <div className="grid grid-cols-7 gap-1">
+                    {calendarDaysGrid.map((cell) => {
+                      const hasBkfst = cell.scheduledSlots.has('breakfast');
+                      const hasLunch = cell.scheduledSlots.has('lunch');
+                      const hasDinner = cell.scheduledSlots.has('dinner');
+                      return (
+                        <button
+                          key={cell.dateKey}
+                          type="button"
+                          onClick={() => {
+                            syncFromTargetSlot(cell.dateKey, selectedSlot);
+                            setIsCalendarOpen(false);
+                          }}
+                          className={`h-9 rounded-lg flex flex-col items-center justify-center relative text-xs font-medium transition-colors cursor-pointer border ${
+                            cell.isSelected
+                              ? isLight
+                                ? 'bg-emerald-700 border-emerald-700 text-white font-bold shadow-sm'
+                                : 'bg-emerald-600 border-emerald-400 text-white font-bold shadow-sm'
+                              : cell.isToday
+                                ? isLight
+                                  ? 'bg-emerald-50 border-emerald-400 text-emerald-900 font-bold'
+                                  : 'bg-emerald-950/60 border-emerald-600/70 text-emerald-200 font-bold'
+                                : cell.inCurrentMonth
+                                  ? isLight
+                                    ? 'bg-stone-50/70 border-transparent text-slate-800 hover:bg-stone-200/70'
+                                    : 'bg-slate-900/60 border-transparent text-slate-200 hover:bg-slate-800'
+                                  : isLight
+                                    ? 'border-transparent text-slate-300 hover:bg-stone-100'
+                                    : 'border-transparent text-slate-600 hover:bg-slate-900'
+                          }`}
+                        >
+                          <span className="leading-none">{cell.dayNumber}</span>
+                          {(hasBkfst || hasLunch || hasDinner) && (
+                            <span className="flex items-center gap-0.5 mt-0.5">
+                              {hasBkfst && (
+                                <span
+                                  className={`w-1 h-1 rounded-full ${
+                                    cell.isSelected
+                                      ? 'bg-amber-200'
+                                      : 'bg-amber-400'
+                                  }`}
+                                />
+                              )}
+                              {hasLunch && (
+                                <span
+                                  className={`w-1 h-1 rounded-full ${
+                                    cell.isSelected
+                                      ? 'bg-emerald-200'
+                                      : 'bg-emerald-400'
+                                  }`}
+                                />
+                              )}
+                              {hasDinner && (
+                                <span
+                                  className={`w-1 h-1 rounded-full ${
+                                    cell.isSelected
+                                      ? 'bg-white'
+                                      : 'bg-sky-400'
+                                  }`}
+                                />
+                              )}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="sm:col-span-7">

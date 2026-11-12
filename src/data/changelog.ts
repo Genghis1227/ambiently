@@ -11,6 +11,15 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.5.9",
+    date: "November 12, 2026",
+    title: "Interactive Month Calendar Selector for the Family Meal Planner",
+    highlights: [
+      "Interactive Calendar Date Selector in Meal Entry Modal: Replaced the native text date input with a touch-friendly Calendar Selector featuring prev/next day steppers, Today & Tomorrow quick chips, month navigation, and color-coded meal slot indicator dots.",
+      "Inline Calendar Date Jumper on the Meal Planner Widget: Added a Calendar Selector button in the widget header that opens an inline month calendar popover to jump to any date in Tomorrow, 3-Day, or Week view with 1-tap reset to Today.",
+    ],
+  },
+  {
     version: "v0.5.8",
     date: "November 12, 2026",
     title: "Parent Chore Auto-Completion & Strict Currency Input Validation",

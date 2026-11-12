@@ -13,6 +13,7 @@ import {
   X,
   Sparkles,
   StickyNote,
+  Calendar,
 } from 'lucide-react';
 import type {
   GoogleKeepExportMode,
@@ -202,6 +203,12 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
   const showCookAvatar = config?.showCookAvatar !== false;
 
   const [weekOffset, setWeekOffset] = useState<number>(0);
+  const [customAnchorDate, setCustomAnchorDate] = useState<Date | null>(null);
+  const [isCalendarOpen, setIsCalendarOpen] = useState<boolean>(false);
+  const [calendarMonthDate, setCalendarMonthDate] = useState<Date>(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
 
   // Shopping List Drawer state
   const [isShoppingOpen, setIsShoppingOpen] = useState<boolean>(false);
@@ -269,20 +276,22 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
     };
 
     if (effectiveScope === 'tomorrow') {
-      return [buildDescriptor(addDays(todayDate, 1))];
+      const target = customAnchorDate || addDays(todayDate, 1);
+      return [buildDescriptor(target)];
     }
 
     if (effectiveScope === 'three_day') {
+      const base = customAnchorDate || todayDate;
       return [
-        buildDescriptor(todayDate),
-        buildDescriptor(addDays(todayDate, 1)),
-        buildDescriptor(addDays(todayDate, 2)),
+        buildDescriptor(base),
+        buildDescriptor(addDays(base, 1)),
+        buildDescriptor(addDays(base, 2)),
       ];
     }
 
     // full_week
-    const shiftedRef = addDays(todayDate, weekOffset * 7);
-    const weekStart = getStartOfWeekDate(shiftedRef, effectiveWeekStartsOn);
+    const baseRef = customAnchorDate || addDays(todayDate, weekOffset * 7);
+    const weekStart = getStartOfWeekDate(baseRef, effectiveWeekStartsOn);
     return Array.from({ length: 7 }, (_, idx) =>
       buildDescriptor(addDays(weekStart, idx))
     );
@@ -292,13 +301,21 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
     todayKey,
     tomorrowKey,
     weekOffset,
+    customAnchorDate,
     effectiveWeekStartsOn,
   ]);
 
   const weekRangeLabel = useMemo(() => {
-    if (effectiveScope !== 'full_week' || dayBoxes.length < 7) return '';
+    if (dayBoxes.length === 0) return '';
+    if (dayBoxes.length === 1) {
+      return dayBoxes[0].dateObj.toLocaleDateString([], {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+      });
+    }
     const first = dayBoxes[0].dateObj;
-    const last = dayBoxes[6].dateObj;
+    const last = dayBoxes[dayBoxes.length - 1].dateObj;
     const sameMonth = first.getMonth() === last.getMonth();
     const startStr = first.toLocaleDateString([], {
       month: 'short',
@@ -308,7 +325,57 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
       ? String(last.getDate())
       : last.toLocaleDateString([], { month: 'short', day: 'numeric' });
     return `${startStr} – ${endStr}`;
-  }, [effectiveScope, dayBoxes]);
+  }, [dayBoxes]);
+
+  const visibleDateKeySet = useMemo(
+    () => new Set(dayBoxes.map((d) => d.dateKey)),
+    [dayBoxes]
+  );
+
+  const widgetCalendarCells = useMemo(() => {
+    const year = calendarMonthDate.getFullYear();
+    const month = calendarMonthDate.getMonth();
+    const firstOfMonth = new Date(year, month, 1);
+    const startIndex = effectiveWeekStartsOn === 'monday' ? 1 : 0;
+    const leadingOffset = (firstOfMonth.getDay() - startIndex + 7) % 7;
+    const gridStart = new Date(year, month, 1 - leadingOffset);
+
+    const slotsByDay = new Map<string, Set<MealSlot>>();
+    for (const m of scheduledMeals) {
+      if (m.deletedAt) continue;
+      const set = slotsByDay.get(m.date) || new Set<MealSlot>();
+      set.add(m.slot);
+      slotsByDay.set(m.date, set);
+    }
+
+    return Array.from({ length: 42 }, (_, idx) => {
+      const d = new Date(
+        gridStart.getFullYear(),
+        gridStart.getMonth(),
+        gridStart.getDate() + idx
+      );
+      const key = localDateKey(d);
+      return {
+        date: d,
+        dateKey: key,
+        dayNumber: d.getDate(),
+        inCurrentMonth: d.getMonth() === month,
+        isToday: key === todayKey,
+        isInVisibleWindow: visibleDateKeySet.has(key),
+        isAnchor: Boolean(
+          customAnchorDate && localDateKey(customAnchorDate) === key
+        ),
+        scheduledSlots: slotsByDay.get(key) || new Set<MealSlot>(),
+      };
+    });
+  }, [
+    calendarMonthDate,
+    effectiveWeekStartsOn,
+    scheduledMeals,
+    todayKey,
+    visibleDateKeySet,
+    customAnchorDate,
+  ]);
 
   const recipeById = useMemo(() => {
     const map = new Map<string, Recipe>();
@@ -768,6 +835,37 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
             </div>
           )}
 
+          {/* Calendar Date Selector Toggle */}
+          {!isShoppingOpen && (
+            <button
+              type="button"
+              data-no-drag="true"
+              onClick={() => {
+                if (!isCalendarOpen && dayBoxes[0]) {
+                  const ref = dayBoxes[0].dateObj;
+                  setCalendarMonthDate(
+                    new Date(ref.getFullYear(), ref.getMonth(), 1)
+                  );
+                }
+                setIsCalendarOpen((open) => !open);
+              }}
+              title="Open calendar date selector"
+              aria-expanded={isCalendarOpen}
+              className={`min-h-[30px] px-2 rounded-lg border inline-flex items-center gap-1 text-[11px] font-medium transition-colors cursor-pointer ${
+                isCalendarOpen || customAnchorDate || weekOffset !== 0
+                  ? isLight
+                    ? 'bg-emerald-50 border-emerald-400 text-emerald-900 font-semibold'
+                    : 'bg-emerald-950/60 border-emerald-700/70 text-emerald-200 font-semibold'
+                  : isLight
+                    ? 'bg-white/80 border-stone-300/80 text-slate-700 hover:bg-stone-100'
+                    : 'bg-slate-900/75 border-slate-800 text-slate-300 hover:bg-slate-800'
+              }`}
+            >
+              <Calendar className="w-3.5 h-3.5 text-emerald-500/90" />
+              <span>{weekRangeLabel}</span>
+            </button>
+          )}
+
           {/* Recipe Book Quick Launcher */}
           <button
             type="button"
@@ -902,6 +1000,180 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
         </div>
       )}
 
+      {/* Interactive Calendar Date Selector Popover on Widget */}
+      {!isShoppingOpen && isCalendarOpen && (
+        <div
+          data-no-drag="true"
+          className={`shrink-0 mt-2 p-2.5 rounded-xl border shadow-lg ${
+            isLight
+              ? 'bg-white border-stone-300 text-slate-800'
+              : 'bg-slate-950/95 border-slate-700/80 text-slate-100'
+          }`}
+        >
+          <div className="flex items-center justify-between gap-2 pb-2 mb-2 border-b border-slate-500/15">
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomAnchorDate(null);
+                  setWeekOffset(0);
+                  setIsCalendarOpen(false);
+                }}
+                className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-colors cursor-pointer ${
+                  !customAnchorDate && weekOffset === 0
+                    ? isLight
+                      ? 'bg-emerald-700 border-emerald-700 text-white'
+                      : 'bg-emerald-600 border-emerald-500 text-white'
+                    : isLight
+                      ? 'bg-stone-100 border-stone-300 text-slate-700 hover:bg-stone-200'
+                      : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomAnchorDate(addDays(todayDate, 1));
+                  setIsCalendarOpen(false);
+                }}
+                className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-colors cursor-pointer ${
+                  isLight
+                    ? 'bg-stone-100 border-stone-300 text-slate-700 hover:bg-stone-200'
+                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                Tomorrow
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsCalendarOpen(false)}
+              className={`px-2 py-0.5 rounded-md text-[11px] font-medium cursor-pointer ${
+                isLight
+                  ? 'text-slate-500 hover:bg-stone-100'
+                  : 'text-slate-400 hover:bg-slate-900'
+              }`}
+            >
+              Close
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between mb-1.5">
+            <button
+              type="button"
+              onClick={() =>
+                setCalendarMonthDate(
+                  (prev) =>
+                    new Date(prev.getFullYear(), prev.getMonth() - 1, 1)
+                )
+              }
+              aria-label="Previous month"
+              className={`p-1 rounded-lg border transition-colors cursor-pointer ${
+                isLight
+                  ? 'bg-stone-50 border-stone-200 text-slate-700 hover:bg-stone-100'
+                  : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
+              }`}
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+            <span className="text-xs font-bold tracking-tight">
+              {calendarMonthDate.toLocaleDateString([], {
+                month: 'long',
+                year: 'numeric',
+              })}
+            </span>
+            <button
+              type="button"
+              onClick={() =>
+                setCalendarMonthDate(
+                  (prev) =>
+                    new Date(prev.getFullYear(), prev.getMonth() + 1, 1)
+                )
+              }
+              aria-label="Next month"
+              className={`p-1 rounded-lg border transition-colors cursor-pointer ${
+                isLight
+                  ? 'bg-stone-50 border-stone-200 text-slate-700 hover:bg-stone-100'
+                  : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
+              }`}
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-7 gap-1 mb-1 text-center">
+            {(effectiveWeekStartsOn === 'monday'
+              ? ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
+              : ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
+            ).map((dayLabel) => (
+              <div
+                key={dayLabel}
+                className={`text-[10px] font-semibold ${
+                  isLight ? 'text-slate-400' : 'text-slate-500'
+                }`}
+              >
+                {dayLabel}
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-7 gap-1">
+            {widgetCalendarCells.map((cell) => {
+              const hasBkfst = cell.scheduledSlots.has('breakfast');
+              const hasLunch = cell.scheduledSlots.has('lunch');
+              const hasDinner = cell.scheduledSlots.has('dinner');
+              return (
+                <button
+                  key={cell.dateKey}
+                  type="button"
+                  onClick={() => {
+                    setCustomAnchorDate(cell.date);
+                    setIsCalendarOpen(false);
+                  }}
+                  className={`h-7 rounded-md flex flex-col items-center justify-center relative text-[11px] font-medium transition-colors cursor-pointer border ${
+                    cell.isAnchor
+                      ? isLight
+                        ? 'bg-emerald-700 border-emerald-700 text-white font-bold'
+                        : 'bg-emerald-600 border-emerald-400 text-white font-bold'
+                      : cell.isInVisibleWindow
+                        ? isLight
+                          ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-semibold'
+                          : 'bg-emerald-950/55 border-emerald-700/60 text-emerald-200 font-semibold'
+                        : cell.isToday
+                          ? isLight
+                            ? 'bg-stone-100 border-emerald-400 text-emerald-800 font-bold'
+                            : 'bg-slate-900 border-emerald-600/60 text-emerald-300 font-bold'
+                          : cell.inCurrentMonth
+                            ? isLight
+                              ? 'bg-stone-50/70 border-transparent text-slate-800 hover:bg-stone-200/70'
+                              : 'bg-slate-900/60 border-transparent text-slate-200 hover:bg-slate-800'
+                            : isLight
+                              ? 'border-transparent text-slate-300 hover:bg-stone-100'
+                              : 'border-transparent text-slate-600 hover:bg-slate-900'
+                  }`}
+                >
+                  <span className="leading-none">{cell.dayNumber}</span>
+                  {(hasBkfst || hasLunch || hasDinner) && (
+                    <span className="flex items-center gap-0.5 mt-0.5">
+                      {hasBkfst && (
+                        <span className="w-1 h-1 rounded-full bg-amber-400" />
+                      )}
+                      {hasLunch && (
+                        <span className="w-1 h-1 rounded-full bg-emerald-400" />
+                      )}
+                      {hasDinner && (
+                        <span className="w-1 h-1 rounded-full bg-sky-400" />
+                      )}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Full-Week Navigation Sub-Bar */}
       {!isShoppingOpen && effectiveScope === 'full_week' && (
         <div className="shrink-0 flex items-center justify-between gap-2 pt-2 pb-1 text-xs">
@@ -909,7 +1181,13 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
             <button
               type="button"
               data-no-drag="true"
-              onClick={() => setWeekOffset((w) => w - 1)}
+              onClick={() => {
+                if (customAnchorDate) {
+                  setCustomAnchorDate(addDays(customAnchorDate, -7));
+                } else {
+                  setWeekOffset((w) => w - 1);
+                }
+              }}
               className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
                 isLight
                   ? 'bg-white/80 border-stone-300 text-slate-700 hover:bg-stone-100'
@@ -922,7 +1200,13 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
             <button
               type="button"
               data-no-drag="true"
-              onClick={() => setWeekOffset((w) => w + 1)}
+              onClick={() => {
+                if (customAnchorDate) {
+                  setCustomAnchorDate(addDays(customAnchorDate, 7));
+                } else {
+                  setWeekOffset((w) => w + 1);
+                }
+              }}
               className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
                 isLight
                   ? 'bg-white/80 border-stone-300 text-slate-700 hover:bg-stone-100'
@@ -935,11 +1219,14 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
             <span className="ml-1.5 font-medium opacity-85">
               {weekRangeLabel}
             </span>
-            {weekOffset !== 0 && (
+            {(weekOffset !== 0 || customAnchorDate) && (
               <button
                 type="button"
                 data-no-drag="true"
-                onClick={() => setWeekOffset(0)}
+                onClick={() => {
+                  setCustomAnchorDate(null);
+                  setWeekOffset(0);
+                }}
                 className={`ml-1 px-2 py-0.5 rounded-md text-[10px] font-semibold border transition-colors cursor-pointer ${
                   isLight
                     ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
