@@ -223,6 +223,7 @@ interface PhotoFrameWidgetProps {
   showCaptions?: boolean;
   showDateTaken?: boolean;
   mosaicKenBurns?: boolean;
+  transparentBg?: boolean;
   onUpdateConfig?: (updates: Record<string, any>) => void;
 }
 
@@ -239,6 +240,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   showCaptions = true,
   showDateTaken: propShowDateTaken,
   mosaicKenBurns = false,
+  transparentBg = false,
   onUpdateConfig: _onUpdateConfig,
 }) => {
   const commonPhotos = useDashboardStore((s) => s.settings.commonPhotos);
@@ -1046,12 +1048,22 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   // Plex links are saved without a token. Until this device's tokens are read (usually a few
   // milliseconds), a Plex photo would load without one, fail, and be skipped, so show the empty frame.
   if (isPlexSource && !plexTokensReady) {
-    return <div className="relative w-full h-full rounded-2xl overflow-hidden bg-black" />;
+    return (
+      <div
+        className={`relative w-full h-full rounded-2xl overflow-hidden ${
+          transparentBg ? 'bg-transparent' : 'bg-black'
+        }`}
+      />
+    );
   }
 
   return (
     <div
-      className="group relative w-full h-full rounded-2xl overflow-hidden select-none bg-black flex flex-col justify-between"
+      className={`group relative w-full h-full rounded-2xl ${
+        transparentBg && style === 'polaroid' ? 'overflow-visible' : 'overflow-hidden'
+      } select-none ${
+        transparentBg && (style === 'polaroid' || style === 'mosaic') ? 'bg-transparent' : 'bg-black'
+      } flex flex-col justify-between`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onTouchStart={handleTouchStart}
@@ -1126,7 +1138,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
 
       {/* 2. Mosaic / Collage Grid Style (4-quadrant auto-rotating collection) */}
       {style === 'mosaic' && (
-        <div className="absolute inset-0 p-2 grid grid-cols-2 grid-rows-2 gap-2 bg-gray-950">
+        <div className={`absolute inset-0 p-2 grid grid-cols-2 grid-rows-2 gap-2 ${transparentBg ? 'bg-transparent' : 'bg-gray-950'}`}>
           {(mosaicPhotos.length >= 4 ? mosaicPhotos : photos.slice(0, 4)).map((p, idx) => {
             const isFocused = mosaicKenBurns && idx === focusedMosaicSlot;
             return (
@@ -1248,9 +1260,17 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
 
       {/* 3. Scattered Polaroids Style (Multiple scattered photos with random updates) */}
       {style === 'polaroid' && (
-        <div className="absolute inset-0 overflow-hidden bg-gradient-to-br from-[#121622] via-[#0b0e16] to-[#07090f] p-3 select-none">
+        <div
+          className={`absolute inset-0 ${
+            transparentBg
+              ? 'overflow-visible bg-transparent'
+              : 'overflow-hidden bg-gradient-to-br from-[#121622] via-[#0b0e16] to-[#07090f]'
+          } p-3 select-none`}
+        >
           {/* Subtle ambient vignette */}
-          <div className="absolute inset-0 bg-radial from-transparent via-black/40 to-black/85 pointer-events-none" />
+          {!transparentBg && (
+            <div className="absolute inset-0 bg-radial from-transparent via-black/40 to-black/85 pointer-events-none" />
+          )}
 
           {/* Render Scattered Polaroid Cards with Dynamic Varied Sizing */}
           {scatteredPolaroids.map((item, idx) => {

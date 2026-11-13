@@ -11,6 +11,15 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.6.5",
+    date: "November 13, 2026",
+    title: "Optional Sticker / No Outline Mode Across Clocks, Weather, Countdown, Quotes & Photo Frames",
+    highlights: [
+      "Sticker / No Outline Toggle (Default Off) for 7 More Widgets: Ambient Clock, World Timezone Clock, Clock & Weather Combo, Weather Forecast, Milestone Countdown, Daily Inspiration & Quotes, and Ambient Photo Frame now include a 1-click 'Sticker / No Outline' toggle in the right-click / Layers menu and Tile Settings.",
+      "True Frameless Rendering & Floating Polaroids: Enabling Sticker mode also removes inner countdown unit boxes, forecast pill borders, and dividers—and lets Scattered Polaroids float directly onto your wallpaper or corkboard with no dark backing card.",
+    ],
+  },
+  {
     version: "v0.6.4",
     date: "November 13, 2026",
     title: "Weekly 1x/wk Chore Persistence, Quick Canvas Photo/GIF Menu & Frameless Text Boxes",

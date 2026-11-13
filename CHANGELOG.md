@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.5] - 2026-11-13
+
+### Optional Sticker / No Outline Mode Across Ambient, Clock, Weather & Photo Frame Widgets
+* **Sticker / No Outline Toggle for 7 Ambient & Media Widgets (`src/components/layout/Corkboard.tsx`, `src/components/widgets/WidgetSettingsModal.tsx`, `src/components/widgets/AddWidgetModal.tsx`):**
+  * Added the 1-click **Sticker / No Outline (`ON` / `OFF`)** toggle (defaulting to **`OFF`**) in both the tile right-click / **Layers (`📚`)** menu and **Tile Settings -> Card Appearance & Theme** for **Ambient Clock**, **World Timezone Clock**, **Clock & Weather Combo**, **Weather Forecast**, **Milestone Countdown**, **Daily Inspiration & Quotes**, and **Ambient Photo Frame** (while preserving **`ON`** by default for **Single Image or GIF** and **Text Box**).
+* **Inner Sub-Border & Backdrop Removal When Frameless (`src/components/widgets/ClockWidget.tsx`, `WorldClockWidget.tsx`, `ClockWeatherWidget.tsx`, `WeatherWidget.tsx`, `CountdownWidget.tsx`, `QuotesWidget.tsx`, `PhotoFrameWidget.tsx`):**
+  * Stripped inner unit boxes (`Days / Hours / Mins / Secs` in Countdown), forecast pill outlines & dividers (Weather & Clock+Weather), multi-city row outlines (World Clock), and badge borders (Clock & Quotes) when Sticker mode is enabled, paired with subtle legibility drop-shadows on dark canvases.
+  * Updated **Ambient Photo Frame** so Sticker mode removes the outer `p-4` card mat for edge-to-edge **Ken Burns / Filmstrip**, clears the dark grid background on **Mosaic**, and removes the dark vignette backdrop and overflow clipping on **Scattered Polaroids** so Polaroids float directly on the canvas.
+
+---
+
 ## [0.6.4] - 2026-11-13
 
 ### Weekly `1x / wk (Any day)` Chore Persistence, Quick Canvas Photo/GIF Menu & Frameless Text Boxes

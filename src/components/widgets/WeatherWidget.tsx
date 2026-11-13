@@ -22,6 +22,7 @@ interface WeatherWidgetProps {
   longitude?: number;
   unit?: 'F' | 'C';
   isLight?: boolean;
+  transparentBg?: boolean;
 }
 
 const renderWeatherIcon = (code: number, isDay: boolean, size = 'w-10 h-10') => {
@@ -48,6 +49,7 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({
   longitude = -97.7431,
   unit = 'F',
   isLight = false,
+  transparentBg = false,
 }) => {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -73,8 +75,10 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({
     return () => clearInterval(interval);
   }, [latitude, longitude, locationName, unit]);
 
+  const stickerShadow = transparentBg && !isLight ? 'drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]' : '';
+
   return (
-    <div className="w-full h-full flex flex-col justify-between select-none p-1">
+    <div className={`w-full h-full flex flex-col justify-between select-none p-1 ${stickerShadow}`}>
       {/* Top Header: Location & Refresh */}
       <div className={`flex items-center justify-between text-xs ${isLight ? 'text-slate-600' : 'text-gray-400'}`}>
         <div className={`flex items-center gap-1.5 font-medium truncate max-w-[80%] ${isLight ? 'text-slate-700' : 'text-gray-300'}`}>
@@ -127,12 +131,16 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({
 
           {/* 5-Day Daily Forecast Pill Strip */}
           {weather.forecast && weather.forecast.length > 0 && (
-            <div className={`grid grid-cols-5 gap-1.5 mt-3 pt-3 border-t ${isLight ? 'border-slate-200' : 'border-gray-800/80'}`}>
+            <div className={`grid grid-cols-5 gap-1.5 mt-3 pt-3 border-t ${
+              transparentBg ? 'border-transparent' : isLight ? 'border-slate-200' : 'border-gray-800/80'
+            }`}>
               {weather.forecast.slice(0, 5).map((day, idx) => (
                 <div
                   key={day.date || idx}
                   className={`flex flex-col items-center rounded-lg p-1.5 text-center border ${
-                    isLight
+                    transparentBg
+                      ? 'bg-transparent border-transparent'
+                      : isLight
                       ? 'bg-slate-100/90 border-slate-200/90'
                       : 'bg-gray-950/40 border-white/5'
                   }`}

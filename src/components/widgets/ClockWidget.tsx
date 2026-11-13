@@ -9,6 +9,7 @@ interface ClockWidgetProps {
   timezone?: string;
   locationName?: string;
   isLight?: boolean;
+  transparentBg?: boolean;
 }
 
 export const ClockWidget: React.FC<ClockWidgetProps> = ({
@@ -18,6 +19,7 @@ export const ClockWidget: React.FC<ClockWidgetProps> = ({
   timezone,
   locationName,
   isLight = false,
+  transparentBg = false,
 }) => {
   const { hour12 } = useTimePrefs();
   const [time, setTime] = useState(new Date());
@@ -50,15 +52,21 @@ export const ClockWidget: React.FC<ClockWidgetProps> = ({
 
   const zt = getFormattedTimeForZone(time, timezone, hour12);
 
+  const stickerShadow = transparentBg && !isLight ? 'drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]' : '';
+
   return (
-    <div className="w-full h-full flex flex-col justify-between select-none p-1">
+    <div className={`w-full h-full flex flex-col justify-between select-none p-1 ${stickerShadow}`}>
       <div className="flex items-center justify-between gap-2">
-        <div className={`text-xs font-medium uppercase tracking-wider truncate ${isLight ? 'text-slate-600' : 'text-gray-400'}`}>
+        <div className={`text-xs font-medium uppercase tracking-wider truncate ${isLight ? 'text-slate-600' : 'text-gray-300'}`}>
           {locationName || title || 'Ambient Clock'}
         </div>
         {timezone && (
           <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full shrink-0 ${
-            isLight
+            transparentBg
+              ? isLight
+                ? 'bg-transparent text-blue-700 font-bold'
+                : 'bg-transparent text-blue-300 font-bold'
+              : isLight
               ? 'bg-blue-50 text-blue-700 border border-blue-200'
               : 'bg-blue-500/15 text-blue-300 border border-blue-500/30'
           }`}>

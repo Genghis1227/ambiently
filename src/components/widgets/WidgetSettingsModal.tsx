@@ -99,6 +99,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const applyCommonPhotosToAllWidgets = useDashboardStore((state) => state.applyCommonPhotosToAllWidgets);
   const [title, setTitle] = useState('');
   const [themeMode, setThemeMode] = useState<WidgetThemeMode>('auto');
+  const [widgetTransparentBg, setWidgetTransparentBg] = useState<boolean>(false);
 
   // Countdown states
   const [countdownDate, setCountdownDate] = useState('');
@@ -227,6 +228,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
 
     setTitle(widget.title || '');
     setThemeMode((widget.config?.themeMode as WidgetThemeMode) || 'auto');
+    setWidgetTransparentBg(Boolean(widget.config?.transparentBg));
     setGeoStatus('');
     setGeoHits([]);
 
@@ -518,6 +520,20 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       themeMode,
     };
 
+    if (
+      [
+        'clock',
+        'world_clock',
+        'clock_weather',
+        'weather',
+        'countdown',
+        'quotes',
+        'photo_frame',
+      ].includes(widget.type)
+    ) {
+      configUpdates.transparentBg = widgetTransparentBg;
+    }
+
     if (widget.type === 'countdown') {
       const dtString = `${countdownDate || '2026-12-25'}T${countdownTime || '00:00'}:00`;
       const iso = new Date(dtString).toISOString();
@@ -759,6 +775,42 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                 <span className="text-[10px] text-gray-400 mt-0.5">Night slate card</span>
               </button>
             </div>
+
+            {[
+              'clock',
+              'world_clock',
+              'clock_weather',
+              'weather',
+              'countdown',
+              'quotes',
+              'photo_frame',
+            ].includes(widget.type) && (
+              <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-800/60">
+                <div>
+                  <span className="text-xs text-gray-300 block font-semibold">
+                    Sticker / No Outline Mode
+                  </span>
+                  <span className="text-[10px] text-gray-500">
+                    {widget.type === 'photo_frame'
+                      ? 'Removes the outer card mat (and Polaroid backdrop) so photos float cleanly on canvas'
+                      : 'Removes the card box and inner outlines so content floats directly on canvas'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setWidgetTransparentBg(!widgetTransparentBg)}
+                  className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer shrink-0 ml-3 ${
+                    widgetTransparentBg ? 'bg-emerald-600' : 'bg-gray-700'
+                  }`}
+                >
+                  <div
+                    className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                      widgetTransparentBg ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Countdown Settings */}

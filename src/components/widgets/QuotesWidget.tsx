@@ -7,6 +7,7 @@ interface QuotesWidgetProps {
   quoteMode?: 'curated' | 'custom' | 'both';
   rotationIntervalSec?: number; // update interval in seconds (0 = manual, 30, 60, 300, 900, 1800, 3600, 14400, 86400)
   isLight?: boolean;
+  transparentBg?: boolean;
 }
 
 export const QuotesWidget: React.FC<QuotesWidgetProps> = ({
@@ -14,6 +15,7 @@ export const QuotesWidget: React.FC<QuotesWidgetProps> = ({
   quoteMode = 'both',
   rotationIntervalSec = 3600,
   isLight = false,
+  transparentBg = false,
 }) => {
   const pool = useMemo(() => {
     if (quoteMode === 'custom' && customQuotes.length > 0) {
@@ -87,11 +89,13 @@ export const QuotesWidget: React.FC<QuotesWidgetProps> = ({
     return 'Daily';
   };
 
+  const stickerShadow = transparentBg && !isLight ? 'drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]' : '';
+
   return (
-    <div className="w-full h-full flex flex-col justify-between p-1 select-none">
+    <div className={`w-full h-full flex flex-col justify-between p-1 select-none ${stickerShadow}`}>
       <div className="flex items-center justify-between pr-16">
         <div className={`flex items-center gap-1.5 text-xs tracking-wider uppercase ${
-          isLight ? 'text-amber-800 font-bold' : 'text-amber-400/80 font-semibold'
+          isLight ? 'text-amber-800 font-bold' : 'text-amber-400/90 font-semibold'
         }`}>
           <Quote className="w-3.5 h-3.5" />
           <span>{headerTitle}</span>
@@ -104,7 +108,7 @@ export const QuotesWidget: React.FC<QuotesWidgetProps> = ({
             className={`p-1 rounded-lg transition-colors cursor-pointer ${
               isLight
                 ? 'text-slate-400 hover:text-slate-800 hover:bg-slate-200'
-                : 'text-gray-500 hover:text-amber-300 hover:bg-gray-800/60'
+                : 'text-gray-400 hover:text-amber-300 hover:bg-gray-800/60'
             }`}
           >
             <RefreshCw className="w-3 h-3" />
@@ -118,23 +122,27 @@ export const QuotesWidget: React.FC<QuotesWidgetProps> = ({
         }`}
       >
         <blockquote className={`text-sm md:text-base font-serif italic leading-snug ${
-          isLight ? 'text-slate-800 font-normal' : 'text-gray-200'
+          isLight ? 'text-slate-800 font-normal' : 'text-gray-100'
         }`}>
           "{activeQuote.quote}"
         </blockquote>
         <div className={`text-right mt-2 text-xs font-medium ${
-          isLight ? 'text-amber-800 font-bold' : 'text-amber-300/80'
+          isLight ? 'text-amber-800 font-bold' : 'text-amber-300/90'
         }`}>
           — {activeQuote.author || 'Family Motto'}
         </div>
       </div>
 
-      <div className={`flex items-center justify-between text-[10px] font-mono ${isLight ? 'text-slate-500' : 'text-gray-500'}`}>
-        <div className={`h-0.5 w-12 rounded-full ${isLight ? 'bg-amber-600/30' : 'bg-amber-500/30'}`} />
+      <div className={`flex items-center justify-between text-[10px] font-mono ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
+        <div className={`h-0.5 w-12 rounded-full ${transparentBg ? 'bg-transparent' : isLight ? 'bg-amber-600/30' : 'bg-amber-500/30'}`} />
         <div className="flex items-center gap-2">
           {intervalSec > 0 && (
             <span className={`px-1.5 py-0.5 rounded border ${
-              isLight
+              transparentBg
+                ? isLight
+                  ? 'bg-transparent text-amber-800 border-transparent'
+                  : 'bg-transparent text-amber-300/80 border-transparent'
+                : isLight
                 ? 'bg-slate-100 text-amber-800 border-amber-300/40'
                 : 'bg-gray-800/80 text-amber-400/70 border-amber-500/10'
             }`}>
