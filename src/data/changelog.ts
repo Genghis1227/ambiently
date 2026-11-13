@@ -11,6 +11,35 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.6.0",
+    date: "November 12, 2026",
+    title: "Docker Self-Hosting & Raspberry Pi Kiosk Edition",
+    highlights: [
+      "Multi-Architecture Docker & Compose Stack: Self-host Ambiently on Intel/AMD servers, Synology NAS, Unraid, Proxmox (amd64), or Raspberry Pi 4/5 & Apple Silicon (arm64) with full local /api/* feed, calendar, Google Photos, and recipe scraper support.",
+      "Zero-Rebuild Runtime Cloud Sync & LAN Feeds: Pass SUPABASE_URL and SUPABASE_ANON_KEY via container environment variables without rebuilding, and optionally enable AMBIENTLY_ALLOW_PRIVATE_FEEDS=true for private home-network iCal and RSS servers.",
+      "1-Command Raspberry Pi Kiosk & All-in-One Installer: Run scripts/pi-kiosk-setup.sh on Raspberry Pi OS (Wayland & X11) to auto-boot into fullscreen Chromium kiosk mode—either pointing at a cloud/LAN URL or running the ARM64 Docker container directly on the Pi.",
+      "Complete Install Guides: Added step-by-step Raspberry Pi & Docker installation manuals in RASPBERRY_PI.md, README.md, and Settings → Household → Kid Protection & Kiosk Lock.",
+    ],
+  },
+  {
+    version: "v0.5.11",
+    date: "November 12, 2026",
+    title: "Blank-Canvas Right-Click Menu & Default Sticker Mode for Photos & GIFs",
+    highlights: [
+      "Blank-Canvas Right-Click Context Menu: Right-click anywhere on empty canvas space to pin a new Sticky Note directly at that spot, create a Shopping List note, or add a widget.",
+      "Default Sticker / Transparent Mode: Single Image & GIF widgets now open in frameless Sticker / Transparent mode by default, with a 1-click ON/OFF toggle in the right-click / Layers menu.",
+    ],
+  },
+  {
+    version: "v0.5.10",
+    date: "November 12, 2026",
+    title: "Unclipped Widget Toolbar Layering & GIF Container Rotation Controls",
+    highlights: [
+      "Individual Widget Toolbar Always in Front: Floating widget toolbars and rotation handles now layer cleanly above adjacent widgets without clipping.",
+      "GIF & Widget Rotation Controls: Restored the top-center grab-to-rotate handle on Image/GIF widgets, added a Rotate handle inside the widget toolbar, and added quick -6° to +6° tilt presets in the Layers menu.",
+    ],
+  },
+  {
     version: "v0.5.9",
     date: "November 12, 2026",
     title: "Interactive Month Calendar Selector for the Family Meal Planner",

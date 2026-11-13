@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.0] - 2026-11-12
+
+### Docker Self-Hosting & Raspberry Pi Kiosk Edition (Phase 6)
+* **Zero-Dependency Node Server & Multi-Arch Docker Stack (`server/index.ts`, `vite.server.config.ts`, `Dockerfile`, `compose.yaml`, `.dockerignore`):**
+  * Added a standalone Node HTTP production server compiled into a single zero-dependency ESM bundle (`dist-server/index.mjs`) serving `dist/` with immutable `/assets/*` caching, in-memory `gzip` compression, `no-cache` headers on `sw.js` / `version.json` / `index.html`, SPA fallback, `GET /api/health`, and full parity across all 7 `/api/*` & `/functions/api/*` endpoints (`ical`, `rss`, `gphotos`, `gdrive`, `reader`, `web-proxy`, `metadata`).
+  * Packaged as a lightweight non-root `node:22-alpine` multi-stage image supporting both `linux/amd64` (Intel/AMD PCs, Synology, Unraid, Proxmox) and `linux/arm64` (Raspberry Pi 4/5, Apple Silicon, ARM SBCs).
+* **Service-Worker-Safe Runtime Cloud Sync Injection (`public/config.js`, `index.html`, `vite.config.ts`, `src/services/supabase.ts`, `.env.example`):**
+  * Added dynamic `GET /config.js` (`window.__AMBIENTLY_CONFIG__`) excluded from Workbox precaching so self-hosted Docker instances can configure `SUPABASE_URL` and `SUPABASE_ANON_KEY` at container runtime without rebuilding the image, with automatic `localStorage` fallback for offline cold boots.
+* **Opt-In Private Home LAN Feeds (`functions/_shared/fetchExternal.ts`):**
+  * Added `AMBIENTLY_ALLOW_PRIVATE_FEEDS=true` support so home-lab deployments can subscribe to private RFC1918 LAN, Tailscale, and `.local` `.ics` calendars and RSS feeds while keeping loopback (`127.0.0.1` / `localhost`) and cloud metadata (`169.254.169.254`) strictly blocked.
+* **1-Command Raspberry Pi Kiosk & All-in-One Installer (`scripts/pi-kiosk-setup.sh`, `.gitattributes`):**
+  * Automated setup script for Raspberry Pi OS (Bookworm Wayland `labwc`/`wayfire` & X11) supporting **Kiosk Display Mode (`--mode kiosk`)** and **All-in-One Standalone Mode (`--mode standalone` ARM64 Docker + `/api/health` boot readiness)**, portrait/landscape screen rotation (`--rotate 0|90|180|270`), cursor auto-hiding, HDMI blanking prevention, crash bubble cleanup, and `--uninstall`.
+* **Comprehensive Documentation & In-App Install Guides (`RASPBERRY_PI.md`, `README.md`, `FEATURES.md`, `ARCHITECTURE.md`, `DEVELOPER_WORKFLOW.md`, `SettingsModal.tsx`, `QuickStartModal.tsx`, `tests/server.test.ts`):**
+  * Published the full **Raspberry Pi & Docker Self-Hosting Installation Guide (`RASPBERRY_PI.md`)**, updated all architecture/feature/README docs, added an in-app **Raspberry Pi Kiosk & Docker Self-Hosting** install card in Settings, and added automated server & LAN SSRF integration tests.
+
+---
+
 ## [0.5.11] - 2026-11-12
 
 ### Blank-Canvas Right-Click Context Menu & Default Sticker/Transparent Mode for Photos & GIFs

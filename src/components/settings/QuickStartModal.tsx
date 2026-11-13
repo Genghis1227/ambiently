@@ -284,17 +284,17 @@ const SLIDES: WalkthroughSlide[] = [
       },
     ],
     proTip:
-      'Adjust "Display Density / UI Scale" (75% to 150%) in Settings → Display & Kiosk to make text readable from across the kitchen on 1080p or 4K screens.',
+      'Adjust "Display Density / UI Scale" (75% to 150%) in Settings → Display & Kiosk for 1080p/4K screens, or use scripts/pi-kiosk-setup.sh to auto-boot a Raspberry Pi 4/5 wall display.',
     ctaLabel: 'Open Display & Photo Settings',
     ctaAction: 'settings',
   },
   {
     id: 'sync',
     shortTitle: 'Sync & Mobile',
-    badge: 'Step 8 of 8 • Multi-Device & Backups',
-    title: 'Cloud Sync, Backups & Mobile Companion',
+    badge: 'Step 8 of 8 • Multi-Device, Self-Hosting & Backups',
+    title: 'Cloud Sync, Backups & Self-Hosting',
     subtitle:
-      'Keep your wall display, family tablets, and phones synchronized in real time while retaining full local ownership.',
+      'Keep your wall display, family tablets, and phones synchronized in real time—hosted in the cloud or on your own home server.',
     accentColor: 'from-violet-500/20 to-cyan-600/20 border-violet-500/30 text-violet-300',
     icon: <Cloud className="w-6 h-6 text-violet-400" />,
     steps: [
@@ -310,8 +310,8 @@ const SLIDES: WalkthroughSlide[] = [
       },
       {
         icon: <Check className="w-4 h-4 text-amber-400" />,
-        heading: '1-Click JSON Backup & PC Auto-Sync',
-        body: 'Export or restore a full JSON backup anytime in Settings → Backup & System, or bind a local file on your PC/Mac so every board change mirrors to disk automatically.',
+        heading: 'JSON Backups, PC Auto-Sync & Docker Self-Hosting',
+        body: 'Export a JSON backup anytime, bind a local file on your PC/Mac for automatic disk mirroring, or self-host Ambiently via Docker Compose (amd64 & Raspberry Pi arm64).',
       },
     ],
     proTip:

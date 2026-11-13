@@ -23,7 +23,7 @@ To ensure consistency, safety, and clear alignment, all contributors must strict
 ---
 
 ## 3. Implementation & Pushing
-* **Verify Changes:** Complete code changes across all bundled updates for the session and ensure all local static files, scripts, and validation checks pass successfully.
+* **Verify Changes:** Complete code changes across all bundled updates for the session and ensure all local static files, scripts, and validation checks (`npm run lint`, `npm run build`, `npm run build:server`, and `npm test`) pass successfully.
 * **PWA & Asset Synchronization Protocol:** Whenever brand assets, icons, or logos are added or modified:
   * Automatically regenerate and synchronize the entire PWA icon suite across all densities and formats (`logo.png`, `icon-512.png`, `icon-192.png`, `icon-maskable-512.png`, `icon-maskable-192.png`, `apple-touch-icon.png`, `favicon.png`).
   * Ensure maskable icons (`icon-maskable-*.png`) are calibrated within the 80% safe zone to prevent Android launcher clipping.

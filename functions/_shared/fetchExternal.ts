@@ -17,22 +17,33 @@ export class ExternalFetchError extends Error {
 // Names that only mean something inside a home or office network
 const PRIVATE_NAME_ENDINGS = ['localhost', 'local', 'internal', 'intranet', 'lan', 'home', 'localdomain', 'home.arpa'];
 
-// IPv4 ranges that aren't on the public internet: "this network", private, carrier-grade NAT, loopback,
-// link-local (including cloud metadata), protocol assignments, documentation, benchmarking, multicast
-// and reserved
-const PRIVATE_IPV4: [number, number][] = [
-  [0x00000000, 8], [0x0a000000, 8], [0x64400000, 10], [0x7f000000, 8], [0xa9fe0000, 16],
-  [0xac100000, 12], [0xc0000000, 24], [0xc0000200, 24], [0xc0a80000, 16], [0xc6120000, 15],
+// Loopback, "this network", link-local (cloud metadata), multicast and reserved — ALWAYS blocked even in LAN mode
+const ALWAYS_BLOCKED_IPV4: [number, number][] = [
+  [0x00000000, 8], [0x7f000000, 8], [0xa9fe0000, 16],
+  [0xc0000000, 24], [0xc0000200, 24], [0xc6120000, 15],
   [0xc6336400, 24], [0xcb007100, 24], [0xe0000000, 4], [0xf0000000, 4],
 ];
 
-function isPrivateIpv4(host: string): boolean {
+// RFC1918 LAN & Tailscale/CGNAT ranges — blocked on public deployments, optionally allowed in self-hosted LAN mode
+const LAN_IPV4: [number, number][] = [
+  [0x0a000000, 8], [0x64400000, 10], [0xac100000, 12], [0xc0a80000, 16],
+];
+
+function matchesIpv4Ranges(host: string, ranges: [number, number][]): boolean {
   const parts = host.split('.').map(Number);
   const value = ((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]) >>> 0;
-  return PRIVATE_IPV4.some(([base, bits]) => (value >>> (32 - bits)) === (base >>> (32 - bits)));
+  return ranges.some(([base, bits]) => (value >>> (32 - bits)) === (base >>> (32 - bits)));
 }
 
-/** Throws unless the address is HTTPS on the public internet (and, if given, one of allowedHosts). */
+function isSelfHostedLanFeedsAllowed(): boolean {
+  return (
+    typeof process !== 'undefined' &&
+    typeof process.env !== 'undefined' &&
+    process.env.AMBIENTLY_ALLOW_PRIVATE_FEEDS === 'true'
+  );
+}
+
+/** Throws unless the address is HTTPS on the public internet (or an opted-in self-hosted LAN address when allowedHosts is unset). */
 export function checkPublicHttpsUrl(raw: string, allowedHosts?: string[]): URL {
   let url: URL;
   try {
@@ -40,7 +51,9 @@ export function checkPublicHttpsUrl(raw: string, allowedHosts?: string[]): URL {
   } catch {
     throw new ExternalFetchError('Malformed URL.', 400);
   }
-  if (url.protocol !== 'https:') {
+
+  const allowLan = !allowedHosts && isSelfHostedLanFeedsAllowed();
+  if (url.protocol !== 'https:' && !(allowLan && url.protocol === 'http:')) {
     throw new ExternalFetchError('Only HTTPS addresses are allowed.', 400);
   }
 
@@ -52,11 +65,14 @@ export function checkPublicHttpsUrl(raw: string, allowedHosts?: string[]): URL {
   if (host.startsWith('[')) {
     throw new ExternalFetchError('IP addresses are not allowed. Use the server name instead.', 400);
   }
+  if (host === 'localhost' || host.endsWith('.localhost')) {
+    throw new ExternalFetchError('Private or internal network addresses are not allowed.', 400);
+  }
   if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) {
-    if (isPrivateIpv4(host)) {
+    if (matchesIpv4Ranges(host, ALWAYS_BLOCKED_IPV4) || (!allowLan && matchesIpv4Ranges(host, LAN_IPV4))) {
       throw new ExternalFetchError('Private or internal network addresses are not allowed.', 400);
     }
-  } else if (!host.includes('.') || PRIVATE_NAME_ENDINGS.some((end) => host === end || host.endsWith(`.${end}`))) {
+  } else if (!allowLan && (!host.includes('.') || PRIVATE_NAME_ENDINGS.some((end) => host === end || host.endsWith(`.${end}`)))) {
     throw new ExternalFetchError('Private or internal network addresses are not allowed.', 400);
   }
   return url;
