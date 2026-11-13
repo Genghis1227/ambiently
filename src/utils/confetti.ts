@@ -1,6 +1,5 @@
 import { useDashboardStore } from '../store/dashboardStore';
 import { useChoreStore } from '../store/choreStore';
-import { isTimeInNightWindow } from './nightMode';
 import type { AppSettings } from '../types/dashboard';
 
 const CALMING_CONFETTI_COLORS = [
@@ -16,18 +15,7 @@ const CALMING_CONFETTI_COLORS = [
 export function isAmbientlyInNightMode(settings?: AppSettings): boolean {
   const activeSettings = settings || useDashboardStore.getState().settings;
   if (!activeSettings) return false;
-  if (activeSettings.nightModeEnabled) return true;
-  if (
-    activeSettings.nightScheduleEnabled !== false &&
-    isTimeInNightWindow(
-      new Date(),
-      activeSettings.nightModeStart,
-      activeSettings.nightModeEnd
-    )
-  ) {
-    return true;
-  }
-  return false;
+  return Boolean(activeSettings.nightModeEnabled);
 }
 
 function playSubtleCelebrationChime(): void {

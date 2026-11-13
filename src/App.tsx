@@ -72,7 +72,6 @@ export function App() {
     unlockKiosk,
     isCarouselPaused,
     pauseCarouselTemporarily,
-    toggleNightModeManual,
     updateSettings,
     updateNotePosition,
     updateWidgetPosition,
@@ -557,6 +556,24 @@ export function App() {
     updateSettings({ nightModeEnabled: false });
   }, [wakeTimeoutMin, updateSettings]);
 
+  const handleToggleNightMode = useCallback(() => {
+    if (settings.nightModeEnabled) {
+      setDismissedUntilMorning(true);
+      setNightWakeSnoozeUntil(null);
+      try {
+        sessionStorage.removeItem('ambiently_night_snooze');
+      } catch {}
+      updateSettings({ nightModeEnabled: false });
+    } else {
+      setDismissedUntilMorning(false);
+      setNightWakeSnoozeUntil(null);
+      try {
+        sessionStorage.removeItem('ambiently_night_snooze');
+      } catch {}
+      updateSettings({ nightModeEnabled: true });
+    }
+  }, [settings.nightModeEnabled, updateSettings]);
+
   // Extend snooze on user touch/keyboard/pointer activity if currently in a night-wake snooze
   useEffect(() => {
     if (!nightWakeSnoozeUntil || wakeTimeoutMin === 0) return;
@@ -577,15 +594,30 @@ export function App() {
   }, [nightWakeSnoozeUntil, wakeTimeoutMin]);
 
   const wasInNightWindow = useRef<boolean | null>(null);
+  const prevNightModeEnabled = useRef<boolean>(settings.nightModeEnabled);
 
   // Smart Scheduled Night Mode Evaluator (runs once settings have loaded and every 5 seconds)
   useEffect(() => {
+    const justDisabledManually =
+      prevNightModeEnabled.current === true && !settings.nightModeEnabled;
+    const justEnabledManually =
+      prevNightModeEnabled.current === false && settings.nightModeEnabled;
+    prevNightModeEnabled.current = settings.nightModeEnabled;
+
+    if (justEnabledManually) {
+      setDismissedUntilMorning(false);
+      setNightWakeSnoozeUntil(null);
+      try {
+        sessionStorage.removeItem('ambiently_night_snooze');
+      } catch {}
+    }
+
     // Wait for saved settings: updateSettings saves the store's current settings, which are still
     // the defaults at this point, over the user's real ones.
     if (!isInitialized || settings.nightScheduleEnabled === false) return;
     if (!settings.nightModeStart || !settings.nightModeEnd) return;
 
-    const checkSchedule = () => {
+    const checkSchedule = (manualDisableOverride = false) => {
       const now = new Date();
       const inWindow = isTimeInNightWindow(now, settings.nightModeStart, settings.nightModeEnd);
       const wasInWindow = wasInNightWindow.current;
@@ -593,6 +625,11 @@ export function App() {
 
       if (inWindow) {
         const isSnoozed = Boolean(nightWakeSnoozeUntil && Date.now() < nightWakeSnoozeUntil);
+
+        if (manualDisableOverride && !isSnoozed && !dismissedUntilMorning) {
+          setDismissedUntilMorning(true);
+          return;
+        }
 
         if (isSnoozed || dismissedUntilMorning) {
           // User is actively awake or snoozed during night
@@ -628,8 +665,8 @@ export function App() {
       }
     };
 
-    checkSchedule();
-    const timer = setInterval(checkSchedule, 30000);
+    checkSchedule(justDisabledManually);
+    const timer = setInterval(() => checkSchedule(false), 30000);
     return () => clearInterval(timer);
   }, [
     isInitialized,
@@ -880,7 +917,7 @@ export function App() {
         onSelectTab={setActiveTabId}
         onOpenSettings={handleOpenSettings}
         onOpenShare={handleOpenShare}
-        onToggleNightMode={toggleNightModeManual}
+        onToggleNightMode={handleToggleNightMode}
         onToggleFullscreen={handleToggleFullscreen}
         isFullscreen={isFullscreen}
         onConnectFile={() => setIsBackupModalOpen(true)}

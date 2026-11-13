@@ -11,6 +11,23 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.6.2",
+    date: "November 13, 2026",
+    title: "Crisp Toolbar Arrow After Disabling Night Mode",
+    highlights: [
+      "Full Toolbar Arrow Visibility When Night Mode Is Off: Disabling Night Mode during scheduled nighttime hours now immediately restores the hidden-toolbar peek arrow to full contrast and opacity instead of staying dimmed.",
+      "Manual Night Mode Disable Respects User Choice: Turning off Night Mode via the toolbar Moon icon, Quick Hub, or Settings during scheduled night hours now holds Night Mode off until morning (or until re-enabled).",
+    ],
+  },
+  {
+    version: "v0.6.1",
+    date: "November 12, 2026",
+    title: "Expanded Curated Ambient Scenery Library (128 Verified Photos)",
+    highlights: [
+      "128 Curated Scenery & Fine Art Photos: Expanded the built-in curated scenery library from 55 to 128 unique, high-resolution (1920px) photos across all 8 themed collections.",
+    ],
+  },
+  {
     version: "v0.6.0",
     date: "November 12, 2026",
     title: "Docker Self-Hosting & Raspberry Pi Kiosk Edition",
