@@ -11,6 +11,15 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.6.6",
+    date: "November 13, 2026",
+    title: "Global Default Widget Style Switch (Auto, Sticker / No Outline, or With Borders)",
+    highlights: [
+      "Default Widget Style in Display & Kiosk Settings: Choose whether newly added widgets start in 'Auto' (frameless GIFs & Text Boxes, bordered cards for everything else), 'Sticker / No Outline' (frameless across all compatible widgets), or 'With Borders' (card frames on all tiles, including Single Photo/GIF & Text Box).",
+      "Per-Tile Override Preservation: Existing and individual tiles can still toggle 'Sticker / No Outline' anytime from their right-click / Layers menu or Tile Settings without affecting other widgets.",
+    ],
+  },
+  {
     version: "v0.6.5",
     date: "November 13, 2026",
     title: "Optional Sticker / No Outline Mode Across Clocks, Weather, Countdown, Quotes & Photo Frames",

@@ -1259,6 +1259,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </button>
             </div>
 
+            {/* Default Widget Style (Sticker / No Outline vs With Borders) */}
+            <div className="p-3 rounded-xl bg-gray-800/40 border border-gray-800 space-y-2.5">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-fuchsia-400" />
+                  <span className="text-sm font-medium text-gray-200">Default Widget Style</span>
+                </div>
+                <p className="text-xs text-gray-400">
+                  Choose whether newly added widgets start frameless in Sticker / No Outline mode or inside a card with borders. Individual tiles can still be toggled anytime from their right-click or Layers menu.
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  ['auto', 'Auto', 'GIFs & Text frameless'],
+                  ['sticker', 'Sticker / No Outline', 'Frameless on canvas'],
+                  ['bordered', 'With Borders', 'Card frame & box'],
+                ] as const).map(([value, label, hint]) => {
+                  const current = settings.defaultWidgetStyle || 'auto';
+                  const isSelected = current === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => updateSettings({ defaultWidgetStyle: value })}
+                      className={`py-2 px-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-fuchsia-500/15 border-fuchsia-500/80 text-fuchsia-200 shadow-xs'
+                          : 'bg-gray-900/60 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'
+                      }`}
+                    >
+                      <div className="text-xs font-semibold leading-tight">{label}</div>
+                      <div className="text-[10px] text-gray-500 mt-0.5 truncate">{hint}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Snap to Grid Setting */}
             <div className="flex items-center justify-between p-3 rounded-xl bg-gray-800/40 border border-gray-800">
               <div className="space-y-0.5 max-w-[80%]">

@@ -138,6 +138,8 @@ export interface StickyNoteItem {
   deleted_at?: string | null;
 }
 
+export type DefaultWidgetFrameStyle = 'auto' | 'sticker' | 'bordered';
+
 export interface AppSettings {
   id: string; // 'global'
   dashboardTitle: string;
@@ -160,6 +162,7 @@ export interface AppSettings {
 
   // Canvas & Dock Options
   snapToGrid?: boolean;
+  defaultWidgetStyle?: DefaultWidgetFrameStyle;
   isDockHidden?: boolean;
   autoHideCursor?: boolean;
   cursorIdleTimeoutSec?: number;

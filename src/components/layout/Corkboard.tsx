@@ -55,6 +55,7 @@ import { categorizeIngredient, parseIngredient } from '../../utils/ingredientAgg
 import { useDashboardStore } from '../../store/dashboardStore';
 import { CANVAS_THEMES, isCanvasThemeLight } from '../../data/canvasThemes';
 import { findOpenCanvasSpot } from '../../utils/autoLayout';
+import { isStickerCapableWidget, isWidgetStickerMode } from '../../utils/widgetStickerMode';
 
 const ChoreDashboardView = React.lazy(() =>
   import('../chores/ChoreDashboardView').then((m) => ({ default: m.ChoreDashboardView }))
@@ -103,36 +104,6 @@ const SNAP_ROWS = 16;
 const SNAP_STEP_X = 1 / SNAP_COLUMNS;
 const SNAP_STEP_Y = 1 / SNAP_ROWS;
 
-const DEFAULT_OFF_STICKER_TYPES = new Set([
-  'clock',
-  'world_clock',
-  'clock_weather',
-  'weather',
-  'countdown',
-  'quotes',
-  'photo_frame',
-]);
-
-function isStickerCapableWidget(type?: DashboardWidget['type']): boolean {
-  if (!type) return false;
-  return type === 'image' || type === 'textbox' || DEFAULT_OFF_STICKER_TYPES.has(type);
-}
-
-function isWidgetStickerMode(widget?: DashboardWidget | null): boolean {
-  if (!widget) return false;
-  if (widget.type === 'image') return widget.config?.transparentBg !== false;
-  if (widget.type === 'textbox') {
-    return (
-      widget.config?.transparentBg !== false &&
-      (!widget.config?.bgStyle || widget.config?.bgStyle === 'transparent')
-    );
-  }
-  if (DEFAULT_OFF_STICKER_TYPES.has(widget.type)) {
-    return Boolean(widget.config?.transparentBg);
-  }
-  return false;
-}
-
 const COLOR_PALETTE = [
   '#fef08a', // Amber/Yellow
   '#bbf7d0', // Emerald/Green
@@ -180,6 +151,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   isCanvasLocked = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const defaultWidgetStyle = useDashboardStore((s) => s.settings.defaultWidgetStyle || 'auto');
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [draggingType, setDraggingType] = useState<'note' | 'widget'>('note');
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -1319,7 +1291,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         const isResizing = resizingId === widget.id;
         const isActiveManipulating = isDragging || isResizing || isRotating;
         const isHovered = hoveredCardId === widget.id;
-        const isFramelessWidget = isWidgetStickerMode(widget);
+        const isFramelessWidget = isWidgetStickerMode(widget, defaultWidgetStyle);
 
         const displayPos = {
           ...pos,
@@ -1796,7 +1768,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   textTransform={widget.config?.textTransform}
                   letterSpacing={widget.config?.letterSpacing}
                   bgStyle={widget.config?.bgStyle}
-                  transparentBg={widget.config?.transparentBg !== false}
+                  transparentBg={isFramelessWidget}
                   isLight={isWidgetLight}
                   onUpdateConfig={(updates) => {
                     if (onUpdateWidget) {
@@ -1809,7 +1781,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               ) : widget.type === 'image' ? (
                 <ImageWidget
                   id={widget.id}
-                  config={widget.config || {}}
+                  config={{ ...(widget.config || {}), transparentBg: isFramelessWidget }}
                   onUpdateConfig={(updates) => {
                     if (onUpdateWidget) {
                       onUpdateWidget(widget.id, {
@@ -2821,7 +2793,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                           zIndex: getNextZIndex(),
                           rotation: 0,
                         },
-                        config: { fit: 'contain', transparentBg: true },
+                        config: { fit: 'contain' },
                       });
                       setContextMenu(null);
                     }}
@@ -2981,7 +2953,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      const isCurrentlySticker = isWidgetStickerMode(activeWidget);
+                      const isCurrentlySticker = isWidgetStickerMode(activeWidget, defaultWidgetStyle);
                       const next = !isCurrentlySticker;
                       if (activeWidget.type === 'textbox') {
                         onUpdateWidget(activeWidget.id, {
@@ -3009,7 +2981,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                       <span>{activeWidget.type === 'image' ? 'Sticker / Transparent' : 'Sticker / No Outline'}</span>
                     </div>
                     {(() => {
-                      const isStickerOn = isWidgetStickerMode(activeWidget);
+                      const isStickerOn = isWidgetStickerMode(activeWidget, defaultWidgetStyle);
                       return (
                         <span
                           className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${

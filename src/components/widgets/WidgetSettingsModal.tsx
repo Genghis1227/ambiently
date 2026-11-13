@@ -29,6 +29,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { useDashboardStore } from '../../store/dashboardStore';
+import { isWidgetStickerMode } from '../../utils/widgetStickerMode';
 import type { DashboardWidget, WidgetThemeMode } from '../../types/dashboard';
 import { type CalendarSource, normalizeCalendarUrl, testCalendarFeed } from '../../services/feeds';
 import { CalendarUrlGuideModal } from '../calendar/CalendarUrlGuideModal';
@@ -226,9 +227,13 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     }
     lastOpenedWidgetIdRef.current = widget.id;
 
+    const resolvedStickerMode = isWidgetStickerMode(
+      widget,
+      settings.defaultWidgetStyle || 'auto'
+    );
     setTitle(widget.title || '');
     setThemeMode((widget.config?.themeMode as WidgetThemeMode) || 'auto');
-    setWidgetTransparentBg(Boolean(widget.config?.transparentBg));
+    setWidgetTransparentBg(resolvedStickerMode);
     setGeoStatus('');
     setGeoHits([]);
 
@@ -320,12 +325,9 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setTextShadow(widget.config?.textShadow ?? true);
       setTextTransform(widget.config?.textTransform || 'none');
       setLetterSpacing(widget.config?.letterSpacing || 'normal');
-      const isSticker =
-        widget.config?.transparentBg !== false &&
-        (!widget.config?.bgStyle || widget.config?.bgStyle === 'transparent');
-      setTextTransparentBg(isSticker);
+      setTextTransparentBg(resolvedStickerMode);
       setTextBgStyle(
-        isSticker
+        resolvedStickerMode
           ? 'transparent'
           : widget.config?.bgStyle && widget.config.bgStyle !== 'transparent'
           ? widget.config.bgStyle
@@ -335,7 +337,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setImageUrl(widget.config?.url || '');
       setImageFit(widget.config?.fit || 'contain');
       setImageCaption(widget.config?.caption || '');
-      setImageTransparentBg(widget.config?.transparentBg !== false);
+      setImageTransparentBg(resolvedStickerMode);
       setImageLinkUrl(widget.config?.linkUrl || '');
     } else if (widget.type === 'chores') {
       setChoreDisplayMode(
@@ -365,7 +367,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setMealShowCookAvatar(widget.config?.showCookAvatar !== false);
       setMealListNoteId(typeof widget.config?.listNoteId === 'string' ? widget.config.listNoteId : '');
     }
-  }, [widget, isOpen, settings.commonPhotos]);
+  }, [widget, isOpen, settings.commonPhotos, settings.defaultWidgetStyle]);
 
   useEffect(() => {
     if (!isOpen) return;

@@ -20,6 +20,7 @@ import type {
 import { MAX_CANVASES } from '../types/dashboard';
 import { saveSnapshotToFile, hasActiveLocalFile } from '../services/fileSync';
 import { computeNonOverlappingLayout, findOpenCanvasSpot } from '../utils/autoLayout';
+import { getDefaultWidgetStickerMode, isStickerCapableWidget } from '../utils/widgetStickerMode';
 import type { PhotoItem } from '../services/photos';
 import { getSupabase, getCurrentUser, pushToCloud } from '../services/supabase';
 import { CANVAS_LOOK_FIELDS, keepLocalNoteFields, keepLocalTabFields, keepLocalWidgetFields } from '../services/syncMerge';
@@ -1176,10 +1177,23 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const existingBoxes = getExistingBoxesForTab(targetTabId, state.widgets, state.notes);
     const openPos = findOpenCanvasSpot(existingBoxes, targetW, targetH, 0);
 
+    const widgetType = partialWidget.type || 'weather';
+    const resolvedConfig: Record<string, any> = { ...(partialWidget.config || {}) };
+    if (isStickerCapableWidget(widgetType) && typeof resolvedConfig.transparentBg !== 'boolean') {
+      const defaultSticker = getDefaultWidgetStickerMode(
+        widgetType,
+        state.settings.defaultWidgetStyle || 'auto'
+      );
+      resolvedConfig.transparentBg = defaultSticker;
+      if (widgetType === 'textbox' && !resolvedConfig.bgStyle) {
+        resolvedConfig.bgStyle = defaultSticker ? 'transparent' : 'glass';
+      }
+    }
+
     const newWidget: DashboardWidget = {
       id,
       tabId: targetTabId,
-      type: partialWidget.type || 'weather',
+      type: widgetType,
       title: partialWidget.title || 'Widget',
       gridPos: partialWidget.gridPos || { x: 0, y: 0, w: 4, h: 4 },
       freeformPos: partialWidget.freeformPos
@@ -1188,7 +1202,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
             ...partialWidget.freeformPos,
           }
         : openPos,
-      config: partialWidget.config || {},
+      config: resolvedConfig,
       updated_at: new Date().toISOString(),
     };
     await db.widgets.put(newWidget);

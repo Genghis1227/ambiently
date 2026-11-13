@@ -53,7 +53,7 @@ const WIDGET_TEMPLATES: WidgetTemplate[] = [
     description: 'Minimalist live digital, typographic, or analog dial clock with optional seconds and city timezone.',
     icon: Clock,
     defaultGridPos: { w: 4, h: 4 },
-    defaultConfig: { clockFace: 'digital', showSeconds: true, transparentBg: false },
+    defaultConfig: { clockFace: 'digital', showSeconds: true },
     color: 'from-blue-500/20 to-indigo-500/20 text-blue-400 border-blue-500/30',
   },
   {
@@ -65,7 +65,6 @@ const WIDGET_TEMPLATES: WidgetTemplate[] = [
     defaultConfig: {
       clockFace: 'digital',
       showSeconds: true,
-      transparentBg: false,
       cities: [
         { id: 'wc-tokyo', cityName: 'Tokyo', country: 'Japan', timezone: 'Asia/Tokyo' },
       ],
@@ -78,7 +77,7 @@ const WIDGET_TEMPLATES: WidgetTemplate[] = [
     description: 'Dual tile showing the current time, day, date, and local temperature combined.',
     icon: LayoutGrid,
     defaultGridPos: { w: 4, h: 4 },
-    defaultConfig: { locationName: 'Austin, TX', latitude: 30.2672, longitude: -97.7431, unit: 'F', showSeconds: true, transparentBg: false },
+    defaultConfig: { locationName: 'Austin, TX', latitude: 30.2672, longitude: -97.7431, unit: 'F', showSeconds: true },
     color: 'from-cyan-500/20 to-blue-500/20 text-cyan-400 border-cyan-500/30',
   },
   {
@@ -87,7 +86,7 @@ const WIDGET_TEMPLATES: WidgetTemplate[] = [
     description: 'Slideshow supporting Plex Media Server, Local NAS folders, and Google Drive links.',
     icon: ImageIcon,
     defaultGridPos: { w: 4, h: 8 },
-    defaultConfig: { displayStyle: 'ken_burns', rotationIntervalSec: 15, transparentBg: false },
+    defaultConfig: { displayStyle: 'ken_burns', rotationIntervalSec: 15 },
     color: 'from-purple-500/20 to-pink-500/20 text-purple-400 border-purple-500/30',
   },
   {
@@ -145,7 +144,7 @@ const WIDGET_TEMPLATES: WidgetTemplate[] = [
     description: 'Real-time countdown timer to upcoming family vacations, birthdays, or holidays.',
     icon: Timer,
     defaultGridPos: { w: 4, h: 4 },
-    defaultConfig: { eventName: 'Family Vacation', targetDate: '2026-12-25T00:00:00Z', transparentBg: false },
+    defaultConfig: { eventName: 'Family Vacation', targetDate: '2026-12-25T00:00:00Z' },
     color: 'from-indigo-500/20 to-violet-500/20 text-indigo-400 border-indigo-500/30',
   },
   {
@@ -154,7 +153,7 @@ const WIDGET_TEMPLATES: WidgetTemplate[] = [
     description: 'Rotating collection of timeless quotes, wisdom, and custom family affirmations.',
     icon: Quote,
     defaultGridPos: { w: 4, h: 4 },
-    defaultConfig: { quoteMode: 'both', customQuotes: [], transparentBg: false },
+    defaultConfig: { quoteMode: 'both', customQuotes: [] },
     color: 'from-yellow-500/20 to-amber-500/20 text-yellow-400 border-yellow-500/30',
   },
   {
@@ -173,8 +172,6 @@ const WIDGET_TEMPLATES: WidgetTemplate[] = [
       textShadow: true,
       textTransform: 'none',
       letterSpacing: 'normal',
-      bgStyle: 'transparent',
-      transparentBg: true,
     },
     color: 'from-blue-500/20 to-cyan-500/20 text-cyan-300 border-cyan-500/30',
   },
@@ -193,7 +190,7 @@ const WIDGET_TEMPLATES: WidgetTemplate[] = [
     description: 'Display an animated GIF from GIPHY, a transparent canvas sticker, or any picture with search & URL support.',
     icon: Sparkles,
     defaultGridPos: { w: 4, h: 4 },
-    defaultConfig: { fit: 'contain', transparentBg: true },
+    defaultConfig: { fit: 'contain' },
     color: 'from-fuchsia-500/20 to-pink-500/20 text-fuchsia-400 border-fuchsia-500/30',
   },
 ];
