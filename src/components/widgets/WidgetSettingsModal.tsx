@@ -179,7 +179,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const [imageUrl, setImageUrl] = useState('');
   const [imageFit, setImageFit] = useState<'contain' | 'cover' | 'fill'>('contain');
   const [imageCaption, setImageCaption] = useState('');
-  const [imageTransparentBg, setImageTransparentBg] = useState(false);
+  const [imageTransparentBg, setImageTransparentBg] = useState(true);
   const [imageLinkUrl, setImageLinkUrl] = useState('');
   const [isMediaSearchOpen, setIsMediaSearchOpen] = useState(false);
 
@@ -322,7 +322,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setImageUrl(widget.config?.url || '');
       setImageFit(widget.config?.fit || 'contain');
       setImageCaption(widget.config?.caption || '');
-      setImageTransparentBg(Boolean(widget.config?.transparentBg));
+      setImageTransparentBg(widget.config?.transparentBg !== false);
       setImageLinkUrl(widget.config?.linkUrl || '');
     } else if (widget.type === 'chores') {
       setChoreDisplayMode(

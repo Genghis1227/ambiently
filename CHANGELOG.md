@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.11] - 2026-11-12
+
+### Blank-Canvas Right-Click Context Menu & Default Sticker/Transparent Mode for Photos & GIFs
+* **Blank-Canvas Right-Click Context Menu (`src/components/layout/Corkboard.tsx`):**
+  * Added a right-click context menu on empty canvas areas with **Add Sticky Note** (pins the new note directly at the right-clicked canvas position), **Add Shopping List Note**, and **Add Widget**.
+* **Default Sticker / Transparent Mode for Photo & GIF Widgets (`src/components/widgets/AddWidgetModal.tsx`, `src/components/widgets/ImageWidget.tsx`, `src/components/layout/Corkboard.tsx`, `src/components/widgets/WidgetSettingsModal.tsx`):**
+  * Defaulted `transparentBg` to `true` (`config.transparentBg !== false`) for Single Image / GIF widgets so photos and GIFs render in frameless **Sticker / Transparent** mode out of the box.
+  * Added a 1-click **Sticker / Transparent (`ON` / `OFF`)** toggle directly inside the right-click / **Layers (`📚`)** menu for Image/GIF widgets.
+
+---
+
 ## [0.5.10] - 2026-11-12
 
 ### Unclipped Widget Toolbar Layering & GIF Container Rotation Controls

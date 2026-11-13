@@ -31,6 +31,7 @@ import {
   Calendar,
   Sun,
   Moon,
+  Sparkles,
 } from 'lucide-react';
 import { ClockWeatherWidget } from '../widgets/ClockWeatherWidget';
 import { ClockWidget } from '../widgets/ClockWidget';
@@ -217,17 +218,20 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   const [expiryOption, setExpiryOption] = useState<'permanent' | '1day' | '3days' | 'custom'>('permanent');
   const [customExpiry, setCustomExpiry] = useState('');
   const [highlightedNoteId, setHighlightedNoteId] = useState<string | null>(null);
+  const [pendingNoteSpot, setPendingNoteSpot] = useState<{ xRatio: number; yRatio: number } | null>(null);
 
-  // Z-Order Context Menu state
+  // Z-Order & Canvas Context Menu state
   interface ContextMenuState {
     x: number;
     y: number;
     id: string;
-    type: 'widget' | 'note';
+    type: 'widget' | 'note' | 'canvas';
     title?: string;
     currentZ: number;
     isBackground?: boolean;
     rotation?: number;
+    clickXRatio?: number;
+    clickYRatio?: number;
   }
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
@@ -600,6 +604,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     setSelectedNoteTabId(activeTabId);
     setExpiryOption('permanent');
     setCustomExpiry('');
+    setPendingNoteSpot(null);
     onCloseCreator?.();
   };
 
@@ -974,7 +979,6 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         expiresAt,
       });
     } else {
-      // Omit freeformPos so dashboardStore.addNote automatically finds an open non-overlapping spot!
       onAddNote({
         tabId: selectedNoteTabId || activeTabId,
         title: resolvedTitle,
@@ -985,6 +989,18 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         bgColor: selectedColor,
         fontSize: selectedFontSize,
         expiresAt,
+        ...(pendingNoteSpot
+          ? {
+              freeformPos: {
+                xRatio: pendingNoteSpot.xRatio,
+                yRatio: pendingNoteSpot.yRatio,
+                wRatio: 0.24,
+                hRatio: 0.28,
+                zIndex: getNextZIndex(),
+                rotation: -1,
+              },
+            }
+          : {}),
       });
     }
 
@@ -1135,6 +1151,36 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
+      onContextMenu={(e) => {
+        if (isCanvasLocked) return;
+        const target = e.target as HTMLElement;
+        if (
+          target.closest('[data-canvas-card="true"]') ||
+          target.closest('[role="dialog"]') ||
+          target.closest('[data-no-drag="true"]')
+        ) {
+          return;
+        }
+        e.preventDefault();
+        const rect = containerRef.current?.getBoundingClientRect();
+        const clickXRatio = rect
+          ? Math.max(0.02, Math.min(0.74, (e.clientX - rect.left) / rect.width))
+          : 0.15;
+        const clickYRatio = rect
+          ? Math.max(0.04, Math.min(0.7, (e.clientY - rect.top) / rect.height))
+          : 0.15;
+        const activeTabName = tabs.find((t) => t.id === activeTabId)?.name || 'Canvas';
+        setContextMenu({
+          x: e.clientX,
+          y: e.clientY,
+          id: 'canvas',
+          type: 'canvas',
+          title: activeTabName,
+          currentZ: 0,
+          clickXRatio,
+          clickYRatio,
+        });
+      }}
       style={{
         touchAction: 'none',
         WebkitTouchCallout: 'none',
@@ -1243,7 +1289,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         const isTransparentTextbox =
           widget.type === 'textbox' &&
           (!widget.config?.bgStyle || widget.config?.bgStyle === 'transparent');
-        const isTransparentImage = widget.type === 'image' && Boolean(widget.config?.transparentBg);
+        const isTransparentImage = widget.type === 'image' && widget.config?.transparentBg !== false;
         const isFramelessWidget = isTransparentTextbox || isTransparentImage;
 
         const displayPos = {
@@ -2622,10 +2668,112 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         );
       })()}
 
-      {/* Floating Context Menu for Z-Order & Layer Management */}
+      {/* Floating Context Menu for Canvas Actions, Z-Order & Layer Management */}
       {contextMenu && (() => {
+        if (contextMenu.type === 'canvas') {
+          return (
+            <div
+              data-no-drag="true"
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+              style={{
+                left: Math.min(contextMenu.x, window.innerWidth - 250),
+                top: Math.min(contextMenu.y, window.innerHeight - 240),
+              }}
+              className="fixed z-[100] w-60 rounded-2xl bg-gray-950/95 backdrop-blur-2xl border border-gray-800 p-2 shadow-2xl text-xs text-gray-200 select-none animate-in fade-in zoom-in-95 duration-100"
+            >
+              {/* Header */}
+              <div className="px-2.5 py-1.5 mb-1 border-b border-gray-800/80 flex items-center justify-between">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Sparkles className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                  <span className="font-bold text-white truncate text-[11px]">
+                    {contextMenu.title || 'Canvas Actions'}
+                  </span>
+                </div>
+                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                  Canvas
+                </span>
+              </div>
+
+              <div className="space-y-0.5">
+                {onOpenCreator && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetNoteModal();
+                      if (contextMenu.clickXRatio !== undefined && contextMenu.clickYRatio !== undefined) {
+                        setPendingNoteSpot({
+                          xRatio: contextMenu.clickXRatio,
+                          yRatio: contextMenu.clickYRatio,
+                        });
+                      }
+                      setSelectedNoteTabId(activeTabId);
+                      onOpenCreator();
+                      setContextMenu(null);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
+                  >
+                    <Pin className="w-4 h-4 text-amber-400 shrink-0" />
+                    <div>
+                      <div className="font-semibold text-xs">Add Sticky Note</div>
+                      <div className="text-[10px] text-gray-400">Pin a note or checklist here</div>
+                    </div>
+                  </button>
+                )}
+
+                {onOpenCreator && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetNoteModal();
+                      if (contextMenu.clickXRatio !== undefined && contextMenu.clickYRatio !== undefined) {
+                        setPendingNoteSpot({
+                          xRatio: contextMenu.clickXRatio,
+                          yRatio: contextMenu.clickYRatio,
+                        });
+                      }
+                      setSelectedNoteTabId(activeTabId);
+                      setIsChecklist(true);
+                      setIsShoppingList(true);
+                      setNewTitle('🛒 Shopping List');
+                      setSelectedColor('#bbf7d0');
+                      onOpenCreator();
+                      setContextMenu(null);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
+                  >
+                    <CheckSquare className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <div>
+                      <div className="font-semibold text-xs">Add Shopping List Note</div>
+                      <div className="text-[10px] text-gray-400">Grouped grocery note & Keep export</div>
+                    </div>
+                  </button>
+                )}
+
+                {onOpenAddWidget && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onOpenAddWidget();
+                      setContextMenu(null);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
+                  >
+                    <Plus className="w-4 h-4 text-blue-400 shrink-0" />
+                    <div>
+                      <div className="font-semibold text-xs">Add Widget</div>
+                      <div className="text-[10px] text-gray-400">Add a live tile or GIF sticker</div>
+                    </div>
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        }
+
         const activeWidget = contextMenu.type === 'widget' ? widgets.find((x) => x.id === contextMenu.id) : null;
         const currentThemeMode: WidgetThemeMode = (activeWidget?.config?.themeMode as WidgetThemeMode) || 'auto';
+        const itemType = contextMenu.type === 'widget' ? 'widget' : 'note';
 
         return (
           <div
@@ -2661,7 +2809,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             <div className="space-y-0.5">
               <button
                 type="button"
-                onClick={() => handleBringToFront(contextMenu.id, contextMenu.type)}
+                onClick={() => handleBringToFront(contextMenu.id, itemType)}
                 className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
               >
                 <BringToFront className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -2673,7 +2821,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
               <button
                 type="button"
-                onClick={() => handleBringForward(contextMenu.id, contextMenu.type)}
+                onClick={() => handleBringForward(contextMenu.id, itemType)}
                 className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
               >
                 <ArrowUp className="w-4 h-4 text-blue-400 shrink-0" />
@@ -2685,7 +2833,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
               <button
                 type="button"
-                onClick={() => handleSendBackward(contextMenu.id, contextMenu.type)}
+                onClick={() => handleSendBackward(contextMenu.id, itemType)}
                 className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
               >
                 <ArrowDown className="w-4 h-4 text-amber-400 shrink-0" />
@@ -2697,7 +2845,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
               <button
                 type="button"
-                onClick={() => handleSendToBack(contextMenu.id, contextMenu.type)}
+                onClick={() => handleSendToBack(contextMenu.id, itemType)}
                 className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
               >
                 <SendToBack className="w-4 h-4 text-purple-400 shrink-0" />
@@ -2743,6 +2891,32 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                     </button>
                   ))}
                 </div>
+
+                {activeWidget?.type === 'image' && onUpdateWidget && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !(activeWidget.config?.transparentBg !== false);
+                      onUpdateWidget(activeWidget.id, {
+                        config: { ...activeWidget.config, transparentBg: next },
+                      });
+                      setContextMenu(null);
+                    }}
+                    className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-300 hover:text-white transition-colors cursor-pointer text-left"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Sparkles className="w-3.5 h-3.5 text-fuchsia-400 shrink-0" />
+                      <span>Sticker / Transparent</span>
+                    </div>
+                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                      activeWidget.config?.transparentBg !== false
+                        ? 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30'
+                        : 'bg-gray-800 text-gray-400'
+                    }`}>
+                      {activeWidget.config?.transparentBg !== false ? 'ON' : 'OFF'}
+                    </span>
+                  </button>
+                )}
 
                 {activeWidget?.type === 'photo_frame' && onUpdateWidget && (
                   <button
