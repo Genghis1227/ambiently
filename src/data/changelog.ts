@@ -11,6 +11,15 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.6.3",
+    date: "November 13, 2026",
+    title: "True Offline Photo Cache & Pre-Built Multi-Arch GHCR Docker Images",
+    highlights: [
+      "True Offline Photo Caching & Quota Reduction: Photo Frame caching now uses CORS requests (storing real ~35 MB photo sizes instead of ~400 MB opaque padding), skips Plex token URLs, deduplicates concurrent fetches, and automatically serves cached photos via the Service Worker when offline.",
+      "Automated CI & Pre-Built GHCR Docker Images: Added GitHub Actions CI and multi-arch (linux/amd64 + linux/arm64) Docker image publishing to ghcr.io/genghis1227/ambiently:latest so NAS, Portainer, and Raspberry Pi users can deploy without cloning or building from source.",
+    ],
+  },
+  {
     version: "v0.6.2",
     date: "November 13, 2026",
     title: "Crisp Toolbar Arrow After Disabling Night Mode",

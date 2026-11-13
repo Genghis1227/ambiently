@@ -4,6 +4,8 @@
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPLv3-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/package-json/v/Genghis1227/ambiently?label=Release&color=cyan)](CHANGELOG.md)
+[![CI](https://github.com/Genghis1227/ambiently/actions/workflows/ci.yml/badge.svg)](https://github.com/Genghis1227/ambiently/actions/workflows/ci.yml)
+[![Docker GHCR](https://img.shields.io/badge/GHCR-amd64%20%7C%20arm64-2496ED?logo=docker&logoColor=white)](https://github.com/Genghis1227/ambiently/pkgs/container/ambiently)
 
 ![Ambiently Banner](public/og-banner.png)
 
@@ -75,8 +77,14 @@ Open **[https://dashboard.trinhism.com](https://dashboard.trinhism.com)** on any
 
 ### Option 2: Docker & Docker Compose Self-Hosting (`amd64` & `arm64`)
 
-Run the complete PWA and all 7 `/api/*` feed/scraper proxies locally on **Synology NAS, Unraid, TrueNAS, Portainer, Proxmox, Linux, macOS, or Windows**:
+Run the complete PWA and all 7 `/api/*` feed/scraper proxies locally on **Synology NAS, Unraid, TrueNAS, Portainer, Proxmox, Raspberry Pi, Linux, macOS, or Windows** using the pre-built multi-arch image (`ghcr.io/genghis1227/ambiently:latest`) or building from source:
 
+```bash
+# Quick 1-liner (pre-built linux/amd64 & linux/arm64 image from GHCR — no git clone needed)
+docker run -d --name ambiently --restart unless-stopped -p 8080:8080 ghcr.io/genghis1227/ambiently:latest
+```
+
+**Or with Docker Compose (`.env` customizable):**
 ```bash
 # 1. Clone the repository
 git clone https://github.com/Genghis1227/ambiently.git
@@ -85,8 +93,8 @@ cd ambiently
 # 2. (Optional) Configure port, timezone, Supabase sync, or private LAN feeds
 cp .env.example .env
 
-# 3. Build and start the container in the background
-docker compose up -d --build
+# 3. Pull & start the pre-built image (or pass --build to compile locally)
+docker compose up -d
 
 # 4. Verify healthcheck
 curl http://localhost:8080/api/health

@@ -155,17 +155,16 @@ The Ambiently Docker image (`Dockerfile`) compiles both the React 19 PWA (`dist/
 **Prerequisites:** Docker Engine `24+` and Docker Compose `v2+` (or Docker Desktop on Windows/macOS).
 
 ```bash
-# 1. Clone the repository
+# Option A: Instant 1-command run using the pre-built multi-arch (amd64 / arm64) GHCR image
+docker run -d --name ambiently --restart unless-stopped -p 8080:8080 ghcr.io/genghis1227/ambiently:latest
+
+# Option B: Docker Compose (with .env configuration or local --build)
 git clone https://github.com/Genghis1227/ambiently.git
 cd ambiently
-
-# 2. (Optional) Copy .env.example to .env to customize port, timezone, or Supabase credentials
 cp .env.example .env
+docker compose up -d
 
-# 3. Build and start in detached mode
-docker compose up -d --build
-
-# 4. Verify container health
+# Verify container health
 curl http://localhost:8080/api/health
 ```
 
@@ -174,24 +173,20 @@ Open **`http://localhost:8080`** (or `http://<server-ip>:8080` from any tablet, 
 **Updating your Docker deployment:**
 ```bash
 cd ambiently
-git pull
-docker compose up -d --build
+docker compose pull && docker compose up -d
+# (Or if building locally from git: git pull && docker compose up -d --build)
 ```
 
 ---
 
 ### 2.2 Portainer / Synology Container Manager / Unraid Setup
 
-1. SSH into your NAS (or use your NAS Git/File Manager) to clone `https://github.com/Genghis1227/ambiently.git` into a folder such as `/volume1/docker/ambiently` (Synology) or `/mnt/user/appdata/ambiently` (Unraid).
-2. In **Synology Container Manager** (*Project -> Create*), **Portainer** (*Stacks -> Add stack -> Git Repository*), or **Unraid Compose Manager**, point to [`compose.yaml`](compose.yaml):
+Because multi-arch (`linux/amd64` + `linux/arm64`) images are published automatically to GitHub Container Registry (`ghcr.io/genghis1227/ambiently:latest`), **no `git clone` is required**—simply paste this Compose stack directly into **Portainer** (*Stacks -> Add stack -> Web editor*), **Synology Container Manager** (*Project -> Create*), or **Unraid Compose Manager**:
 
 ```yaml
 services:
   ambiently:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: ambiently:latest
+    image: ghcr.io/genghis1227/ambiently:latest
     container_name: ambiently
     restart: unless-stopped
     ports:
@@ -207,7 +202,7 @@ services:
       - no-new-privileges:true
 ```
 
-3. Deploy the stack and access Ambiently at `http://<nas-ip>:8080`.
+Deploy the stack and access Ambiently at `http://<nas-ip>:8080`.
 
 ---
 

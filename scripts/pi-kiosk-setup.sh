@@ -181,10 +181,15 @@ if [[ "${MODE}" == "standalone" ]]; then
     git clone "${REPO_URL}" "${INSTALL_DIR}"
   fi
 
-  echo "🏗️  Building and starting Ambiently container on port ${PORT}..."
+  echo "🐳 Starting Ambiently container on port ${PORT}..."
   (
     cd "${INSTALL_DIR}"
-    AMBIENTLY_PORT="${PORT}" sudo docker compose up -d --build
+    if AMBIENTLY_PORT="${PORT}" sudo docker compose pull; then
+      AMBIENTLY_PORT="${PORT}" sudo docker compose up -d
+    else
+      echo "ℹ️  Pre-built GHCR image unavailable; building locally from source..."
+      AMBIENTLY_PORT="${PORT}" sudo docker compose up -d --build
+    fi
   )
 fi
 

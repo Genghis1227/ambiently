@@ -1,9 +1,9 @@
 services:
   ambiently:
+    image: ghcr.io/genghis1227/ambiently:latest
     build:
       context: .
       dockerfile: Dockerfile
-    image: ambiently:latest
     container_name: ambiently
     restart: unless-stopped
     ports:
