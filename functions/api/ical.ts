@@ -405,7 +405,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       const overridesByUid = new Map<string, any[]>();
       const repeatingUids = new Set<string>();
       for (const v of vevents) {
-        const uid = v.getFirstPropertyValue('uid');
+        const uid = String(v.getFirstPropertyValue('uid') || '');
         if (v.hasProperty('recurrence-id')) {
           overridesByUid.set(uid, [...(overridesByUid.get(uid) || []), v]);
         } else if (v.hasProperty('rrule') || v.hasProperty('rdate')) {
@@ -415,7 +415,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
 
       for (const v of vevents) {
         try {
-          const uid = v.getFirstPropertyValue('uid');
+          const uid = String(v.getFirstPropertyValue('uid') || '');
           const isOverride = v.hasProperty('recurrence-id');
 
           // Its series reports this one. An override with no series in the feed stays: that is how

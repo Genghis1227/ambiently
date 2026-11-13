@@ -42,6 +42,7 @@ import {
   CalendarDays,
   HelpCircle,
   Users,
+  Server,
 } from 'lucide-react';
 import { useUpdateChecker } from '../../services/updateChecker';
 import { db } from '../../services/db';
@@ -2076,7 +2077,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </a>
                 </div>
 
-                {/* 3. Require PIN for Settings */}
+                {/* 3. Raspberry Pi Kiosk & Docker Self-Hosting Guide */}
+                <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-gray-900/60 border border-gray-800">
+                  <div className="space-y-0.5 pr-2">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
+                      <Server className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Raspberry Pi Kiosk & Docker Self-Hosting</span>
+                    </div>
+                    <span className="text-[11px] text-gray-400 block leading-tight">
+                      Auto-boot a Raspberry Pi 4/5 wall display (Wayland/X11) with our 1-command installer, or self-host via Docker Compose (amd64 & arm64).
+                    </span>
+                  </div>
+                  <a
+                    href="https://github.com/Genghis1227/ambiently/blob/main/RASPBERRY_PI.md"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-native-link="true"
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 text-xs font-semibold shrink-0 transition-colors cursor-pointer"
+                  >
+                    Install Guide ↗
+                  </a>
+                </div>
+
+                {/* 4. Require PIN for Settings */}
                 <div className="flex items-center justify-between p-3 rounded-lg bg-gray-900/60 border border-gray-800">
                   <div className="space-y-0.5 pr-4">
                     <div className="flex items-center gap-1.5 text-xs font-semibold text-white">

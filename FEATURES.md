@@ -114,21 +114,23 @@ Every widget features a top-right **Tile Settings (`⚙️`)** button to customi
   * Clicking any headline opens the **In-App Kiosk Article Reader (`/api/reader`)** powered by Mozilla Readability and Linkedom, with 1-click switching to **Web Preview (`/api/web-proxy`)** so users never get trapped in an uncloseable fullscreen browser window.
 * **Milestone Countdown (`CountdownWidget.tsx`):**
   * Live days/hours/minutes/seconds countdown timer to upcoming vacations, birthdays, or milestones.
+* **Animated GIF, Sticker & Picture Tile (`ImageWidget.tsx`) & Custom Text Banner (`TextboxWidget.tsx`):**
+  * Pin frameless transparent stickers, GIPHY animated GIFs (via built-in media search or URL), or framed images with full `360°` rotation and quick tilt presets (`-6°` to `+6°`), plus customizable typography banners (`TextboxWidget.tsx`) for family headings and labels.
 
 ---
 
-## 5. Ambiently Family Chore & Reward Engine (`v0.4.6` – `v0.4.11`)
+## 5. Ambiently Family Chore & Reward Engine (`v0.4.6` – `v0.5.8`)
 
 * **Global Household Profile & Avatar Engine (`useProfileStore.ts`, `HouseholdProfileManager.tsx`, `AvatarCropModal.tsx`, `avatarCompressor.ts`):**
   * Shared family profiles (`Parent` and `Kid` roles) with a calming low-arousal color palette, 24 preset icons, or custom keyboard emoji entry.
   * **Universal Photo Upload (including iOS 17/18 `.HEIC` / `.HEIF`):** Client-side decoding via `libheif-js` paired with an interactive circular **Avatar Cropper** (drag-to-pan, `1×`–`3×` zoom, and `90°` rotation) that exports lightweight `256×256` WebP avatars synced via IndexedDB and Supabase Realtime.
 * **Polymorphic Dual-View Chore & Reward UI (`ChoreWidget.tsx`, `ChoreDashboardView.tsx`):**
-  * **Compact Bento Tile (`variant="tile"`):** Filter by *Whole Household* or a specific child, with collapsible accordions for *Today's Chores*, *Awaiting Parent Review*, and *Completed Today*.
+  * **Compact Bento Tile (`variant="tile"`):** Filter by *Whole Household* or a specific family member, with collapsible accordions for *Today's Chores*, *Awaiting Parent Review*, and *Completed Today*, plus portal-mounted modals (`createPortal`) so dialogs always frame cleanly over the full screen.
   * **Full-Screen Chore & Reward Hub (`variant="view"`):** 3-column dashboard launched via the Chore tile header's **Maximize** button (or *Full-Screen Hub on Canvas* in Tile Settings) featuring profile point banks, daily/weekly/bounty tasks, and the visual **Reward Store**.
-* **Flexible Scheduling Cadences, Multi-Kid Creation & Overdue Policies (`choreEngine.ts`, `ParentChoreDrawer.tsx`):**
+* **Flexible Scheduling Cadences, Parent Participation & Overdue Policies (`choreEngine.ts`, `ParentChoreDrawer.tsx`):**
   * **Cadences:** *Daily*, *Weekdays (Mon–Fri)*, *Weekends (Sat–Sun)*, *Weekly — Any Day (1× / Week)*, *Weekly (Specific Days)*, *Interval (Every N Days)*, and *One-Off Bounty*.
-  * **Multi-Kid Assignment & Duplication:** Check multiple kids when creating a chore to generate individual tasks for each child in one click, or duplicate any existing chore via the `Copy` button.
-  * **Shared Chores & Interactive Point Splitting (`PointSplitModal.tsx`):** Shared chores can be claimed by a single child or split across multiple siblings using whole-number point sliders.
+  * **Multi-Member Assignment, Parent Auto-Completion & Duplication:** Assign tasks to any mix of kids and parents in one click, or duplicate any existing chore via the `Copy` button. Tasks completed solely by `Parent` profiles auto-approve immediately without entering the *Awaiting Parent Review* queue.
+  * **Shared Chores & Interactive Point Splitting (`PointSplitModal.tsx`):** Shared chores can be claimed by a single family member or split across multiple participants using whole-number point sliders.
   * **24-Hour Overdue Grace Window & Vacation Mode:** Unfinished tasks roll over for 24 hours with configurable point policies (*Full 100%*, *Half 50%*, *Zero 0%*, or *Custom %*), include a manual **Dismiss** button, and automatically expire after 24 hours so stale tasks never pile up. Enabling **Vacation Mode** freezes midnight rollovers and penalties while away.
 * **Append-Only Audit Ledger, Wishlist Store & Trophy Case (`choreStore.ts`, `ProposeRewardModal.tsx`, `TrophyCaseModal.tsx`):**
   * **Immutable Audit Ledger:** Spendable `balance` and `lifetimePoints` are strictly computed from an append-only transaction log (`chore_completion`, `reward_redemption`, `manual_adjustment`, `reversion`).
@@ -136,10 +138,12 @@ Every widget features a top-right **Tile Settings (`⚙️`)** button to customi
 
 ---
 
-## 6. Family Meal Planner, Smart Grocery Aggregator & Cooking Mode (`v0.5.0` – `v0.5.1`)
+## 6. Family Meal Planner, Smart Grocery Aggregator & Cooking Mode (`v0.5.0` – `v0.5.9`)
 
-* **Flexible Calendar Scopes & Automatic History Pruning (`MealPlannerWidget.tsx`, `useMealStore.ts`):**
-  * Add a **Family Meal Planner** widget to any canvas and switch between **Tomorrow**, **3-Day**, or **Full Week (7-Day)** views across configurable meal slots (*Breakfast*, *Lunch*, *Dinner*, *Snack*), with optional cook profile badges and prep/cook time pills.
+* **Flexible Calendar Scopes, Interactive Date Picker & Household Strip (`MealPlannerWidget.tsx`, `useMealStore.ts`):**
+  * Add a **Family Meal Planner** widget to any canvas and switch between **Tomorrow**, **3-Day**, or **Full Week (7-Day)** views across configurable meal slots (*Breakfast*, *Lunch*, *Dinner*, *Snack*).
+  * **Interactive Month Calendar Selector:** Click the date range pill in the widget header (or the date badge inside the Meal Entry modal) to jump straight to any future week or date via an interactive month grid with scheduled-meal indicator dots and a 1-tap *Today* shortcut.
+  * **Household Profile Strip & Inline 1-Tap Cook Picker:** Displays your household avatars directly in the Meal Planner header with quick access to Household settings, plus an inline avatar/name cook badge on every meal card so anyone can claim or reassign cooking duties in a single tap without opening the full editor.
   * **Automatic 21-Day Past Meal Pruning:** Scheduled meal entries older than 21 days in the past are automatically pruned on load and save (recording tombstones for cloud sync) while keeping all saved recipes in your **Recipe Book** untouched.
 * **Quick-Meal Autocomplete, Recipe Book & Schema.org URL Scraper (`MealEntryModal.tsx`, `functions/api/metadata.ts`):**
   * **Quick-Text Entry with Dynamic Autocomplete Chips:** Type a quick meal title (*Taco Night*, *Leftovers*) or tap one of up to 8 clickable recent/saved meal pills for instant 1-tap scheduling.
@@ -177,7 +181,17 @@ Every widget features a top-right **Tile Settings (`⚙️`)** button to customi
 
 ---
 
-## 8. Upcoming Roadmap
+## 8. Docker Self-Hosting & Raspberry Pi Kiosk Edition (Phase 6)
 
-* **Docker & Self-Hosting (`server/index.ts`, `Dockerfile`, `compose.yaml`):**
-  * Standalone Node/Hono container bundling static PWA assets and `/api/*` proxy routes for home-lab deployments (Synology, Unraid, Proxmox, Raspberry Pi).
+* **Multi-Architecture Docker & Compose Stack (`Dockerfile`, `compose.yaml`, `server/index.ts`, `vite.server.config.ts`):**
+  * Bundles `server/index.ts` and all 7 `/api/*` handlers into a single zero-dependency Node ESM bundle (`dist-server/index.mjs`) alongside the built PWA (`dist/`) inside a lightweight non-root `node:22-alpine` container (`linux/amd64` for PCs, Synology, Unraid, and Proxmox + `linux/arm64` for Raspberry Pi 4/5, Apple Silicon, and ARM SBCs).
+  * Includes immutable `/assets/*` caching (`max-age=31536000, immutable`), an in-memory `gzip` static asset cache, strict `no-cache` headers for `sw.js`/`version.json`/`index.html`, SPA history fallback, and a built-in `/api/health` container readiness endpoint.
+* **Zero-Rebuild Runtime Cloud Sync Injection (`/config.js`):**
+  * Pass `SUPABASE_URL` and `SUPABASE_ANON_KEY` at container runtime via `.env` or `compose.yaml` without rebuilding the Docker image—preserving Workbox Service Worker precache integrity while caching credentials in `localStorage` for instant offline cold boots.
+* **Opt-In Private Home LAN Feeds (`AMBIENTLY_ALLOW_PRIVATE_FEEDS=true`):**
+  * Enables self-hosted home-lab deployments to subscribe to private RFC1918 LAN / Tailscale / `.local` `.ics` calendars and RSS feeds (e.g., Nextcloud, Radicale, Home Assistant, FreshRSS) while keeping loopback (`127.0.0.1` / `localhost`) and cloud metadata (`169.254.169.254`) strictly blocked.
+* **Automated Raspberry Pi Kiosk & All-in-One Appliance Installer (`scripts/pi-kiosk-setup.sh`, [`RASPBERRY_PI.md`](./RASPBERRY_PI.md)):**
+  * 1-command installer for Raspberry Pi OS (Bookworm Wayland `labwc`/`wayfire` & X11) supporting two deployment modes:
+    1. **Kiosk Display Mode (`--mode kiosk`):** Auto-boots fullscreen Chromium pointing to `https://dashboard.trinhism.com` or any LAN Docker URL (`http://nas.local:8080`).
+    2. **All-in-One Standalone Mode (`--mode standalone`):** Installs Docker Engine, builds & launches the ARM64 Ambiently container locally (`restart: unless-stopped`), waits for `/api/health` readiness, and launches fullscreen Chromium to `http://localhost:8080`.
+  * Configures cursor auto-hiding (`unclutter`), disables HDMI DPMS blanking, clears Chromium crash recovery bubbles on unclean power loss, supports `0°` / `90°` / `180°` / `270°` portrait/landscape screen rotation (`--rotate`), and includes a clean `--uninstall` flag.

@@ -113,11 +113,51 @@ export function invalidateDashboardIdCache(): void {
   cachedDashboardTarget = null;
 }
 
+const RUNTIME_CONFIG_CACHE_KEY = 'ambiently_runtime_supabase_cfg';
+
+function resolveSupabaseCredentials(): { url?: string; anonKey?: string } {
+  const runtimeCfg =
+    typeof window !== 'undefined'
+      ? (window as unknown as { __AMBIENTLY_CONFIG__?: { supabaseUrl?: string; supabaseAnonKey?: string } })
+          .__AMBIENTLY_CONFIG__
+      : undefined;
+
+  if (runtimeCfg?.supabaseUrl && runtimeCfg?.supabaseAnonKey) {
+    try {
+      localStorage.setItem(
+        RUNTIME_CONFIG_CACHE_KEY,
+        JSON.stringify({ supabaseUrl: runtimeCfg.supabaseUrl, supabaseAnonKey: runtimeCfg.supabaseAnonKey })
+      );
+    } catch {
+      // Ignore storage quota / sandbox restrictions
+    }
+    return { url: runtimeCfg.supabaseUrl, anonKey: runtimeCfg.supabaseAnonKey };
+  }
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    return { url: import.meta.env.VITE_SUPABASE_URL, anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY };
+  }
+
+  // Offline PWA fallback for self-hosted Docker instances configured via runtime env vars
+  try {
+    const cached = localStorage.getItem(RUNTIME_CONFIG_CACHE_KEY);
+    if (cached) {
+      const parsed = JSON.parse(cached) as { supabaseUrl?: string; supabaseAnonKey?: string };
+      if (parsed.supabaseUrl && parsed.supabaseAnonKey) {
+        return { url: parsed.supabaseUrl, anonKey: parsed.supabaseAnonKey };
+      }
+    }
+  } catch {
+    // Ignore parse errors
+  }
+
+  return {};
+}
+
 export function getSupabase(): SupabaseClient | null {
   if (supabaseClient) return supabaseClient;
 
-  const url = import.meta.env.VITE_SUPABASE_URL;
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const { url, anonKey } = resolveSupabaseCredentials();
 
   if (url && anonKey) {
     supabaseClient = createClient(url, anonKey);
