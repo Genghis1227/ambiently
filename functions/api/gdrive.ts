@@ -117,7 +117,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
         headers: {
           'Content-Type': 'application/json',
           // Anyone with the link can see the folder, but it isn't public, so only the browser keeps a copy
-          'Cache-Control': 'private, max-age=1800',
+          'Cache-Control': 'private, max-age=900',
         },
       }
     );

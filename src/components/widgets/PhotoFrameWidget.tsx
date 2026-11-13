@@ -250,6 +250,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
 
   const isThisWidgetSyncing =
     Boolean(photoSyncState?.isActive) &&
+    !photoSyncState?.isSilent &&
     (!photoSyncState?.targetWidgetId || photoSyncState?.targetWidgetId === widgetId);
 
   const isUsingCommonSource =

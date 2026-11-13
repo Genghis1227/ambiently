@@ -47,6 +47,14 @@ import {
 import { useUpdateChecker } from '../../services/updateChecker';
 import { db } from '../../services/db';
 import { useDashboardStore } from '../../store/dashboardStore';
+import { photoSyncService } from '../../services/photoSyncService';
+import {
+  type PhotoAutoSyncInterval,
+  formatCooldownRemaining,
+  formatRelativeSyncTime,
+  getManualRescanCooldownRemainingMs,
+  isTargetRescannable,
+} from '../../utils/photoSyncPolicy';
 import {
   openLocalFileBinding,
   reconnectStoredFile,
@@ -111,6 +119,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const {
     settings,
     photoSyncState,
+    photoSyncMeta,
     tabs,
     widgets,
     notes,
@@ -158,9 +167,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isConfirmingReset, setIsConfirmingReset] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [backupStatus, setBackupStatus] = useState<string>('');
+  const [photoSyncNowTick, setPhotoSyncNowTick] = useState<number>(() => Date.now());
+  const [photoRescanNotice, setPhotoRescanNotice] = useState<string>('');
   const restoreFileRef = useRef<HTMLInputElement>(null);
   const wallpaperUploadRef = useRef<HTMLInputElement>(null);
   const [isUploadingWallpaper, setIsUploadingWallpaper] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || activeTab !== 'photos') return;
+    setPhotoSyncNowTick(Date.now());
+    void photoSyncService.init();
+    const timer = setInterval(() => setPhotoSyncNowTick(Date.now()), 15000);
+    return () => clearInterval(timer);
+  }, [isOpen, activeTab]);
 
   const [isCreateCanvasOpen, setIsCreateCanvasOpen] = useState(false);
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
@@ -1391,25 +1410,136 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               )}
 
-              <div className="flex items-center justify-between text-xs px-3 py-2.5 rounded-lg bg-gray-900/60 border border-gray-800 text-gray-300">
-                <span className="text-gray-400">Current Shared Source:</span>
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-amber-300">
-                    {settings.commonPhotoSourceLabel || 'Curated Ambient'}
-                    {settings.commonPhotos && settings.commonPhotos.length > 0 && ` (${settings.commonPhotos.length.toLocaleString()} photos)`}
-                  </span>
-                  {settings.commonPhotos && settings.commonPhotos.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => applyCommonPhotosToAllWidgets([], undefined, undefined, 'curated')}
-                      className="text-[10px] text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 px-2 py-0.5 rounded border border-red-500/20 cursor-pointer transition-all font-semibold"
-                      title="Reset shared library back to default Curated Scenery"
-                    >
-                      Reset to Default
-                    </button>
-                  )}
-                </div>
-              </div>
+              {(() => {
+                const commonRescannable = isTargetRescannable(
+                  settings.commonPhotoSourceType,
+                  settings.commonPhotoSourceUrl,
+                  settings.commonPhotoPlexConfig,
+                  settings.commonPhotoSourceLabel
+                );
+                const commonMeta = photoSyncMeta['common'];
+                const commonCooldownMs = getManualRescanCooldownRemainingMs(commonMeta, photoSyncNowTick);
+                const isSyncBusy = Boolean(photoSyncState?.isActive);
+                const currentAutoInterval: PhotoAutoSyncInterval = settings.photoAutoSyncInterval ?? 'daily';
+
+                return (
+                  <>
+                    <div className="space-y-1.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs px-3 py-2.5 rounded-lg bg-gray-900/60 border border-gray-800 text-gray-300">
+                        <span className="text-gray-400">Current Shared Source:</span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium text-amber-300">
+                            {settings.commonPhotoSourceLabel || 'Curated Ambient'}
+                            {settings.commonPhotos && settings.commonPhotos.length > 0 && ` (${settings.commonPhotos.length.toLocaleString()} photos)`}
+                          </span>
+                          {commonRescannable && (
+                            <button
+                              type="button"
+                              disabled={isSyncBusy || commonCooldownMs > 0}
+                              onClick={async () => {
+                                setPhotoRescanNotice('');
+                                const res = await photoSyncService.rescanTarget({ reason: 'manual' });
+                                setPhotoRescanNotice(res.message);
+                              }}
+                              className="text-[10px] text-blue-300 hover:text-blue-200 disabled:opacity-50 disabled:cursor-not-allowed bg-blue-500/15 hover:bg-blue-500/25 px-2 py-0.5 rounded border border-blue-500/30 cursor-pointer transition-all font-semibold inline-flex items-center gap-1"
+                              title={
+                                commonCooldownMs > 0
+                                  ? `Cooldown prevents rapid rescans. Available again in ${formatCooldownRemaining(commonCooldownMs)}.`
+                                  : 'Check Google Photos, Google Drive, or Plex for new photos'
+                              }
+                            >
+                              <RefreshCw className={`w-3 h-3 ${isSyncBusy ? 'animate-spin' : ''}`} />
+                              <span>
+                                {isSyncBusy
+                                  ? 'Syncing…'
+                                  : commonCooldownMs > 0
+                                  ? `Rescan in ${formatCooldownRemaining(commonCooldownMs)}`
+                                  : 'Rescan Now'}
+                              </span>
+                            </button>
+                          )}
+                          {settings.commonPhotos && settings.commonPhotos.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPhotoRescanNotice('');
+                                applyCommonPhotosToAllWidgets([], undefined, undefined, 'curated');
+                              }}
+                              className="text-[10px] text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 px-2 py-0.5 rounded border border-red-500/20 cursor-pointer transition-all font-semibold"
+                              title="Reset shared library back to default Curated Scenery"
+                            >
+                              Reset to Default
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {(commonRescannable || photoRescanNotice) && (
+                        <div className="flex flex-wrap items-center justify-between gap-2 px-3 text-[11px] text-gray-400">
+                          <span>
+                            Last synced:{' '}
+                            <strong className="text-gray-200">
+                              {formatRelativeSyncTime(commonMeta?.lastSuccessAt, photoSyncNowTick)}
+                            </strong>
+                            {commonMeta?.lastResultSummary && ` • ${commonMeta.lastResultSummary}`}
+                          </span>
+                          {(photoRescanNotice || commonMeta?.lastError) && (
+                            <span
+                              className={
+                                commonMeta?.lastError &&
+                                (!commonMeta.lastSuccessAt ||
+                                  (commonMeta.lastErrorAt || 0) > commonMeta.lastSuccessAt)
+                                  ? 'text-amber-300'
+                                  : 'text-emerald-300'
+                              }
+                            >
+                              {photoRescanNotice || commonMeta?.lastError}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Automatic Background Library Rescan Cadence */}
+                    <div className="p-3.5 rounded-xl bg-gray-900/60 border border-gray-800 space-y-2.5">
+                      <div className="space-y-0.5">
+                        <div className="text-xs font-semibold text-white flex items-center gap-2">
+                          <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Automatic Library Rescan</span>
+                        </div>
+                        <p className="text-[11px] text-gray-400">
+                          Quietly check connected Google Photos, Google Drive, and Plex libraries for new pictures in the background. Skipped during Night Mode, and manual rescans have a 15-minute cooldown.
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {(
+                          [
+                            ['daily', 'Daily (24h)', 'Recommended for kiosks'],
+                            ['weekly', 'Weekly (7d)', 'Lightest network use'],
+                            ['manual', 'Manual Only', 'Only when clicked'],
+                          ] as const
+                        ).map(([value, label, hint]) => {
+                          const isSelected = currentAutoInterval === value;
+                          return (
+                            <button
+                              key={value}
+                              type="button"
+                              onClick={() => updateSettings({ photoAutoSyncInterval: value })}
+                              className={`py-2 px-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'bg-emerald-500/15 border-emerald-500/80 text-emerald-200 shadow-xs'
+                                  : 'bg-gray-950/60 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'
+                              }`}
+                            >
+                              <div className="text-xs font-semibold leading-tight">{label}</div>
+                              <div className="text-[10px] text-gray-500 mt-0.5 truncate">{hint}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
 
               {/* Common Library Date Taken Toggle */}
               <div className="flex items-center justify-between p-3.5 rounded-xl bg-gray-900/60 border border-gray-800">
@@ -2262,8 +2392,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             currentSourceLabel={settings.commonPhotoSourceLabel}
             currentSourceType={settings.commonPhotoSourceType}
             currentPhotoCount={settings.commonPhotos?.length}
-            onPhotosLoaded={(photos, sourceLabel, sourceUrl, sourceType) => {
-              applyCommonPhotosToAllWidgets(photos, sourceLabel, sourceUrl, sourceType);
+            onPhotosLoaded={(photos, sourceLabel, sourceUrl, sourceType, _applyToAll, plexSyncConfig) => {
+              applyCommonPhotosToAllWidgets(photos, sourceLabel, sourceUrl, sourceType, plexSyncConfig);
             }}
           />
         </React.Suspense>

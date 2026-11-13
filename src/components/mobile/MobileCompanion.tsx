@@ -1108,9 +1108,9 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
                   ? (settings.commonPhotos?.length ?? activePhotoWidget.config?.customPhotos?.length)
                   : (activePhotoWidget.config?.customPhotos?.length ?? settings.commonPhotos?.length)
               }
-              onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType, applyToAll) => {
+              onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType, applyToAll, plexSyncConfig) => {
                 if (applyToAll) {
-                  applyCommonPhotosToAllWidgets(newPhotos, sourceName, sourceUrl, sourceType);
+                  applyCommonPhotosToAllWidgets(newPhotos, sourceName, sourceUrl, sourceType, plexSyncConfig);
                 } else if (onUpdateWidget && newPhotos.length > 0) {
                   onUpdateWidget(activePhotoWidget.id, {
                     config: {
@@ -1120,6 +1120,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
                       sourceLabel: sourceName,
                       sourceUrl: sourceType === 'web' ? (sourceUrl || '') : undefined,
                       sourceType: sourceType || activePhotoWidget.config?.sourceType,
+                      plexSyncConfig: sourceType === 'plex' ? plexSyncConfig : undefined,
                     },
                   });
                 }

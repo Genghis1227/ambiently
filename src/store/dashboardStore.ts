@@ -21,6 +21,7 @@ import { MAX_CANVASES } from '../types/dashboard';
 import { saveSnapshotToFile, hasActiveLocalFile } from '../services/fileSync';
 import { computeNonOverlappingLayout, findOpenCanvasSpot } from '../utils/autoLayout';
 import { getDefaultWidgetStickerMode, isStickerCapableWidget } from '../utils/widgetStickerMode';
+import type { PhotoTargetSyncMeta, PlexPhotoSyncConfig } from '../utils/photoSyncPolicy';
 import type { PhotoItem } from '../services/photos';
 import { getSupabase, getCurrentUser, pushToCloud } from '../services/supabase';
 import { CANVAS_LOOK_FIELDS, keepLocalNoteFields, keepLocalTabFields, keepLocalWidgetFields } from '../services/syncMerge';
@@ -68,6 +69,7 @@ async function markCanvasLooksChanged(get: () => DashboardState, set: (partial: 
 
 export interface PhotoSyncState {
   isActive: boolean;
+  isSilent?: boolean;
   sourceType: 'plex' | 'local' | 'web' | 'curated' | null;
   sourceLabel: string;
   loadedCount: number;
@@ -97,6 +99,7 @@ interface DashboardState {
   isUnlocked: boolean; // runtime unlock state when pinLockEnabled is on
   lastLayoutSnapshot: LayoutSnapshot | null;
   photoSyncState: PhotoSyncState | null;
+  photoSyncMeta: Record<string, PhotoTargetSyncMeta>;
 
   // Actions
   initStore: () => Promise<void>;
@@ -122,28 +125,33 @@ interface DashboardState {
     photos: PhotoItem[],
     sourceLabel?: string,
     sourceUrl?: string,
-    sourceType?: 'plex' | 'local' | 'web' | 'curated'
+    sourceType?: 'plex' | 'local' | 'web' | 'curated',
+    plexSyncConfig?: PlexPhotoSyncConfig
   ) => Promise<void>;
   applyCommonPhotosToAllWidgets: (
     photos: PhotoItem[],
     sourceLabel?: string,
     sourceUrl?: string,
-    sourceType?: 'plex' | 'local' | 'web' | 'curated'
+    sourceType?: 'plex' | 'local' | 'web' | 'curated',
+    plexSyncConfig?: PlexPhotoSyncConfig
   ) => Promise<void>;
   setPhotoSyncState: (state: PhotoSyncState | null) => void;
+  setPhotoSyncMeta: (meta: Record<string, PhotoTargetSyncMeta>) => void;
   appendPhotosToTarget: (
     targetWidgetId: string | undefined,
     newPhotos: PhotoItem[],
     sourceLabel?: string,
     sourceUrl?: string,
-    sourceType?: 'plex' | 'local' | 'web' | 'curated'
+    sourceType?: 'plex' | 'local' | 'web' | 'curated',
+    plexSyncConfig?: PlexPhotoSyncConfig
   ) => Promise<void>;
   finalizePhotosToTarget: (
     targetWidgetId: string | undefined,
     allPhotos: PhotoItem[],
     sourceLabel?: string,
     sourceUrl?: string,
-    sourceType?: 'plex' | 'local' | 'web' | 'curated'
+    sourceType?: 'plex' | 'local' | 'web' | 'curated',
+    plexSyncConfig?: PlexPhotoSyncConfig
   ) => Promise<void>;
   toggleTabEnabled: (tabId: string, enabled: boolean) => Promise<void>;
   setDisplayDensity: (density: 0.75 | 1.0 | 1.25 | 1.5) => Promise<void>;
@@ -240,6 +248,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   isUnlocked: true,
   lastLayoutSnapshot: null,
   photoSyncState: null,
+  photoSyncMeta: {},
 
   initStore: async () => {
     // Non-blocking cleanup of soft-deleted records older than 30 days
@@ -487,13 +496,20 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     await get().setDockHidden(!current);
   },
 
-  setCommonPhotos: async (photos, sourceLabel, sourceUrl, sourceType) => {
+  setCommonPhotos: async (photos, sourceLabel, sourceUrl, sourceType, plexSyncConfig) => {
+    const prevSettings = get().settings;
     const updated = {
-      ...get().settings,
+      ...prevSettings,
       commonPhotos: photos,
       commonPhotoSourceLabel: sourceLabel,
       commonPhotoSourceUrl: sourceType === 'web' ? (sourceUrl || '') : undefined,
       commonPhotoSourceType: sourceType,
+      commonPhotoPlexConfig:
+        sourceType === 'plex'
+          ? (plexSyncConfig ?? prevSettings.commonPhotoPlexConfig)
+          : sourceType
+          ? undefined
+          : prevSettings.commonPhotoPlexConfig,
       updated_at: new Date().toISOString(),
     };
     await db.settings.put(updated);
@@ -501,8 +517,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     get().saveLocalBackup();
   },
 
-  applyCommonPhotosToAllWidgets: async (photos, sourceLabel, sourceUrl, sourceType) => {
-    await get().setCommonPhotos(photos, sourceLabel, sourceUrl, sourceType);
+  applyCommonPhotosToAllWidgets: async (photos, sourceLabel, sourceUrl, sourceType, plexSyncConfig) => {
+    await get().setCommonPhotos(photos, sourceLabel, sourceUrl, sourceType, plexSyncConfig);
     const updatedWidgets = get().widgets.map((w) => {
       if (w.type === 'photo_frame') {
         return {
@@ -513,6 +529,12 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
             sourceLabel: sourceLabel || w.config?.sourceLabel,
             sourceUrl: sourceType === 'web' ? (sourceUrl || '') : undefined,
             sourceType: sourceType || w.config?.sourceType,
+            plexSyncConfig:
+              sourceType === 'plex'
+                ? (plexSyncConfig ?? w.config?.plexSyncConfig)
+                : sourceType
+                ? undefined
+                : w.config?.plexSyncConfig,
           },
           updated_at: new Date().toISOString(),
         };
@@ -528,23 +550,35 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     set({ photoSyncState });
   },
 
-  appendPhotosToTarget: async (targetWidgetId, incomingPhotos, sourceLabel, sourceUrl, sourceType) => {
+  setPhotoSyncMeta: (photoSyncMeta) => {
+    set({ photoSyncMeta });
+  },
+
+  appendPhotosToTarget: async (targetWidgetId, incomingPhotos, sourceLabel, sourceUrl, sourceType, plexSyncConfig) => {
     if (!incomingPhotos || incomingPhotos.length === 0) return;
 
     if (!targetWidgetId) {
       // Common / Shared Photos
-      const current = get().settings.commonPhotos || [];
+      const prevSettings = get().settings;
+      const current = prevSettings.commonPhotos || [];
       const seenIds = new Set(current.map((p) => p.id));
       const fresh = incomingPhotos.filter((p) => !seenIds.has(p.id));
       if (fresh.length === 0) return;
 
+      const resolvedSourceType = sourceType || prevSettings.commonPhotoSourceType;
       const combined = [...current, ...fresh];
       const updated = {
-        ...get().settings,
+        ...prevSettings,
         commonPhotos: combined,
-        commonPhotoSourceLabel: sourceLabel || get().settings.commonPhotoSourceLabel,
+        commonPhotoSourceLabel: sourceLabel || prevSettings.commonPhotoSourceLabel,
         commonPhotoSourceUrl: sourceType === 'web' ? (sourceUrl || '') : undefined,
-        commonPhotoSourceType: sourceType || get().settings.commonPhotoSourceType,
+        commonPhotoSourceType: resolvedSourceType,
+        commonPhotoPlexConfig:
+          resolvedSourceType === 'plex'
+            ? (plexSyncConfig ?? prevSettings.commonPhotoPlexConfig)
+            : sourceType
+            ? undefined
+            : prevSettings.commonPhotoPlexConfig,
         updated_at: new Date().toISOString(),
       };
       await db.settings.put(updated);
@@ -559,6 +593,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       const fresh = incomingPhotos.filter((p) => !seenIds.has(p.id));
       if (fresh.length === 0) return;
 
+      const resolvedSourceType = sourceType || widget.config?.sourceType;
       const combined = [...current, ...fresh];
       const updatedWidget: DashboardWidget = {
         ...widget,
@@ -567,8 +602,14 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           customPhotos: combined,
           useCommonSource: false,
           sourceLabel: sourceLabel || widget.config?.sourceLabel,
-          sourceType: sourceType || widget.config?.sourceType,
+          sourceType: resolvedSourceType,
           sourceUrl: sourceType === 'web' ? (sourceUrl || '') : undefined,
+          plexSyncConfig:
+            resolvedSourceType === 'plex'
+              ? (plexSyncConfig ?? widget.config?.plexSyncConfig)
+              : sourceType
+              ? undefined
+              : widget.config?.plexSyncConfig,
         },
         updated_at: new Date().toISOString(),
       };
@@ -580,12 +621,13 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     get().saveLocalBackup();
   },
 
-  finalizePhotosToTarget: async (targetWidgetId, allPhotos, sourceLabel, sourceUrl, sourceType) => {
+  finalizePhotosToTarget: async (targetWidgetId, allPhotos, sourceLabel, sourceUrl, sourceType, plexSyncConfig) => {
     if (!targetWidgetId) {
-      await get().applyCommonPhotosToAllWidgets(allPhotos, sourceLabel, sourceUrl, sourceType);
+      await get().applyCommonPhotosToAllWidgets(allPhotos, sourceLabel, sourceUrl, sourceType, plexSyncConfig);
     } else {
       const widget = get().widgets.find((w) => w.id === targetWidgetId);
       if (widget) {
+        const resolvedSourceType = sourceType || widget.config?.sourceType;
         const updatedWidget: DashboardWidget = {
           ...widget,
           config: {
@@ -593,8 +635,14 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
             customPhotos: allPhotos,
             useCommonSource: false,
             sourceLabel: sourceLabel || widget.config?.sourceLabel,
-            sourceType: sourceType || widget.config?.sourceType,
+            sourceType: resolvedSourceType,
             sourceUrl: sourceType === 'web' ? (sourceUrl || '') : undefined,
+            plexSyncConfig:
+              resolvedSourceType === 'plex'
+                ? (plexSyncConfig ?? widget.config?.plexSyncConfig)
+                : sourceType
+                ? undefined
+                : widget.config?.plexSyncConfig,
           },
           updated_at: new Date().toISOString(),
         };

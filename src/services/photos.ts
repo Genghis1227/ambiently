@@ -1,4 +1,5 @@
 // Multi-source Photo Feed Service & Cache API integration
+import { makeStableWebPhotoId } from '../utils/photoSyncPolicy';
 
 export interface PhotoItem {
   id: string;
@@ -586,7 +587,8 @@ export function isGoogleDriveFolderUrl(url: string): boolean {
 
 export async function fetchGooglePhotosAlbum(
   albumUrl: string,
-  maxPhotos: number = 10000
+  maxPhotos: number = 10000,
+  signal?: AbortSignal
 ): Promise<{
   title: string;
   count: number;
@@ -599,11 +601,13 @@ export async function fetchGooglePhotosAlbum(
 
   try {
     let res = await fetch(
-      `/api/gphotos?url=${encodeURIComponent(trimmed)}&maxPhotos=${maxPhotos}`
+      `/api/gphotos?url=${encodeURIComponent(trimmed)}&maxPhotos=${maxPhotos}`,
+      { signal }
     );
     if (res.status === 404) {
       res = await fetch(
-        `/functions/api/gphotos?url=${encodeURIComponent(trimmed)}&maxPhotos=${maxPhotos}`
+        `/functions/api/gphotos?url=${encodeURIComponent(trimmed)}&maxPhotos=${maxPhotos}`,
+        { signal }
       );
     }
 
@@ -646,6 +650,7 @@ export async function fetchGooglePhotosAlbum(
       photos: data.photos,
     };
   } catch (err: any) {
+    if (err?.name === 'AbortError') throw err;
     return {
       title: '',
       count: 0,
@@ -657,7 +662,8 @@ export async function fetchGooglePhotosAlbum(
 }
 
 export async function fetchGoogleDriveFolder(
-  folderUrl: string
+  folderUrl: string,
+  signal?: AbortSignal
 ): Promise<{
   title: string;
   count: number;
@@ -669,9 +675,9 @@ export async function fetchGoogleDriveFolder(
   if (!trimmed) return { title: '', count: 0, totalAlbumCount: 0, photos: [], error: 'Empty URL' };
 
   try {
-    let res = await fetch(`/api/gdrive?url=${encodeURIComponent(trimmed)}`);
+    let res = await fetch(`/api/gdrive?url=${encodeURIComponent(trimmed)}`, { signal });
     if (res.status === 404) {
-      res = await fetch(`/functions/api/gdrive?url=${encodeURIComponent(trimmed)}`);
+      res = await fetch(`/functions/api/gdrive?url=${encodeURIComponent(trimmed)}`, { signal });
     }
 
     const contentType = res.headers.get('content-type') || '';
@@ -713,6 +719,7 @@ export async function fetchGoogleDriveFolder(
       photos: data.photos,
     };
   } catch (err: any) {
+    if (err?.name === 'AbortError') throw err;
     return {
       title: '',
       count: 0,
@@ -739,7 +746,7 @@ export function parseWebPhotoUrls(text: string): PhotoItem[] {
     const isGdrive = !!gdriveResolved;
 
     items.push({
-      id: `web-${idx}-${Date.now()}`,
+      id: makeStableWebPhotoId(idx, finalUrl),
       url: finalUrl,
       caption: isGdrive ? 'Google Drive Photo' : `Web Photo ${idx + 1}`,
       source: isGdrive ? 'gdrive' : 'web',
@@ -796,7 +803,7 @@ export async function resolveWebAndCloudPhotoUrls(
       const finalUrl = gdriveResolved || line;
       const isGdrive = !!gdriveResolved;
       directItems.push({
-        id: `web-${idx}-${Date.now()}`,
+        id: makeStableWebPhotoId(idx, finalUrl),
         url: finalUrl,
         caption: isGdrive ? 'Google Drive Photo' : `Web Photo ${idx + 1}`,
         source: isGdrive ? 'gdrive' : 'web',
@@ -808,8 +815,8 @@ export async function resolveWebAndCloudPhotoUrls(
   const initialGPhotosLimit = onBatch ? Math.min(150, maxPhotos) : maxPhotos;
 
   const initialAlbumPromises = [
-    ...gphotosUrls.map((u) => fetchGooglePhotosAlbum(u, initialGPhotosLimit)),
-    ...gdriveUrls.map((u) => fetchGoogleDriveFolder(u)),
+    ...gphotosUrls.map((u) => fetchGooglePhotosAlbum(u, initialGPhotosLimit, signal)),
+    ...gdriveUrls.map((u) => fetchGoogleDriveFolder(u, signal)),
   ];
 
   const albumResults = await Promise.all(initialAlbumPromises);
@@ -865,7 +872,7 @@ export async function resolveWebAndCloudPhotoUrls(
     (async () => {
       try {
         const deepGPhotos = await Promise.all(
-          gphotosUrls.map((u) => fetchGooglePhotosAlbum(u, maxPhotos))
+          gphotosUrls.map((u) => fetchGooglePhotosAlbum(u, maxPhotos, signal))
         );
         if (signal?.aborted) return;
 

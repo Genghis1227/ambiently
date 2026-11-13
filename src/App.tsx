@@ -19,6 +19,7 @@ import { useIdleCursor } from './hooks/useIdleCursor';
 import { isCanvasThemeLight } from './data/canvasThemes';
 import { isTimeInNightWindow } from './utils/nightMode';
 import { initUpdateChecker } from './services/updateChecker';
+import { photoSyncService } from './services/photoSyncService';
 import { UpdateNotificationBanner } from './components/common/UpdateNotificationBanner';
 import { PlexReauthBanner } from './components/common/PlexReauthBanner';
 import { SyncRefusedBanner } from './components/common/SyncRefusedBanner';
@@ -679,6 +680,44 @@ export function App() {
     updateSettings,
   ]);
 
+  // Scheduled background photo library rescan (24h default, pauses in Night Mode & hidden tabs)
+  const prevNightModeForSyncRef = useRef<boolean>(settings.nightModeEnabled);
+  useEffect(() => {
+    if (!isInitialized) return;
+
+    void photoSyncService.init();
+
+    const jitterMs = 90_000 + Math.floor(Math.random() * 150_000);
+    const bootTimer = setTimeout(() => {
+      void photoSyncService.runDueAutoSyncs();
+    }, jitterMs);
+
+    const intervalTimer = setInterval(() => {
+      void photoSyncService.runDueAutoSyncs();
+    }, 15 * 60 * 1000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void photoSyncService.runDueAutoSyncs();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearTimeout(bootTimer);
+      clearInterval(intervalTimer);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [isInitialized]);
+
+  useEffect(() => {
+    const wasNight = prevNightModeForSyncRef.current;
+    prevNightModeForSyncRef.current = settings.nightModeEnabled;
+    if (isInitialized && wasNight && !settings.nightModeEnabled) {
+      void photoSyncService.runDueAutoSyncs();
+    }
+  }, [isInitialized, settings.nightModeEnabled]);
+
   const visibleTabs = tabs.filter((t) =>
     t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false
   );
@@ -966,8 +1005,8 @@ export function App() {
             currentSourceLabel={settings.commonPhotoSourceLabel || 'Plex Photos'}
             currentSourceType="plex"
             currentPhotoCount={settings.commonPhotos?.length}
-            onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType) => {
-              applyCommonPhotosToAllWidgets(newPhotos, sourceName, sourceUrl, sourceType);
+            onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType, _applyToAll, plexSyncConfig) => {
+              applyCommonPhotosToAllWidgets(newPhotos, sourceName, sourceUrl, sourceType, plexSyncConfig);
               setIsPlexPairingModalOpen(false);
               if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('plex_auth_changed', { detail: { hasToken: true } }));

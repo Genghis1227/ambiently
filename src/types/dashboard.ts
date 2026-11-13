@@ -1,7 +1,13 @@
 import type { PhotoItem } from '../services/photos';
 import type { GroceryCategory } from './meals';
+import type {
+  PhotoAutoSyncInterval,
+  PlexPhotoSyncConfig,
+  PhotoTargetSyncMeta,
+} from '../utils/photoSyncPolicy';
 export type { ChoreWidgetConfig } from './chores';
 export type { MealWidgetConfig } from './meals';
+export type { PhotoAutoSyncInterval, PlexPhotoSyncConfig, PhotoTargetSyncMeta };
 
 export type DockPosition = 'left' | 'top' | 'right' | 'bottom';
 
@@ -173,6 +179,8 @@ export interface AppSettings {
   commonPhotoSourceUrl?: string;
   commonPhotoSourceType?: 'plex' | 'local' | 'web' | 'curated';
   commonPhotoShowDateTaken?: boolean;
+  commonPhotoPlexConfig?: PlexPhotoSyncConfig;
+  photoAutoSyncInterval?: PhotoAutoSyncInterval;
 
   // PIN Protection & Kid Kiosk Controls
   pinLockEnabled: boolean;
