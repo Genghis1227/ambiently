@@ -27,8 +27,17 @@ import {
   ArrowUpDown,
   Columns,
   Clock,
+  RefreshCw,
 } from 'lucide-react';
 import { useDashboardStore } from '../../store/dashboardStore';
+import { photoSyncService } from '../../services/photoSyncService';
+import {
+  formatCooldownRemaining,
+  formatRelativeSyncTime,
+  getManualRescanCooldownRemainingMs,
+  getPhotoSyncTargetKey,
+  isTargetRescannable,
+} from '../../utils/photoSyncPolicy';
 import { isWidgetStickerMode } from '../../utils/widgetStickerMode';
 import type { DashboardWidget, WidgetThemeMode } from '../../types/dashboard';
 import { type CalendarSource, normalizeCalendarUrl, testCalendarFeed } from '../../services/feeds';
@@ -98,6 +107,10 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
 }) => {
   const settings = useDashboardStore((state) => state.settings);
   const applyCommonPhotosToAllWidgets = useDashboardStore((state) => state.applyCommonPhotosToAllWidgets);
+  const photoSyncState = useDashboardStore((state) => state.photoSyncState);
+  const photoSyncMeta = useDashboardStore((state) => state.photoSyncMeta);
+  const [photoSyncNowTick, setPhotoSyncNowTick] = useState<number>(() => Date.now());
+  const [photoRescanNotice, setPhotoRescanNotice] = useState<string>('');
   const [title, setTitle] = useState('');
   const [themeMode, setThemeMode] = useState<WidgetThemeMode>('auto');
   const [widgetTransparentBg, setWidgetTransparentBg] = useState<boolean>(false);
@@ -377,6 +390,15 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
+
+  useEffect(() => {
+    if (!isOpen || widget?.type !== 'photo_frame') return;
+    setPhotoRescanNotice('');
+    setPhotoSyncNowTick(Date.now());
+    void photoSyncService.init();
+    const timer = setInterval(() => setPhotoSyncNowTick(Date.now()), 15000);
+    return () => clearInterval(timer);
+  }, [isOpen, widget?.type, widget?.id]);
 
   if (!isOpen || !widget) return null;
 
@@ -871,7 +893,8 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                           widget.config.customPhotos,
                           widget.config.sourceLabel || 'Google Photos & Web',
                           widget.config.sourceUrl,
-                          widget.config.sourceType || 'web'
+                          widget.config.sourceType || 'web',
+                          widget.config.plexSyncConfig
                         );
                         setSyncSuccessMessage(
                           `✓ Synced ${widget.config.customPhotos.length.toLocaleString()} photos as the Shared Board Library!`
@@ -960,7 +983,8 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                         widget.config.customPhotos,
                         widget.config.sourceLabel || (widget.config.sourceType === 'plex' ? 'Plex Media Server' : 'Google Photos & Web'),
                         widget.config.sourceType === 'web' ? widget.config.sourceUrl : undefined,
-                        widget.config.sourceType || 'web'
+                        widget.config.sourceType || 'web',
+                        widget.config.plexSyncConfig
                       );
                       setUseCommonSource(true);
                       setSyncSuccessMessage(
@@ -1064,6 +1088,93 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                   </button>
                 </div>
               )}
+
+              {/* Active Rescan Control & Anti-Spam Cooldown */}
+              {(() => {
+                const activeType = useCommonSource
+                  ? settings.commonPhotoSourceType
+                  : widget.config?.sourceType;
+                const activeUrl = useCommonSource
+                  ? (settings.commonPhotoSourceUrl || widget.config?.sourceUrl)
+                  : widget.config?.sourceUrl;
+                const activePlexConfig = useCommonSource
+                  ? settings.commonPhotoPlexConfig
+                  : widget.config?.plexSyncConfig;
+                const activeLabel = useCommonSource
+                  ? settings.commonPhotoSourceLabel
+                  : widget.config?.sourceLabel;
+
+                if (!isTargetRescannable(activeType, activeUrl, activePlexConfig, activeLabel)) {
+                  return null;
+                }
+
+                const syncTargetId = useCommonSource ? undefined : widget.id;
+                const targetKey = getPhotoSyncTargetKey(syncTargetId);
+                const targetMeta = photoSyncMeta[targetKey];
+                const cooldownRemainingMs = getManualRescanCooldownRemainingMs(targetMeta, photoSyncNowTick);
+                const isSyncBusy = Boolean(photoSyncState?.isActive);
+
+                return (
+                  <div className="p-3 rounded-xl bg-gray-900/70 border border-gray-800 space-y-1.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-[11px] text-gray-300 flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                        <span>
+                          Last synced:{' '}
+                          <strong className="text-white">
+                            {formatRelativeSyncTime(targetMeta?.lastSuccessAt, photoSyncNowTick)}
+                          </strong>
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={isSyncBusy || cooldownRemainingMs > 0}
+                        onClick={async () => {
+                          setPhotoRescanNotice('');
+                          const res = await photoSyncService.rescanTarget({
+                            targetWidgetId: syncTargetId,
+                            reason: 'manual',
+                          });
+                          setPhotoRescanNotice(res.message);
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 disabled:opacity-50 disabled:cursor-not-allowed border border-blue-500/30 text-blue-300 text-[11px] font-semibold inline-flex items-center gap-1.5 transition-all cursor-pointer"
+                        title={
+                          cooldownRemainingMs > 0
+                            ? `Cooldown prevents rapid rescans. Available again in ${formatCooldownRemaining(cooldownRemainingMs)}.`
+                            : 'Check Google Photos, Google Drive, or Plex for new photos'
+                        }
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isSyncBusy ? 'animate-spin' : ''}`} />
+                        <span>
+                          {isSyncBusy
+                            ? 'Syncing…'
+                            : cooldownRemainingMs > 0
+                            ? `Rescan in ${formatCooldownRemaining(cooldownRemainingMs)}`
+                            : 'Rescan Now'}
+                        </span>
+                      </button>
+                    </div>
+                    {(targetMeta?.lastResultSummary || photoRescanNotice || targetMeta?.lastError) && (
+                      <div className="text-[10px] text-gray-400 flex flex-wrap items-center justify-between gap-2">
+                        <span>{targetMeta?.lastResultSummary}</span>
+                        {(photoRescanNotice || targetMeta?.lastError) && (
+                          <span
+                            className={
+                              targetMeta?.lastError &&
+                              (!targetMeta.lastSuccessAt ||
+                                (targetMeta.lastErrorAt || 0) > targetMeta.lastSuccessAt)
+                                ? 'text-amber-300'
+                                : 'text-emerald-300'
+                            }
+                          >
+                            {photoRescanNotice || targetMeta?.lastError}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">

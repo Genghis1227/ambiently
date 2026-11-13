@@ -82,6 +82,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   commonPhotoSourceLabel: undefined,
   commonPhotoSourceUrl: undefined,
   commonPhotoSourceType: undefined,
+  commonPhotoPlexConfig: undefined,
+  photoAutoSyncInterval: 'daily',
   pinLockEnabled: false,
   pinHash: null,
   isLocked: false,

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.7] - 2026-11-13
+
+### Automatic Daily Photo Library Rescan & Anti-Spam Manual Cooldowns
+* **Scheduled Background Rescan (`src/services/photoSyncService.ts`, `src/utils/photoSyncPolicy.ts`, `src/App.tsx`, `src/components/settings/SettingsModal.tsx`):**
+  * Added an **Automatic Library Rescan** cadence setting in **Settings -> Photos** (`Daily (24h)` default, `Weekly (7d)`, or `Manual Only`) persisted in IndexedDB so kiosk reloads never re-trigger premature scans.
+  * Automatically pauses while Night Mode is active or the display tab is hidden, adds a 1.5–4 minute startup jitter, and commits silent diff-only updates so unchanged slideshows never flicker or reshuffle.
+* **Anti-Spam `Rescan Now` & Saved Plex Scope (`src/components/widgets/WidgetSettingsModal.tsx`, `src/components/photos/PhotoSourcesModal.tsx`, `functions/api/gphotos.ts`, `functions/api/gdrive.ts`):**
+  * Added 1-click **Rescan Now** controls in **Settings -> Photos** and **Tile Settings -> Photo Frame** with a persistent 15-minute cooldown (plus 30-second error retry backoff), single-flight locking, and aligned 15-minute `Cache-Control` headers on `/api/gphotos` & `/api/gdrive`.
+  * Persists tokenless `PlexPhotoSyncConfig` (server, section, folder checklist, or timeline date filter) alongside photo sources so Plex rescans automatically query the exact same library scope.
+
+---
+
 ## [0.6.6] - 2026-11-13
 
 ### Global Default Widget Style Setting (Auto, Sticker / No Outline, With Borders)

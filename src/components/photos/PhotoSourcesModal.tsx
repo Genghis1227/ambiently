@@ -30,6 +30,7 @@ import {
   Search,
   ArrowLeft,
   Info,
+  Clock,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -67,9 +68,16 @@ import {
   type PhotoDisplayStyle,
 } from '../../services/photos';
 import { photoSyncService } from '../../services/photoSyncService';
-import { addPlexToken } from '../../services/plexLinks';
+import { addPlexToken, stripPlexToken } from '../../services/plexLinks';
 import { usePlexServerTokens } from '../../hooks/usePlexServerTokens';
 import { useDashboardStore } from '../../store/dashboardStore';
+import {
+  type PlexPhotoSyncConfig,
+  formatCooldownRemaining,
+  getManualRescanCooldownRemainingMs,
+  getPhotoSyncTargetKey,
+  isSamePlexSyncConfig,
+} from '../../utils/photoSyncPolicy';
 
 const CATEGORY_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Sparkles,
@@ -97,7 +105,8 @@ interface PhotoSourcesModalProps {
     sourceName: string,
     sourceUrl?: string,
     sourceType?: 'plex' | 'local' | 'web' | 'curated',
-    applyToAll?: boolean
+    applyToAll?: boolean,
+    plexSyncConfig?: PlexPhotoSyncConfig
   ) => void;
   targetWidgetId?: string;
   initialWebUrls?: string;
@@ -170,6 +179,37 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   const storeCommonPhotos = useDashboardStore((s) => s.settings.commonPhotos);
   const storeCommonLabel = useDashboardStore((s) => s.settings.commonPhotoSourceLabel);
   const storeCommonType = useDashboardStore((s) => s.settings.commonPhotoSourceType);
+  const storeCommonPlexConfig = useDashboardStore((s) => s.settings.commonPhotoPlexConfig);
+  const storeWidgetPlexConfig = useDashboardStore((s) =>
+    targetWidgetId
+      ? (s.widgets.find((w) => w.id === targetWidgetId)?.config?.plexSyncConfig as PlexPhotoSyncConfig | undefined)
+      : undefined
+  );
+  const photoSyncMeta = useDashboardStore((s) => s.photoSyncMeta);
+  const savedPlexConfig = isCommonSource ? storeCommonPlexConfig : storeWidgetPlexConfig;
+  const targetSyncKey = getPhotoSyncTargetKey(applyToAll ? undefined : targetWidgetId);
+  const [nowTick, setNowTick] = useState<number>(() => Date.now());
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setNowTick(Date.now());
+    void photoSyncService.init();
+    const timer = setInterval(() => setNowTick(Date.now()), 15000);
+    return () => clearInterval(timer);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !savedPlexConfig) return;
+    setPlexScopeMode(savedPlexConfig.scopeMode || 'timeline');
+    setPlexDateFilter(savedPlexConfig.dateFilter || 'all');
+    setSelectedPlexFolderKeys(new Set(savedPlexConfig.folderKeys || []));
+  }, [isOpen, savedPlexConfig]);
+
+  const manualCooldownRemainingMs = getManualRescanCooldownRemainingMs(
+    photoSyncMeta[targetSyncKey],
+    nowTick
+  );
+
   const effectivePhotoCount = currentPhotoCount ?? (isCommonSource ? storeCommonPhotos?.length : undefined) ?? 0;
   const effectiveSourceLabel = currentSourceLabel || (isCommonSource ? storeCommonLabel : undefined);
   const effectiveSourceType = currentSourceType || (isCommonSource ? storeCommonType : undefined);
@@ -323,7 +363,11 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
       const sections = await getPlexPhotoLibraries(uri, server.accessToken || token, true);
       setPhotoSections(sections);
       if (sections.length > 0) {
-        const preferredSection = sections.find((s) => s.isPhoto) || sections[0];
+        const preferredSection =
+          (savedPlexConfig?.sectionKey &&
+            sections.find((s) => s.key === savedPlexConfig.sectionKey)) ||
+          sections.find((s) => s.isPhoto) ||
+          sections[0];
         setSelectedSectionKey(preferredSection.key);
         loadSectionFolders(server, token, preferredSection.key);
       } else {
@@ -342,8 +386,14 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
       const sList = await getPlexServers(token);
       setServers(sList);
       if (sList.length > 0) {
-        setSelectedServer(sList[0]);
-        loadPhotoSections(sList[0], token);
+        const preferredServer =
+          (savedPlexConfig?.serverClientIdentifier &&
+            sList.find((s) => s.clientIdentifier === savedPlexConfig.serverClientIdentifier)) ||
+          (savedPlexConfig?.serverName &&
+            sList.find((s) => s.name === savedPlexConfig.serverName)) ||
+          sList[0];
+        setSelectedServer(preferredServer);
+        loadPhotoSections(preferredServer, token);
       } else {
         setStatusMessage("No Plex Media Servers found for this account.");
       }
@@ -464,6 +514,15 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
     }
 
     const sourceLabel = `Plex (${selectedServer.name} - ${sectionTitle}${folderLabelSuffix}${timeLabelSuffix})`;
+    const plexSyncConfig: PlexPhotoSyncConfig = {
+      serverClientIdentifier: selectedServer.clientIdentifier,
+      serverName: selectedServer.name,
+      serverUri: stripPlexToken(uri),
+      sectionKey: selectedSectionKey,
+      scopeMode: plexScopeMode,
+      folderKeys: plexScopeMode === 'folders' ? targetFolderKeys : undefined,
+      dateFilter: plexScopeMode === 'timeline' ? plexDateFilter : undefined,
+    };
 
     setPlexLoading(true);
     setStatusMessage(
@@ -479,10 +538,11 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
       folderOrAlbumKeys: targetFolderKeys,
       minYear,
       sourceLabel,
+      plexSyncConfig,
       targetWidgetId: isCommonSource ? undefined : targetWidgetId,
       applyToAll,
       onInitialBatchReady: (initialBatch) => {
-        onPhotosLoaded(initialBatch, sourceLabel, undefined, 'plex', applyToAll);
+        onPhotosLoaded(initialBatch, sourceLabel, undefined, 'plex', applyToAll, plexSyncConfig);
         setStatusMessage(`Streaming ${initialBatch.length} photos! Continuing library indexing in background...`);
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('plex_auth_changed', { detail: { hasToken: true } }));
@@ -1471,41 +1531,70 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                     </div>
                   )}
 
-                  <button
-                    onClick={handleLoadPlexPhotos}
-                    disabled={
-                      plexLoading ||
-                      photoSections.length === 0 ||
-                      (plexScopeMode === 'folders' && selectedPlexFolderKeys.size === 0)
-                    }
-                    className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-xs shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    {plexLoading ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                        <span>Fetching Photos...</span>
-                      </>
-                    ) : (
-                      <>
-                        <ImageIcon className="w-4 h-4" />
-                        <span>
-                          {plexScopeMode === 'folders'
-                            ? `Stream from ${selectedPlexFolderKeys.size} Selected Folder${
-                                selectedPlexFolderKeys.size !== 1 ? 's' : ''
-                              }`
-                            : plexDateFilter === 'last3Years'
-                            ? 'Stream Memories (Last 3 Years)'
-                            : plexDateFilter === 'last5Years'
-                            ? 'Stream Memories (Last 5 Years)'
-                            : plexDateFilter === 'last1Year'
-                            ? 'Stream Memories (Past Year)'
-                            : sectionTotalPhotos && sectionTotalPhotos > 0
-                            ? `Stream Entire Library (${sectionTotalPhotos.toLocaleString()} Photos)`
-                            : 'Stream Entire Library (All Time)'}
-                        </span>
-                      </>
-                    )}
-                  </button>
+                  {(() => {
+                    const currentUri = selectedServer ? getBestPlexConnectionUri(selectedServer) : '';
+                    const draftPlexConfig: PlexPhotoSyncConfig = {
+                      serverClientIdentifier: selectedServer?.clientIdentifier,
+                      serverName: selectedServer?.name,
+                      serverUri: stripPlexToken(currentUri),
+                      sectionKey: selectedSectionKey,
+                      scopeMode: plexScopeMode,
+                      folderKeys:
+                        plexScopeMode === 'folders' ? Array.from(selectedPlexFolderKeys) : undefined,
+                      dateFilter: plexScopeMode === 'timeline' ? plexDateFilter : undefined,
+                    };
+                    const isPlexCooldownBlocked =
+                      Boolean(savedPlexConfig) &&
+                      isSamePlexSyncConfig(draftPlexConfig, savedPlexConfig) &&
+                      manualCooldownRemainingMs > 0;
+
+                    return (
+                      <button
+                        onClick={handleLoadPlexPhotos}
+                        disabled={
+                          plexLoading ||
+                          photoSections.length === 0 ||
+                          (plexScopeMode === 'folders' && selectedPlexFolderKeys.size === 0) ||
+                          isPlexCooldownBlocked
+                        }
+                        className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
+                      >
+                        {plexLoading ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            <span>Fetching Photos...</span>
+                          </>
+                        ) : isPlexCooldownBlocked ? (
+                          <>
+                            <Clock className="w-4 h-4" />
+                            <span>
+                              Synced recently • Rescan available in{' '}
+                              {formatCooldownRemaining(manualCooldownRemainingMs)}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <ImageIcon className="w-4 h-4" />
+                            <span>
+                              {plexScopeMode === 'folders'
+                                ? `Stream from ${selectedPlexFolderKeys.size} Selected Folder${
+                                    selectedPlexFolderKeys.size !== 1 ? 's' : ''
+                                  }`
+                                : plexDateFilter === 'last3Years'
+                                ? 'Stream Memories (Last 3 Years)'
+                                : plexDateFilter === 'last5Years'
+                                ? 'Stream Memories (Last 5 Years)'
+                                : plexDateFilter === 'last1Year'
+                                ? 'Stream Memories (Past Year)'
+                                : sectionTotalPhotos && sectionTotalPhotos > 0
+                                ? `Stream Entire Library (${sectionTotalPhotos.toLocaleString()} Photos)`
+                                : 'Stream Entire Library (All Time)'}
+                            </span>
+                          </>
+                        )}
+                      </button>
+                    );
+                  })()}
                 </div>
               )}
             </div>
@@ -2082,36 +2171,53 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
                 </div>
               )}
 
-              <button
-                type="button"
-                onClick={handleApplyWebUrls}
-                disabled={isWebLoading || detectedSources.length === 0}
-                className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-xs shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
-              >
-                {isWebLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>
-                      {detectedSources.length > 1
-                        ? `Resolving & Merging ${detectedSources.length} Cloud Sources...`
-                        : 'Resolving Google Photos Album & Images...'}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <Globe className="w-4 h-4" />
-                    <span>
-                      {detectedSources.length > 1
-                        ? initialWebUrls && initialWebUrls.trim() === webUrlsText.trim()
-                          ? `Reload & Sync All ${detectedSources.length} Sources`
-                          : `Load & Merge All ${detectedSources.length} Sources`
-                        : initialWebUrls && initialWebUrls.trim() === webUrlsText.trim()
-                        ? `Reload & Sync ${detectedSources[0]?.label || 'Album'}`
-                        : `Load ${detectedSources[0]?.label || 'Google Photos & Web'}`}
-                    </span>
-                  </>
-                )}
-              </button>
+              {(() => {
+                const isWebUnchangedReload = Boolean(
+                  initialWebUrls && initialWebUrls.trim() === webUrlsText.trim()
+                );
+                const isWebCooldownBlocked = isWebUnchangedReload && manualCooldownRemainingMs > 0;
+
+                return (
+                  <button
+                    type="button"
+                    onClick={handleApplyWebUrls}
+                    disabled={isWebLoading || detectedSources.length === 0 || isWebCooldownBlocked}
+                    className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    {isWebLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>
+                          {detectedSources.length > 1
+                            ? `Resolving & Merging ${detectedSources.length} Cloud Sources...`
+                            : 'Resolving Google Photos Album & Images...'}
+                        </span>
+                      </>
+                    ) : isWebCooldownBlocked ? (
+                      <>
+                        <Clock className="w-4 h-4" />
+                        <span>
+                          Synced recently • Reload available in{' '}
+                          {formatCooldownRemaining(manualCooldownRemainingMs)}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <Globe className="w-4 h-4" />
+                        <span>
+                          {detectedSources.length > 1
+                            ? isWebUnchangedReload
+                              ? `Reload & Sync All ${detectedSources.length} Sources`
+                              : `Load & Merge All ${detectedSources.length} Sources`
+                            : isWebUnchangedReload
+                            ? `Reload & Sync ${detectedSources[0]?.label || 'Album'}`
+                            : `Load ${detectedSources[0]?.label || 'Google Photos & Web'}`}
+                        </span>
+                      </>
+                    )}
+                  </button>
+                );
+              })()}
             </div>
           )}
 

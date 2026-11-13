@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.6.7",
+    date: "November 13, 2026",
+    title: "Automatic Daily Photo Rescan & Anti-Spam Cooldowns (Google Photos, Drive & Plex)",
+    highlights: [
+      "Scheduled Background Rescan (Daily 24h Default): Automatically checks connected Google Photos albums, Google Drive folders, and Plex libraries every 24 hours (configurable to Weekly or Manual Only in Settings -> Photos), skipping Night Mode and hidden tabs.",
+      "Anti-Spam Rescan Now & 15-Minute Cooldown: Added 1-click Rescan Now buttons in Settings -> Photos and Tile Settings with a persistent 15-minute cooldown after synced checks, single-flight locking, and 30-second error retry backoff.",
+      "Silent Diff-Only Updates & Saved Plex Scope: Saves your selected Plex server, library section, folder checklist, or timeline date filter locally and only updates the slideshow when photos are actually added or removed.",
+    ],
+  },
+  {
     version: "v0.6.6",
     date: "November 13, 2026",
     title: "Global Default Widget Style Switch (Auto, Sticker / No Outline, or With Borders)",
