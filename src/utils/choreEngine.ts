@@ -45,21 +45,99 @@ export function daysBetweenDateKeys(startKey: string, endKey: string): number {
 }
 
 /**
- * Returns the Sunday "YYYY-MM-DD" date key starting the calendar week of `dateKey`.
+ * Returns the "YYYY-MM-DD" date key starting the calendar week of `dateKey`,
+ * respecting the configured first day of the week ('sunday' or 'monday').
  */
-export function getWeekStartDateKey(dateKey: string): string {
+export function getWeekStartDateKey(
+  dateKey: string,
+  weekStartsOn: 'sunday' | 'monday' = 'sunday'
+): string {
   const date = parseLocalDateKey(dateKey);
   const dayOfWeek = date.getDay(); // 0 (Sun) .. 6 (Sat)
-  const sunday = new Date(
+  const startDay = weekStartsOn === 'monday' ? 1 : 0;
+  const daysBack = (dayOfWeek - startDay + 7) % 7;
+  const startOfWeekDate = new Date(
     date.getFullYear(),
     date.getMonth(),
-    date.getDate() - dayOfWeek,
+    date.getDate() - daysBack,
     0,
     0,
     0,
     0
   );
-  return localDateKey(sunday);
+  return localDateKey(startOfWeekDate);
+}
+
+/**
+ * Returns the "YYYY-MM-DD" date key ending the 7-day calendar week of `dateKey`.
+ */
+export function getWeekEndDateKey(
+  dateKey: string,
+  weekStartsOn: 'sunday' | 'monday' = 'sunday'
+): string {
+  const startKey = getWeekStartDateKey(dateKey, weekStartsOn);
+  const start = parseLocalDateKey(startKey);
+  const end = new Date(
+    start.getFullYear(),
+    start.getMonth(),
+    start.getDate() + 6,
+    0,
+    0,
+    0,
+    0
+  );
+  return localDateKey(end);
+}
+
+/**
+ * Checks whether a "Weekly — Any Day (1x / wk)" chore has already been completed
+ * (or submitted for parent approval) during the calendar week `[weekStartKey, weekEndKey]`,
+ * inspecting both `instances` and active (`canRevert !== false`) `chore_completion` ledger entries.
+ */
+export function isWeeklyChoreCompletedInWeek(
+  choreId: string,
+  weekStartKey: string,
+  weekEndKey: string,
+  instances: ActiveChoreInstance[],
+  ledger: LedgerEntry[] = []
+): boolean {
+  for (const inst of instances) {
+    if (inst.choreId !== choreId) continue;
+    if (inst.status !== 'completed' && inst.status !== 'awaiting_approval') continue;
+
+    if (inst.dateScheduled >= weekStartKey && inst.dateScheduled <= weekEndKey) {
+      return true;
+    }
+    if (inst.completedAt) {
+      const completedDateKey = localDateKey(new Date(inst.completedAt));
+      if (completedDateKey >= weekStartKey && completedDateKey <= weekEndKey) {
+        return true;
+      }
+    }
+  }
+
+  const refPrefix = `${choreId}_`;
+  for (const entry of ledger) {
+    if (entry.type !== 'chore_completion' || entry.canRevert === false) continue;
+    if (!entry.refId.startsWith(refPrefix)) continue;
+
+    const scheduledSuffix = entry.refId.slice(refPrefix.length);
+    if (
+      /^\d{4}-\d{2}-\d{2}$/.test(scheduledSuffix) &&
+      scheduledSuffix >= weekStartKey &&
+      scheduledSuffix <= weekEndKey
+    ) {
+      return true;
+    }
+    if (entry.timestamp) {
+      const entryDateKey = localDateKey(new Date(entry.timestamp));
+      if (entryDateKey >= weekStartKey && entryDateKey <= weekEndKey) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -294,7 +372,9 @@ export function isDateMatchingTemplateCadence(
 export function isTemplateDueOnDate(
   template: ChoreTemplate,
   dateKey: string,
-  existingInstances: ActiveChoreInstance[]
+  existingInstances: ActiveChoreInstance[],
+  weekStartsOn: 'sunday' | 'monday' = 'sunday',
+  ledger: LedgerEntry[] = []
 ): boolean {
   const date = parseLocalDateKey(dateKey);
   const dayOfWeek = date.getDay(); // 0 (Sun) .. 6 (Sat)
@@ -308,18 +388,27 @@ export function isTemplateDueOnDate(
       return dayOfWeek === 0 || dayOfWeek === 6;
     case 'weekly': {
       if (template.weeklyAnyDay) {
-        const weekStartKey = getWeekStartDateKey(dateKey);
-        const alreadyHandledThisWeek = existingInstances.some(
+        const weekStartKey = getWeekStartDateKey(dateKey, weekStartsOn);
+        const weekEndKey = getWeekEndDateKey(dateKey, weekStartsOn);
+        if (
+          isWeeklyChoreCompletedInWeek(
+            template.id,
+            weekStartKey,
+            weekEndKey,
+            existingInstances,
+            ledger
+          )
+        ) {
+          return false;
+        }
+        const hasPendingThisWeek = existingInstances.some(
           (inst) =>
             inst.choreId === template.id &&
             inst.dateScheduled >= weekStartKey &&
-            inst.dateScheduled <= dateKey &&
-            (inst.status === 'pending' ||
-              inst.status === 'awaiting_approval' ||
-              inst.status === 'completed' ||
-              inst.status === 'expired')
+            inst.dateScheduled <= weekEndKey &&
+            inst.status === 'pending'
         );
-        return !alreadyHandledThisWeek;
+        return !hasPendingThisWeek;
       }
       const days =
         template.daysOfWeek && template.daysOfWeek.length > 0 ? template.daysOfWeek : [0];
@@ -482,10 +571,61 @@ export function evaluateChoreRollover(
     return inst;
   });
 
-  // 3. Process past-day pending instances
+  // 2c. Reconcile any instance whose completion is recorded in the append-only ledger
+  //     (protects against stale multi-device sync snapshots overwriting completed instances back to pending)
+  const activeCompletionByInstanceId = new Map<string, LedgerEntry[]>();
+  for (const entry of nextLedger) {
+    if (entry.type === 'chore_completion' && entry.canRevert !== false) {
+      const list = activeCompletionByInstanceId.get(entry.refId) || [];
+      list.push(entry);
+      activeCompletionByInstanceId.set(entry.refId, list);
+    }
+  }
+  nextInstances = nextInstances.map((inst) => {
+    if (inst.status === 'pending' && activeCompletionByInstanceId.has(inst.instanceId)) {
+      const entries = activeCompletionByInstanceId.get(inst.instanceId)!;
+      changed = true;
+      return {
+        ...inst,
+        status: 'completed' as const,
+        completedBy: entries.map((e) => ({
+          profileId: e.profileId,
+          pointsAwarded: e.pointsDelta,
+        })),
+        completedAt: entries[entries.length - 1]?.timestamp || now.toISOString(),
+        isOverdue: false,
+      };
+    }
+    return inst;
+  });
+
+  // 3. Process past-day and weeklyAnyDay pending instances
   // Track overdue instances per choreId so at most one active overdue carry-over exists per template
   const overdueByChoreId = new Map<string, ActiveChoreInstance>();
-  const currentWeekStartKey = getWeekStartDateKey(todayKey);
+  const weekStartsOn: 'sunday' | 'monday' =
+    snapshot.householdSettings.weekStartsOn === 'monday' ? 'monday' : 'sunday';
+  const currentWeekStartKey = getWeekStartDateKey(todayKey, weekStartsOn);
+  const currentWeekEndKey = getWeekEndDateKey(todayKey, weekStartsOn);
+
+  // Track which "Weekly — Any Day (1x / wk)" templates have already been completed this week,
+  // and deduplicate so at most one pending instance exists for an uncompleted weeklyAnyDay template.
+  const weeklyAnyDayHandledChores = new Set<string>();
+  const weeklyAnyDayPendingKept = new Set<string>();
+  for (const tpl of snapshot.templates) {
+    if (
+      tpl.cadence === 'weekly' &&
+      tpl.weeklyAnyDay &&
+      isWeeklyChoreCompletedInWeek(
+        tpl.id,
+        currentWeekStartKey,
+        currentWeekEndKey,
+        nextInstances,
+        nextLedger
+      )
+    ) {
+      weeklyAnyDayHandledChores.add(tpl.id);
+    }
+  }
 
   nextInstances = nextInstances.map((inst) => {
     if (inst.status === 'pending') {
@@ -499,15 +639,23 @@ export function evaluateChoreRollover(
         return { ...inst, status: 'expired' as const, isOverdue: false };
       }
 
-      if (inst.dateScheduled < todayKey) {
-        // For "Weekly — Any Day (1x / Week)" chores, keep the pending instance active
-        // throughout the current calendar week (Sun–Sat) without marking it overdue mid-week
-        if (
-          tpl.cadence === 'weekly' &&
-          tpl.weeklyAnyDay &&
-          !inst.isOverdue &&
-          inst.dateScheduled >= currentWeekStartKey
-        ) {
+      // Special handling for "Weekly — Any Day (1x / wk)" chores:
+      // - If already completed at any point in the current week, expire any remaining/duplicate pending instances
+      //   so it stays checked off until the configured first day of the next week.
+      // - If from a prior week (< currentWeekStartKey), expire it cleanly at the week boundary so the new week
+      //   starts with a single fresh instance on the first day of the week.
+      // - If from earlier in the current week and still unchecked, carry the single pending instance forward to today.
+      if (tpl.cadence === 'weekly' && tpl.weeklyAnyDay) {
+        if (weeklyAnyDayHandledChores.has(tpl.id) || inst.dateScheduled < currentWeekStartKey) {
+          changed = true;
+          return { ...inst, status: 'expired' as const, isOverdue: false };
+        }
+        if (weeklyAnyDayPendingKept.has(tpl.id)) {
+          changed = true;
+          return { ...inst, status: 'expired' as const, isOverdue: false };
+        }
+        weeklyAnyDayPendingKept.add(tpl.id);
+        if (inst.dateScheduled !== todayKey || inst.isOverdue || inst.instanceId !== `${inst.choreId}_${todayKey}`) {
           changed = true;
           return {
             ...inst,
@@ -516,7 +664,10 @@ export function evaluateChoreRollover(
             isOverdue: false,
           };
         }
+        return inst;
+      }
 
+      if (inst.dateScheduled < todayKey) {
         const daysLate = daysBetweenDateKeys(inst.dateScheduled, todayKey);
         // Auto-dismiss overdue tasks after 24 whole hours (daysLate > 1) or if rolloverUntilDone is disabled
         if (!tpl.rolloverUntilDone || daysLate > 1) {
@@ -557,7 +708,13 @@ export function evaluateChoreRollover(
   const existingInstanceIds = new Set(nextInstances.map((i) => i.instanceId));
   for (const tpl of snapshot.templates) {
     const instanceId = `${tpl.id}_${todayKey}`;
-    if (existingInstanceIds.has(instanceId)) continue;
+    const existingForToday = nextInstances.find((i) => i.instanceId === instanceId);
+    if (
+      existingForToday &&
+      (existingForToday.status !== 'expired' || !(tpl.cadence === 'weekly' && tpl.weeklyAnyDay))
+    ) {
+      continue;
+    }
 
     // For bounty or interval templates that already have an active overdue carry-over, don't spawn a duplicate
     if (
@@ -567,15 +724,23 @@ export function evaluateChoreRollover(
       continue;
     }
 
-    if (isTemplateDueOnDate(tpl, todayKey, nextInstances)) {
-      nextInstances.push({
-        instanceId,
-        choreId: tpl.id,
-        dateScheduled: todayKey,
-        status: 'pending',
-        isOverdue: false,
-      });
-      existingInstanceIds.add(instanceId);
+    if (isTemplateDueOnDate(tpl, todayKey, nextInstances, weekStartsOn, nextLedger)) {
+      if (existingForToday) {
+        nextInstances = nextInstances.map((i) =>
+          i.instanceId === instanceId
+            ? { ...i, status: 'pending' as const, isOverdue: false, completedBy: undefined, completedAt: undefined }
+            : i
+        );
+      } else {
+        nextInstances.push({
+          instanceId,
+          choreId: tpl.id,
+          dateScheduled: todayKey,
+          status: 'pending',
+          isOverdue: false,
+        });
+        existingInstanceIds.add(instanceId);
+      }
       changed = true;
     }
   }
@@ -682,7 +847,14 @@ export function mergeChoreSnapshotsAuthoritative(
   );
   const deletedTemplateSet = new Set(deletedTemplateIds);
 
-  // 3. Merge Instances: remote wins on conflict when remoteIsParentAuthoritative
+  // 3. Merge Instances: remote wins on conflict when remoteIsParentAuthoritative,
+  //    but never let a stale 'pending' instance overwrite an instance that has an active
+  //    (non-reverted) completion in mergedLedger.
+  const activeCompletedRefIds = new Set(
+    mergedLedger
+      .filter((e) => e.type === 'chore_completion' && e.canRevert !== false)
+      .map((e) => e.refId)
+  );
   const instanceMap = new Map<string, ActiveChoreInstance>();
   for (const inst of remoteIsParentAuthoritative ? local.instances : remote.instances) {
     if (!deletedTemplateSet.has(inst.choreId)) {
@@ -691,6 +863,15 @@ export function mergeChoreSnapshotsAuthoritative(
   }
   for (const inst of remoteIsParentAuthoritative ? remote.instances : local.instances) {
     if (!deletedTemplateSet.has(inst.choreId)) {
+      const existing = instanceMap.get(inst.instanceId);
+      if (
+        existing &&
+        existing.status === 'completed' &&
+        inst.status === 'pending' &&
+        activeCompletedRefIds.has(inst.instanceId)
+      ) {
+        continue;
+      }
       instanceMap.set(inst.instanceId, inst);
     }
   }

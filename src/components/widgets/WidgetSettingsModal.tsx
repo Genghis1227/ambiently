@@ -174,6 +174,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const [textTransform, setTextTransform] = useState<NonNullable<TextBoxConfig['textTransform']>>('none');
   const [letterSpacing, setLetterSpacing] = useState<NonNullable<TextBoxConfig['letterSpacing']>>('normal');
   const [textBgStyle, setTextBgStyle] = useState<NonNullable<TextBoxConfig['bgStyle']>>('transparent');
+  const [textTransparentBg, setTextTransparentBg] = useState<boolean>(true);
 
   // Single Image / GIF states
   const [imageUrl, setImageUrl] = useState('');
@@ -317,7 +318,17 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setTextShadow(widget.config?.textShadow ?? true);
       setTextTransform(widget.config?.textTransform || 'none');
       setLetterSpacing(widget.config?.letterSpacing || 'normal');
-      setTextBgStyle(widget.config?.bgStyle || 'transparent');
+      const isSticker =
+        widget.config?.transparentBg !== false &&
+        (!widget.config?.bgStyle || widget.config?.bgStyle === 'transparent');
+      setTextTransparentBg(isSticker);
+      setTextBgStyle(
+        isSticker
+          ? 'transparent'
+          : widget.config?.bgStyle && widget.config.bgStyle !== 'transparent'
+          ? widget.config.bgStyle
+          : 'glass'
+      );
     } else if (widget.type === 'image') {
       setImageUrl(widget.config?.url || '');
       setImageFit(widget.config?.fit || 'contain');
@@ -570,7 +581,8 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.textShadow = textShadow;
       configUpdates.textTransform = textTransform;
       configUpdates.letterSpacing = letterSpacing;
-      configUpdates.bgStyle = textBgStyle;
+      configUpdates.bgStyle = textTransparentBg ? 'transparent' : textBgStyle === 'transparent' ? 'glass' : textBgStyle;
+      configUpdates.transparentBg = textTransparentBg;
     } else if (widget.type === 'image') {
       configUpdates.url = imageUrl.trim();
       configUpdates.fit = imageFit;
@@ -2371,11 +2383,11 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                 </label>
                 <div
                   className={`w-full min-h-[90px] rounded-xl p-4 flex flex-col justify-center border transition-all ${
-                    textBgStyle === 'glass'
+                    textTransparentBg || textBgStyle === 'transparent'
+                      ? 'bg-black/30 border-transparent'
+                      : textBgStyle === 'glass'
                       ? 'bg-gray-950/40 backdrop-blur-md border-white/10'
-                      : textBgStyle === 'solid'
-                      ? 'bg-gray-900 border-gray-800'
-                      : 'bg-black/30 border-dashed border-gray-700/60'
+                      : 'bg-gray-900 border-gray-800'
                   }`}
                 >
                   <div
@@ -2608,14 +2620,17 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                   </label>
                   <div className="grid grid-cols-3 gap-1">
                     {[
-                      { id: 'transparent', label: 'Clean' },
+                      { id: 'transparent', label: 'No Box' },
                       { id: 'glass', label: 'Glass' },
                       { id: 'solid', label: 'Dark' },
                     ].map((bg) => (
                       <button
                         key={bg.id}
                         type="button"
-                        onClick={() => setTextBgStyle(bg.id as any)}
+                        onClick={() => {
+                          setTextBgStyle(bg.id as any);
+                          setTextTransparentBg(bg.id === 'transparent');
+                        }}
                         className={`py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                           textBgStyle === bg.id
                             ? 'bg-blue-600/30 border border-blue-500 text-blue-300'
@@ -2627,6 +2642,35 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                     ))}
                   </div>
                 </div>
+              </div>
+
+              {/* Sticker / Frameless Mode (Remove Box Outline) */}
+              <div className="flex items-center justify-between pt-2 border-t border-gray-800/60">
+                <div>
+                  <span className="text-xs text-gray-300 block font-semibold">
+                    Sticker / Transparent Mode (Remove Box Outline)
+                  </span>
+                  <span className="text-[10px] text-gray-500">
+                    Removes the card outline and background box so text floats directly on canvas
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !textTransparentBg;
+                    setTextTransparentBg(next);
+                    setTextBgStyle(next ? 'transparent' : textBgStyle === 'transparent' ? 'glass' : textBgStyle);
+                  }}
+                  className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer ${
+                    textTransparentBg ? 'bg-emerald-600' : 'bg-gray-700'
+                  }`}
+                >
+                  <div
+                    className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                      textTransparentBg ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
               </div>
 
               {/* Text Color Swatches & Drop Shadow */}

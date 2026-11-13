@@ -392,4 +392,138 @@ describe('Chore Engine & useChoreStore', () => {
       [{ profileId: 'kid_2', pointsAwarded: 10 }]
     );
   });
+
+  it('keeps weeklyAnyDay (1x/wk) chores hidden for the rest of the week after completion and respawns on weekStartsOn day', () => {
+    const base = createBaseSnapshot();
+    const laundryTpl = {
+      id: 'tpl_laundry_alyssa',
+      title: 'Laundry',
+      points: 20,
+      assignedTo: 'kid_2',
+      cadence: 'weekly' as const,
+      weeklyAnyDay: true,
+      requiresApproval: false,
+      rolloverUntilDone: true,
+      overduePolicy: 'full' as const,
+    };
+
+    // Wednesday 2026-11-11: initial weeklyAnyDay pending instance
+    const wednesdaySnap: ChoreEngineSnapshot = {
+      ...base,
+      templates: [laundryTpl],
+      instances: [
+        {
+          instanceId: 'tpl_laundry_alyssa_2026-11-11',
+          choreId: 'tpl_laundry_alyssa',
+          dateScheduled: '2026-11-11',
+          status: 'pending',
+          isOverdue: false,
+        },
+      ],
+      householdSettings: {
+        ...base.householdSettings,
+        weekStartsOn: 'sunday',
+        lastRolloverDate: '2026-11-11',
+      },
+    };
+
+    // Rollover to Thursday 2026-11-12: unchecked instance moves to Thursday
+    const { snapshot: thursdaySnap } = evaluateChoreRollover(
+      wednesdaySnap,
+      new Date(2026, 10, 12, 8, 0, 0)
+    );
+    const thuPending = thursdaySnap.instances.filter(
+      (i) => i.choreId === 'tpl_laundry_alyssa' && i.status === 'pending'
+    );
+    assert.equal(thuPending.length, 1);
+    assert.equal(thuPending[0]?.dateScheduled, '2026-11-12');
+
+    // Complete Laundry on Thursday 2026-11-12, and also simulate a stale Wednesday pending instance from multi-device merge
+    const completedThursday: ChoreEngineSnapshot = {
+      ...thursdaySnap,
+      instances: [
+        {
+          instanceId: 'tpl_laundry_alyssa_2026-11-11',
+          choreId: 'tpl_laundry_alyssa',
+          dateScheduled: '2026-11-11',
+          status: 'pending',
+          isOverdue: false,
+        },
+        {
+          instanceId: 'tpl_laundry_alyssa_2026-11-12',
+          choreId: 'tpl_laundry_alyssa',
+          dateScheduled: '2026-11-12',
+          status: 'completed',
+          completedBy: [{ profileId: 'kid_2', pointsAwarded: 20 }],
+          completedAt: '2026-11-12T18:00:00.000Z',
+          isOverdue: false,
+        },
+      ],
+      ledger: [
+        {
+          id: 'ledger_laundry_thu',
+          timestamp: '2026-11-12T18:00:00.000Z',
+          type: 'chore_completion',
+          refId: 'tpl_laundry_alyssa_2026-11-12',
+          profileId: 'kid_2',
+          pointsDelta: 20,
+          approvedBy: 'auto',
+          canRevert: true,
+        },
+      ],
+    };
+
+    // Rollover to Friday 2026-11-13: must NOT reappear as pending!
+    const { snapshot: fridaySnap } = evaluateChoreRollover(
+      completedThursday,
+      new Date(2026, 10, 13, 8, 0, 0)
+    );
+    assert.equal(
+      fridaySnap.instances.filter(
+        (i) => i.choreId === 'tpl_laundry_alyssa' && i.status === 'pending'
+      ).length,
+      0
+    );
+
+    // If weekStartsOn is 'monday', Sunday 2026-11-15 is STILL in the same Mon–Sun week (2026-11-09..2026-11-15),
+    // so it stays hidden on Sunday and comes back on Monday 2026-11-16!
+    const mondayPrefSnap: ChoreEngineSnapshot = {
+      ...fridaySnap,
+      householdSettings: {
+        ...fridaySnap.householdSettings,
+        weekStartsOn: 'monday',
+      },
+    };
+    const { snapshot: sundayWithMondayStart } = evaluateChoreRollover(
+      mondayPrefSnap,
+      new Date(2026, 10, 15, 8, 0, 0)
+    );
+    assert.equal(
+      sundayWithMondayStart.instances.filter(
+        (i) => i.choreId === 'tpl_laundry_alyssa' && i.status === 'pending'
+      ).length,
+      0
+    );
+
+    const { snapshot: mondayWithMondayStart } = evaluateChoreRollover(
+      sundayWithMondayStart,
+      new Date(2026, 10, 16, 8, 0, 0)
+    );
+    const monPending = mondayWithMondayStart.instances.filter(
+      (i) => i.choreId === 'tpl_laundry_alyssa' && i.status === 'pending'
+    );
+    assert.equal(monPending.length, 1);
+    assert.equal(monPending[0]?.dateScheduled, '2026-11-16');
+
+    // If weekStartsOn is 'sunday', it comes back on Sunday 2026-11-15!
+    const { snapshot: sundayWithSundayStart } = evaluateChoreRollover(
+      fridaySnap,
+      new Date(2026, 10, 15, 8, 0, 0)
+    );
+    const sunPending = sundayWithSundayStart.instances.filter(
+      (i) => i.choreId === 'tpl_laundry_alyssa' && i.status === 'pending'
+    );
+    assert.equal(sunPending.length, 1);
+    assert.equal(sunPending[0]?.dateScheduled, '2026-11-15');
+  });
 });

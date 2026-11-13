@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.6.4",
+    date: "November 13, 2026",
+    title: "Weekly 1x/wk Chore Persistence, Quick Canvas Photo/GIF Menu & Frameless Text Boxes",
+    highlights: [
+      "Weekly 1x / wk (Any day) Chore Fix: Once a weekly any-day chore is checked off, it stays hidden for the rest of the week across daily rollovers and cloud syncs, and only comes back on your configured first day of the week (Sunday or Monday).",
+      "Add Single Photo / GIF on Right-Click: Right-clicking anywhere on the blank canvas now includes 'Add Single Photo / GIF' to immediately pin a transparent photo or GIF sticker at that exact spot.",
+      "Text Box Sticker / No Outline Mode: Added a 1-click 'Sticker / No Outline' toggle in the Text Box right-click / Layers menu and Tile Settings, removing all box outlines so text floats cleanly on the canvas.",
+    ],
+  },
+  {
     version: "v0.6.3",
     date: "November 13, 2026",
     title: "True Offline Photo Cache & Pre-Built Multi-Arch GHCR Docker Images",

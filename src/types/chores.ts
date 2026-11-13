@@ -101,6 +101,7 @@ export interface ChoreHouseholdSettings {
   vacationMode: boolean;
   pointsPerDollar: number; // e.g. 10 ($1 = 10 pts)
   soundEffectsEnabled: boolean; // default false
+  weekStartsOn?: 'sunday' | 'monday'; // Synced with global dashboard settings (default 'sunday')
   lastRolloverDate?: string; // "YYYY-MM-DD"
   lastPrunedYear?: number;
 }
