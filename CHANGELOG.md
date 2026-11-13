@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.10] - 2026-11-12
+
+### Unclipped Widget Toolbar Layering & GIF Container Rotation Controls
+* **Individual Widget Toolbar Always in Front (`src/components/layout/Corkboard.tsx`):**
+  * Removed `overflow-hidden` from the outer `image` / GIF widget container and kept `overflow-hidden rounded-[inherit]` + `relative z-0 isolate` on the inner widget renderer wrapper so internal widget content is clipped and isolated without clipping floating controls (`-top-3.5` toolbar and `-top-7.5` rotation handle).
+  * Elevated floating widget toolbars and rotation handles to `z-50` and boosted hovered cards to `zIndex: 55` on pointer hover so adjacent widgets above a card never obscure its toolbar or rotation handle.
+* **GIF & Widget Container Rotation Controls (`src/components/layout/Corkboard.tsx`):**
+  * Restored the top-center **Grab-to-Rotate Handle (`↻`)** on Image/GIF widgets with a continuous pointer hit-bridge so hover does not drop between the card edge and the handle.
+  * Added an always-available **Rotate (`↻`)** handle inside the top-right widget toolbar (drag to rotate from any angle, or click when tilted to reset to `0°`).
+  * Added quick **Tilt / Rotation** presets (`-6°`, `-3°`, `0°`, `+3°`, `+6°`) inside the **Layers (`📚`)** popover menu for both widgets and sticky notes.
+
+---
+
 ## [0.5.9] - 2026-11-12
 
 ### Interactive Month Calendar Selector for the Family Meal Planner

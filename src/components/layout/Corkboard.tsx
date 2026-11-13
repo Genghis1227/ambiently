@@ -20,7 +20,6 @@ import {
   Minimize2,
   Settings,
   Archive,
-  RotateCcw,
   RotateCw,
   Edit2,
   Copy,
@@ -187,6 +186,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   });
 
   // Grab-and-Rotate state
+  const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
   const [rotatingId, setRotatingId] = useState<string | null>(null);
   const [rotatingType, setRotatingType] = useState<'note' | 'widget'>('note');
   const [rotateAngle, setRotateAngle] = useState<number | null>(null);
@@ -1239,6 +1239,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         const isRotating = rotatingId === widget.id;
         const isResizing = resizingId === widget.id;
         const isActiveManipulating = isDragging || isResizing || isRotating;
+        const isHovered = hoveredCardId === widget.id;
         const isTransparentTextbox =
           widget.type === 'textbox' &&
           (!widget.config?.bgStyle || widget.config?.bgStyle === 'transparent');
@@ -1260,6 +1261,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
           <div
             key={widget.id}
             data-canvas-card="true"
+            onPointerEnter={() => setHoveredCardId(widget.id)}
+            onPointerLeave={() => setHoveredCardId((prev) => (prev === widget.id ? null : prev))}
             onPointerDown={(e) => !isFullScreen && !isCanvasLocked && handlePointerDown(e, widget.id, 'widget', pos)}
             onPointerDownCapture={() => {
               if (!isFullScreen && !isCanvasLocked && !pos?.isBackground && (pos?.zIndex || 1) < getTopZIndex()) {
@@ -1309,7 +1312,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                     maxWidth: '100%',
                     maxHeight: '100%',
                     transform: `rotate(${displayPos.rotation}deg) ${isDragging ? 'scale(1.02)' : 'scale(1)'}`,
-                    zIndex: isActiveManipulating ? 50 : pos.zIndex,
+                    zIndex: isActiveManipulating ? 58 : isHovered && !isCanvasLocked ? 55 : pos.zIndex,
                     touchAction: 'none',
                     WebkitTouchCallout: 'none',
                     userSelect: 'none',
@@ -1327,7 +1330,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 : isFramelessWidget
                 ? 'rounded-2xl border border-dashed border-transparent hover:border-white/20 p-1'
                 : widget.type === 'image'
-                ? isWidgetLight ? 'rounded-2xl border border-slate-200/90 p-0 overflow-hidden' : 'rounded-2xl border border-gray-800/90 p-0 overflow-hidden'
+                ? isWidgetLight ? 'rounded-2xl border border-slate-200/90 p-0' : 'rounded-2xl border border-gray-800/90 p-0'
                 : isWidgetLight ? 'rounded-2xl border border-slate-200/90 p-4' : 'rounded-2xl border border-gray-800/90 p-4'
             } ${
               isFramelessWidget
@@ -1348,20 +1351,22 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             {/* Elevated Grab-to-Rotate Handle (Prominent, impossible to obscure) */}
             {!isFullScreen && !isCanvasLocked && onUpdateWidgetPos && (
               <div
-                className={`absolute left-1/2 -translate-x-1/2 z-40 flex flex-col items-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${
-                  isNearTopEdge ? '-bottom-8 flex-col-reverse' : '-top-7.5'
+                data-no-drag="true"
+                onPointerDown={(e) => handleRotatePointerDown(e, widget.id, 'widget', pos)}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  onUpdateWidgetPos(widget.id, widget.gridPos, { ...pos, rotation: 0 });
+                }}
+                title="Grab and drag in a circle to rotate tile (double-click to reset to 0°)"
+                className={`absolute left-1/2 -translate-x-1/2 z-50 flex flex-col items-center transition-opacity pointer-events-auto cursor-grab active:cursor-grabbing px-3 ${
+                  isRotating ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                } ${
+                  isNearTopEdge ? '-bottom-8 pt-2 flex-col-reverse' : '-top-7.5 pb-2'
                 }`}
               >
                 <div
-                  data-no-drag="true"
-                  onPointerDown={(e) => handleRotatePointerDown(e, widget.id, 'widget', pos)}
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    onUpdateWidgetPos(widget.id, widget.gridPos, { ...pos, rotation: 0 });
-                  }}
-                  title="Grab and drag in a circle to rotate tile (double-click to reset to 0°)"
-                  className={`pointer-events-auto w-6 h-6 rounded-full bg-gray-950 border border-blue-400 hover:border-blue-300 text-blue-300 hover:text-white shadow-xl flex items-center justify-center cursor-grab active:cursor-grabbing hover:scale-110 active:scale-95 transition-all ${
-                    isRotating ? 'opacity-100 ring-2 ring-blue-400 bg-blue-900/60' : ''
+                  className={`w-6 h-6 rounded-full bg-gray-950 border border-blue-400 hover:border-blue-300 text-blue-300 hover:text-white shadow-xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all ${
+                    isRotating ? 'ring-2 ring-blue-400 bg-blue-900/60' : ''
                   }`}
                 >
                   <RotateCw className="w-3 h-3" />
@@ -1369,7 +1374,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 {/* Visual stem line */}
                 <div className="w-0.5 h-1.5 bg-blue-400/60" />
                 {isRotating && (
-                  <span className="pointer-events-auto px-1.5 py-0.5 rounded-full bg-blue-600 text-white font-mono font-bold text-[10px] shadow-lg mt-0.5">
+                  <span className="px-1.5 py-0.5 rounded-full bg-blue-600 text-white font-mono font-bold text-[10px] shadow-lg mt-0.5">
                     {displayPos.rotation}°
                   </span>
                 )}
@@ -1378,7 +1383,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
             {/* Top Right Widget Controls: Reset Rotation (if tilted), Settings, Layer Order, Maximize/Restore & Remove */}
             <div
-              className={`absolute z-30 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-md px-1.5 py-1 rounded-xl shadow-xl ${
+              data-no-drag="true"
+              className={`absolute z-50 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-md px-1.5 py-1 rounded-xl shadow-xl ${
                 isWidgetLight
                   ? 'bg-white/95 border border-slate-300/90 text-slate-700'
                   : 'bg-gray-950/90 border border-gray-700/80 shadow-2xl text-gray-300'
@@ -1394,18 +1400,35 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   : '-top-3.5 right-3'
               }`}
             >
-              {!isFullScreen && !isCanvasLocked && onUpdateWidgetPos && pos.rotation !== 0 && (
+              {!isFullScreen && !isCanvasLocked && onUpdateWidgetPos && (
                 <button
                   type="button"
-                  onClick={(e) => {
+                  onPointerDown={(e) => handleRotatePointerDown(e, widget.id, 'widget', pos)}
+                  onDoubleClick={(e) => {
                     e.stopPropagation();
                     onUpdateWidgetPos(widget.id, widget.gridPos, { ...pos, rotation: 0 });
                   }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  title="Reset rotation to 0°"
-                  className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-500/20 text-blue-400 hover:bg-blue-600 hover:text-white transition-all cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!isRotating && pos.rotation !== 0) {
+                      onUpdateWidgetPos(widget.id, widget.gridPos, { ...pos, rotation: 0 });
+                    }
+                  }}
+                  title={
+                    pos.rotation !== 0
+                      ? `Rotated ${pos.rotation}° — drag to rotate or click to reset to 0°`
+                      : 'Drag in a circle to rotate tile'
+                  }
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold flex items-center gap-0.5 transition-all cursor-grab active:cursor-grabbing ${
+                    pos.rotation !== 0
+                      ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-600 hover:text-white'
+                      : isWidgetLight
+                      ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
+                      : 'hover:bg-gray-800 text-gray-300 hover:text-white'
+                  }`}
                 >
-                  {pos.rotation}°
+                  <RotateCw className="w-3 h-3" />
+                  {pos.rotation !== 0 && <span>{pos.rotation}°</span>}
                 </button>
               )}
               {!isCanvasLocked && onUpdateWidget && (
@@ -1530,7 +1553,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 data-no-drag="true"
                 onPointerDown={(e) => handleResizePointerDown(e, widget.id, 'widget', pos)}
                 title="Drag to resize tile"
-                className={`absolute bottom-1 right-1 p-1.5 cursor-nwse-resize z-20 opacity-40 group-hover:opacity-100 hover:opacity-100 touch-none transition-opacity ${
+                className={`absolute bottom-1 right-1 p-1.5 cursor-nwse-resize z-40 opacity-40 group-hover:opacity-100 hover:opacity-100 touch-none transition-opacity ${
                   isWidgetLight ? 'text-slate-400 hover:text-slate-800' : 'text-gray-400 hover:text-white'
                 }`}
               >
@@ -1547,7 +1570,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
 
             {/* Widget Inner Renderers */}
-            <div className="w-full h-full flex flex-col justify-between overflow-hidden">
+            <div className="relative z-0 isolate w-full h-full flex flex-col justify-between overflow-hidden rounded-[inherit]">
               <TileErrorBoundary label={widget.title} resetKey={widget.updated_at}>
               {widget.type === 'weather' ? (
                 <WeatherWidget
@@ -1783,6 +1806,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         const isRotating = rotatingId === note.id;
         const isResizing = resizingId === note.id;
         const isActiveManipulating = isDragging || isResizing || isRotating;
+        const isHovered = hoveredCardId === note.id;
         const isExpiringSoon =
           note.expiresAt &&
           new Date(note.expiresAt).getTime() - now.getTime() < 12 * 60 * 60 * 1000;
@@ -1801,6 +1825,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
           <div
             key={note.id}
             data-canvas-card="true"
+            onPointerEnter={() => setHoveredCardId(note.id)}
+            onPointerLeave={() => setHoveredCardId((prev) => (prev === note.id ? null : prev))}
             onPointerDown={(e) => !isCanvasLocked && handlePointerDown(e, note.id, 'note', pos)}
             onPointerDownCapture={() => {
               if (!isCanvasLocked && !pos?.isBackground && (pos?.zIndex || 1) < getTopZIndex()) {
@@ -1852,7 +1878,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               maxHeight: '100%',
               transform: `rotate(${displayPos.rotation}deg) ${isDragging ? 'scale(1.03)' : 'scale(1)'}`,
               backgroundColor: note.bgColor || '#fef08a',
-              zIndex: isActiveManipulating ? 50 : pos.zIndex,
+              zIndex: isActiveManipulating ? 58 : isHovered && !isCanvasLocked ? 55 : pos.zIndex,
               touchAction: 'none',
               WebkitTouchCallout: 'none',
               userSelect: 'none',
@@ -1875,24 +1901,28 @@ export const Corkboard: React.FC<CorkboardProps> = ({
           >
             {/* Top-Center Grab-to-Rotate Handle with Stem (appears on hover) */}
             {!isCanvasLocked && (
-              <div className="absolute -top-7.5 left-1/2 -translate-x-1/2 flex flex-col items-center z-20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+              <div
+                data-no-drag="true"
+                onPointerDown={(e) => handleRotatePointerDown(e, note.id, 'note', pos)}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  onUpdateNotePos(note.id, { ...pos, rotation: 0 });
+                }}
+                title="Grab and drag in a circle to rotate note (double-click to reset to 0°)"
+                className={`absolute -top-7.5 left-1/2 -translate-x-1/2 flex flex-col items-center z-50 transition-opacity pointer-events-auto cursor-grab active:cursor-grabbing px-3 pb-2 ${
+                  isRotating ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                }`}
+              >
                 <div
-                  data-no-drag="true"
-                  onPointerDown={(e) => handleRotatePointerDown(e, note.id, 'note', pos)}
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    onUpdateNotePos(note.id, { ...pos, rotation: 0 });
-                  }}
-                  title="Grab and drag in a circle to rotate note (double-click to reset to 0°)"
-                  className={`pointer-events-auto w-6 h-6 rounded-full bg-gray-900/95 border border-gray-700 hover:border-gray-500 text-white shadow-xl flex items-center justify-center cursor-grab active:cursor-grabbing hover:scale-110 active:scale-95 transition-all ${
-                    isRotating ? 'opacity-100 ring-2 ring-blue-400' : ''
+                  className={`w-6 h-6 rounded-full bg-gray-900/95 border border-gray-700 hover:border-gray-500 text-white shadow-xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all ${
+                    isRotating ? 'ring-2 ring-blue-400' : ''
                   }`}
                 >
                   <RotateCw className="w-3 h-3" />
                 </div>
                 <div className="w-0.5 h-1.5 bg-gray-600/70" />
                 {isRotating && (
-                  <span className="pointer-events-auto px-1.5 py-0.5 rounded-full bg-gray-900 text-white font-mono font-bold text-[10px] shadow mt-0.5">
+                  <span className="px-1.5 py-0.5 rounded-full bg-gray-900 text-white font-mono font-bold text-[10px] shadow mt-0.5">
                     {displayPos.rotation}°
                   </span>
                 )}
@@ -2754,21 +2784,66 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               </div>
             )}
 
-          {contextMenu.type === 'widget' && Boolean(contextMenu.rotation) && onUpdateWidgetPos && (
-            <button
-              type="button"
-              onClick={() => {
-                const w = widgets.find((x) => x.id === contextMenu.id);
-                if (w && w.freeformPos) {
-                  onUpdateWidgetPos(w.id, w.gridPos, { ...w.freeformPos, rotation: 0 });
-                }
-                setContextMenu(null);
-              }}
-              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-300 hover:text-white transition-colors cursor-pointer text-left"
-            >
-              <RotateCcw className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-              <span>Reset Rotation (0°)</span>
-            </button>
+          {((contextMenu.type === 'widget' && onUpdateWidgetPos) ||
+            contextMenu.type === 'note') && (
+            <div className="space-y-1.5 my-1">
+              <div className="px-2 pt-0.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center justify-between">
+                <span>Tilt / Rotation</span>
+                <span className="font-mono text-blue-400 font-bold">
+                  {contextMenu.rotation ?? 0}°
+                </span>
+              </div>
+              <div className="grid grid-cols-5 gap-1 px-1">
+                {([-6, -3, 0, 3, 6] as const).map((deg) => {
+                  const isCurrent = (contextMenu.rotation ?? 0) === deg;
+                  return (
+                    <button
+                      key={deg}
+                      type="button"
+                      onClick={() => {
+                        if (contextMenu.type === 'widget' && onUpdateWidgetPos) {
+                          const w = widgets.find((x) => x.id === contextMenu.id);
+                          const basePos = w?.freeformPos || {
+                            xRatio: 0.1,
+                            yRatio: 0.1,
+                            wRatio: 0.35,
+                            hRatio: 0.45,
+                            zIndex: contextMenu.currentZ || 1,
+                            rotation: 0,
+                          };
+                          onUpdateWidgetPos(contextMenu.id, w?.gridPos, {
+                            ...basePos,
+                            rotation: deg,
+                          });
+                        } else if (contextMenu.type === 'note') {
+                          const n = notes.find((x) => x.id === contextMenu.id);
+                          const basePos = n?.freeformPos || {
+                            xRatio: 0.1,
+                            yRatio: 0.1,
+                            wRatio: 0.26,
+                            hRatio: 0.3,
+                            zIndex: contextMenu.currentZ || 1,
+                            rotation: 0,
+                          };
+                          onUpdateNotePos(contextMenu.id, {
+                            ...basePos,
+                            rotation: deg,
+                          });
+                        }
+                        setContextMenu((prev) => (prev ? { ...prev, rotation: deg } : null));
+                      }}
+                      className={`py-1 px-1 rounded-lg text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                        isCurrent
+                          ? 'bg-blue-600 text-white shadow'
+                          : 'bg-gray-800/70 hover:bg-gray-700/80 text-gray-300'
+                      }`}
+                    >
+                      {deg > 0 ? `+${deg}°` : `${deg}°`}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           )}
 
           {contextMenu.type === 'note' && (() => {
