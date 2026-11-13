@@ -32,6 +32,7 @@ import {
   Sun,
   Moon,
   Sparkles,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { ClockWeatherWidget } from '../widgets/ClockWeatherWidget';
 import { ClockWidget } from '../widgets/ClockWidget';
@@ -89,6 +90,7 @@ interface CorkboardProps {
   onPermanentlyDeleteNote?: (noteId: string) => void;
   onPermanentlyDeleteNotes?: (noteIds: string[]) => void;
   onRemoveWidget?: (widgetId: string) => void;
+  onAddWidget?: (widget: Partial<DashboardWidget>) => void;
   onOpenAddWidget?: () => void;
   onUpdateWidget?: (widgetId: string, updates: Partial<DashboardWidget>) => void;
   onUpdateTab?: (tabId: string, updates: Partial<DashboardTab>) => void;
@@ -140,6 +142,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   onPermanentlyDeleteNote,
   onPermanentlyDeleteNotes,
   onRemoveWidget,
+  onAddWidget,
   onOpenAddWidget,
   onUpdateWidget,
   onUpdateTab,
@@ -1288,6 +1291,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         const isHovered = hoveredCardId === widget.id;
         const isTransparentTextbox =
           widget.type === 'textbox' &&
+          widget.config?.transparentBg !== false &&
           (!widget.config?.bgStyle || widget.config?.bgStyle === 'transparent');
         const isTransparentImage = widget.type === 'image' && widget.config?.transparentBg !== false;
         const isFramelessWidget = isTransparentTextbox || isTransparentImage;
@@ -1374,7 +1378,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   ? 'rounded-none border-0 p-4 overflow-hidden'
                   : 'rounded-none border-0 p-0 overflow-hidden'
                 : isFramelessWidget
-                ? 'rounded-2xl border border-dashed border-transparent hover:border-white/20 p-1'
+                ? 'rounded-2xl border-0 p-1'
                 : widget.type === 'image'
                 ? isWidgetLight ? 'rounded-2xl border border-slate-200/90 p-0' : 'rounded-2xl border border-gray-800/90 p-0'
                 : isWidgetLight ? 'rounded-2xl border border-slate-200/90 p-4' : 'rounded-2xl border border-gray-800/90 p-4'
@@ -1390,7 +1394,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               isDragging || isRotating
                 ? 'ring-2 ring-blue-500 shadow-blue-500/20'
                 : isFramelessWidget
-                ? isWidgetLight ? 'hover:bg-black/5' : 'hover:bg-white/5'
+                ? ''
                 : 'hover:shadow-blue-500/10'
             } flex flex-col justify-between`}
           >
@@ -1752,6 +1756,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   textTransform={widget.config?.textTransform}
                   letterSpacing={widget.config?.letterSpacing}
                   bgStyle={widget.config?.bgStyle}
+                  transparentBg={widget.config?.transparentBg !== false}
                   isLight={isWidgetLight}
                   onUpdateConfig={(updates) => {
                     if (onUpdateWidget) {
@@ -2750,6 +2755,46 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   </button>
                 )}
 
+                {onAddWidget && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const wRatio = 0.26;
+                      const hRatio = 0.32;
+                      const xRatio =
+                        contextMenu.clickXRatio !== undefined
+                          ? Math.max(0.01, Math.min(1 - wRatio - 0.01, contextMenu.clickXRatio))
+                          : 0.15;
+                      const yRatio =
+                        contextMenu.clickYRatio !== undefined
+                          ? Math.max(0.01, Math.min(1 - hRatio - 0.01, contextMenu.clickYRatio))
+                          : 0.15;
+                      onAddWidget({
+                        type: 'image',
+                        title: 'Single Image or GIF',
+                        gridPos: { x: 0, y: 0, w: 4, h: 4 },
+                        freeformPos: {
+                          xRatio,
+                          yRatio,
+                          wRatio,
+                          hRatio,
+                          zIndex: getNextZIndex(),
+                          rotation: 0,
+                        },
+                        config: { fit: 'contain', transparentBg: true },
+                      });
+                      setContextMenu(null);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
+                  >
+                    <ImageIcon className="w-4 h-4 text-fuchsia-400 shrink-0" />
+                    <div>
+                      <div className="font-semibold text-xs">Add Single Photo / GIF</div>
+                      <div className="text-[10px] text-gray-400">Pin a photo or animated GIF sticker</div>
+                    </div>
+                  </button>
+                )}
+
                 {onOpenAddWidget && (
                   <button
                     type="button"
@@ -2892,29 +2937,58 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   ))}
                 </div>
 
-                {activeWidget?.type === 'image' && onUpdateWidget && (
+                {(activeWidget?.type === 'image' || activeWidget?.type === 'textbox') && onUpdateWidget && (
                   <button
                     type="button"
                     onClick={() => {
-                      const next = !(activeWidget.config?.transparentBg !== false);
-                      onUpdateWidget(activeWidget.id, {
-                        config: { ...activeWidget.config, transparentBg: next },
-                      });
+                      if (activeWidget.type === 'textbox') {
+                        const isCurrentlySticker =
+                          activeWidget.config?.transparentBg !== false &&
+                          (!activeWidget.config?.bgStyle || activeWidget.config?.bgStyle === 'transparent');
+                        const next = !isCurrentlySticker;
+                        onUpdateWidget(activeWidget.id, {
+                          config: {
+                            ...activeWidget.config,
+                            transparentBg: next,
+                            bgStyle: next
+                              ? 'transparent'
+                              : activeWidget.config?.bgStyle && activeWidget.config.bgStyle !== 'transparent'
+                              ? activeWidget.config.bgStyle
+                              : 'glass',
+                          },
+                        });
+                      } else {
+                        const next = !(activeWidget.config?.transparentBg !== false);
+                        onUpdateWidget(activeWidget.id, {
+                          config: { ...activeWidget.config, transparentBg: next },
+                        });
+                      }
                       setContextMenu(null);
                     }}
                     className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-300 hover:text-white transition-colors cursor-pointer text-left"
                   >
                     <div className="flex items-center gap-2.5">
                       <Sparkles className="w-3.5 h-3.5 text-fuchsia-400 shrink-0" />
-                      <span>Sticker / Transparent</span>
+                      <span>{activeWidget.type === 'textbox' ? 'Sticker / No Outline' : 'Sticker / Transparent'}</span>
                     </div>
-                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
-                      activeWidget.config?.transparentBg !== false
-                        ? 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30'
-                        : 'bg-gray-800 text-gray-400'
-                    }`}>
-                      {activeWidget.config?.transparentBg !== false ? 'ON' : 'OFF'}
-                    </span>
+                    {(() => {
+                      const isStickerOn =
+                        activeWidget.type === 'textbox'
+                          ? activeWidget.config?.transparentBg !== false &&
+                            (!activeWidget.config?.bgStyle || activeWidget.config?.bgStyle === 'transparent')
+                          : activeWidget.config?.transparentBg !== false;
+                      return (
+                        <span
+                          className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                            isStickerOn
+                              ? 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30'
+                              : 'bg-gray-800 text-gray-400'
+                          }`}
+                        >
+                          {isStickerOn ? 'ON' : 'OFF'}
+                        </span>
+                      );
+                    })()}
                   </button>
                 )}
 

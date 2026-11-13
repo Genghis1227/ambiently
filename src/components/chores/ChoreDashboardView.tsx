@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react';
 import { useChoreStore, getPendingParentActionCounts } from '../../store/choreStore';
+import { useDashboardStore } from '../../store/dashboardStore';
 import type {
   ActiveChoreInstance,
   ChoreTemplate,
@@ -29,7 +30,10 @@ import {
   calculateEffectiveChorePoints,
   canSelfRevertInstance,
   daysBetweenDateKeys,
+  getWeekEndDateKey,
+  getWeekStartDateKey,
   isDateMatchingTemplateCadence,
+  isWeeklyChoreCompletedInWeek,
 } from '../../utils/choreEngine';
 import { localDateKey } from '../../utils/timePrefs';
 import { HouseholdAvatar } from '../common/HouseholdAvatar';
@@ -74,6 +78,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
   onOpenWidgetSettings,
 }) => {
   const snapshot = useChoreStore((s) => s.snapshot);
+  const dashboardWeekStartsOn = useDashboardStore((s) => s.settings.weekStartsOn);
   const completeChore = useChoreStore((s) => s.completeChore);
   const revertChoreSameDay = useChoreStore((s) => s.revertChoreSameDay);
   const dismissChoreInstance = useChoreStore((s) => s.dismissChoreInstance);
@@ -176,9 +181,35 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
     let rCount = 0;
     let cCount = 0;
 
+    const weekStartsOn: 'sunday' | 'monday' =
+      dashboardWeekStartsOn === 'monday' ||
+      snapshot.householdSettings?.weekStartsOn === 'monday'
+        ? 'monday'
+        : 'sunday';
+    const currentWeekStartKey = getWeekStartDateKey(todayKey, weekStartsOn);
+    const currentWeekEndKey = getWeekEndDateKey(todayKey, weekStartsOn);
+    const seenWeeklyAnyDayPending = new Set<string>();
+
     for (const inst of snapshot.instances) {
       const tpl = templateMap.get(inst.choreId);
       if (!tpl) continue;
+
+      if (inst.status === 'pending' && tpl.cadence === 'weekly' && tpl.weeklyAnyDay) {
+        if (
+          seenWeeklyAnyDayPending.has(tpl.id) ||
+          inst.dateScheduled < currentWeekStartKey ||
+          isWeeklyChoreCompletedInWeek(
+            tpl.id,
+            currentWeekStartKey,
+            currentWeekEndKey,
+            snapshot.instances,
+            snapshot.ledger
+          )
+        ) {
+          continue;
+        }
+        seenWeeklyAnyDayPending.add(tpl.id);
+      }
 
       const isValidPending =
         inst.status !== 'pending' ||
@@ -283,7 +314,16 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
       reviewTotalCount: rCount,
       completedTotalCount: cCount,
     };
-  }, [snapshot.instances, templateMap, visibleProfiles, todayKey, activeScope]);
+  }, [
+    snapshot.instances,
+    snapshot.ledger,
+    snapshot.householdSettings?.weekStartsOn,
+    dashboardWeekStartsOn,
+    templateMap,
+    visibleProfiles,
+    todayKey,
+    activeScope,
+  ]);
 
   if (!isOpen) return null;
 

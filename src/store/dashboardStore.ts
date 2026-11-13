@@ -683,6 +683,11 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     };
     await db.settings.put(updated);
     set({ settings: updated });
+    if (updates.weekStartsOn === 'monday' || updates.weekStartsOn === 'sunday') {
+      void useChoreStore.getState().updateHouseholdSettings({
+        weekStartsOn: updates.weekStartsOn,
+      });
+    }
     get().saveLocalBackup();
   },
 

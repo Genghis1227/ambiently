@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.4] - 2026-11-13
+
+### Weekly `1x / wk (Any day)` Chore Persistence, Quick Canvas Photo/GIF Menu & Frameless Text Boxes
+* **Weekly `1x / wk (Any day)` Chore Completion & Week-Start Respawn (`src/types/chores.ts`, `src/utils/choreEngine.ts`, `src/stores/useChoreStore.ts`, `src/store/dashboardStore.ts`, `src/components/widgets/ChoreWidget.tsx`, `src/components/chores/ChoreDashboardView.tsx`, `tests/choreEngineAndStore.test.ts`):**
+  * Fixed `weeklyAnyDay` (`1x / wk (Any day)`) chores reappearing the next day after being completed during the current week.
+  * Added `isWeeklyChoreCompletedInWeek` checking both scheduled/completed instances and active `chore_completion` entries in the append-only ledger so completed weekly chores stay hidden for the remainder of the week and only respawn on the configured `weekStartsOn` (`sunday` or `monday`) boundary.
+  * Hardened `mergeChoreSnapshotsAuthoritative` and `evaluateChoreRollover` so a stale `pending` instance never overwrites a completed instance backed by an active ledger completion entry.
+* **Add Single Photo / GIF in Blank-Canvas Context Menu (`src/components/layout/Corkboard.tsx`, `src/App.tsx`):**
+  * Added **Add Single Photo / GIF** directly to the blank-canvas right-click context menu so right-clicking anywhere on empty canvas pins a new `Single Image or GIF` sticker widget right at the clicked spot.
+* **Text Box Sticker / No Box Outline Mode (`src/components/layout/Corkboard.tsx`, `src/components/widgets/TextBoxWidget.tsx`, `src/components/widgets/WidgetSettingsModal.tsx`, `src/components/widgets/AddWidgetModal.tsx`):**
+  * Added a 1-click **Sticker / No Outline (`ON` / `OFF`)** toggle to the Text Box right-click / **Layers (`📚`)** menu and a **Sticker / Transparent Mode (Remove Box Outline)** switch in **Tile Settings**.
+  * Removed the outer dashed hover border and duplicate inner border on frameless/sticker widgets so Text Boxes and GIFs float cleanly on the canvas without any box outline.
+
+---
+
 ## [0.6.3] - 2026-11-13
 
 ### True Offline Photo Cache, Token Safety & Multi-Arch GHCR Docker CI Pipeline

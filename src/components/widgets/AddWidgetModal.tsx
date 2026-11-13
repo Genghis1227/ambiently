@@ -173,6 +173,7 @@ const WIDGET_TEMPLATES: WidgetTemplate[] = [
       textTransform: 'none',
       letterSpacing: 'normal',
       bgStyle: 'transparent',
+      transparentBg: true,
     },
     color: 'from-blue-500/20 to-cyan-500/20 text-cyan-300 border-cyan-500/30',
   },

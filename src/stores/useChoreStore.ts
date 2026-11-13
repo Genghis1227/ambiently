@@ -319,8 +319,19 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => {
       try {
         await useProfileStore.getState().initProfileStore();
         const householdProfiles = useProfileStore.getState().profiles;
-        const stored = await db.chores.get('household_chores');
+        const [stored, storedSettings] = await Promise.all([
+          db.chores.get('household_chores'),
+          db.settings.get('default_settings').catch(() => undefined),
+        ]);
         const base = stored || DEFAULT_CHORE_SNAPSHOT;
+        const resolvedWeekStartsOn: 'sunday' | 'monday' =
+          storedSettings?.weekStartsOn === 'monday'
+            ? 'monday'
+            : storedSettings?.weekStartsOn === 'sunday'
+              ? 'sunday'
+              : base.householdSettings?.weekStartsOn === 'monday'
+                ? 'monday'
+                : 'sunday';
         const deletedTemplateSet = new Set(base.deletedTemplateIds || []);
         const deletedRewardSet = new Set(base.deletedRewardIds || []);
         const { templates: migratedTemplates, rewards: migratedRewards } =
@@ -335,6 +346,10 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => {
           templates: migratedTemplates,
           rewards: migratedRewards,
           profiles: syncedProfiles.length > 0 ? syncedProfiles : base.profiles,
+          householdSettings: {
+            ...base.householdSettings,
+            weekStartsOn: resolvedWeekStartsOn,
+          },
         };
         const { snapshot: rolled, changed } = evaluateChoreRollover(initial, new Date());
 

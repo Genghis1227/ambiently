@@ -30,7 +30,10 @@ import {
   calculateEffectiveChorePoints,
   canSelfRevertInstance,
   daysBetweenDateKeys,
+  getWeekEndDateKey,
+  getWeekStartDateKey,
   isDateMatchingTemplateCadence,
+  isWeeklyChoreCompletedInWeek,
   selectProfilePointsFromLedger,
 } from '../../utils/choreEngine';
 import { localDateKey } from '../../utils/timePrefs';
@@ -262,9 +265,35 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
     let rCount = 0;
     let cCount = 0;
 
+    const weekStartsOn: 'sunday' | 'monday' =
+      dashboardSettings?.weekStartsOn === 'monday' ||
+      snapshot.householdSettings?.weekStartsOn === 'monday'
+        ? 'monday'
+        : 'sunday';
+    const currentWeekStartKey = getWeekStartDateKey(todayKey, weekStartsOn);
+    const currentWeekEndKey = getWeekEndDateKey(todayKey, weekStartsOn);
+    const seenWeeklyAnyDayPending = new Set<string>();
+
     for (const inst of snapshot.instances) {
       const tpl = templateMap.get(inst.choreId);
       if (!tpl) continue;
+
+      if (inst.status === 'pending' && tpl.cadence === 'weekly' && tpl.weeklyAnyDay) {
+        if (
+          seenWeeklyAnyDayPending.has(tpl.id) ||
+          inst.dateScheduled < currentWeekStartKey ||
+          isWeeklyChoreCompletedInWeek(
+            tpl.id,
+            currentWeekStartKey,
+            currentWeekEndKey,
+            snapshot.instances,
+            snapshot.ledger
+          )
+        ) {
+          continue;
+        }
+        seenWeeklyAnyDayPending.add(tpl.id);
+      }
 
       const isValidPending =
         inst.status !== 'pending' ||
@@ -378,7 +407,17 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
       reviewTotalCount: rCount,
       completedTotalCount: cCount,
     };
-  }, [snapshot.instances, templateMap, visibleProfiles, todayKey, now, activeScope]);
+  }, [
+    snapshot.instances,
+    snapshot.ledger,
+    snapshot.householdSettings?.weekStartsOn,
+    dashboardSettings?.weekStartsOn,
+    templateMap,
+    visibleProfiles,
+    todayKey,
+    now,
+    activeScope,
+  ]);
 
   const toggleSection = (section: AccordionSectionId) => {
     setExpandedSections((prev) => ({

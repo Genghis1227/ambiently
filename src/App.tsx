@@ -898,6 +898,7 @@ export function App() {
           onDeleteNote={deleteNote}
           onPermanentlyDeleteNote={permanentlyDeleteNote}
           onPermanentlyDeleteNotes={permanentlyDeleteNotes}
+          onAddWidget={addWidget}
           onRemoveWidget={removeWidget}
           onOpenAddWidget={() => setIsAddWidgetOpen(true)}
           onUpdateWidget={updateWidget}

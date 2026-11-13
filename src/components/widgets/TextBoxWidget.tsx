@@ -11,6 +11,7 @@ export interface TextBoxConfig {
   textTransform?: 'none' | 'uppercase' | 'lowercase' | 'capitalize';
   letterSpacing?: 'normal' | 'wide' | 'widest';
   bgStyle?: 'transparent' | 'glass' | 'solid';
+  transparentBg?: boolean;
 }
 
 interface TextBoxWidgetProps {
@@ -24,6 +25,7 @@ interface TextBoxWidgetProps {
   textTransform?: TextBoxConfig['textTransform'];
   letterSpacing?: TextBoxConfig['letterSpacing'];
   bgStyle?: TextBoxConfig['bgStyle'];
+  transparentBg?: boolean;
   onUpdateConfig?: (updates: Partial<TextBoxConfig>) => void;
   isLight?: boolean;
 }
@@ -119,6 +121,7 @@ export const TextBoxWidget: React.FC<TextBoxWidgetProps> = ({
   textTransform = 'none',
   letterSpacing = 'normal',
   bgStyle = 'transparent',
+  transparentBg = true,
   onUpdateConfig,
   isLight = false,
 }) => {
@@ -167,6 +170,8 @@ export const TextBoxWidget: React.FC<TextBoxWidgetProps> = ({
 
   const lines = (content || '').split('\n');
 
+  const isStickerMode = transparentBg !== false && (!bgStyle || bgStyle === 'transparent');
+
   return (
     <div
       onDoubleClick={(e) => {
@@ -174,15 +179,17 @@ export const TextBoxWidget: React.FC<TextBoxWidgetProps> = ({
         setIsInlineEditing(true);
       }}
       className={`w-full h-full flex flex-col justify-center ${alignClass} select-none transition-all p-2 ${
-        bgStyle === 'glass'
+        isStickerMode
+          ? 'bg-transparent border-0 shadow-none'
+          : bgStyle === 'glass'
           ? isLight
-            ? 'rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200 shadow-sm'
-            : 'rounded-2xl bg-gray-950/40 backdrop-blur-md border border-white/10'
+            ? 'rounded-2xl bg-white/70 backdrop-blur-md'
+            : 'rounded-2xl bg-gray-950/40 backdrop-blur-md'
           : bgStyle === 'solid'
           ? isLight
-            ? 'rounded-2xl bg-white border border-slate-200 shadow-sm'
-            : 'rounded-2xl bg-gray-900/90 border border-gray-800'
-          : 'bg-transparent'
+            ? 'rounded-2xl bg-white'
+            : 'rounded-2xl bg-gray-900/90'
+          : 'bg-transparent border-0 shadow-none'
       }`}
     >
       {isInlineEditing ? (
