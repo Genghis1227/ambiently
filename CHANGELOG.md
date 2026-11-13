@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.1] - 2026-11-12
+
+### Expanded Curated Ambient Scenery Library (128 Verified High-Resolution Photos)
+* **128 Curated Scenery & Fine Art Photos (`src/data/curatedScenery.ts`):**
+  * Expanded the built-in curated scenery library from 55 to **128 unique, HTTP 200-verified, high-resolution (`1920px`) photos** across all 8 themed collections (16 photos each in `National Parks & Mountains`, `Coasts & Turquoise Oceans`, `Deep Woods & Autumn Forests`, `Deep Space & NASA Cosmos`, `Classic Art & Museum Gallery`, `Urban Nights & Cityscapes`, `Cozy Cabin & Warm Living`, and `Zen Minimalism & Botany`).
+  * Eliminated duplicate URLs and replaced stale links so every curated photo loads reliably out of the box.
+
+---
+
 ## [0.6.0] - 2026-11-12
 
 ### Docker Self-Hosting & Raspberry Pi Kiosk Edition (Phase 6)
