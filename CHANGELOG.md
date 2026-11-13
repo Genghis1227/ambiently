@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.6] - 2026-11-13
+
+### Global Default Widget Style Setting (Auto, Sticker / No Outline, With Borders)
+* **Default Widget Style Selector (`src/components/settings/SettingsModal.tsx`, `src/types/dashboard.ts`, `src/services/db.ts`):**
+  * Added a 3-way **Default Widget Style** setting in **Settings -> Display & Kiosk** (`Auto`, `Sticker / No Outline`, `With Borders`) synced across IndexedDB, JSON backups, and Supabase Cloud.
+* **Centralized Sticker Resolution & Per-Tile Overrides (`src/utils/widgetStickerMode.ts`, `src/store/dashboardStore.ts`, `src/components/widgets/AddWidgetModal.tsx`, `src/components/layout/Corkboard.tsx`, `src/components/widgets/WidgetSettingsModal.tsx`, `tests/widgetStickerMode.test.ts`):**
+  * Newly created widgets from **Add Widget** and the blank-canvas **Add Single Photo / GIF** context menu inherit the global default frame style while preserving explicit per-widget `Sticker / No Outline` overrides.
+
+---
+
 ## [0.6.5] - 2026-11-13
 
 ### Optional Sticker / No Outline Mode Across Ambient, Clock, Weather & Photo Frame Widgets
