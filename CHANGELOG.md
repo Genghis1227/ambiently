@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.2] - 2026-11-13
+
+### Crisp Toolbar Arrow After Disabling Night Mode
+* **Respect Disabled Night Mode During Scheduled Hours (`src/components/dock/NavigationDock.tsx`, `src/utils/confetti.ts`):**
+  * Fixed `NavigationDock` and `isAmbientlyInNightMode` continuing to report Night Mode as active during scheduled nighttime hours (`22:00`–`07:00`) even after the user disabled or woke from Night Mode.
+* **Manual Night Mode Disable Hold (`src/App.tsx`):**
+  * Disabling Night Mode via the toolbar Moon button, Quick Hub, or Settings during the scheduled night window now records the manual dismissal so the schedule evaluator does not immediately re-enable Night Mode.
+* **Toolbar Peek Arrow Contrast (`src/components/dock/NavigationDock.tsx`):**
+  * Restored full `opacity-100`, crisp border, and bright `text-blue-400` chevron contrast on the hidden-toolbar peek arrow when Night Mode is off, and removed compounded `opacity-30` × `text-blue-500/30` double-dimming when Night Mode is on.
+
+---
+
 ## [0.6.1] - 2026-11-12
 
 ### Expanded Curated Ambient Scenery Library (128 Verified High-Resolution Photos)

@@ -59,7 +59,6 @@ import { MAX_CANVASES } from '../../types/dashboard';
 import { AmbientQuickMenu } from './AmbientQuickMenu';
 import { useUpdateChecker } from '../../services/updateChecker';
 import { useDashboardStore } from '../../store/dashboardStore';
-import { isAmbientlyInNightMode } from '../../utils/confetti';
 
 interface NavigationDockProps {
   tabs: DashboardTab[];
@@ -159,7 +158,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
   const navRef = useRef<HTMLElement>(null);
   const { isUpdateAvailable, latestVersion, applyUpdate } = useUpdateChecker();
   const dashboardSettings = useDashboardStore((s) => s.settings);
-  const effectiveNightMode = Boolean(isNightMode || isAmbientlyInNightMode(dashboardSettings));
+  const effectiveNightMode = Boolean(isNightMode ?? dashboardSettings?.nightModeEnabled);
 
   useEffect(() => {
     if (!showOrganizeMenu) return;
@@ -311,8 +310,8 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
           title="Peek Navigation Toolbar (Shortcut: \)"
           className={`fixed z-[65] flex items-center justify-center p-2.5 backdrop-blur-xl transition-all cursor-pointer group active:scale-95 ${
             effectiveNightMode
-              ? 'bg-gray-950/40 hover:bg-gray-900/80 text-gray-600 hover:text-gray-300 border border-gray-900/60 opacity-30 hover:opacity-100 shadow-none'
-              : 'bg-gray-900/90 hover:bg-gray-800 text-gray-300 hover:text-white border border-gray-700/80 shadow-2xl'
+              ? 'bg-gray-950/80 hover:bg-gray-900/95 text-gray-300 hover:text-white border border-gray-800/80 opacity-75 hover:opacity-100 shadow-none'
+              : 'bg-gray-900/95 hover:bg-gray-800 text-white border border-gray-600/90 opacity-100 shadow-2xl'
           } ${
             dockPosition === 'left'
               ? effectiveNightMode
@@ -331,10 +330,10 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
               : 'bottom-0 right-24 rounded-t-2xl border-b-0 shadow-[0_-4px_15px_rgba(0,0,0,0.5)]'
           }`}
         >
-          {dockPosition === 'left' && <ChevronRight className={`w-5 h-5 ${effectiveNightMode ? 'text-blue-500/30 group-hover:text-blue-400' : 'text-blue-400'} group-hover:scale-110 transition-transform`} />}
-          {dockPosition === 'right' && <ChevronLeft className={`w-5 h-5 ${effectiveNightMode ? 'text-blue-500/30 group-hover:text-blue-400' : 'text-blue-400'} group-hover:scale-110 transition-transform`} />}
-          {dockPosition === 'top' && <ChevronDown className={`w-5 h-5 ${effectiveNightMode ? 'text-blue-500/30 group-hover:text-blue-400' : 'text-blue-400'} group-hover:scale-110 transition-transform`} />}
-          {dockPosition === 'bottom' && <ChevronUp className={`w-5 h-5 ${effectiveNightMode ? 'text-blue-500/30 group-hover:text-blue-400' : 'text-blue-400'} group-hover:scale-110 transition-transform`} />}
+          {dockPosition === 'left' && <ChevronRight className={`w-5 h-5 ${effectiveNightMode ? 'text-blue-400/80 group-hover:text-blue-300' : 'text-blue-400 group-hover:text-blue-300'} group-hover:scale-110 transition-transform`} />}
+          {dockPosition === 'right' && <ChevronLeft className={`w-5 h-5 ${effectiveNightMode ? 'text-blue-400/80 group-hover:text-blue-300' : 'text-blue-400 group-hover:text-blue-300'} group-hover:scale-110 transition-transform`} />}
+          {dockPosition === 'top' && <ChevronDown className={`w-5 h-5 ${effectiveNightMode ? 'text-blue-400/80 group-hover:text-blue-300' : 'text-blue-400 group-hover:text-blue-300'} group-hover:scale-110 transition-transform`} />}
+          {dockPosition === 'bottom' && <ChevronUp className={`w-5 h-5 ${effectiveNightMode ? 'text-blue-400/80 group-hover:text-blue-300' : 'text-blue-400 group-hover:text-blue-300'} group-hover:scale-110 transition-transform`} />}
         </button>
       )}
 
