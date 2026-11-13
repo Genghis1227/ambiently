@@ -86,6 +86,45 @@ export default defineConfig({
         // Never intercept /api/*, /functions/*, or runtime /config.js requests
         // with the SPA index.html navigation fallback.
         navigateFallbackDenylist: [/^\/api\//, /^\/functions\//, /^\/config\.js$/],
+        runtimeCaching: [
+          {
+            // Photos from external HTTPS hosts load from the network as usual. Only when that fails
+            // (the screen is offline) is the copy saved in ambiently-photo-cache-v1 returned.
+            urlPattern: ({ request, url }) =>
+              request.destination === 'image' &&
+              url.protocol === 'https:' &&
+              url.origin !== (globalThis as unknown as { location: { origin: string } }).location.origin,
+            handler: async ({ request }) => {
+              try {
+                return await fetch(request);
+              } catch (err) {
+                // Written out in full because Workbox serializes this function into sw.js as text
+                const storage = (globalThis as unknown as {
+                  caches: {
+                    open(name: string): Promise<{
+                      match(req: Request | string): Promise<Response | undefined>;
+                      keys(): Promise<readonly Request[]>;
+                    }>;
+                  };
+                }).caches;
+                const cache = await storage.open('ambiently-photo-cache-v1');
+                const exact = await cache.match(request.url);
+                if (exact) return exact;
+                if (request.url.includes('googleusercontent.com')) {
+                  const base = request.url.replace(/=(w\d+.*|s\d+.*)$/, '');
+                  const keys = await cache.keys();
+                  for (const key of keys) {
+                    if (key.url.replace(/=(w\d+.*|s\d+.*)$/, '') === base) {
+                      const variant = await cache.match(key);
+                      if (variant) return variant;
+                    }
+                  }
+                }
+                throw err;
+              }
+            },
+          },
+        ],
       },
     }),
   ],

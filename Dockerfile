@@ -2,9 +2,10 @@
 
 # ==============================================================================
 # Stage 1: Build PWA Static Assets + Bundled API/Static Production Server
-# Supports multi-arch builds natively: linux/amd64 & linux/arm64 (Raspberry Pi)
+# Uses $BUILDPLATFORM so multi-arch builds (linux/amd64 + linux/arm64) compile
+# TypeScript & Vite at native host speed without slow QEMU emulation.
 # ==============================================================================
-FROM node:22-alpine AS builder
+FROM --platform=$BUILDPLATFORM node:22-alpine AS builder
 
 WORKDIR /app
 

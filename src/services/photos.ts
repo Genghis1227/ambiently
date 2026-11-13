@@ -39,8 +39,6 @@ export function formatPhotoDate(dateStr?: string): string | null {
   return trimmed;
 }
 
-import { getPlexServerTokens } from './plex';
-import { addPlexToken } from './plexLinks';
 import {
   ALL_CURATED_PHOTOS,
   CURATED_CATEGORIES,
@@ -51,36 +49,53 @@ import {
 export { CURATED_CATEGORIES, getCuratedCategoryById, type CuratedCategory };
 export const CURATED_AMBIENT_PHOTOS: PhotoItem[] = ALL_CURATED_PHOTOS;
 
-// Offline Photo Cache via Cache Storage API (preserves last 30-50 photos offline)
-const CACHE_NAME = 'ambiently-photo-cache-v1';
+// Offline photo cache. Keeps copies of up to 50 recent web photos so the photo frame still shows
+// pictures when the screen loses its connection; the service worker (vite.config.ts) reads them back
+// when an image can't be downloaded. Copies are fetched with CORS so the browser stores them at their
+// real size (~35 MB instead of ~400 MB of opaque padding) and skips error responses. Hosts that don't
+// allow CORS are simply not cached. Plex photos are skipped so device tokens are never persisted in
+// shared browser CacheStorage.
+export const PHOTO_CACHE_NAME = 'ambiently-photo-cache-v1';
+const CACHE_NAME = PHOTO_CACHE_NAME;
 const MAX_CACHE_ENTRIES = 50;
 const IMAGE_EXT_REGEX = /\.(jpe?g|png|webp|avif|gif|bmp|heic|heif)$/i;
+const photosBeingCached = new Set<string>();
 
 export async function cachePhotosLocally(photos: PhotoItem[]): Promise<void> {
-  if (!('caches' in window)) return;
+  if (typeof globalThis.caches === 'undefined') return;
   try {
-    const cache = await caches.open(CACHE_NAME);
-    const slice = photos.slice(0, 30);
-    for (const photo of slice) {
-      if (photo.url.startsWith('blob:') || photo.url.startsWith('data:')) {
+    const cache = await globalThis.caches.open(CACHE_NAME);
+    const writes: Promise<void>[] = [];
+    for (const photo of photos.slice(0, 30)) {
+      if (!photo?.url || photo.source === 'plex') continue;
+      const url = photo.url.includes('googleusercontent.com')
+        ? getOptimizedPhotoUrl(photo.url, 1920)
+        : photo.url;
+      if (!url.startsWith('https://') || photosBeingCached.has(url)) continue;
+      photosBeingCached.add(url);
+      if (await cache.match(url)) {
+        photosBeingCached.delete(url);
         continue;
       }
-      // Saved Plex links have no token, so add this device's token to fetch the same image it shows
-      const url = photo.source === 'plex' ? addPlexToken(photo.url, getPlexServerTokens()) : photo.url;
-      const match = await cache.match(url);
-      if (!match) {
-        // Fetch and cache without failing the app if network drops
-        fetch(url, { mode: 'no-cors' })
-          .then((res) => cache.put(url, res))
-          .catch(() => {});
-      }
+      writes.push(
+        fetch(url, { mode: 'cors', credentials: 'omit' })
+          .then(async (res) => {
+            if (res.ok && res.type !== 'opaque') {
+              await cache.put(url, res);
+            }
+          })
+          .catch(() => {})
+          .finally(() => photosBeingCached.delete(url))
+      );
     }
+    await Promise.all(writes);
 
-    // Prune oldest cache entries if total items exceed MAX_CACHE_ENTRIES
+    // Keep only the newest entries (Cache Storage lists them oldest first)
     const keys = await cache.keys();
     if (keys.length > MAX_CACHE_ENTRIES) {
-      const keysToDelete = keys.slice(0, keys.length - MAX_CACHE_ENTRIES);
-      await Promise.all(keysToDelete.map((req) => cache.delete(req)));
+      await Promise.all(
+        keys.slice(0, keys.length - MAX_CACHE_ENTRIES).map((req) => cache.delete(req))
+      );
     }
   } catch (err) {
     console.warn('Cache API error:', err);

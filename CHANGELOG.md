@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.3] - 2026-11-13
+
+### True Offline Photo Cache, Token Safety & Multi-Arch GHCR Docker CI Pipeline
+* **True Offline Photo Caching & Quota Fix (`src/services/photos.ts`, `vite.config.ts`, `tests/photoCache.test.ts`):**
+  * Switched `cachePhotosLocally` from `mode: 'no-cors'` (opaque responses inflating browser storage quota to ~400 MB) to `{ mode: 'cors', credentials: 'omit' }` with `res.ok && res.type !== 'opaque'` validation so cached photos occupy their true ~35 MB footprint and never store error pages.
+  * Skipped `plex` photo URLs in `CacheStorage` so per-device Plex tokens are never persisted in shared browser cache entries, and added synchronous in-flight deduplication (`photosBeingCached`) to prevent duplicate concurrent downloads.
+  * Added a Workbox `runtimeCaching` route in `vite.config.ts` that loads HTTPS photos from the network first and automatically falls back to `ambiently-photo-cache-v1` when offline (including resized `googleusercontent.com` variant matching across all display modes).
+* **GitHub Actions CI & Multi-Arch GHCR Docker Registry (`.github/workflows/ci.yml`, `.github/workflows/docker-publish.yml`, `Dockerfile`, `compose.yaml`, `scripts/pi-kiosk-setup.sh`, `README.md`, `RASPBERRY_PI.md`):**
+  * Added automated PR/push CI (`ci.yml`) running `npm run lint`, `npm run build`, `npm run build:server`, and `npm test`.
+  * Added `docker-publish.yml` to build and publish multi-architecture (`linux/amd64` + `linux/arm64`) images to `ghcr.io/genghis1227/ambiently` (`:latest`, `:<version>`, and semver git tags) using `$BUILDPLATFORM` native cross-compilation in `Dockerfile`.
+  * Updated `compose.yaml`, `scripts/pi-kiosk-setup.sh` (pulls pre-built `arm64` image first with automatic local `--build` fallback), and Portainer/Synology/Unraid documentation.
+
+---
+
 ## [0.6.2] - 2026-11-13
 
 ### Crisp Toolbar Arrow After Disabling Night Mode
