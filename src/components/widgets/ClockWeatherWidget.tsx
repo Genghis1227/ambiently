@@ -25,6 +25,7 @@ interface ClockWeatherWidgetProps {
   timezone?: string;
   clockAlign?: 'center' | 'left';
   isLight?: boolean;
+  transparentBg?: boolean;
 }
 
 const renderWeatherIcon = (code: number, isDay: boolean) => {
@@ -51,6 +52,7 @@ export const ClockWeatherWidget: React.FC<ClockWeatherWidgetProps> = ({
   timezone,
   clockAlign = 'center',
   isLight = false,
+  transparentBg = false,
 }) => {
   const { hour12 } = useTimePrefs();
   const [time, setTime] = useState(new Date());
@@ -107,9 +109,10 @@ export const ClockWeatherWidget: React.FC<ClockWeatherWidgetProps> = ({
   }, [latitude, longitude, locationName, unit]);
 
   const zt = getFormattedTimeForZone(time, timezone, hour12);
+  const stickerShadow = transparentBg && !isLight ? 'drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]' : '';
 
   return (
-    <div className="w-full h-full flex flex-col justify-between select-none">
+    <div className={`w-full h-full flex flex-col justify-between select-none ${stickerShadow}`}>
       {/* Clock Section */}
       <div className={`flex flex-col justify-center ${clockAlign === 'left' ? 'items-start text-left' : 'items-center text-center'}`}>
         {clockFace === 'analog' ? (
@@ -170,7 +173,7 @@ export const ClockWeatherWidget: React.FC<ClockWeatherWidgetProps> = ({
       </div>
 
       {/* Divider */}
-      <div className={`w-full h-px my-2 ${isLight ? 'bg-slate-200' : 'bg-gray-800/80'}`} />
+      <div className={`w-full h-px my-2 ${transparentBg ? 'bg-transparent' : isLight ? 'bg-slate-200' : 'bg-gray-800/80'}`} />
 
       {/* Weather Section */}
       {weather ? (
@@ -205,12 +208,16 @@ export const ClockWeatherWidget: React.FC<ClockWeatherWidgetProps> = ({
           </div>
 
           {/* 3-day micro forecast strip */}
-          <div className={`grid grid-cols-3 gap-1.5 pt-1.5 border-t ${isLight ? 'border-slate-200' : 'border-gray-800/40'}`}>
+          <div className={`grid grid-cols-3 gap-1.5 pt-1.5 border-t ${
+            transparentBg ? 'border-transparent' : isLight ? 'border-slate-200' : 'border-gray-800/40'
+          }`}>
             {weather.forecast.slice(1, 4).map((f) => (
               <div
                 key={f.date}
                 className={`flex flex-col items-center rounded-lg py-1 px-1 text-center ${
-                  isLight
+                  transparentBg
+                    ? 'bg-transparent border-0'
+                    : isLight
                     ? 'bg-slate-100/90 border border-slate-200/80 text-slate-800'
                     : 'bg-gray-950/40'
                 }`}

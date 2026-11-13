@@ -103,6 +103,36 @@ const SNAP_ROWS = 16;
 const SNAP_STEP_X = 1 / SNAP_COLUMNS;
 const SNAP_STEP_Y = 1 / SNAP_ROWS;
 
+const DEFAULT_OFF_STICKER_TYPES = new Set([
+  'clock',
+  'world_clock',
+  'clock_weather',
+  'weather',
+  'countdown',
+  'quotes',
+  'photo_frame',
+]);
+
+function isStickerCapableWidget(type?: DashboardWidget['type']): boolean {
+  if (!type) return false;
+  return type === 'image' || type === 'textbox' || DEFAULT_OFF_STICKER_TYPES.has(type);
+}
+
+function isWidgetStickerMode(widget?: DashboardWidget | null): boolean {
+  if (!widget) return false;
+  if (widget.type === 'image') return widget.config?.transparentBg !== false;
+  if (widget.type === 'textbox') {
+    return (
+      widget.config?.transparentBg !== false &&
+      (!widget.config?.bgStyle || widget.config?.bgStyle === 'transparent')
+    );
+  }
+  if (DEFAULT_OFF_STICKER_TYPES.has(widget.type)) {
+    return Boolean(widget.config?.transparentBg);
+  }
+  return false;
+}
+
 const COLOR_PALETTE = [
   '#fef08a', // Amber/Yellow
   '#bbf7d0', // Emerald/Green
@@ -1289,12 +1319,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         const isResizing = resizingId === widget.id;
         const isActiveManipulating = isDragging || isResizing || isRotating;
         const isHovered = hoveredCardId === widget.id;
-        const isTransparentTextbox =
-          widget.type === 'textbox' &&
-          widget.config?.transparentBg !== false &&
-          (!widget.config?.bgStyle || widget.config?.bgStyle === 'transparent');
-        const isTransparentImage = widget.type === 'image' && widget.config?.transparentBg !== false;
-        const isFramelessWidget = isTransparentTextbox || isTransparentImage;
+        const isFramelessWidget = isWidgetStickerMode(widget);
 
         const displayPos = {
           ...pos,
@@ -1378,7 +1403,9 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   ? 'rounded-none border-0 p-4 overflow-hidden'
                   : 'rounded-none border-0 p-0 overflow-hidden'
                 : isFramelessWidget
-                ? 'rounded-2xl border-0 p-1'
+                ? widget.type === 'photo_frame'
+                  ? 'rounded-2xl border-0 p-0'
+                  : 'rounded-2xl border-0 p-1'
                 : widget.type === 'image'
                 ? isWidgetLight ? 'rounded-2xl border border-slate-200/90 p-0' : 'rounded-2xl border border-gray-800/90 p-0'
                 : isWidgetLight ? 'rounded-2xl border border-slate-200/90 p-4' : 'rounded-2xl border border-gray-800/90 p-4'
@@ -1620,7 +1647,13 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
 
             {/* Widget Inner Renderers */}
-            <div className="relative z-0 isolate w-full h-full flex flex-col justify-between overflow-hidden rounded-[inherit]">
+            <div
+              className={`relative z-0 isolate w-full h-full flex flex-col justify-between ${
+                isFramelessWidget && widget.type === 'photo_frame' && widget.config?.displayStyle === 'polaroid'
+                  ? 'overflow-visible'
+                  : 'overflow-hidden'
+              } rounded-[inherit]`}
+            >
               <TileErrorBoundary label={widget.title} resetKey={widget.updated_at}>
               {widget.type === 'weather' ? (
                 <WeatherWidget
@@ -1629,6 +1662,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   longitude={widget.config?.longitude}
                   unit={widget.config?.unit || 'F'}
                   isLight={isWidgetLight}
+                  transparentBg={isFramelessWidget}
                 />
               ) : widget.type === 'clock' ? (
                 <ClockWidget
@@ -1638,6 +1672,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   timezone={widget.config?.timezone}
                   locationName={widget.config?.locationName}
                   isLight={isWidgetLight}
+                  transparentBg={isFramelessWidget}
                 />
               ) : widget.type === 'world_clock' ? (
                 <WorldClockWidget
@@ -1646,6 +1681,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   clockFace={widget.config?.clockFace || 'digital'}
                   showSeconds={widget.config?.showSeconds ?? true}
                   isLight={isWidgetLight}
+                  transparentBg={isFramelessWidget}
                   onUpdateConfig={(updates) => {
                     if (onUpdateWidget) {
                       onUpdateWidget(widget.id, {
@@ -1665,12 +1701,14 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   timezone={widget.config?.timezone}
                   clockAlign={widget.config?.clockAlign || 'center'}
                   isLight={isWidgetLight}
+                  transparentBg={isFramelessWidget}
                 />
               ) : widget.type === 'countdown' ? (
                 <CountdownWidget
                   eventName={widget.title || widget.config?.eventName}
                   targetDate={widget.config?.targetDate}
                   isLight={isWidgetLight}
+                  transparentBg={isFramelessWidget}
                 />
               ) : widget.type === 'quotes' ? (
                 <QuotesWidget
@@ -1678,6 +1716,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   quoteMode={widget.config?.quoteMode}
                   rotationIntervalSec={widget.config?.rotationIntervalSec ?? widget.config?.quoteIntervalSec}
                   isLight={isWidgetLight}
+                  transparentBg={isFramelessWidget}
                 />
               ) : widget.type === 'calendar' ? (
                 <CalendarWidget
@@ -1721,6 +1760,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   showCaptions={widget.config?.showCaptions ?? true}
                   showDateTaken={widget.config?.showDateTaken}
                   mosaicKenBurns={widget.config?.mosaicKenBurns ?? false}
+                  transparentBg={isFramelessWidget}
                   onUpdateConfig={(updates) => {
                     if (onUpdateWidget) {
                       onUpdateWidget(widget.id, {
@@ -2937,15 +2977,13 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   ))}
                 </div>
 
-                {(activeWidget?.type === 'image' || activeWidget?.type === 'textbox') && onUpdateWidget && (
+                {activeWidget && isStickerCapableWidget(activeWidget.type) && onUpdateWidget && (
                   <button
                     type="button"
                     onClick={() => {
+                      const isCurrentlySticker = isWidgetStickerMode(activeWidget);
+                      const next = !isCurrentlySticker;
                       if (activeWidget.type === 'textbox') {
-                        const isCurrentlySticker =
-                          activeWidget.config?.transparentBg !== false &&
-                          (!activeWidget.config?.bgStyle || activeWidget.config?.bgStyle === 'transparent');
-                        const next = !isCurrentlySticker;
                         onUpdateWidget(activeWidget.id, {
                           config: {
                             ...activeWidget.config,
@@ -2958,7 +2996,6 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                           },
                         });
                       } else {
-                        const next = !(activeWidget.config?.transparentBg !== false);
                         onUpdateWidget(activeWidget.id, {
                           config: { ...activeWidget.config, transparentBg: next },
                         });
@@ -2969,14 +3006,10 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   >
                     <div className="flex items-center gap-2.5">
                       <Sparkles className="w-3.5 h-3.5 text-fuchsia-400 shrink-0" />
-                      <span>{activeWidget.type === 'textbox' ? 'Sticker / No Outline' : 'Sticker / Transparent'}</span>
+                      <span>{activeWidget.type === 'image' ? 'Sticker / Transparent' : 'Sticker / No Outline'}</span>
                     </div>
                     {(() => {
-                      const isStickerOn =
-                        activeWidget.type === 'textbox'
-                          ? activeWidget.config?.transparentBg !== false &&
-                            (!activeWidget.config?.bgStyle || activeWidget.config?.bgStyle === 'transparent')
-                          : activeWidget.config?.transparentBg !== false;
+                      const isStickerOn = isWidgetStickerMode(activeWidget);
                       return (
                         <span
                           className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${

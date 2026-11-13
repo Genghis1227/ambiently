@@ -183,6 +183,7 @@ interface WorldClockWidgetProps {
   clockFace?: 'digital' | 'minimal' | 'analog';
   showSeconds?: boolean;
   isLight?: boolean;
+  transparentBg?: boolean;
   onUpdateCities?: (cities: WorldClockCity[]) => void;
   onUpdateConfig?: (updates: Record<string, any>) => void;
 }
@@ -193,6 +194,7 @@ export const WorldClockWidget: React.FC<WorldClockWidgetProps> = ({
   clockFace = 'digital',
   showSeconds = true,
   isLight = false,
+  transparentBg = false,
   onUpdateCities,
   onUpdateConfig,
 }) => {
@@ -256,13 +258,15 @@ export const WorldClockWidget: React.FC<WorldClockWidgetProps> = ({
     else if (onUpdateConfig) onUpdateConfig({ cities: sorted });
   };
 
+  const stickerShadow = transparentBg && !isLight ? 'drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]' : '';
+
   // Single-City Focus Mode
   if (activeCities.length === 1) {
     const city = activeCities[0];
     const zt = getFormattedTimeForZone(now, city.timezone, hour12);
 
     return (
-      <div className="w-full h-full flex flex-col justify-between select-none p-1">
+      <div className={`w-full h-full flex flex-col justify-between select-none p-1 ${stickerShadow}`}>
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 min-w-0">
             <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
@@ -272,7 +276,11 @@ export const WorldClockWidget: React.FC<WorldClockWidgetProps> = ({
             </span>
           </div>
           <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full shrink-0 ${
-            isLight
+            transparentBg
+              ? isLight
+                ? 'bg-transparent text-cyan-800 font-bold'
+                : 'bg-transparent text-cyan-300 font-bold'
+              : isLight
               ? 'bg-cyan-50 text-cyan-800 border border-cyan-200'
               : 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
           }`}>
@@ -374,8 +382,10 @@ export const WorldClockWidget: React.FC<WorldClockWidgetProps> = ({
   const canReorder = Boolean(onUpdateCities || onUpdateConfig) && activeCities.length > 1;
 
   return (
-    <div className="w-full h-full flex flex-col justify-between select-none p-1 overflow-hidden">
-      <div className={`flex items-center justify-between border-b pb-2 mb-2 shrink-0 ${isLight ? 'border-slate-200' : 'border-gray-800/80'}`}>
+    <div className={`w-full h-full flex flex-col justify-between select-none p-1 overflow-hidden ${stickerShadow}`}>
+      <div className={`flex items-center justify-between pb-2 mb-2 shrink-0 ${
+        transparentBg ? 'border-b border-transparent' : isLight ? 'border-b border-slate-200' : 'border-b border-gray-800/80'
+      }`}>
         <div className="flex items-center gap-1.5 min-w-0">
           <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
           <span className={`text-xs font-bold uppercase tracking-wider truncate ${isLight ? 'text-slate-700' : 'text-gray-300'}`}>
@@ -464,6 +474,8 @@ export const WorldClockWidget: React.FC<WorldClockWidgetProps> = ({
                   ? isLight
                     ? 'border-cyan-500 ring-2 ring-cyan-400/50 bg-cyan-50/80'
                     : 'border-cyan-400 ring-2 ring-cyan-500/50 bg-cyan-950/50'
+                  : transparentBg
+                  ? 'bg-transparent border-transparent'
                   : isLight
                   ? 'bg-slate-100/90 border-slate-200/90 hover:border-slate-300'
                   : 'bg-gray-950/60 border-gray-800/80 hover:border-gray-700'
