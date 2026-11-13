@@ -191,7 +191,7 @@ const WIDGET_TEMPLATES: WidgetTemplate[] = [
     description: 'Display an animated GIF from GIPHY, a transparent canvas sticker, or any picture with search & URL support.',
     icon: Sparkles,
     defaultGridPos: { w: 4, h: 4 },
-    defaultConfig: { fit: 'contain', transparentBg: false },
+    defaultConfig: { fit: 'contain', transparentBg: true },
     color: 'from-fuchsia-500/20 to-pink-500/20 text-fuchsia-400 border-fuchsia-500/30',
   },
 ];

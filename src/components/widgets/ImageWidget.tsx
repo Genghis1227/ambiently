@@ -26,7 +26,7 @@ export const ImageWidget: React.FC<ImageWidgetProps> = ({
 
   const url = config.url?.trim() || '';
   const fit = config.fit || 'contain';
-  const transparentBg = Boolean(config.transparentBg);
+  const transparentBg = config.transparentBg !== false;
 
   const handleSelectMedia = (selectedUrl: string, selectedTitle?: string) => {
     setHasError(false);
