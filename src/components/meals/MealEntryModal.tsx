@@ -372,12 +372,24 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
     const leadingOffset = (firstOfMonth.getDay() - startDayIndex + 7) % 7;
     const gridStart = new Date(year, month, 1 - leadingOffset);
 
+    const slotOrder: Record<MealSlot, number> = {
+      breakfast: 0,
+      lunch: 1,
+      dinner: 2,
+    };
+    const mealsByDay = new Map<string, ScheduledMeal[]>();
     const slotsByDay = new Map<string, Set<MealSlot>>();
     for (const m of scheduledMeals) {
       if (m.deletedAt) continue;
       const set = slotsByDay.get(m.date) || new Set<MealSlot>();
       set.add(m.slot);
       slotsByDay.set(m.date, set);
+      const list = mealsByDay.get(m.date) || [];
+      list.push(m);
+      mealsByDay.set(m.date, list);
+    }
+    for (const list of mealsByDay.values()) {
+      list.sort((a, b) => (slotOrder[a.slot] ?? 9) - (slotOrder[b.slot] ?? 9));
     }
 
     return Array.from({ length: 42 }, (_, idx) => {
@@ -395,6 +407,7 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
         isToday: key === todayKey,
         isSelected: key === selectedDate,
         scheduledSlots: slotsByDay.get(key) || new Set<MealSlot>(),
+        dayMeals: mealsByDay.get(key) || [],
       };
     });
   }, [
@@ -570,6 +583,9 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
   });
 
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [loadedFromExistingSlot, setLoadedFromExistingSlot] = useState<boolean>(
+    () => Boolean(editingMeal || existingMealAtSlot)
+  );
 
   const syncFromTargetSlot = (targetDate: string, targetSlot: MealSlot) => {
     setSelectedDate(targetDate);
@@ -579,14 +595,22 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
     const slotMeal = scheduledMeals.find(
       (m) => !m.deletedAt && m.date === targetDate && m.slot === targetSlot
     );
-    if (!slotMeal) return;
+    if (!slotMeal) {
+      if (loadedFromExistingSlot) {
+        setQuickTitle('');
+        setSelectedRecipeId('');
+        setMealNotes('');
+        setCookProfileId(defaultCookProfileId || '');
+        setScaleFactor(1);
+        setSelectedIngredientIndices(new Set());
+        setLoadedFromExistingSlot(false);
+      }
+      return;
+    }
 
-    if (slotMeal.cookProfileId) {
-      setCookProfileId(slotMeal.cookProfileId);
-    }
-    if (slotMeal.notes) {
-      setMealNotes(slotMeal.notes);
-    }
+    setLoadedFromExistingSlot(true);
+    setCookProfileId(slotMeal.cookProfileId || defaultCookProfileId || '');
+    setMealNotes(slotMeal.notes || '');
     if (slotMeal.recipeId) {
       setMode('recipe');
       setSelectedRecipeId(slotMeal.recipeId);
@@ -1103,8 +1127,8 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
         {/* Scrollable Modal Body */}
         <div className="flex-1 min-h-0 overflow-y-auto p-4 md:p-5 space-y-4">
           {/* Date & Meal Slot Row */}
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-            <div className="sm:col-span-5 relative">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+            <div className="md:col-span-6 min-w-0 relative">
               <label
                 className={`block text-[11px] font-semibold uppercase tracking-wider mb-1.5 ${
                   isLight ? 'text-slate-500' : 'text-slate-400'
@@ -1113,7 +1137,7 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
                 Date
               </label>
 
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5 min-w-0">
                 <button
                   type="button"
                   onClick={() => stepSelectedDateByDays(-1)}
@@ -1145,7 +1169,7 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
                   }}
                   aria-expanded={isCalendarOpen}
                   aria-label="Open calendar date selector"
-                  className={`flex-1 min-h-[46px] px-3 rounded-xl border text-left inline-flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                  className={`flex-1 min-w-0 min-h-[46px] px-2.5 rounded-xl border text-left inline-flex items-center justify-between gap-1.5 transition-colors cursor-pointer ${
                     isCalendarOpen
                       ? isLight
                         ? 'bg-emerald-50/70 border-emerald-500 text-slate-900'
@@ -1339,10 +1363,20 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
                       const hasBkfst = cell.scheduledSlots.has('breakfast');
                       const hasLunch = cell.scheduledSlots.has('lunch');
                       const hasDinner = cell.scheduledSlots.has('dinner');
+                      const tooltipText =
+                        cell.dayMeals.length > 0
+                          ? `${formatReadableDate(cell.dateKey)} — ${cell.dayMeals
+                              .map(
+                                (m) =>
+                                  `${m.slot.charAt(0).toUpperCase() + m.slot.slice(1)}: ${m.title}`
+                              )
+                              .join(', ')}`
+                          : formatReadableDate(cell.dateKey);
                       return (
                         <button
                           key={cell.dateKey}
                           type="button"
+                          title={tooltipText}
                           onClick={() => {
                             syncFromTargetSlot(cell.dateKey, selectedSlot);
                             setIsCalendarOpen(false);
@@ -1370,7 +1404,7 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
                             <span className="flex items-center gap-0.5 mt-0.5">
                               {hasBkfst && (
                                 <span
-                                  className={`w-1 h-1 rounded-full ${
+                                  className={`w-1.5 h-1.5 rounded-full ${
                                     cell.isSelected
                                       ? 'bg-amber-200'
                                       : 'bg-amber-400'
@@ -1379,7 +1413,7 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
                               )}
                               {hasLunch && (
                                 <span
-                                  className={`w-1 h-1 rounded-full ${
+                                  className={`w-1.5 h-1.5 rounded-full ${
                                     cell.isSelected
                                       ? 'bg-emerald-200'
                                       : 'bg-emerald-400'
@@ -1388,7 +1422,7 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
                               )}
                               {hasDinner && (
                                 <span
-                                  className={`w-1 h-1 rounded-full ${
+                                  className={`w-1.5 h-1.5 rounded-full ${
                                     cell.isSelected
                                       ? 'bg-white'
                                       : 'bg-sky-400'
@@ -1405,7 +1439,7 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
               )}
             </div>
 
-            <div className="sm:col-span-7">
+            <div className="md:col-span-6 min-w-0">
               <label
                 className={`block text-[11px] font-semibold uppercase tracking-wider mb-1.5 ${
                   isLight ? 'text-slate-500' : 'text-slate-400'
@@ -1429,7 +1463,7 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
                       onClick={() =>
                         syncFromTargetSlot(selectedDate, slotOpt.id)
                       }
-                      className={`min-h-[38px] px-2.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
+                      className={`min-h-[38px] min-w-0 px-2 rounded-lg text-xs font-semibold border truncate transition-colors cursor-pointer ${
                         active
                           ? isLight
                             ? slotOpt.activeLight

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.1] - 2026-11-14
+
+### Adaptive 3-Column Kanban Tiles, Meal Entry Layout Fix & Family Calendar Meal Overlay
+* **Adaptive 3-Column Kanban Tile Resizing & `To Do` Default Column (`src/types/kanban.ts`, `src/components/widgets/KanbanWidget.tsx`, `src/components/kanban/useKanbanPointerDnD.ts`, `src/components/widgets/AddWidgetModal.tsx`, `src/components/widgets/WidgetSettingsModal.tsx`, `tests/kanbanStore.test.ts`):**
+  * New Project Kanban tiles open on `To Do` (`'todo'`) by default (`DEFAULT_KANBAN_COLUMN`), and resizing a Kanban tile wider (`>= Math.round(760 * displayDensity)` px via `ResizeObserver`) dynamically switches the tile in place between the compact 1-column stepper and a side-by-side 3-column swimlane layout (`To Do`, `In Progress`, `Done`) with horizontal/vertical pointer drag-and-drop and per-column inline `+ Add card`.
+* **Meal Planner Date Stepper Fix, `Today` Outlook Scope & Family Calendar Meal Overlay (`src/types/meals.ts`, `src/stores/useMealStore.ts`, `src/utils/mealCalendarEvents.ts`, `src/services/feeds.ts`, `src/components/meals/MealEntryModal.tsx`, `src/components/widgets/MealPlannerWidget.tsx`, `src/components/widgets/CalendarWidget.tsx`, `src/components/layout/Corkboard.tsx`, `src/components/mobile/MobileCompanion.tsx`, `src/components/widgets/WidgetSettingsModal.tsx`, `tests/mealPlannerAndCalendar.test.ts`):**
+  * Fixed the `Date` next-day `>` chevron overlapping the `Breakfast` pill in `Schedule Family Meal` (`12`-column responsive header + slot-switch state hygiene), added a `'today'` scope (`Today`, `Tomorrow`, `3-Day`, `Week`) to `MealPlannerWidget`, always surfaced populated meal slots (such as Lunch) regardless of empty-slot prompts while defaulting `+` to the next unoccupied slot, eliminated `${date}_${slot}` tombstone collisions via unique `generateMealId('meal')` IDs and `resurrectedMealIds` merge protection, and surfaced scheduled meals across all `CalendarWidget` layouts (`Agenda`, `3-Day`, `Week`, `Timeline`, `Month`) with a per-widget **Show Planned Family Meals** (`showMeals`, default `true`) toggle.
+
+---
+
 ## [0.7.0] - 2026-11-14
 
 ### Multi-Board Project Kanban Engine & Bento Widget

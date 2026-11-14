@@ -122,6 +122,33 @@ export function resolveWidgetActiveBoardId(
   return sorted[0]?.id || '';
 }
 
+export const DEFAULT_KANBAN_ACTIVE_COLUMN: KanbanColumnId = 'todo';
+export const KANBAN_THREE_COLUMN_MIN_WIDTH_PX = 760;
+
+/**
+ * Resolves a Kanban widget's starting/active compact column, defaulting new widgets to To Do.
+ */
+export function resolveWidgetActiveColumnId(
+  config: Partial<KanbanWidgetConfig> | undefined
+): KanbanColumnId {
+  const candidate = config?.activeColumnId;
+  if (candidate === 'todo' || candidate === 'in_progress' || candidate === 'done') {
+    return candidate;
+  }
+  return DEFAULT_KANBAN_ACTIVE_COLUMN;
+}
+
+/**
+ * Switches a Kanban widget tile cleanly from 1-column focus to a 3-column layout when resized wide enough.
+ */
+export function shouldUseThreeColumnKanbanTile(
+  containerWidthPx: number,
+  displayDensity = 1
+): boolean {
+  const density = Number.isFinite(displayDensity) && displayDensity > 0 ? displayDensity : 1;
+  return containerWidthPx >= Math.round(KANBAN_THREE_COLUMN_MIN_WIDTH_PX * density);
+}
+
 export interface KanbanEngineSnapshot {
   id: 'household_kanban';
   boards: KanbanBoard[];

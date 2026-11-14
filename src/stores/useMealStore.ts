@@ -148,12 +148,35 @@ export function mergeMealSnapshots(
   );
   const deletedRecipeSet = new Set(deletedRecipeIds);
 
+  const localDeletedMealSet = new Set(local.deletedScheduledMealIds || []);
+  const remoteDeletedMealSet = new Set(remote.deletedScheduledMealIds || []);
+  const resurrectedMealIds = new Set<string>();
+
+  for (const item of local.scheduledMeals || []) {
+    if (!item || item.deletedAt || localDeletedMealSet.has(item.id)) continue;
+    if (
+      remoteDeletedMealSet.has(item.id) &&
+      (Date.parse(item.updatedAt || '') || 0) > remoteUpdated
+    ) {
+      resurrectedMealIds.add(item.id);
+    }
+  }
+  for (const item of remote.scheduledMeals || []) {
+    if (!item || item.deletedAt || remoteDeletedMealSet.has(item.id)) continue;
+    if (
+      localDeletedMealSet.has(item.id) &&
+      (Date.parse(item.updatedAt || '') || 0) > localUpdated
+    ) {
+      resurrectedMealIds.add(item.id);
+    }
+  }
+
   const deletedScheduledMealIds = Array.from(
     new Set([
       ...(local.deletedScheduledMealIds || []),
       ...(remote.deletedScheduledMealIds || []),
     ])
-  );
+  ).filter((id) => !resurrectedMealIds.has(id));
   const deletedMealSet = new Set(deletedScheduledMealIds);
 
   const deletedShoppingItemIds = Array.from(
@@ -202,11 +225,27 @@ export function mergeMealSnapshots(
   const primary = remoteWinsScalar ? remote : local;
   const latestUpdatedAt = remoteWinsScalar ? remote.updated_at : local.updated_at;
 
-  const mergedScheduled = mergeById(
+  const mergedScheduledRaw = mergeById(
     local.scheduledMeals,
     remote.scheduledMeals,
     deletedMealSet
   );
+  // Deduplicate by (date, slot) keeping the newer updatedAt so concurrent offline edits converge cleanly
+  const dedupedBySlot = new Map<string, ScheduledMeal>();
+  for (const meal of mergedScheduledRaw) {
+    const slotKey = `${meal.date}_${meal.slot}`;
+    const prev = dedupedBySlot.get(slotKey);
+    if (!prev) {
+      dedupedBySlot.set(slotKey, meal);
+    } else {
+      const prevTime = Date.parse(prev.updatedAt || '') || 0;
+      const curTime = Date.parse(meal.updatedAt || '') || 0;
+      if (curTime >= prevTime) {
+        dedupedBySlot.set(slotKey, meal);
+      }
+    }
+  }
+  const mergedScheduled = Array.from(dedupedBySlot.values());
   const pruned = prunePastScheduledMeals(mergedScheduled, deletedScheduledMealIds);
 
   return {
@@ -384,11 +423,19 @@ export const useMealStore = create<MealStoreState>((set, get) => {
     applyRemoteMealSnapshot: async (remote) => {
       const storedLocal = get().isInitialized
         ? get().snapshot
-        : await db.meals.get('household_meals').catch(() => undefined);
+        : typeof indexedDB !== 'undefined'
+          ? await db.meals.get('household_meals').catch(() => undefined)
+          : undefined;
       const local = storedLocal || remote;
       const merged = mergeMealSnapshots(local, remote);
       commitMealState(merged, { isInitialized: true });
-      await db.meals.put(merged);
+      if (typeof indexedDB !== 'undefined') {
+        try {
+          await db.meals.put(merged);
+        } catch (err) {
+          console.warn('Failed to persist merged meal snapshot to IndexedDB:', err);
+        }
+      }
     },
 
     upsertRecipe: async (input) => {
@@ -526,13 +573,17 @@ export const useMealStore = create<MealStoreState>((set, get) => {
         ? current.recipes.find((r) => r.id === input.recipeId)
         : undefined;
 
+      const deletedMealIdSet = new Set(current.deletedScheduledMealIds || []);
       const existing = input.id
-        ? current.scheduledMeals.find((m) => m.id === input.id)
+        ? current.scheduledMeals.find((m) => !m.deletedAt && m.id === input.id)
         : current.scheduledMeals.find(
-            (m) => m.date === input.date && m.slot === input.slot
+            (m) => !m.deletedAt && m.date === input.date && m.slot === input.slot
           );
 
-      const id = existing?.id || input.id || `${input.date}_${input.slot}`;
+      const id =
+        existing?.id ||
+        (input.id && !deletedMealIdSet.has(input.id) ? input.id : undefined) ||
+        generateMealId('meal');
       const resolvedTitle =
         input.title?.trim() || linkedRecipe?.title || existing?.title || 'Planned Meal';
 
@@ -619,7 +670,10 @@ export const useMealStore = create<MealStoreState>((set, get) => {
       let startKey: string;
       let endKey: string;
 
-      if (scope === 'tomorrow') {
+      if (scope === 'today') {
+        startKey = localDateKey(referenceDate);
+        endKey = startKey;
+      } else if (scope === 'tomorrow') {
         startKey = addDaysToLocalDate(referenceDate, 1);
         endKey = startKey;
       } else if (scope === 'three_day') {

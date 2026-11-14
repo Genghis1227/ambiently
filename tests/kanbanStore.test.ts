@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
 import { useKanbanStore } from '../src/stores/useKanbanStore.ts';
 import {
+  DEFAULT_KANBAN_ACTIVE_COLUMN,
   resolveWidgetActiveBoardId,
+  resolveWidgetActiveColumnId,
+  shouldUseThreeColumnKanbanTile,
   type KanbanBoard,
   type KanbanCard,
   type KanbanEngineSnapshot,
@@ -323,5 +326,28 @@ describe('useKanbanStore & Multi-Board Kanban Engine', () => {
       useKanbanStore.getState().boards.find((b) => b.id === 'board-main')?.name,
       'Household Updated Remotely'
     );
+  });
+
+  it('defaults new Kanban widgets to To Do and adapts wide tiles to 3 columns based on width & displayDensity', () => {
+    assert.equal(DEFAULT_KANBAN_ACTIVE_COLUMN, 'todo');
+    assert.equal(resolveWidgetActiveColumnId(undefined), 'todo');
+    assert.equal(resolveWidgetActiveColumnId({}), 'todo');
+    assert.equal(resolveWidgetActiveColumnId({ activeColumnId: 'in_progress' }), 'in_progress');
+    assert.equal(resolveWidgetActiveColumnId({ activeColumnId: 'done' }), 'done');
+
+    // Standard 1.0x density threshold (760px)
+    assert.equal(shouldUseThreeColumnKanbanTile(448, 1), false);
+    assert.equal(shouldUseThreeColumnKanbanTile(672, 1), false);
+    assert.equal(shouldUseThreeColumnKanbanTile(759, 1), false);
+    assert.equal(shouldUseThreeColumnKanbanTile(760, 1), true);
+    assert.equal(shouldUseThreeColumnKanbanTile(960, 1), true);
+
+    // Proportional displayDensity scaling
+    assert.equal(shouldUseThreeColumnKanbanTile(569, 0.75), false);
+    assert.equal(shouldUseThreeColumnKanbanTile(570, 0.75), true);
+    assert.equal(shouldUseThreeColumnKanbanTile(949, 1.25), false);
+    assert.equal(shouldUseThreeColumnKanbanTile(950, 1.25), true);
+    assert.equal(shouldUseThreeColumnKanbanTile(1139, 1.5), false);
+    assert.equal(shouldUseThreeColumnKanbanTile(1140, 1.5), true);
   });
 });

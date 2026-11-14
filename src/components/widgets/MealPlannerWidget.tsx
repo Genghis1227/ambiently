@@ -37,6 +37,12 @@ import {
 } from '../../utils/ingredientAggregator';
 import { isAmbientlyInNightMode } from '../../utils/confetti';
 import { localDateKey } from '../../utils/dateKey';
+import {
+  ALL_MEAL_SLOTS,
+  getDisplaySlotsForDay,
+  groupScheduledMealsByDate,
+  pickDefaultScheduleSlot,
+} from '../../utils/mealCalendarEvents';
 import { ProfileAvatar } from '../common/ProfileAvatar';
 import { MealEntryModal } from '../meals/MealEntryModal';
 import { CookingModeModal } from '../meals/CookingModeModal';
@@ -49,8 +55,6 @@ export interface MealPlannerWidgetProps {
     updates: Partial<MealWidgetConfig> & { weekStartsOn?: WeekStartDay }
   ) => void;
 }
-
-const ALL_SLOTS: readonly MealSlot[] = ['breakfast', 'lunch', 'dinner'];
 
 const SLOT_SHORT_LABELS: Record<MealSlot, string> = {
   breakfast: 'Bkfst',
@@ -65,6 +69,7 @@ const SLOT_FULL_LABELS: Record<MealSlot, string> = {
 };
 
 const SCOPE_OPTIONS: readonly { id: WidgetMealScope; label: string }[] = [
+  { id: 'today', label: 'Today' },
   { id: 'tomorrow', label: 'Tomorrow' },
   { id: 'three_day', label: '3-Day' },
   { id: 'full_week', label: 'Week' },
@@ -195,9 +200,9 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
 
   const visibleSlots: MealSlot[] = useMemo(() => {
     if (Array.isArray(config?.visibleSlots) && config.visibleSlots.length > 0) {
-      return ALL_SLOTS.filter((s) => config.visibleSlots?.includes(s));
+      return ALL_MEAL_SLOTS.filter((s) => config.visibleSlots?.includes(s));
     }
-    return [...ALL_SLOTS];
+    return [...ALL_MEAL_SLOTS];
   }, [config?.visibleSlots]);
 
   const showCookAvatar = config?.showCookAvatar !== false;
@@ -275,6 +280,11 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
       };
     };
 
+    if (effectiveScope === 'today') {
+      const target = customAnchorDate || todayDate;
+      return [buildDescriptor(target)];
+    }
+
     if (effectiveScope === 'tomorrow') {
       const target = customAnchorDate || addDays(todayDate, 1);
       return [buildDescriptor(target)];
@@ -332,6 +342,11 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
     [dayBoxes]
   );
 
+  const mealsByDate = useMemo(
+    () => groupScheduledMealsByDate(scheduledMeals),
+    [scheduledMeals]
+  );
+
   const widgetCalendarCells = useMemo(() => {
     const year = calendarMonthDate.getFullYear();
     const month = calendarMonthDate.getMonth();
@@ -340,14 +355,6 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
     const leadingOffset = (firstOfMonth.getDay() - startIndex + 7) % 7;
     const gridStart = new Date(year, month, 1 - leadingOffset);
 
-    const slotsByDay = new Map<string, Set<MealSlot>>();
-    for (const m of scheduledMeals) {
-      if (m.deletedAt) continue;
-      const set = slotsByDay.get(m.date) || new Set<MealSlot>();
-      set.add(m.slot);
-      slotsByDay.set(m.date, set);
-    }
-
     return Array.from({ length: 42 }, (_, idx) => {
       const d = new Date(
         gridStart.getFullYear(),
@@ -355,6 +362,7 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
         gridStart.getDate() + idx
       );
       const key = localDateKey(d);
+      const dayMeals = mealsByDate.get(key) || [];
       return {
         date: d,
         dateKey: key,
@@ -365,13 +373,14 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
         isAnchor: Boolean(
           customAnchorDate && localDateKey(customAnchorDate) === key
         ),
-        scheduledSlots: slotsByDay.get(key) || new Set<MealSlot>(),
+        scheduledSlots: new Set<MealSlot>(dayMeals.map((m) => m.slot)),
+        dayMeals,
       };
     });
   }, [
     calendarMonthDate,
     effectiveWeekStartsOn,
-    scheduledMeals,
+    mealsByDate,
     todayKey,
     visibleDateKeySet,
     customAnchorDate,
@@ -386,29 +395,6 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
     }
     return map;
   }, [recipes]);
-
-  const mealsByDate = useMemo(() => {
-    const slotOrder: Record<MealSlot, number> = {
-      breakfast: 0,
-      lunch: 1,
-      dinner: 2,
-    };
-    const visibleSlotSet = new Set<MealSlot>(visibleSlots);
-    const map = new Map<string, ScheduledMeal[]>();
-
-    for (const meal of scheduledMeals) {
-      if (meal.deletedAt || !visibleSlotSet.has(meal.slot)) continue;
-      const arr = map.get(meal.date) || [];
-      arr.push(meal);
-      map.set(meal.date, arr);
-    }
-
-    for (const arr of map.values()) {
-      arr.sort((a, b) => (slotOrder[a.slot] ?? 9) - (slotOrder[b.slot] ?? 9));
-    }
-
-    return map;
-  }, [scheduledMeals, visibleSlots]);
 
   const visibleMealCountsByProfile = useMemo(() => {
     const counts = new Map<string, number>();
@@ -499,6 +485,7 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
   const handleScopeChange = (nextScope: WidgetMealScope) => {
     setFallbackScope(nextScope);
     setWeekOffset(0);
+    setCustomAnchorDate(null);
     onUpdateConfig?.({ scope: nextScope });
   };
 
@@ -515,15 +502,8 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
     initialMode?: 'quick' | 'recipe'
   ) => {
     const existingForDay = mealsByDate.get(dateKey) || [];
-    const occupiedSlots = new Set(existingForDay.map((m) => m.slot));
-    const chosenSlot =
-      preferredSlot ||
-      visibleSlots.find((s) => !occupiedSlots.has(s)) ||
-      visibleSlots[visibleSlots.length - 1] ||
-      'dinner';
-
-    const existingInChosen =
-      existingForDay.find((m) => m.slot === chosenSlot) || null;
+    const { slot: chosenSlot, editingMeal: existingInChosen } =
+      pickDefaultScheduleSlot(visibleSlots, existingForDay, preferredSlot);
 
     setEntryModalState({
       isOpen: true,
@@ -872,7 +852,7 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
             data-no-drag="true"
             onClick={() =>
               openScheduleForDay(
-                effectiveScope === 'tomorrow' ? tomorrowKey : todayKey,
+                dayBoxes[0]?.dateKey || todayKey,
                 undefined,
                 'recipe'
               )
@@ -1015,12 +995,18 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  setCustomAnchorDate(null);
+                  if (effectiveScope === 'tomorrow') {
+                    setCustomAnchorDate(todayDate);
+                  } else {
+                    setCustomAnchorDate(null);
+                  }
                   setWeekOffset(0);
                   setIsCalendarOpen(false);
                 }}
                 className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-colors cursor-pointer ${
-                  !customAnchorDate && weekOffset === 0
+                  (effectiveScope === 'tomorrow'
+                    ? dayBoxes[0]?.dateKey === todayKey
+                    : !customAnchorDate && weekOffset === 0)
                     ? isLight
                       ? 'bg-emerald-700 border-emerald-700 text-white'
                       : 'bg-emerald-600 border-emerald-500 text-white'
@@ -1034,13 +1020,27 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  setCustomAnchorDate(addDays(todayDate, 1));
+                  if (effectiveScope === 'tomorrow') {
+                    setCustomAnchorDate(null);
+                  } else {
+                    setCustomAnchorDate(addDays(todayDate, 1));
+                  }
+                  setWeekOffset(0);
                   setIsCalendarOpen(false);
                 }}
                 className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-colors cursor-pointer ${
-                  isLight
-                    ? 'bg-stone-100 border-stone-300 text-slate-700 hover:bg-stone-200'
-                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
+                  (effectiveScope === 'tomorrow'
+                    ? dayBoxes[0]?.dateKey === tomorrowKey
+                    : Boolean(
+                        customAnchorDate &&
+                          localDateKey(customAnchorDate) === tomorrowKey
+                      ))
+                    ? isLight
+                      ? 'bg-emerald-700 border-emerald-700 text-white'
+                      : 'bg-emerald-600 border-emerald-500 text-white'
+                    : isLight
+                      ? 'bg-stone-100 border-stone-300 text-slate-700 hover:bg-stone-200'
+                      : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
                 }`}
               >
                 Tomorrow
@@ -1123,10 +1123,22 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
               const hasBkfst = cell.scheduledSlots.has('breakfast');
               const hasLunch = cell.scheduledSlots.has('lunch');
               const hasDinner = cell.scheduledSlots.has('dinner');
+              const dateSummary = cell.date.toLocaleDateString([], {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+              });
+              const tooltipText =
+                cell.dayMeals.length > 0
+                  ? `${dateSummary} — ${cell.dayMeals
+                      .map((m) => `${SLOT_FULL_LABELS[m.slot]}: ${m.title}`)
+                      .join(', ')}`
+                  : dateSummary;
               return (
                 <button
                   key={cell.dateKey}
                   type="button"
+                  title={tooltipText}
                   onClick={() => {
                     setCustomAnchorDate(cell.date);
                     setIsCalendarOpen(false);
@@ -1157,13 +1169,25 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
                   {(hasBkfst || hasLunch || hasDinner) && (
                     <span className="flex items-center gap-0.5 mt-0.5">
                       {hasBkfst && (
-                        <span className="w-1 h-1 rounded-full bg-amber-400" />
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            cell.isAnchor ? 'bg-amber-200' : 'bg-amber-400'
+                          }`}
+                        />
                       )}
                       {hasLunch && (
-                        <span className="w-1 h-1 rounded-full bg-emerald-400" />
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            cell.isAnchor ? 'bg-emerald-200' : 'bg-emerald-400'
+                          }`}
+                        />
                       )}
                       {hasDinner && (
-                        <span className="w-1 h-1 rounded-full bg-sky-400" />
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            cell.isAnchor ? 'bg-white' : 'bg-sky-400'
+                          }`}
+                        />
                       )}
                     </span>
                   )}
@@ -1529,11 +1553,17 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
           data-no-drag="true"
           className="flex-1 min-h-0 overflow-y-auto pt-2.5 pr-0.5"
         >
-          {effectiveScope === 'tomorrow' ? (
-            /* SCOPE 1: TOMORROW COMPACT SLOT CARD */
+          {effectiveScope === 'today' || effectiveScope === 'tomorrow' ? (
+            /* SCOPE 1: FOCUSED SINGLE-DAY COMPACT SLOT CARD */
             (() => {
-              const tomorrowBox = dayBoxes[0];
-              const dayMeals = mealsByDate.get(tomorrowBox.dateKey) || [];
+              const singleDayBox = dayBoxes[0];
+              const dayMeals = mealsByDate.get(singleDayBox.dateKey) || [];
+              const slotsToRender = getDisplaySlotsForDay(visibleSlots, dayMeals);
+              const dayBadgeLabel = singleDayBox.isToday
+                ? 'Today'
+                : singleDayBox.isTomorrow
+                  ? 'Tomorrow'
+                  : singleDayBox.weekdayShort;
               return (
                 <div
                   className={`rounded-2xl border p-3.5 space-y-2.5 ${
@@ -1551,29 +1581,29 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
                             : 'bg-emerald-950/45 border-emerald-800/60 text-emerald-300/90'
                         }`}
                       >
-                        Tomorrow
+                        {dayBadgeLabel}
                       </span>
                       <span className="ml-2 text-xs font-semibold opacity-85">
-                        {tomorrowBox.weekdayShort}, {tomorrowBox.monthDayLabel}
+                        {singleDayBox.weekdayShort}, {singleDayBox.monthDayLabel}
                       </span>
                     </div>
 
                     <button
                       type="button"
-                      onClick={() => openScheduleForDay(tomorrowBox.dateKey)}
+                      onClick={() => openScheduleForDay(singleDayBox.dateKey)}
                       className={`w-7 h-7 rounded-lg border inline-flex items-center justify-center transition-colors cursor-pointer ${
                         isLight
                           ? 'bg-stone-100 border-stone-300 text-slate-700 hover:bg-stone-200'
                           : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:text-white'
                       }`}
-                      title="Plan meal for Tomorrow"
+                      title={`Plan meal for ${dayBadgeLabel}`}
                     >
                       <Plus className="w-3.5 h-3.5" />
                     </button>
                   </div>
 
                   <div className="space-y-2">
-                    {visibleSlots.map((slot) => {
+                    {slotsToRender.map((slot) => {
                       const meal = dayMeals.find((m) => m.slot === slot);
                       if (!meal) {
                         return (
@@ -1581,7 +1611,7 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
                             key={slot}
                             type="button"
                             onClick={() =>
-                              openScheduleForDay(tomorrowBox.dateKey, slot)
+                              openScheduleForDay(singleDayBox.dateKey, slot)
                             }
                             className={`w-full min-h-[42px] px-3 py-2 rounded-xl border border-dashed flex items-center justify-between text-xs transition-colors cursor-pointer ${
                               isLight
