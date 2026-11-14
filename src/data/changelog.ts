@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.6.8",
+    date: "November 13, 2026",
+    title: "Proposals Tray Visibility Fix & Kid Self-Service Proposal Editing",
+    highlights: [
+      "Pending Proposals Tray Count & Filter Alignment: Fixed the mismatch where the Proposals Tray button showed pending items while opening to 0; opening from the tray button now shows all pending household proposals with interactive All Pending and per-profile filter pills plus stale-scope normalization.",
+      "Kid Self-Service Proposal Edit & Removal: Kids can now edit unpriced proposals (reward title, product link + auto-extract details, image URL, estimated dollar price, or proposer) or withdraw unwanted pending wishes with 2-step confirmation—no Parent PIN required while still awaiting pricing.",
+      "Sync Preservation & Parent Lockout Guard: Kid edits to unpriced proposals survive multi-device sync merges while parent pricing remains strictly authoritative and blocks unauthenticated edits once a reward is priced or unlocked.",
+    ],
+  },
+  {
     version: "v0.6.7",
     date: "November 13, 2026",
     title: "Automatic Daily Photo Rescan & Anti-Spam Cooldowns (Google Photos, Drive & Plex)",

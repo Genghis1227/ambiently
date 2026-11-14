@@ -9,14 +9,16 @@ import {
   Loader2,
   CheckCircle2,
   AlertCircle,
+  Pencil,
 } from 'lucide-react';
-import type { Profile } from '../../types/chores';
+import type { Profile, WishlistReward } from '../../types/chores';
 import { HouseholdAvatar } from '../common/HouseholdAvatar';
 
 interface ProposeRewardModalProps {
   isOpen: boolean;
   profiles: Profile[];
   defaultProfileId?: string;
+  editingProposal?: WishlistReward | null;
   onClose: () => void;
   onSubmitProposal: (proposal: {
     profileId: string;
@@ -35,22 +37,48 @@ function sanitizeDollarInput(value: string): string {
   return `${whole}.${decimals.join('').slice(0, 2)}`;
 }
 
-export const ProposeRewardModal: React.FC<ProposeRewardModalProps> = ({
-  isOpen,
+function resolveInitialProfileId(
+  profiles: Profile[],
+  defaultProfileId?: string,
+  editingProposal?: WishlistReward | null
+): string {
+  if (
+    editingProposal?.profileId &&
+    profiles.some((p) => p.id === editingProposal.profileId)
+  ) {
+    return editingProposal.profileId;
+  }
+  if (
+    defaultProfileId &&
+    defaultProfileId !== 'household' &&
+    profiles.some((p) => p.id === defaultProfileId)
+  ) {
+    return defaultProfileId;
+  }
+  return profiles.find((p) => p.role === 'kid')?.id || profiles[0]?.id || '';
+}
+
+function formatInitialPrice(rawPrice?: number): string {
+  return typeof rawPrice === 'number' && rawPrice > 0 ? rawPrice.toFixed(2) : '';
+}
+
+const ProposeRewardModalContent: React.FC<Omit<ProposeRewardModalProps, 'isOpen'>> = ({
   profiles,
   defaultProfileId,
+  editingProposal = null,
   onClose,
   onSubmitProposal,
 }) => {
-  const [selectedProfileId, setSelectedProfileId] = useState<string>(
-    defaultProfileId && defaultProfileId !== 'household'
-      ? defaultProfileId
-      : profiles[0]?.id || ''
+  const isEditing = Boolean(editingProposal);
+  const [selectedProfileId, setSelectedProfileId] = useState<string>(() =>
+    resolveInitialProfileId(profiles, defaultProfileId, editingProposal)
   );
-  const [sourceUrl, setSourceUrl] = useState('');
-  const [title, setTitle] = useState('');
-  const [imageUrl, setImageUrl] = useState('');
-  const [rawPriceInput, setRawPriceInput] = useState('');
+  const [sourceUrl, setSourceUrl] = useState(editingProposal?.sourceUrl || '');
+  const [title, setTitle] = useState(editingProposal?.title || '');
+  const [imageUrl, setImageUrl] = useState(editingProposal?.imageUrl || '');
+  const [rawPriceInput, setRawPriceInput] = useState(() =>
+    formatInitialPrice(editingProposal?.rawPrice)
+  );
   const [extractStatus, setExtractStatus] = useState<
     'idle' | 'loading' | 'success' | 'error'
   >('idle');
@@ -58,18 +86,16 @@ export const ProposeRewardModal: React.FC<ProposeRewardModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
+        e.stopImmediatePropagation();
         onClose();
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [onClose]);
 
   const handleExtractMetadata = async () => {
     const trimmedUrl = sourceUrl.trim();
@@ -181,14 +207,20 @@ export const ProposeRewardModal: React.FC<ProposeRewardModalProps> = ({
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800/80 bg-slate-900/60">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-300">
-              <Sparkles className="w-4 h-4" />
+              {isEditing ? (
+                <Pencil className="w-4 h-4" />
+              ) : (
+                <Sparkles className="w-4 h-4" />
+              )}
             </div>
             <div>
               <h3 className="text-base font-semibold text-slate-100">
-                Propose a Wishlist Reward
+                {isEditing ? 'Edit Reward Proposal' : 'Propose a Wishlist Reward'}
               </h3>
               <p className="text-xs text-slate-400">
-                Add an item to the Proposals Tray for parent point appraisal
+                {isEditing
+                  ? 'Update details before parent point appraisal'
+                  : 'Add an item to the Proposals Tray for parent point appraisal'}
               </p>
             </div>
           </div>
@@ -391,8 +423,12 @@ export const ProposeRewardModal: React.FC<ProposeRewardModalProps> = ({
               disabled={!title.trim() || !selectedProfileId || isSubmitting}
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-600/90 hover:bg-emerald-500 text-white shadow-sm disabled:opacity-40 transition-all cursor-pointer"
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Send to Proposals Tray</span>
+              {isEditing ? (
+                <CheckCircle2 className="w-3.5 h-3.5" />
+              ) : (
+                <Sparkles className="w-3.5 h-3.5" />
+              )}
+              <span>{isEditing ? 'Save Changes' : 'Send to Proposals Tray'}</span>
             </button>
           </div>
         </form>
@@ -404,4 +440,14 @@ export const ProposeRewardModal: React.FC<ProposeRewardModalProps> = ({
     return createPortal(modalContent, document.body);
   }
   return modalContent;
+};
+
+export const ProposeRewardModal: React.FC<ProposeRewardModalProps> = (props) => {
+  if (!props.isOpen) return null;
+  return (
+    <ProposeRewardModalContent
+      key={props.editingProposal?.id || 'new-proposal'}
+      {...props}
+    />
+  );
 };

@@ -242,6 +242,19 @@ export interface ChoreStoreState {
     imageUrl?: string;
     rawPrice?: number;
   }) => Promise<WishlistReward>;
+  updateWishlistProposal: (
+    rewardId: string,
+    updates: {
+      profileId: string;
+      title: string;
+      sourceUrl?: string;
+      imageUrl?: string;
+      rawPrice?: number;
+    }
+  ) => Promise<{ success: boolean; reward?: WishlistReward; error?: string }>;
+  withdrawWishlistProposal: (
+    rewardId: string
+  ) => Promise<{ success: boolean; error?: string }>;
   claimUnlockedReward: (rewardId: string) => Promise<{ success: boolean; error?: string }>;
 
   // PIN-Authenticated Parent Actions
@@ -678,6 +691,82 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => {
       commitSnapshotState(nextSnapshot);
       await persistSnapshot(nextSnapshot);
       return newReward;
+    },
+
+    updateWishlistProposal: async (rewardId, updates) => {
+      const current = get().snapshot;
+      const existing = current.rewards.find((r) => r.id === rewardId);
+      if (!existing) {
+        return { success: false, error: 'Proposal not found' };
+      }
+      if (existing.status !== 'needs_pricing') {
+        return {
+          success: false,
+          error: 'Only unpriced proposals can be edited without a Parent PIN',
+        };
+      }
+
+      const trimmedTitle = updates.title.trim();
+      if (!trimmedTitle) {
+        return { success: false, error: 'Reward title is required' };
+      }
+
+      const nowIso = new Date().toISOString();
+      const updatedReward: WishlistReward = {
+        ...existing,
+        profileId: updates.profileId.trim() || existing.profileId,
+        title: trimmedTitle,
+        sourceUrl: updates.sourceUrl?.trim() || undefined,
+        imageUrl: updates.imageUrl?.trim() || undefined,
+        rawPrice:
+          typeof updates.rawPrice === 'number' &&
+          Number.isFinite(updates.rawPrice) &&
+          updates.rawPrice > 0
+            ? Number(updates.rawPrice.toFixed(2))
+            : undefined,
+        pointsCost: 0,
+        status: 'needs_pricing',
+        updatedAt: nowIso,
+      };
+
+      const nextSnapshot: ChoreEngineSnapshot = {
+        ...current,
+        rewards: current.rewards.map((r) => (r.id === rewardId ? updatedReward : r)),
+        updated_at: nowIso,
+      };
+
+      commitSnapshotState(nextSnapshot);
+      await persistSnapshot(nextSnapshot);
+      return { success: true, reward: updatedReward };
+    },
+
+    withdrawWishlistProposal: async (rewardId) => {
+      const current = get().snapshot;
+      const existing = current.rewards.find((r) => r.id === rewardId);
+      if (!existing) {
+        return { success: false, error: 'Proposal not found' };
+      }
+      if (existing.status !== 'needs_pricing') {
+        return {
+          success: false,
+          error: 'Only unpriced proposals can be removed without a Parent PIN',
+        };
+      }
+
+      const nowIso = new Date().toISOString();
+      const nextDeletedRewardIds = Array.from(
+        new Set([...(current.deletedRewardIds || []), rewardId])
+      );
+      const nextSnapshot: ChoreEngineSnapshot = {
+        ...current,
+        rewards: current.rewards.filter((r) => r.id !== rewardId),
+        deletedRewardIds: nextDeletedRewardIds,
+        updated_at: nowIso,
+      };
+
+      commitSnapshotState(nextSnapshot);
+      await persistSnapshot(nextSnapshot);
+      return { success: true };
     },
 
     claimUnlockedReward: async (rewardId) => {

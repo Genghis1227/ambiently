@@ -878,7 +878,7 @@ export function mergeChoreSnapshotsAuthoritative(
 
   // 4. Merge Rewards & Trophies: parent-authoritative source is the source of truth for rewards
   //    (so deleted rewards never resurrect from an older snapshot or DEFAULT_CHORE_SNAPSHOT),
-  //    while preserving genuinely new kid proposals created after the authoritative snapshot's timestamp.
+  //    while preserving genuinely new kid proposals and newer kid edits on unpriced (`needs_pricing`) proposals.
   const baseAuthTime = Math.max(
     Date.parse(baseSource.lastParentActionAt || '') || 0,
     Date.parse(baseSource.updated_at || '') || 0
@@ -890,10 +890,26 @@ export function mergeChoreSnapshotsAuthoritative(
     }
   }
   for (const r of otherSource.rewards) {
-    if (deletedRewardSet.has(r.id) || rewardMap.has(r.id)) continue;
-    const createdTime = Date.parse(r.createdAt || '') || 0;
-    if (r.status === 'needs_pricing' && createdTime > baseAuthTime) {
-      rewardMap.set(r.id, r);
+    if (deletedRewardSet.has(r.id)) continue;
+    const rTimestamp = Math.max(
+      Date.parse(r.updatedAt || '') || 0,
+      Date.parse(r.createdAt || '') || 0
+    );
+    const existing = rewardMap.get(r.id);
+    if (!existing) {
+      if (r.status === 'needs_pricing' && rTimestamp > baseAuthTime) {
+        rewardMap.set(r.id, r);
+      }
+      continue;
+    }
+    if (existing.status === 'needs_pricing' && r.status === 'needs_pricing') {
+      const existingTimestamp = Math.max(
+        Date.parse(existing.updatedAt || '') || 0,
+        Date.parse(existing.createdAt || '') || 0
+      );
+      if (rTimestamp > existingTimestamp) {
+        rewardMap.set(r.id, r);
+      }
     }
   }
 

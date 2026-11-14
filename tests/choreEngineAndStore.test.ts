@@ -10,7 +10,11 @@ import {
   selectProfilePointsFromLedger,
   validateChoreSplits,
 } from '../src/utils/choreEngine';
-import { useChoreStore, selectPendingParentActionsCount } from '../src/stores/useChoreStore';
+import {
+  getPendingParentActionCounts,
+  selectPendingParentActionsCount,
+  useChoreStore,
+} from '../src/stores/useChoreStore';
 import type { ChoreEngineSnapshot, ChoreTemplate } from '../src/types/chores';
 
 function createBaseSnapshot(): ChoreEngineSnapshot {
@@ -525,5 +529,170 @@ describe('Chore Engine & useChoreStore', () => {
     );
     assert.equal(sunPending.length, 1);
     assert.equal(sunPending[0]?.dateScheduled, '2026-11-15');
+  });
+
+  it('allows kids to edit or withdraw unpriced proposals while locking priced rewards and preventing sync resurrection', async () => {
+    // 1. Propose two pending rewards for kid_1 and kid_2
+    const first = await useChoreStore.getState().proposeWishlistReward({
+      profileId: 'kid_1',
+      title: 'Mini Drone',
+      sourceUrl: 'https://example.com/drone',
+      imageUrl: 'https://example.com/drone.jpg',
+      rawPrice: 25,
+    });
+    const second = await useChoreStore.getState().proposeWishlistReward({
+      profileId: 'kid_2',
+      title: 'Art Easel',
+      rawPrice: 30,
+    });
+
+    assert.equal(
+      getPendingParentActionCounts(useChoreStore.getState().snapshot).needsPricingCount,
+      2
+    );
+
+    // 2. Kid edits the first unpriced proposal (including clearing optional imageUrl/rawPrice & reassigning profile)
+    const editRes = await useChoreStore.getState().updateWishlistProposal(first.id, {
+      profileId: 'kid_2',
+      title: 'Deluxe Lego Set',
+      sourceUrl: 'https://example.com/lego',
+      imageUrl: undefined,
+      rawPrice: undefined,
+    });
+    assert.equal(editRes.success, true);
+    assert.equal(editRes.reward?.title, 'Deluxe Lego Set');
+    assert.equal(editRes.reward?.profileId, 'kid_2');
+    assert.equal(editRes.reward?.sourceUrl, 'https://example.com/lego');
+    assert.equal(editRes.reward?.imageUrl, undefined);
+    assert.equal(editRes.reward?.rawPrice, undefined);
+    assert.equal(editRes.reward?.status, 'needs_pricing');
+    assert.equal(editRes.reward?.pointsCost, 0);
+    assert.ok(editRes.reward?.updatedAt);
+
+    // Count remains accurate
+    assert.equal(
+      getPendingParentActionCounts(useChoreStore.getState().snapshot).needsPricingCount,
+      2
+    );
+
+    // 3. Kid withdraws the second unpriced proposal cleanly -> added to deletedRewardIds & decrements count
+    const withdrawRes = await useChoreStore.getState().withdrawWishlistProposal(second.id);
+    assert.deepEqual(withdrawRes, { success: true });
+    assert.equal(
+      getPendingParentActionCounts(useChoreStore.getState().snapshot).needsPricingCount,
+      1
+    );
+    assert.ok(useChoreStore.getState().snapshot.deletedRewardIds?.includes(second.id));
+
+    // Sync merge against an older snapshot that still contained `second` must NOT resurrect it
+    const staleRemote = {
+      ...createBaseSnapshot(),
+      rewards: [...createBaseSnapshot().rewards, second],
+      updated_at: '2026-11-12T00:00:00.000Z',
+    };
+    const mergedAfterWithdraw = mergeChoreSnapshotsAuthoritative(
+      useChoreStore.getState().snapshot,
+      staleRemote
+    );
+    assert.equal(
+      mergedAfterWithdraw.rewards.some((r) => r.id === second.id),
+      false
+    );
+
+    // 4. Sync merge preserves a newer kid edit on a `needs_pricing` proposal even if another snapshot
+    //    had a newer parent action on an unrelated chore
+    const staleUneditedCopy = {
+      ...useChoreStore.getState().snapshot,
+      rewards: useChoreStore
+        .getState()
+        .snapshot.rewards.map((r) =>
+          r.id === first.id
+            ? { ...r, title: 'Mini Drone', updatedAt: '2026-11-10T10:00:00.000Z' }
+            : r
+        ),
+      lastParentActionAt: '2099-01-01T00:00:00.000Z',
+      updated_at: '2099-01-01T00:00:00.000Z',
+    };
+    const newerKidEditSnap = {
+      ...useChoreStore.getState().snapshot,
+      rewards: useChoreStore
+        .getState()
+        .snapshot.rewards.map((r) =>
+          r.id === first.id
+            ? { ...r, title: 'Updated Rocket Ship', updatedAt: '2026-11-15T12:00:00.000Z' }
+            : r
+        ),
+    };
+    const mergedKidEdit = mergeChoreSnapshotsAuthoritative(
+      newerKidEditSnap,
+      staleUneditedCopy
+    );
+    assert.equal(
+      mergedKidEdit.rewards.find((r) => r.id === first.id)?.title,
+      'Updated Rocket Ship'
+    );
+
+    // Conversely, if a parent priced the reward on remote, parent pricing strictly wins
+    // even if a local device has a later timestamped unpriced edit
+    const remoteParentPriced = {
+      ...staleUneditedCopy,
+      rewards: staleUneditedCopy.rewards.map((r) =>
+        r.id === first.id
+          ? {
+              ...r,
+              status: 'active_goal' as const,
+              pointsCost: 250,
+              pricedAt: '2026-11-16T00:00:00.000Z',
+            }
+          : r
+      ),
+      lastParentActionAt: '2026-11-16T00:00:00.000Z',
+      updated_at: '2026-11-16T00:00:00.000Z',
+    };
+    const localNewerUnpricedEdit = {
+      ...newerKidEditSnap,
+      rewards: newerKidEditSnap.rewards.map((r) =>
+        r.id === first.id
+          ? { ...r, updatedAt: '2026-11-17T00:00:00.000Z' }
+          : r
+      ),
+    };
+    const mergedParentPriced = mergeChoreSnapshotsAuthoritative(
+      localNewerUnpricedEdit,
+      remoteParentPriced
+    );
+    assert.equal(
+      mergedParentPriced.rewards.find((r) => r.id === first.id)?.status,
+      'active_goal'
+    );
+    assert.equal(
+      mergedParentPriced.rewards.find((r) => r.id === first.id)?.pointsCost,
+      250
+    );
+
+    // 5. Once priced by parent, kid self-service edit/withdraw without Parent PIN is rejected
+    await useChoreStore.getState().priceWishlistReward(first.id, { pointsCost: 150 });
+    const priced = useChoreStore
+      .getState()
+      .snapshot.rewards.find((r) => r.id === first.id);
+    assert.equal(priced?.status, 'active_goal');
+    assert.equal(
+      getPendingParentActionCounts(useChoreStore.getState().snapshot).needsPricingCount,
+      0
+    );
+
+    const lockedEdit = await useChoreStore.getState().updateWishlistProposal(first.id, {
+      profileId: 'kid_2',
+      title: '1 Point Bike',
+    });
+    assert.equal(lockedEdit.success, false);
+
+    const lockedWithdraw = await useChoreStore.getState().withdrawWishlistProposal(first.id);
+    assert.equal(lockedWithdraw.success, false);
+
+    assert.equal(
+      useChoreStore.getState().snapshot.rewards.find((r) => r.id === first.id)?.title,
+      'Deluxe Lego Set'
+    );
   });
 });

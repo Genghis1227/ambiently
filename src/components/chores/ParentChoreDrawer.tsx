@@ -182,6 +182,7 @@ export const ParentChoreDrawer: React.FC = () => {
   const handleCloseDrawer = () => {
     setIsSessionVerified(false);
     setEditingSplitInstanceId(null);
+    setPriceInputs({});
     setParentDrawerOpen(false);
   };
 

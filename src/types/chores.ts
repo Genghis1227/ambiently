@@ -70,6 +70,7 @@ export interface WishlistReward {
   pointsCost: number;
   status: WishlistRewardStatus;
   createdAt: string;
+  updatedAt?: string;
   pricedAt?: string;
   fulfilledAt?: string;
 }
