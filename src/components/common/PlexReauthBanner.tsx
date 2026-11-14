@@ -27,7 +27,9 @@ export const PlexReauthBanner: React.FC<PlexReauthBannerProps> = ({ onOpenPlexAu
     if (settings.commonPhotos?.some((p) => p.source === 'plex')) return true;
     return widgets.some(
       (w) =>
+        !w.deleted_at &&
         w.type === 'photo_frame' &&
+        w.config?.useCommonSource === false &&
         (w.config?.sourceType === 'plex' ||
           w.config?.sourceLabel?.toLowerCase().includes('plex') ||
           w.config?.customPhotos?.some((p: any) => p.source === 'plex'))

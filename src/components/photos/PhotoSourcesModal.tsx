@@ -53,6 +53,7 @@ import {
 import {
   CURATED_CATEGORIES,
   getCuratedCategoryById,
+  inferCuratedCategoryId,
   promptLocalDirectoryHandle,
   inspectLocalDirectory,
   inspectLocalFileList,
@@ -106,12 +107,14 @@ interface PhotoSourcesModalProps {
     sourceUrl?: string,
     sourceType?: 'plex' | 'local' | 'web' | 'curated',
     applyToAll?: boolean,
-    plexSyncConfig?: PlexPhotoSyncConfig
+    plexSyncConfig?: PlexPhotoSyncConfig,
+    curatedCategoryId?: string
   ) => void;
   targetWidgetId?: string;
   initialWebUrls?: string;
   currentSourceLabel?: string;
   currentSourceType?: 'plex' | 'local' | 'web' | 'curated';
+  currentCuratedCategoryId?: string;
   currentPhotoCount?: number;
   isCommonSource?: boolean;
   initialTab?: 'plex' | 'local' | 'web' | 'curated';
@@ -134,6 +137,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   initialWebUrls = '',
   currentSourceLabel,
   currentSourceType,
+  currentCuratedCategoryId,
   currentPhotoCount,
   isCommonSource,
   initialTab,
@@ -797,7 +801,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
     const cat = getCuratedCategoryById(targetId);
     setSelectedCuratedCategoryId(targetId);
     const label = targetId === 'all' ? 'Curated Ambient' : `Curated (${cat.name})`;
-    onPhotosLoaded(cat.photos, label, undefined, 'curated', applyToAll);
+    onPhotosLoaded(cat.photos, label, undefined, 'curated', applyToAll, undefined, targetId);
     cachePhotosLocally(cat.photos);
     setStatusMessage(`Loaded ${cat.photos.length} photos from "${cat.name}"!`);
     setTimeout(() => onClose(), 1000);
@@ -817,7 +821,11 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
     } else if (initialWebUrls) {
       setActiveTab('web');
     }
-  }, [isOpen, initialWebUrls, currentSourceType]);
+    const inferredCuratedId = inferCuratedCategoryId(currentCuratedCategoryId, currentSourceLabel);
+    if (inferredCuratedId) {
+      setSelectedCuratedCategoryId(inferredCuratedId);
+    }
+  }, [isOpen, initialWebUrls, currentSourceType, currentCuratedCategoryId, currentSourceLabel]);
 
   useEffect(() => {
     if (!isOpen) return;

@@ -11,6 +11,17 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.6.11",
+    date: "November 14, 2026",
+    title: "Per-Tile Photo Source Isolation, Confirmed PIN Setup & Sticker Cloud Restore",
+    highlights: [
+      "Per-Tile Photo Source Isolation Across Restore & Plex Pairing: Photo Frame tiles set to 'This Tile Only' preserve their dedicated Curated Scenery, Google Photos/Drive, Web URL, or Plex source across backups, Cloud Sync restores, and Plex re-authentication without inheriting the Shared Board Library.",
+      "Double-Entry 4-Digit PIN Confirmation & Non-Destructive Change PIN: Setting or updating a Parent PIN in Settings -> Household or the Parent Chore Drawer now requires matching Confirm PIN entry, and Change PIN keeps your existing PIN and locks active until the new PIN is confirmed.",
+      "Enforced Per-Open Settings PIN Lock & Legacy Lock Auto-Repair: Opening Settings, Household Sharing, or Plex Pairing (across both desktop Dock and Mobile Companion viewports) now prompts for the Parent PIN on every open whenever active, strips device-local lock flags from shared Cloud Sync payloads, and automatically heals legacy lockSettingsAccess=false residue.",
+      "Sticker / No Outline Cloud Sync & Authoritative Restore: Flushes pending Cloud Sync auto-pushes before sign-out or tab hide, saves tile style overrides before opening Photo Sources, and applies authoritative restore for global Default Widget Style and per-tile Sticker / No Outline settings.",
+    ],
+  },
+  {
     version: "v0.6.10",
     date: "November 13, 2026",
     title: "Persistent Workspace Agent Rules (AGENTS.md) & Pre-PR Documentation Gate",

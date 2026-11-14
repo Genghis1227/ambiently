@@ -8,6 +8,9 @@ import type { MealPlannerSnapshot } from '../types/meals';
 import { useChoreStore } from '../store/choreStore';
 import { useProfileStore } from '../stores/useProfileStore';
 import { useMealStore } from '../stores/useMealStore';
+import { inferCuratedCategoryId } from '../data/curatedScenery';
+import { sanitizeRestoredPhotoWidget } from '../utils/photoSourceIsolation';
+import { normalizePinLockSettings } from '../utils/pinValidation';
 
 export interface LocalExportPayload {
   version: 1;
@@ -198,14 +201,21 @@ export async function restoreBackupToDatabase(
   try {
     // 1. Restore Settings
     if (payload.settings) {
-      const settingsToSave: AppSettings = { ...payload.settings };
+      let settingsToSave: AppSettings = { ...payload.settings };
       // If clearPinLock is enabled or if PIN was not active in backup, purge all PIN lock residue
-      if (options?.clearPinLock || !settingsToSave.pinLockEnabled) {
+      if (options?.clearPinLock || !settingsToSave.pinLockEnabled || !settingsToSave.pinHash) {
         settingsToSave.pinLockEnabled = false;
         settingsToSave.pinHash = null;
         settingsToSave.lockCanvasEditing = false;
         settingsToSave.lockFullscreenKiosk = false;
-        settingsToSave.lockSettingsAccess = false;
+        settingsToSave.lockSettingsAccess = true;
+        settingsToSave.settingsPinOptOut = false;
+      } else {
+        settingsToSave = normalizePinLockSettings(settingsToSave).settings;
+      }
+      if (settingsToSave.commonPhotoSourceType === 'curated' && !settingsToSave.commonPhotoCuratedCategory) {
+        settingsToSave.commonPhotoCuratedCategory =
+          inferCuratedCategoryId(undefined, settingsToSave.commonPhotoSourceLabel) || 'all';
       }
       await db.settings.put(settingsToSave);
     }
@@ -219,7 +229,8 @@ export async function restoreBackupToDatabase(
     // 3. Replace Widgets
     await db.widgets.clear();
     if (payload.widgets.length > 0) {
-      await db.widgets.bulkAdd(payload.widgets);
+      const sanitizedWidgets = payload.widgets.map((w) => sanitizeRestoredPhotoWidget(w).widget);
+      await db.widgets.bulkAdd(sanitizedWidgets);
     }
 
     // 4. Replace Notes

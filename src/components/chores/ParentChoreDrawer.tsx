@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   Check,
   CheckCheck,
@@ -40,6 +40,7 @@ import { HouseholdAvatar } from '../common/HouseholdAvatar';
 import { HouseholdProfileManager } from '../common/HouseholdProfileManager';
 import { PinOverlay } from '../kiosk/PinOverlay';
 import { openInAppWebViewer } from '../../utils/webViewer';
+import { sanitizePinDigits, validatePinSetup } from '../../utils/pinValidation';
 
 const CHORE_ICON_PRESETS = [
   '🧹', '🛏️', '🍽️', '🐕', '🐈', '🗑️', '🧺', '📚', '🦷', '🌱', '🧸', '🎒',
@@ -87,11 +88,25 @@ export const ParentChoreDrawer: React.FC = () => {
   // Dashboard PIN state
   const settings = useDashboardStore((s) => s.settings);
   const unlockKiosk = useDashboardStore((s) => s.unlockKiosk);
+  const lockKiosk = useDashboardStore((s) => s.lockKiosk);
   const setPinLock = useDashboardStore((s) => s.setPinLock);
 
   const [isSessionVerified, setIsSessionVerified] = useState(false);
   const [quickPinInput, setQuickPinInput] = useState('');
+  const [quickPinConfirmInput, setQuickPinConfirmInput] = useState('');
+  const quickPinConfirmRef = useRef<HTMLInputElement>(null);
   const [quickPinSaved, setQuickPinSaved] = useState(false);
+  const quickPinValidation = validatePinSetup(quickPinInput, quickPinConfirmInput);
+
+  const handleSaveQuickPin = async () => {
+    if (!quickPinValidation.canSubmit) return;
+    await setPinLock(quickPinInput);
+    setIsSessionVerified(true);
+    setQuickPinInput('');
+    setQuickPinConfirmInput('');
+    setQuickPinSaved(true);
+    setTimeout(() => setQuickPinSaved(false), 3000);
+  };
 
   // Tab 1: Approvals Split Adjustment State
   const [editingSplitInstanceId, setEditingSplitInstanceId] = useState<string | null>(null);
@@ -183,6 +198,7 @@ export const ParentChoreDrawer: React.FC = () => {
     setIsSessionVerified(false);
     setEditingSplitInstanceId(null);
     setPriceInputs({});
+    lockKiosk();
     setParentDrawerOpen(false);
   };
 
@@ -489,29 +505,57 @@ export const ParentChoreDrawer: React.FC = () => {
               <KeyRound className="w-3.5 h-3.5 text-amber-400 shrink-0" />
               <span>Protect this Parent Drawer with a 4-digit PIN so kids can&apos;t self-approve:</span>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
               <input
                 type="password"
+                inputMode="numeric"
                 maxLength={4}
+                aria-label="Enter 4-digit PIN"
                 value={quickPinInput}
-                onChange={(e) => setQuickPinInput(e.target.value.replace(/\D/g, ''))}
+                onChange={(e) => {
+                  const next = sanitizePinDigits(e.target.value);
+                  setQuickPinInput(next);
+                  if (next.length === 4 && quickPinInput.length < 4) {
+                    quickPinConfirmRef.current?.focus();
+                  }
+                }}
                 placeholder="4-digit PIN"
                 className="w-24 px-2.5 py-1 rounded-lg bg-slate-900 border border-amber-500/30 text-xs text-white font-mono text-center focus:outline-none focus:border-amber-400"
               />
+              <input
+                ref={quickPinConfirmRef}
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                aria-label="Confirm 4-digit PIN"
+                value={quickPinConfirmInput}
+                onChange={(e) => setQuickPinConfirmInput(sanitizePinDigits(e.target.value))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && quickPinValidation.canSubmit) {
+                    e.preventDefault();
+                    void handleSaveQuickPin();
+                  }
+                }}
+                placeholder="Confirm PIN"
+                className={`w-24 px-2.5 py-1 rounded-lg bg-slate-900 border text-xs text-white font-mono text-center focus:outline-none ${
+                  quickPinValidation.hasMismatch
+                    ? 'border-rose-500/70 focus:border-rose-400'
+                    : 'border-amber-500/30 focus:border-amber-400'
+                }`}
+              />
               <button
                 type="button"
-                disabled={quickPinInput.length !== 4}
-                onClick={async () => {
-                  await setPinLock(quickPinInput);
-                  setIsSessionVerified(true);
-                  setQuickPinInput('');
-                  setQuickPinSaved(true);
-                  setTimeout(() => setQuickPinSaved(false), 3000);
-                }}
+                disabled={!quickPinValidation.canSubmit}
+                onClick={() => void handleSaveQuickPin()}
                 className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-slate-950 font-bold text-xs transition-colors cursor-pointer"
               >
                 Enable PIN
               </button>
+              {quickPinValidation.errorMessage && (
+                <span className="w-full text-[11px] text-rose-300 text-right">
+                  {quickPinValidation.errorMessage}
+                </span>
+              )}
             </div>
           </div>
         )}

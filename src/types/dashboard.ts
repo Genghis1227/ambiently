@@ -178,6 +178,7 @@ export interface AppSettings {
   commonPhotoSourceLabel?: string;
   commonPhotoSourceUrl?: string;
   commonPhotoSourceType?: 'plex' | 'local' | 'web' | 'curated';
+  commonPhotoCuratedCategory?: string;
   commonPhotoShowDateTaken?: boolean;
   commonPhotoPlexConfig?: PlexPhotoSyncConfig;
   photoAutoSyncInterval?: PhotoAutoSyncInterval;
@@ -189,6 +190,7 @@ export interface AppSettings {
   lockFullscreenKiosk?: boolean; // Prevent exiting fullscreen without PIN
   lockCanvasEditing?: boolean;   // Disable modifying canvases (freezes moving, resizing, rotating & organizing)
   lockSettingsAccess?: boolean;  // Require PIN to open settings
+  settingsPinOptOut?: boolean;   // True only when user explicitly toggles off PIN requirement for Settings
 
   updated_at: string;
 }

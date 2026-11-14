@@ -46,7 +46,11 @@ import {
 } from 'lucide-react';
 import { useUpdateChecker } from '../../services/updateChecker';
 import { db } from '../../services/db';
-import { useDashboardStore } from '../../store/dashboardStore';
+import {
+  cancelPendingCloudPush,
+  flushPendingCloudPush,
+  useDashboardStore,
+} from '../../store/dashboardStore';
 import { photoSyncService } from '../../services/photoSyncService';
 import {
   type PhotoAutoSyncInterval,
@@ -88,6 +92,7 @@ import {
 import type { CanvasBackgroundTheme } from '../../types/dashboard';
 import { CreateCanvasModal } from '../dock/CreateCanvasModal';
 import { SupportPanel } from './SupportPanel';
+import { sanitizePinDigits, validatePinSetup } from '../../utils/pinValidation';
 
 const ChangelogModal = React.lazy(() =>
   import('../changelog/ChangelogModal').then((m) => ({ default: m.ChangelogModal }))
@@ -143,6 +148,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const fileSync = useFileSync();
 
   const [pinInput, setPinInput] = useState('');
+  const [pinConfirmInput, setPinConfirmInput] = useState('');
+  const [isChangingPin, setIsChangingPin] = useState(false);
+  const pinConfirmRef = useRef<HTMLInputElement>(null);
   const [pinSuccess, setPinSuccess] = useState(false);
   const [pinDisabledMessage, setPinDisabledMessage] = useState('');
   const [resetPinOnRestore, setResetPinOnRestore] = useState(true);
@@ -244,6 +252,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   if (!isOpen) return null;
 
+  const pinValidation = validatePinSetup(pinInput, pinConfirmInput);
+
   const handleFactoryReset = async () => {
     setIsResetting(true);
     try {
@@ -263,12 +273,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleExportBackup = () => {
     // If PIN protection is not active, guarantee no lingering hash or locks in export
+    const hasActivePin = Boolean(settings.pinLockEnabled && settings.pinHash);
     const sanitizedSettings = {
       ...settings,
-      pinHash: settings.pinLockEnabled ? settings.pinHash : null,
-      lockCanvasEditing: settings.pinLockEnabled ? settings.lockCanvasEditing : false,
-      lockFullscreenKiosk: settings.pinLockEnabled ? settings.lockFullscreenKiosk : false,
-      lockSettingsAccess: settings.pinLockEnabled ? settings.lockSettingsAccess : false,
+      pinLockEnabled: hasActivePin,
+      pinHash: hasActivePin ? settings.pinHash : null,
+      lockCanvasEditing: hasActivePin ? settings.lockCanvasEditing : false,
+      lockFullscreenKiosk: hasActivePin ? settings.lockFullscreenKiosk : false,
+      lockSettingsAccess: hasActivePin ? settings.lockSettingsAccess : true,
+      settingsPinOptOut: hasActivePin ? Boolean(settings.settingsPinOptOut) : false,
     };
     downloadBackupFile(sanitizedSettings, tabs, widgets, notes);
     setBackupStatus('Backup file downloaded.');
@@ -294,20 +307,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const handleSavePin = async () => {
-    if (pinInput.length === 4) {
-      await setPinLock(pinInput);
-      setPinSuccess(true);
-      setPinDisabledMessage('');
-      setTimeout(() => setPinSuccess(false), 2000);
-      setPinInput('');
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(() => {});
-      }
+    if (!pinValidation.canSubmit) return;
+    await setPinLock(pinInput);
+    setIsChangingPin(false);
+    setPinSuccess(true);
+    setPinDisabledMessage('');
+    setTimeout(() => setPinSuccess(false), 2000);
+    setPinInput('');
+    setPinConfirmInput('');
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
     }
   };
 
   const handleDisablePin = async () => {
     await setPinLock(null);
+    setIsChangingPin(false);
+    setPinInput('');
+    setPinConfirmInput('');
     setPinDisabledMessage('Parent PIN and all kiosk restrictions disabled.');
     setTimeout(() => setPinDisabledMessage(''), 3500);
   };
@@ -353,6 +370,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setIsVerifyingOtp(false);
     if (res.success) {
       const u = await getCurrentUser();
+      const pullRes = await pullFromCloud({ force: true });
+      if (pullRes.success && pullRes.hasChanges) {
+        await useDashboardStore.getState().initStore();
+      }
       setUser(u);
       setAuthStep('email');
       setOtpInput('');
@@ -363,6 +384,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const handleSignOutKeepLocal = async () => {
+    await flushPendingCloudPush();
     await signOutSupabase();
     setUser(null);
     setAuthStep('email');
@@ -374,6 +396,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleSignOutAndWipe = async () => {
     setIsResetting(true);
     try {
+      await flushPendingCloudPush();
       await signOutSupabase();
       await db.delete();
       if ('caches' in window) {
@@ -391,7 +414,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handlePushCloud = async () => {
     setSyncLoading(true);
-    const res = await pushToCloud(settings, tabs, widgets, notes);
+    cancelPendingCloudPush();
+    const res = await pushToCloud(settings, tabs, widgets, notes, { force: true });
     setSyncLoading(false);
     if (res.success) {
       setAuthMessage('Dashboard successfully backed up to the cloud!');
@@ -402,7 +426,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handlePullCloud = async () => {
     setSyncLoading(true);
-    const res = await pullFromCloud({ force: true });
+    cancelPendingCloudPush();
+    const res = await pullFromCloud({ force: true, overwriteLocal: true });
     setSyncLoading(false);
     if (res.success) {
       setAuthMessage('Dashboard successfully restored from the cloud!');
@@ -2145,23 +2170,73 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   )}
                 </div>
 
-                {!settings.pinLockEnabled ? (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="password"
-                      maxLength={4}
-                      placeholder="Enter 4-digit PIN"
-                      value={pinInput}
-                      onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
-                      className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500 w-44 font-mono tracking-widest text-center"
-                    />
-                    <button
-                      onClick={handleSavePin}
-                      disabled={pinInput.length !== 4}
-                      className="py-1.5 px-3 rounded-lg bg-blue-600 disabled:opacity-40 text-xs font-medium text-white hover:bg-blue-500 transition-all cursor-pointer"
-                    >
-                      Set PIN
-                    </button>
+                {!settings.pinLockEnabled || isChangingPin ? (
+                  <div className="space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={4}
+                        aria-label={isChangingPin ? 'New 4-digit PIN' : 'Enter 4-digit PIN'}
+                        placeholder={isChangingPin ? 'New 4-digit PIN' : 'Enter 4-digit PIN'}
+                        value={pinInput}
+                        onChange={(e) => {
+                          const next = sanitizePinDigits(e.target.value);
+                          setPinInput(next);
+                          if (next.length === 4 && pinInput.length < 4) {
+                            pinConfirmRef.current?.focus();
+                          }
+                        }}
+                        className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500 w-40 font-mono tracking-widest text-center"
+                      />
+                      <input
+                        ref={pinConfirmRef}
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={4}
+                        aria-label="Confirm 4-digit PIN"
+                        placeholder="Confirm PIN"
+                        value={pinConfirmInput}
+                        onChange={(e) => setPinConfirmInput(sanitizePinDigits(e.target.value))}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && pinValidation.canSubmit) {
+                            e.preventDefault();
+                            void handleSavePin();
+                          }
+                        }}
+                        className={`bg-gray-900 border rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none w-40 font-mono tracking-widest text-center ${
+                          pinValidation.hasMismatch
+                            ? 'border-rose-500/70 focus:border-rose-400'
+                            : 'border-gray-700 focus:border-blue-500'
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void handleSavePin()}
+                        disabled={!pinValidation.canSubmit}
+                        className="py-1.5 px-3 rounded-lg bg-blue-600 disabled:opacity-40 text-xs font-medium text-white hover:bg-blue-500 transition-all cursor-pointer"
+                      >
+                        {isChangingPin && settings.pinLockEnabled ? 'Update PIN' : 'Set PIN'}
+                      </button>
+                      {isChangingPin && settings.pinLockEnabled && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsChangingPin(false);
+                            setPinInput('');
+                            setPinConfirmInput('');
+                          }}
+                          className="py-1.5 px-2.5 rounded-lg border border-gray-700 text-xs font-medium text-gray-300 hover:bg-gray-800 transition-colors cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+                    {pinValidation.errorMessage && (
+                      <span className="text-xs text-rose-400 mt-2 block">
+                        {pinValidation.errorMessage}
+                      </span>
+                    )}
                   </div>
                 ) : (
                   <div className="flex items-center justify-between pt-1">
@@ -2169,17 +2244,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       Forgot it? Choose Forgot PIN on the PIN pad to get a code by email (needs cloud sign-in).
                     </span>
                     <button
+                      type="button"
                       onClick={() => {
                         setPinInput('');
-                        updateSettings({
-                          pinLockEnabled: false,
-                          pinHash: null,
-                          lockCanvasEditing: false,
-                          lockFullscreenKiosk: false,
-                          lockSettingsAccess: false,
-                        });
-                        setPinDisabledMessage('Previous PIN removed. Enter 4 digits to set a new PIN.');
-                        setTimeout(() => setPinDisabledMessage(''), 3500);
+                        setPinConfirmInput('');
+                        setPinSuccess(false);
+                        setPinDisabledMessage('');
+                        setIsChangingPin(true);
                       }}
                       className="text-xs text-blue-400 hover:text-blue-300 underline cursor-pointer"
                     >
@@ -2268,34 +2339,40 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 {/* 4. Require PIN for Settings */}
-                <div className="flex items-center justify-between p-3 rounded-lg bg-gray-900/60 border border-gray-800">
-                  <div className="space-y-0.5 pr-4">
-                    <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
-                      <Settings className="w-3.5 h-3.5 text-purple-400" />
-                      <span>Require PIN for Command Center Settings</span>
+                {(() => {
+                  const isSettingsPinEnabled = !settings.settingsPinOptOut && settings.lockSettingsAccess !== false;
+                  return (
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-gray-900/60 border border-gray-800">
+                      <div className="space-y-0.5 pr-4">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
+                          <Settings className="w-3.5 h-3.5 text-purple-400" />
+                          <span>Require PIN for Command Center Settings</span>
+                        </div>
+                        <span className="text-[11px] text-gray-400 block leading-tight">
+                          Prompts for parent PIN before opening settings, wallpaper configurations, and photo library controls.
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateSettings({
+                            lockSettingsAccess: !isSettingsPinEnabled,
+                            settingsPinOptOut: isSettingsPinEnabled,
+                          })
+                        }
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                          isSettingsPinEnabled ? 'bg-purple-600' : 'bg-gray-700'
+                        }`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                            isSettingsPinEnabled ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
                     </div>
-                    <span className="text-[11px] text-gray-400 block leading-tight">
-                      Prompts for parent PIN before opening settings, wallpaper configurations, and photo library controls.
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updateSettings({
-                        lockSettingsAccess: settings.lockSettingsAccess === false ? true : false,
-                      })
-                    }
-                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                      settings.lockSettingsAccess !== false ? 'bg-purple-600' : 'bg-gray-700'
-                    }`}
-                  >
-                    <span
-                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                        settings.lockSettingsAccess !== false ? 'translate-x-5' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
-                </div>
+                  );
+                })()}
               </div>
             </div>
             </>
@@ -2391,9 +2468,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             initialWebUrls={settings.commonPhotoSourceType === 'web' ? (settings.commonPhotoSourceUrl || '') : ''}
             currentSourceLabel={settings.commonPhotoSourceLabel}
             currentSourceType={settings.commonPhotoSourceType}
+            currentCuratedCategoryId={settings.commonPhotoCuratedCategory}
             currentPhotoCount={settings.commonPhotos?.length}
-            onPhotosLoaded={(photos, sourceLabel, sourceUrl, sourceType, _applyToAll, plexSyncConfig) => {
-              applyCommonPhotosToAllWidgets(photos, sourceLabel, sourceUrl, sourceType, plexSyncConfig);
+            onPhotosLoaded={(photos, sourceLabel, sourceUrl, sourceType, _applyToAll, plexSyncConfig, curatedCategoryId) => {
+              applyCommonPhotosToAllWidgets(photos, sourceLabel, sourceUrl, sourceType, plexSyncConfig, curatedCategoryId);
             }}
           />
         </React.Suspense>

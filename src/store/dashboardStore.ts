@@ -25,6 +25,9 @@ import type { PhotoTargetSyncMeta, PlexPhotoSyncConfig } from '../utils/photoSyn
 import type { PhotoItem } from '../services/photos';
 import { getSupabase, getCurrentUser, pushToCloud } from '../services/supabase';
 import { CANVAS_LOOK_FIELDS, keepLocalNoteFields, keepLocalTabFields, keepLocalWidgetFields } from '../services/syncMerge';
+import { inferCuratedCategoryId } from '../data/curatedScenery';
+import { applySharedPhotoUpdateToWidgets, sanitizeRestoredPhotoWidget } from '../utils/photoSourceIsolation';
+import { applyPinLockTransition, normalizePinLockSettings } from '../utils/pinValidation';
 import { useChoreStore, registerChorePersistListener } from './choreStore';
 import type { ChoreEngineSnapshot } from '../types/chores';
 import { useProfileStore, registerProfileSyncListener } from '../stores/useProfileStore';
@@ -38,24 +41,109 @@ const MEAL_PLANNER_CLOUD_ROW_ID = '__ambiently_meal_planner__';
 
 let backupDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 let cloudAutoSyncTimer: ReturnType<typeof setTimeout> | null = null;
+let hasPendingCloudPush = false;
+let activeCloudPushPromise: Promise<void> | null = null;
+let latestDashboardGet: (() => DashboardState) | null = null;
+
+/**
+ * Cancels any pending debounced cloud auto-push before an explicit backup or restore.
+ */
+export function cancelPendingCloudPush(): void {
+  if (cloudAutoSyncTimer) {
+    clearTimeout(cloudAutoSyncTimer);
+    cloudAutoSyncTimer = null;
+  }
+  hasPendingCloudPush = false;
+}
+
+/**
+ * Flushes any pending debounced cloud auto-push immediately before sign-out or page unload.
+ */
+export async function flushPendingCloudPush(): Promise<void> {
+  if (cloudAutoSyncTimer) {
+    clearTimeout(cloudAutoSyncTimer);
+    cloudAutoSyncTimer = null;
+  }
+  if (activeCloudPushPromise) {
+    await activeCloudPushPromise.catch(() => {});
+  }
+  if (!hasPendingCloudPush) return;
+  hasPendingCloudPush = false;
+
+  try {
+    const sb = getSupabase();
+    if (!sb) return;
+    const user = await getCurrentUser();
+    if (!user) return;
+
+    const state = (latestDashboardGet || (() => useDashboardStore.getState()))();
+    const runPush = Promise.resolve(
+      pushToCloud(state.settings, state.tabs, state.widgets, state.notes)
+    ).then(
+      () => undefined,
+      (err) => {
+        console.warn('Cloud flush push skipped:', err);
+      }
+    );
+    activeCloudPushPromise = runPush;
+    try {
+      await runPush;
+    } finally {
+      if (activeCloudPushPromise === runPush) {
+        activeCloudPushPromise = null;
+      }
+    }
+  } catch (err) {
+    console.warn('Cloud flush push skipped:', err);
+  }
+}
 
 async function scheduleCloudAutoPush(get: () => DashboardState) {
+  latestDashboardGet = get;
   try {
     const sb = getSupabase();
     if (!sb) return;
     const user = await getCurrentUser();
     if (user) {
+      hasPendingCloudPush = true;
       if (cloudAutoSyncTimer) {
         clearTimeout(cloudAutoSyncTimer);
       }
-      cloudAutoSyncTimer = setTimeout(async () => {
+      cloudAutoSyncTimer = setTimeout(() => {
+        cloudAutoSyncTimer = null;
+        if (!hasPendingCloudPush) return;
+        hasPendingCloudPush = false;
         const state = get();
-        await pushToCloud(state.settings, state.tabs, state.widgets, state.notes);
+        const runPush = Promise.resolve(
+          pushToCloud(state.settings, state.tabs, state.widgets, state.notes)
+        ).then(
+          () => undefined,
+          (err) => {
+            console.warn('Cloud auto-push skipped:', err);
+          }
+        );
+        activeCloudPushPromise = runPush;
+        void runPush.finally(() => {
+          if (activeCloudPushPromise === runPush) {
+            activeCloudPushPromise = null;
+          }
+        });
       }, 2500);
     }
   } catch (err) {
     console.warn('Cloud auto-push skipped:', err);
   }
+}
+
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      void flushPendingCloudPush();
+    }
+  });
+  window.addEventListener('pagehide', () => {
+    void flushPendingCloudPush();
+  });
 }
 
 // A canvas's look (theme, wallpaper, dimming, hidden notes, home canvas) syncs inside the board settings
@@ -126,14 +214,17 @@ interface DashboardState {
     sourceLabel?: string,
     sourceUrl?: string,
     sourceType?: 'plex' | 'local' | 'web' | 'curated',
-    plexSyncConfig?: PlexPhotoSyncConfig
+    plexSyncConfig?: PlexPhotoSyncConfig,
+    curatedCategoryId?: string
   ) => Promise<void>;
   applyCommonPhotosToAllWidgets: (
     photos: PhotoItem[],
     sourceLabel?: string,
     sourceUrl?: string,
     sourceType?: 'plex' | 'local' | 'web' | 'curated',
-    plexSyncConfig?: PlexPhotoSyncConfig
+    plexSyncConfig?: PlexPhotoSyncConfig,
+    curatedCategoryId?: string,
+    optInWidgetId?: string
   ) => Promise<void>;
   setPhotoSyncState: (state: PhotoSyncState | null) => void;
   setPhotoSyncMeta: (meta: Record<string, PhotoTargetSyncMeta>) => void;
@@ -264,7 +355,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     }
 
     const rawSettings = await db.settings.get('global');
-    const loadedSettings = {
+    const mergedSettings = {
       ...DEFAULT_SETTINGS,
       ...(rawSettings || {}),
       carouselEnabled: rawSettings?.carouselEnabled ?? true,
@@ -274,6 +365,11 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         ? get().settings.nightModeEnabled
         : rawSettings?.nightModeEnabled ?? false,
     };
+    const { settings: loadedSettings, repaired: pinSettingsRepaired } =
+      normalizePinLockSettings(mergedSettings);
+    if (pinSettingsRepaired) {
+      await db.settings.put(loadedSettings).catch(() => {});
+    }
     const allTabs = await db.tabs.toArray();
     const tabsToRepair: DashboardTab[] = [];
     const loadedTabs = allTabs
@@ -292,13 +388,22 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     if (tabsToRepair.length > 0) {
       await db.tabs.bulkPut(tabsToRepair).catch(() => {});
     }
-    const loadedWidgets = (await db.widgets.toArray()).filter(
+    const rawLoadedWidgets = (await db.widgets.toArray()).filter(
       (w) =>
         !w.deleted_at &&
         w.id !== CHORE_ENGINE_CLOUD_ROW_ID &&
         w.id !== HOUSEHOLD_PROFILES_CLOUD_ROW_ID &&
         w.id !== MEAL_PLANNER_CLOUD_ROW_ID
     );
+    const widgetsToRepair: DashboardWidget[] = [];
+    const loadedWidgets = rawLoadedWidgets.map((w) => {
+      const { widget: sanitized, repaired } = sanitizeRestoredPhotoWidget(w);
+      if (repaired) widgetsToRepair.push(sanitized);
+      return sanitized;
+    });
+    if (widgetsToRepair.length > 0) {
+      await db.widgets.bulkPut(widgetsToRepair).catch(() => {});
+    }
     const loadedNotes = (await db.notes.toArray())
       .filter((n) => !n.deleted_at)
       .map((n) =>
@@ -496,7 +601,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     await get().setDockHidden(!current);
   },
 
-  setCommonPhotos: async (photos, sourceLabel, sourceUrl, sourceType, plexSyncConfig) => {
+  setCommonPhotos: async (photos, sourceLabel, sourceUrl, sourceType, plexSyncConfig, curatedCategoryId) => {
     const prevSettings = get().settings;
     const updated = {
       ...prevSettings,
@@ -504,6 +609,12 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       commonPhotoSourceLabel: sourceLabel,
       commonPhotoSourceUrl: sourceType === 'web' ? (sourceUrl || '') : undefined,
       commonPhotoSourceType: sourceType,
+      commonPhotoCuratedCategory:
+        sourceType === 'curated'
+          ? (curatedCategoryId || inferCuratedCategoryId(undefined, sourceLabel) || 'all')
+          : sourceType
+          ? undefined
+          : prevSettings.commonPhotoCuratedCategory,
       commonPhotoPlexConfig:
         sourceType === 'plex'
           ? (plexSyncConfig ?? prevSettings.commonPhotoPlexConfig)
@@ -517,32 +628,24 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     get().saveLocalBackup();
   },
 
-  applyCommonPhotosToAllWidgets: async (photos, sourceLabel, sourceUrl, sourceType, plexSyncConfig) => {
-    await get().setCommonPhotos(photos, sourceLabel, sourceUrl, sourceType, plexSyncConfig);
-    const updatedWidgets = get().widgets.map((w) => {
-      if (w.type === 'photo_frame') {
-        return {
-          ...w,
-          config: {
-            ...w.config,
-            useCommonSource: true,
-            sourceLabel: sourceLabel || w.config?.sourceLabel,
-            sourceUrl: sourceType === 'web' ? (sourceUrl || '') : undefined,
-            sourceType: sourceType || w.config?.sourceType,
-            plexSyncConfig:
-              sourceType === 'plex'
-                ? (plexSyncConfig ?? w.config?.plexSyncConfig)
-                : sourceType
-                ? undefined
-                : w.config?.plexSyncConfig,
-          },
-          updated_at: new Date().toISOString(),
-        };
-      }
-      return w;
-    });
-    await db.widgets.bulkPut(updatedWidgets);
-    set({ widgets: updatedWidgets });
+  applyCommonPhotosToAllWidgets: async (
+    photos,
+    sourceLabel,
+    sourceUrl,
+    sourceType,
+    plexSyncConfig,
+    curatedCategoryId,
+    optInWidgetId
+  ) => {
+    await get().setCommonPhotos(photos, sourceLabel, sourceUrl, sourceType, plexSyncConfig, curatedCategoryId);
+    const { widgets: updatedWidgets, changedWidgets } = applySharedPhotoUpdateToWidgets(
+      get().widgets,
+      optInWidgetId
+    );
+    if (changedWidgets.length > 0) {
+      await db.widgets.bulkPut(changedWidgets);
+      set({ widgets: updatedWidgets });
+    }
     get().saveLocalBackup();
   },
 
@@ -573,6 +676,12 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         commonPhotoSourceLabel: sourceLabel || prevSettings.commonPhotoSourceLabel,
         commonPhotoSourceUrl: sourceType === 'web' ? (sourceUrl || '') : undefined,
         commonPhotoSourceType: resolvedSourceType,
+        commonPhotoCuratedCategory:
+          resolvedSourceType === 'curated'
+            ? prevSettings.commonPhotoCuratedCategory
+            : sourceType
+            ? undefined
+            : prevSettings.commonPhotoCuratedCategory,
         commonPhotoPlexConfig:
           resolvedSourceType === 'plex'
             ? (plexSyncConfig ?? prevSettings.commonPhotoPlexConfig)
@@ -604,6 +713,12 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           sourceLabel: sourceLabel || widget.config?.sourceLabel,
           sourceType: resolvedSourceType,
           sourceUrl: sourceType === 'web' ? (sourceUrl || '') : undefined,
+          curatedCategoryId:
+            resolvedSourceType === 'curated'
+              ? widget.config?.curatedCategoryId
+              : sourceType
+              ? undefined
+              : widget.config?.curatedCategoryId,
           plexSyncConfig:
             resolvedSourceType === 'plex'
               ? (plexSyncConfig ?? widget.config?.plexSyncConfig)
@@ -623,20 +738,27 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
 
   finalizePhotosToTarget: async (targetWidgetId, allPhotos, sourceLabel, sourceUrl, sourceType, plexSyncConfig) => {
     if (!targetWidgetId) {
-      await get().applyCommonPhotosToAllWidgets(allPhotos, sourceLabel, sourceUrl, sourceType, plexSyncConfig);
+      await get().setCommonPhotos(allPhotos, sourceLabel, sourceUrl, sourceType, plexSyncConfig);
     } else {
       const widget = get().widgets.find((w) => w.id === targetWidgetId);
       if (widget) {
         const resolvedSourceType = sourceType || widget.config?.sourceType;
+        const resolvedLabel = sourceLabel || widget.config?.sourceLabel;
         const updatedWidget: DashboardWidget = {
           ...widget,
           config: {
             ...widget.config,
             customPhotos: allPhotos,
             useCommonSource: false,
-            sourceLabel: sourceLabel || widget.config?.sourceLabel,
+            sourceLabel: resolvedLabel,
             sourceType: resolvedSourceType,
             sourceUrl: sourceType === 'web' ? (sourceUrl || '') : undefined,
+            curatedCategoryId:
+              resolvedSourceType === 'curated'
+                ? (inferCuratedCategoryId(widget.config?.curatedCategoryId, resolvedLabel) || 'all')
+                : sourceType
+                ? undefined
+                : widget.config?.curatedCategoryId,
             plexSyncConfig:
               resolvedSourceType === 'plex'
                 ? (plexSyncConfig ?? widget.config?.plexSyncConfig)
@@ -748,22 +870,20 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       pinLockEnabled = true;
     }
     const current = get().settings;
+    let hasBoundCloudBoard = false;
+    try {
+      hasBoundCloudBoard =
+        typeof localStorage !== 'undefined' && Boolean(localStorage.getItem('ambiently_local_board'));
+    } catch {
+      hasBoundCloudBoard = false;
+    }
     const updated = {
       ...current,
-      pinLockEnabled,
-      pinHash,
-      // If PIN is disabled, reset all kiosk locks so no lingering locks remain
-      ...(pinLockEnabled
-        ? {}
-        : {
-            lockCanvasEditing: false,
-            lockFullscreenKiosk: false,
-            lockSettingsAccess: false,
-          }),
-      updated_at: new Date().toISOString(),
+      ...applyPinLockTransition(current, pinHash),
+      updated_at: hasBoundCloudBoard ? new Date().toISOString() : current.updated_at,
     };
     await db.settings.put(updated);
-    set({ settings: updated, isUnlocked: true });
+    set({ settings: updated, isUnlocked: !pinLockEnabled });
     get().saveLocalBackup();
   },
 
