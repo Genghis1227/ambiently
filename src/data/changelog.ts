@@ -11,6 +11,17 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.1",
+    date: "November 14, 2026",
+    title: "Adaptive 3-Column Kanban Tiles, Meal Entry Layout Fix & Calendar Meal Overlay",
+    highlights: [
+      "Adaptive 3-Column Kanban Tiles & To Do Default: New Project Kanban tiles open on To Do by default, and widening a Kanban tile past the 3-column threshold adapts it in place into a 3-column swimlane board with horizontal/vertical drag-and-drop and per-column quick-add.",
+      "Schedule Family Meal Date Stepper Fix: Replaced the 2-column header grid with a responsive 12-column split so the next-day chevron no longer overlaps the Breakfast slot button, while keeping slot switches cleanly synced.",
+      "Today Meal Scope & Always-Visible Scheduled Meals: Added Today outlook scope alongside Tomorrow / 3-Day / Week, ensured populated Breakfast/Lunch/Dinner slots always appear on the Meal Planner tile even when only a subset of empty prompts is selected, and defaulted '+' to the next open slot.",
+      "Family Calendar Meal Overlay & Tombstone Fix: Replaced deterministic date_slot IDs with unique meal IDs + resurrection tracking so cleared slots can be re-scheduled cleanly, and surfaced planned family meals across Agenda, 3-Day, Week, Timeline, and Month Calendar views with a Show Planned Family Meals toggle.",
+    ],
+  },
+  {
     version: "v0.7.0",
     date: "November 14, 2026",
     title: "Multi-Board Project Kanban Engine & Bento Widget",
