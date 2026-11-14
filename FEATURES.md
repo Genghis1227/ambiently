@@ -162,11 +162,27 @@ Every widget features a top-right **Tile Settings (`⚙️`)** button to customi
 
 ---
 
+## Multi-Board Project Kanban Engine (`KanbanWidget.tsx`, `KanbanBoardView.tsx`, `useKanbanStore.ts`)
+
+* **Zero-Friction, Non-Point Family Task Boards:** Strictly decoupled from the Chore & Reward point ledger and free of PIN gates so any household member can organize home maintenance, 3D print queues, or packing lists immediately.
+* **Multi-Board Pool with Independent Per-Widget Selection (`KanbanWidgetConfig`):** Multiple **Project Kanban** Bento tiles across different tabs share the global pool of boards and cards via `useKanbanStore`, while each widget instance independently persists its own `activeBoardId`, `activeColumnId`, and presentation mode (`tile` vs. full 3-column `view`).
+* **Classic 3-Column Flow & Inline Quick-Add (`KanbanInlineAdd.tsx`):** Every board uses `To Do`, `In Progress`, and `Done` columns with inline `+ Add card` inputs (`Enter` to create without opening a modal), desaturated Calm Science tag pills (`Sage`, `Slate`, `Dusty Rose`, `Soft Amber`, `Lavender-Gray`), `<ProfileAvatar size="xs"/>` multi-assignee badges, and conditional checklist progress badges (`☑ X/Y`).
+* **Polymorphic Compact Tile & Touch/Mouse Drag-to-Edge (`KanbanWidget.tsx`, `useKanbanPointerDnD.ts`):**
+  * Compact tiles default to **`In Progress`** on mount with header column-stepper controls (`← To Do (N)` / `Done (N) →`).
+  * Supports **dual cross-column card movement**: single-tap `←`/`→` card chevrons for quick wall-kiosk triage plus unified mouse/touch drag-and-drop with ~350ms **Drag-to-Edge** hover highlights that flip the active column mid-drag so cards drop at the exact vertical index.
+  * Clicking **Maximize** or switching to **Full 3-Column Board** renders all 3 swimlanes side by side (`KanbanBoardView.tsx`) with horizontal & vertical drag-and-drop reordering.
+* **Done Lifecycle, Auto-Archive & Per-Board Archive Drawer (`KanbanArchiveDrawer.tsx`):**
+  * Entering `Done` stamps `completedAt` (and moving a card back to `To Do` or `In Progress` clears it).
+  * Configurable per-board `autoArchiveDays` (`Off`, `1`, `3`, `7`, `14`, `30` days) evaluated at startup and on hourly/midnight/visibility ticks, plus one-tap **Archive All Done** and confirmation-gated permanent **Clear Done**.
+  * **Archive Drawer (`Archived (X)`):** Searchable chronological archive per board with 1-tap **Restore** back to `To Do` or `Done` (preserving checklist items for reusable packing/prep templates), single-card delete, and confirmation-gated **Empty Archive**.
+
+---
+
 ## 7. Mobile Companion Mode & Hybrid Sync (Phase 5)
 
 * **Vertical Tile Stream (`MobileCompanion.tsx`):**
   * Automatically serves a structured single-column vertical feed of the active canvas when opened on a smartphone (`< 768px`).
-  * **Live Preview Cards:** Every canvas widget (Clock & Weather, Countdown, Photos, RSS, Quotes, Media, Notes) renders a live mobile-responsive preview card.
+  * **Live Preview Cards:** Every canvas widget (Clock & Weather, Countdown, Photos, RSS, Quotes, Media, Notes, Chores, Meal Planner, Project Kanban) renders a live mobile-responsive preview card.
   * **Persistent View Option Filter:** 3-way segmented filter pills (`All Tiles` | `Widgets` | `Notes & Tasks`) automatically persisted in `localStorage`.
   * **Independent Mobile Reordering (`▲` / `▼`):** Move buttons on each widget card modify an isolated `mobileOrder` property with zero impact on the desktop/kiosk layout.
   * **Mobile Tile Settings & Creation:** 1-tap `⚙️` button opens the full tile customizer on mobile, plus a `+ Add Tile` button to add new widgets from your phone.

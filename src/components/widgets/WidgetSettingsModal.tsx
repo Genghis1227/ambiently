@@ -52,10 +52,16 @@ import { CURATED_RSS_FEEDS, RSS_FEED_CATEGORIES, type RssFeedCategory } from '..
 import { MediaSearchModal, type MediaSelectionMeta } from './MediaSearchModal';
 import { resolveOptimizedImageMedia } from '../../utils/mediaOptimization';
 import { useVaultMediaUrl } from '../../utils/localMediaVault';
-import { Sparkles, Utensils } from 'lucide-react';
+import { Sparkles, Utensils, Kanban } from 'lucide-react';
 import { useChoreStore } from '../../store/choreStore';
 import { useMealStore } from '../../stores/useMealStore';
+import { useKanbanStore } from '../../stores/useKanbanStore';
 import type { MealSlot, WeekStartDay, WidgetMealScope } from '../../types/meals';
+import {
+  KANBAN_COLUMNS,
+  resolveWidgetActiveBoardId,
+  type KanbanColumnId,
+} from '../../types/kanban';
 import { HouseholdAvatar } from '../common/HouseholdAvatar';
 
 interface WidgetSettingsModalProps {
@@ -233,6 +239,12 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   ]);
   const [mealShowCookAvatar, setMealShowCookAvatar] = useState<boolean>(true);
   const [mealListNoteId, setMealListNoteId] = useState<string>('');
+
+  // Kanban widget states
+  const kanbanBoards = useKanbanStore((s) => s.boards);
+  const [kanbanBoardId, setKanbanBoardId] = useState<string>('');
+  const [kanbanColumnId, setKanbanColumnId] = useState<KanbanColumnId>('in_progress');
+  const [kanbanDisplayMode, setKanbanDisplayMode] = useState<'tile' | 'view'>('tile');
   const [rssCategoryFilter, setRssCategoryFilter] = useState<'All' | RssFeedCategory>('All');
   const [rssSearchQuery, setRssSearchQuery] = useState('');
 
@@ -393,6 +405,16 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setMealVisibleSlots(cfgSlots.length > 0 ? cfgSlots : validSlots);
       setMealShowCookAvatar(widget.config?.showCookAvatar !== false);
       setMealListNoteId(typeof widget.config?.listNoteId === 'string' ? widget.config.listNoteId : '');
+    } else if (widget.type === 'kanban') {
+      const allBoards = useKanbanStore.getState().boards;
+      setKanbanBoardId(resolveWidgetActiveBoardId(widget.config, allBoards));
+      const cfgCol = widget.config?.activeColumnId;
+      setKanbanColumnId(
+        cfgCol === 'todo' || cfgCol === 'in_progress' || cfgCol === 'done'
+          ? cfgCol
+          : 'in_progress'
+      );
+      setKanbanDisplayMode(widget.config?.displayMode === 'view' ? 'view' : 'tile');
     }
   }, [widget, isOpen, settings.commonPhotos, settings.defaultWidgetStyle]);
 
@@ -712,6 +734,46 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.showCookAvatar = mealShowCookAvatar;
       configUpdates.listNoteId = mealListNoteId || undefined;
       void useMealStore.getState().setWeekStartsOn(mealWeekStartsOn);
+    } else if (widget.type === 'kanban') {
+      const resolvedBoardId =
+        kanbanBoardId || resolveWidgetActiveBoardId(widget.config, useKanbanStore.getState().boards);
+      configUpdates.widgetInstanceId = widget.id;
+      configUpdates.activeBoardId = resolvedBoardId;
+      configUpdates.activeColumnId = kanbanColumnId;
+      configUpdates.displayMode = kanbanDisplayMode;
+
+      const existingPos = widget.freeformPos || {
+        xRatio: 0.1,
+        yRatio: 0.1,
+        wRatio: 0.45,
+        hRatio: 0.55,
+        zIndex: 5,
+        rotation: 0,
+      };
+      const wasFullScreen =
+        Boolean(widget.freeformPos?.isFullScreen) || widget.config?.displayMode === 'view';
+
+      if (kanbanDisplayMode === 'view') {
+        freeformPosUpdate = {
+          ...existingPos,
+          xRatio: 0,
+          yRatio: 0,
+          wRatio: 1,
+          hRatio: 1,
+          rotation: 0,
+          isFullScreen: true,
+        };
+      } else if (wasFullScreen) {
+        freeformPosUpdate = {
+          ...existingPos,
+          xRatio: 0.1,
+          yRatio: 0.1,
+          wRatio: 0.45,
+          hRatio: 0.55,
+          rotation: 0,
+          isFullScreen: false,
+        };
+      }
     }
 
     onSave(widget.id, {
@@ -3460,6 +3522,79 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                         );
                       })}
                   </select>
+                </div>
+              </div>
+            )}
+
+            {/* KANBAN WIDGET SETTINGS */}
+            {widget.type === 'kanban' && (
+              <div className="space-y-4 pt-2 border-t border-gray-800">
+                <div>
+                  <label className="text-xs font-semibold text-gray-300 flex items-center gap-1.5 mb-1.5">
+                    <Kanban className="w-3.5 h-3.5 text-slate-300" />
+                    <span>Pinned Kanban Board (This Widget Only)</span>
+                  </label>
+                  <p className="text-[11px] text-gray-400 mb-2">
+                    Each Project Kanban tile selects its own active board independently across your Bento tabs.
+                  </p>
+                  <select
+                    value={kanbanBoardId}
+                    onChange={(e) => setKanbanBoardId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-gray-950 border border-gray-800 text-xs text-gray-200 focus:outline-none focus:border-emerald-500/60"
+                  >
+                    {kanbanBoards.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-gray-300 block mb-1.5">
+                    Compact View Default Column
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {KANBAN_COLUMNS.map((col) => (
+                      <button
+                        key={col.id}
+                        type="button"
+                        onClick={() => setKanbanColumnId(col.id)}
+                        className={`p-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                          kanbanColumnId === col.id
+                            ? 'bg-emerald-600/20 border-emerald-500/60 text-emerald-200 font-semibold'
+                            : 'bg-gray-950 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'
+                        }`}
+                      >
+                        {col.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-gray-300 block mb-1.5">
+                    Canvas Presentation Mode
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: 'tile' as const, label: 'Compact Single-Column Tile' },
+                      { id: 'view' as const, label: 'Full 3-Column Swimlane View' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setKanbanDisplayMode(opt.id)}
+                        className={`p-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                          kanbanDisplayMode === opt.id
+                            ? 'bg-emerald-600/20 border-emerald-500/60 text-emerald-200 font-semibold'
+                            : 'bg-gray-950 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}

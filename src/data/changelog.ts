@@ -11,6 +11,17 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.0",
+    date: "November 14, 2026",
+    title: "Multi-Board Project Kanban Engine & Bento Widget",
+    highlights: [
+      "Zero-Friction Multi-Board Kanban & Independent Per-Widget Selection: Added Project Kanban widgets with zero PIN gates or chore points across desktop and Mobile Companion, sharing a global pool of boards in useKanbanStore while keeping each widget instance's activeBoardId and compact column independent.",
+      "Compact Kiosk Tile with Drag-to-Edge Flipping & Full 3-Column View: Compact tiles default to In Progress with ←/→ column steppers, single-tap card chevrons, unified mouse/touch drag reordering with 350ms Drag-to-Edge column switching, inline Enter quick-add, and a 1-tap fullscreen 3-column swimlane board.",
+      "Calm Science Cards, Multi-Profile Assignees & Sub-Checklists: Displays desaturated tag pills (Sage, Slate, Dusty Rose, Soft Amber, Lavender-Gray), multi-member <ProfileAvatar/> badges, and interactive checklist items (☑ X/Y progress pill when present).",
+      "Done Auto-Archive, Clear Done & Reusable Archive Drawer + Realtime Sync: Configurable per-board autoArchiveDays sweeps, 1-tap Archive All Done, confirmation-gated Clear Done, a searchable Archive Drawer that restores cards with checklists intact, Dexie v4 storage, and Postgres Realtime sync (kanban_boards & kanban_cards).",
+    ],
+  },
+  {
     version: "v0.6.12",
     date: "November 14, 2026",
     title: "GIF MP4/WebP Caching, Search Bounce Fix & Canvas Performance Engine",

@@ -23,7 +23,7 @@ import { computeNonOverlappingLayout, findOpenCanvasSpot } from '../utils/autoLa
 import { getDefaultWidgetStickerMode, isStickerCapableWidget } from '../utils/widgetStickerMode';
 import type { PhotoTargetSyncMeta, PlexPhotoSyncConfig } from '../utils/photoSyncPolicy';
 import type { PhotoItem } from '../services/photos';
-import { getSupabase, getCurrentUser, pushToCloud } from '../services/supabase';
+import { getSupabase, getCurrentUser, pushToCloud, syncKanbanRowEventToCloud, KANBAN_ENGINE_CLOUD_ROW_ID } from '../services/supabase';
 import { CANVAS_LOOK_FIELDS, keepLocalNoteFields, keepLocalTabFields, keepLocalWidgetFields } from '../services/syncMerge';
 import { inferCuratedCategoryId } from '../data/curatedScenery';
 import { applySharedPhotoUpdateToWidgets, sanitizeRestoredPhotoWidget } from '../utils/photoSourceIsolation';
@@ -34,6 +34,12 @@ import { useProfileStore, registerProfileSyncListener } from '../stores/useProfi
 import type { HouseholdProfile } from '../types/profiles';
 import { useMealStore, registerMealPersistListener } from '../stores/useMealStore';
 import type { MealPlannerSnapshot } from '../types/meals';
+import {
+  useKanbanStore,
+  registerKanbanPersistListener,
+  registerKanbanRowSyncListener,
+} from '../stores/useKanbanStore';
+import type { KanbanEngineSnapshot } from '../types/kanban';
 
 const CHORE_ENGINE_CLOUD_ROW_ID = '__ambiently_chore_engine__';
 const HOUSEHOLD_PROFILES_CLOUD_ROW_ID = '__ambiently_household_profiles__';
@@ -393,7 +399,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         !w.deleted_at &&
         w.id !== CHORE_ENGINE_CLOUD_ROW_ID &&
         w.id !== HOUSEHOLD_PROFILES_CLOUD_ROW_ID &&
-        w.id !== MEAL_PLANNER_CLOUD_ROW_ID
+        w.id !== MEAL_PLANNER_CLOUD_ROW_ID &&
+        w.id !== KANBAN_ENGINE_CLOUD_ROW_ID
     );
     const widgetsToRepair: DashboardWidget[] = [];
     const loadedWidgets = rawLoadedWidgets.map((w) => {
@@ -412,10 +419,11 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           : n
       );
 
-    // Initialize Global Household Profile Store, Chore Engine Store & Meal Planner Store
+    // Initialize Global Household Profile Store, Chore Engine Store, Meal Planner Store & Kanban Store
     await useProfileStore.getState().initProfileStore();
     await useChoreStore.getState().initChoreStore();
     await useMealStore.getState().initMealStore();
+    await useKanbanStore.getState().initKanbanStore();
 
     const tabsToUse = loadedTabs.length > 0 ? loadedTabs : DEFAULT_TABS;
     const explicitHome = tabsToUse.find((t) => t.isHome && (t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false));
@@ -926,6 +934,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         profiles: useProfileStore.getState().profiles,
         chores: useChoreStore.getState().snapshot,
         meals: useMealStore.getState().snapshot,
+        kanban: useKanbanStore.getState().snapshot,
       });
     }, 400);
   },
@@ -948,6 +957,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       profiles: useProfileStore.getState().profiles,
       chores: useChoreStore.getState().snapshot,
       meals: useMealStore.getState().snapshot,
+      kanban: useKanbanStore.getState().snapshot,
     });
   },
 
@@ -1191,6 +1201,20 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         useMealStore
           .getState()
           .applyRemoteMealSnapshot(incomingWidget.config as MealPlannerSnapshot)
+          .catch(() => {});
+      }
+      return;
+    }
+
+    if (incomingWidget.id === KANBAN_ENGINE_CLOUD_ROW_ID) {
+      if (
+        eventType !== 'DELETE' &&
+        !incomingWidget.deleted_at &&
+        incomingWidget.config?.id === 'household_kanban'
+      ) {
+        useKanbanStore
+          .getState()
+          .applyRemoteKanbanSnapshot(incomingWidget.config as KanbanEngineSnapshot)
           .catch(() => {});
       }
       return;
@@ -1483,5 +1507,19 @@ registerProfileSyncListener(() => {
   const dashState = useDashboardStore.getState();
   if (dashState.isInitialized) {
     dashState.saveLocalBackup();
+  }
+});
+
+registerKanbanPersistListener(() => {
+  const dashState = useDashboardStore.getState();
+  if (dashState.isInitialized) {
+    dashState.saveLocalBackup();
+  }
+});
+
+registerKanbanRowSyncListener((event) => {
+  const dashState = useDashboardStore.getState();
+  if (dashState.isInitialized) {
+    void syncKanbanRowEventToCloud(event);
   }
 });

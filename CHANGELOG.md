@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.0] - 2026-11-14
+
+### Multi-Board Project Kanban Engine & Bento Widget
+* **Local-First Multi-Board Kanban Store & Supabase Realtime Sync (`src/types/kanban.ts`, `src/stores/useKanbanStore.ts`, `src/services/db.ts`, `src/services/supabase.ts`, `src/services/fileSync.ts`, `supabase/migrations/kanban_boards_and_cards.sql`, `tests/kanbanStore.test.ts`):**
+  * Zero-point, zero-PIN Kanban engine backed by Dexie v4 (`kanbanBoards`, `kanbanCards`, `kanban`) and relational Postgres Realtime tables (`public.kanban_boards`, `public.kanban_cards` + `__ambiently_kanban_engine__` fallback), fractional `sortOrder` (`1000`-step reindexing), `completedAt` set/reset lifecycle, and JSON backup round-tripping.
+* **Polymorphic Compact Bento Tile & 3-Column Swimlane View (`src/components/widgets/KanbanWidget.tsx`, `src/components/kanban/KanbanBoardView.tsx`, `src/components/kanban/useKanbanPointerDnD.ts`, `src/components/layout/Corkboard.tsx`, `src/components/mobile/MobileCompanion.tsx`, `src/components/widgets/AddWidgetModal.tsx`, `src/components/widgets/WidgetSettingsModal.tsx`):**
+  * Independent per-widget `activeBoardId` & `activeColumnId` config (`In Progress` default), `←`/`→` column steppers with live counts, dual cross-column card movement (1-tap chevrons + 350ms Drag-to-Edge auto-switch), inline `Enter` quick-add, Calm Science palette tags, `<ProfileAvatar size="xs"/>` multi-assignees, sub-checklists (`☑ X/Y`), and fullscreen 3-column view.
+* **Done Auto-Archive, Destructive Clear & Per-Board Archive Drawer (`src/components/kanban/KanbanArchiveDrawer.tsx`, `src/components/kanban/KanbanBoardModal.tsx`, `src/components/kanban/KanbanConfirmDialog.tsx`, `FEATURES.md`, `README.md`, `ARCHITECTURE.md`):**
+  * Configurable per-board `autoArchiveDays` (`Off`, `1`, `3`, `7`, `14`, `30` days), 1-tap `Archive All Done`, confirmation-gated `Clear Done`, and a searchable Archive Drawer that restores cards to `To Do` or `Done` with checklists intact.
+
+---
+
 ## [0.6.12] - 2026-11-14
 
 ### GIF MP4/WebP Caching, Search Bounce Fix & Canvas Performance Engine

@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient, type User, type RealtimeChannel } from '@supabase/supabase-js';
-import { db, DEFAULT_SETTINGS, DEFAULT_TABS, DEFAULT_WIDGETS, DEFAULT_NOTES, DEFAULT_CHORE_SNAPSHOT, DEFAULT_HOUSEHOLD_PROFILES, DEFAULT_MEAL_SNAPSHOT } from './db';
+import { db, DEFAULT_SETTINGS, DEFAULT_TABS, DEFAULT_WIDGETS, DEFAULT_NOTES, DEFAULT_CHORE_SNAPSHOT, DEFAULT_HOUSEHOLD_PROFILES, DEFAULT_MEAL_SNAPSHOT, DEFAULT_KANBAN_BOARDS, DEFAULT_KANBAN_SNAPSHOT } from './db';
 import { stripPlexTokens } from './plexLinks';
 import { isBoardFullError, setSyncRefusal } from './syncRefusal';
 import {
@@ -21,13 +21,96 @@ import type { DashboardTab, DashboardWidget, StickyNoteItem, AppSettings } from 
 import type { ChoreEngineSnapshot } from '../types/chores';
 import type { HouseholdProfile } from '../types/profiles';
 import type { MealPlannerSnapshot } from '../types/meals';
+import type { KanbanBoard, KanbanCard, KanbanChecklistItem, KanbanColumnId, KanbanEngineSnapshot } from '../types/kanban';
 import { useChoreStore } from '../store/choreStore';
 import { useProfileStore } from '../stores/useProfileStore';
 import { useMealStore } from '../stores/useMealStore';
+import { useKanbanStore, type KanbanRowSyncEvent } from '../stores/useKanbanStore';
 
 const CHORE_ENGINE_CLOUD_ROW_ID = '__ambiently_chore_engine__';
 const HOUSEHOLD_PROFILES_CLOUD_ROW_ID = '__ambiently_household_profiles__';
 const MEAL_PLANNER_CLOUD_ROW_ID = '__ambiently_meal_planner__';
+export const KANBAN_ENGINE_CLOUD_ROW_ID = '__ambiently_kanban_engine__';
+
+function normalizeColumnId(col: unknown): KanbanColumnId {
+  return col === 'in_progress' || col === 'done' ? col : 'todo';
+}
+
+function mapDbKanbanBoardRow(raw: any): KanbanBoard {
+  return {
+    id: raw.id,
+    name: raw.name || 'Untitled Board',
+    autoArchiveDays:
+      typeof raw.auto_archive_days === 'number' && raw.auto_archive_days > 0
+        ? raw.auto_archive_days
+        : null,
+    sortOrder: Number.isFinite(Number(raw.sort_order)) ? Number(raw.sort_order) : 0,
+    createdAt: raw.created_at || new Date().toISOString(),
+    updatedAt: raw.updated_at || new Date().toISOString(),
+  };
+}
+
+function mapDbKanbanCardRow(raw: any): KanbanCard {
+  const checklist: KanbanChecklistItem[] = Array.isArray(raw.checklist)
+    ? raw.checklist
+        .filter((item: any) => item && typeof item.id === 'string')
+        .map((item: any) => ({
+          id: item.id,
+          text: String(item.text ?? ''),
+          checked: Boolean(item.checked),
+        }))
+    : [];
+  return {
+    id: raw.id,
+    boardId: raw.board_id,
+    columnId: normalizeColumnId(raw.column_id),
+    title: raw.title || '',
+    tagColor: raw.tag_color || undefined,
+    tagLabel: raw.tag_label || undefined,
+    assigneeIds: Array.isArray(raw.assignee_ids) ? raw.assignee_ids : [],
+    checklist,
+    sortOrder: Number.isFinite(Number(raw.sort_order)) ? Number(raw.sort_order) : 0,
+    isArchived: Boolean(raw.is_archived),
+    completedAt: raw.completed_at || undefined,
+    archivedAt: raw.archived_at || undefined,
+    createdAt: raw.created_at || new Date().toISOString(),
+    updatedAt: raw.updated_at || new Date().toISOString(),
+  };
+}
+
+function toDbKanbanBoardRow(board: KanbanBoard, dashboardId: string, ownerId: string) {
+  return {
+    id: board.id,
+    dashboard_id: dashboardId,
+    user_id: ownerId,
+    name: board.name,
+    auto_archive_days: board.autoArchiveDays,
+    sort_order: board.sortOrder,
+    created_at: board.createdAt,
+    updated_at: board.updatedAt,
+  };
+}
+
+function toDbKanbanCardRow(card: KanbanCard, dashboardId: string, ownerId: string) {
+  return {
+    id: card.id,
+    dashboard_id: dashboardId,
+    user_id: ownerId,
+    board_id: card.boardId,
+    column_id: card.columnId,
+    title: card.title,
+    tag_color: card.tagColor || null,
+    tag_label: card.tagLabel || null,
+    assignee_ids: card.assigneeIds || [],
+    checklist: card.checklist || [],
+    sort_order: card.sortOrder,
+    is_archived: Boolean(card.isArchived),
+    completed_at: card.completedAt || null,
+    archived_at: card.archivedAt || null,
+    created_at: card.createdAt,
+    updated_at: card.updatedAt,
+  };
+}
 
 let supabaseClient: SupabaseClient | null = null;
 let realtimeChannel: RealtimeChannel | null = null;
@@ -101,23 +184,32 @@ function deviceOwnSettings(settings?: AppSettings): Partial<AppSettings> {
   };
 }
 
-// Removes the previous board's tabs, widgets, notes, settings, chores, profiles, meals and photo catalog from this device
+// Removes the previous board's tabs, widgets, notes, settings, chores, profiles, meals, kanban and photo catalog from this device
 async function clearLocalBoard(): Promise<void> {
   const current = await db.settings.get('global');
-  await db.transaction('rw', [db.tabs, db.widgets, db.notes, db.settings, db.chores, db.profiles, db.meals], async () => {
-    await Promise.all([
-      db.tabs.clear(),
-      db.widgets.clear(),
-      db.notes.clear(),
-      db.chores.clear(),
-      db.profiles.clear(),
-      db.meals.clear(),
-    ]);
-    await db.settings.put({ ...DEFAULT_SETTINGS, ...deviceOwnSettings(current) });
-    await db.chores.put(DEFAULT_CHORE_SNAPSHOT);
-    await db.profiles.bulkPut(DEFAULT_HOUSEHOLD_PROFILES);
-    await db.meals.put(DEFAULT_MEAL_SNAPSHOT);
-  });
+  await db.transaction(
+    'rw',
+    [db.tabs, db.widgets, db.notes, db.settings, db.chores, db.profiles, db.meals, db.kanbanBoards, db.kanbanCards, db.kanban],
+    async () => {
+      await Promise.all([
+        db.tabs.clear(),
+        db.widgets.clear(),
+        db.notes.clear(),
+        db.chores.clear(),
+        db.profiles.clear(),
+        db.meals.clear(),
+        db.kanbanBoards.clear(),
+        db.kanbanCards.clear(),
+        db.kanban.clear(),
+      ]);
+      await db.settings.put({ ...DEFAULT_SETTINGS, ...deviceOwnSettings(current) });
+      await db.chores.put(DEFAULT_CHORE_SNAPSHOT);
+      await db.profiles.bulkPut(DEFAULT_HOUSEHOLD_PROFILES);
+      await db.meals.put(DEFAULT_MEAL_SNAPSHOT);
+      await db.kanbanBoards.bulkPut(DEFAULT_KANBAN_BOARDS);
+      await db.kanban.put(DEFAULT_KANBAN_SNAPSHOT);
+    }
+  );
 }
 
 export function isRealtimeConnected(): boolean {
@@ -433,6 +525,46 @@ export function subscribeToRealtimeBoard(
           .catch(() => {});
       }
     )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'kanban_boards',
+        filter: `dashboard_id=eq.${boardId}`,
+      },
+      (payload) => {
+        const eventType = payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE';
+        const raw = (eventType === 'DELETE' ? payload.old : payload.new || payload.old) as any;
+        if (!raw || !raw.id) return;
+        if (raw.dashboard_id && raw.dashboard_id !== boardId) return;
+
+        useKanbanStore
+          .getState()
+          .applyRemoteBoardRow(mapDbKanbanBoardRow(raw), eventType)
+          .catch(() => {});
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'kanban_cards',
+        filter: `dashboard_id=eq.${boardId}`,
+      },
+      (payload) => {
+        const eventType = payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE';
+        const raw = (eventType === 'DELETE' ? payload.old : payload.new || payload.old) as any;
+        if (!raw || !raw.id) return;
+        if (raw.dashboard_id && raw.dashboard_id !== boardId) return;
+
+        useKanbanStore
+          .getState()
+          .applyRemoteCardRow(mapDbKanbanCardRow(raw), eventType)
+          .catch(() => {});
+      }
+    )
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
         realtimeConnectionActive = true;
@@ -679,6 +811,60 @@ export function clearLegacyJoinKeys(): void {
   localStorage.removeItem('joined_invite_code');
 }
 
+/**
+ * Optimistically replicates Kanban row-level writes/deletions directly to Supabase
+ * `kanban_boards` and `kanban_cards` for sub-second Postgres Realtime broadcast across screens.
+ * Silently no-ops if unauthenticated, offline, switching boards, or before migration is run.
+ */
+export async function syncKanbanRowEventToCloud(event: KanbanRowSyncEvent): Promise<void> {
+  try {
+    const sb = getSupabase();
+    const user = await getCurrentUser();
+    if (!sb || !user) return;
+
+    const target = await resolveActiveDashboardId();
+    const dashboardId = target?.dashboardId || user.id;
+    const ownerId = target?.ownerId || user.id;
+
+    const localBoard = getLocalBoard();
+    if (localBoard && localBoard !== dashboardId) return;
+
+    if (event.kind === 'upsert_boards') {
+      if (event.boards.length === 0) return;
+      await sb
+        .from('kanban_boards')
+        .upsert(event.boards.map((b) => toDbKanbanBoardRow(b, dashboardId, ownerId)));
+    } else if (event.kind === 'delete_boards') {
+      if (event.boardIds.length === 0) return;
+      await sb
+        .from('kanban_boards')
+        .delete()
+        .eq('dashboard_id', dashboardId)
+        .in('id', event.boardIds);
+    } else if (event.kind === 'upsert_cards') {
+      if (event.parentBoards && event.parentBoards.length > 0) {
+        await sb
+          .from('kanban_boards')
+          .upsert(event.parentBoards.map((b) => toDbKanbanBoardRow(b, dashboardId, ownerId)));
+      }
+      if (event.cards.length > 0) {
+        await sb
+          .from('kanban_cards')
+          .upsert(event.cards.map((c) => toDbKanbanCardRow(c, dashboardId, ownerId)));
+      }
+    } else if (event.kind === 'delete_cards') {
+      if (event.cardIds.length === 0) return;
+      await sb
+        .from('kanban_cards')
+        .delete()
+        .eq('dashboard_id', dashboardId)
+        .in('id', event.cardIds);
+    }
+  } catch {
+    // Graceful best-effort: full snapshot sync still delivers updates via KANBAN_ENGINE_CLOUD_ROW_ID
+  }
+}
+
 // Push local Dexie snapshot to Supabase Cloud (Strictly authenticated only)
 export async function pushToCloud(
   settings: AppSettings,
@@ -705,7 +891,7 @@ export async function pushToCloud(
     }
 
     // 1. Query Dexie to include all active and soft-deleted records so remote devices sync additions and deletions
-    const [dbSettings, dbTabs, dbWidgets, dbNotes, dbChoreSnapshot, dbProfiles, dbMealSnapshot] = await Promise.all([
+    const [dbSettings, dbTabs, dbWidgets, dbNotes, dbChoreSnapshot, dbProfiles, dbMealSnapshot, dbKanbanSnapshot] = await Promise.all([
       db.settings.get('global'),
       db.tabs.toArray(),
       db.widgets.toArray(),
@@ -713,6 +899,7 @@ export async function pushToCloud(
       db.chores.get('household_chores'),
       db.profiles.toArray(),
       db.meals.get('household_meals'),
+      db.kanban.get('household_kanban'),
     ]);
 
     const propSettingsTime = Date.parse(settings?.updated_at || '') || 0;
@@ -903,6 +1090,36 @@ export async function pushToCloud(
       }
     }
 
+    // Sync Multi-Board Kanban Engine snapshot via reserved system row + direct table upserts/deletes
+    const activeKanbanSnapshot = dbKanbanSnapshot || useKanbanStore.getState().snapshot;
+    const kanbanSnapshotPushed = (() => {
+      if (!activeKanbanSnapshot || activeKanbanSnapshot.id !== 'household_kanban') return false;
+      const localKanbanTime = new Date(activeKanbanSnapshot.updated_at || 0).getTime();
+      const remoteKanbanTime = remoteWidgetsMap.get(KANBAN_ENGINE_CLOUD_ROW_ID);
+      const shouldPushKanban =
+        Boolean(options?.force) ||
+        (remoteKanbanTime === undefined
+          ? localKanbanTime > 0 || activeKanbanSnapshot.cards.length > 0 || activeKanbanSnapshot.boards.length > 1
+          : localKanbanTime > remoteKanbanTime);
+
+      if (shouldPushKanban) {
+        widgetsToUpsert.push({
+          id: KANBAN_ENGINE_CLOUD_ROW_ID,
+          dashboard_id: dashboardId,
+          tab_id: null,
+          user_id: ownerId,
+          type: 'kanban_engine_store',
+          title: 'Household Kanban Engine Store',
+          grid_pos: {},
+          freeform_pos: {},
+          config: activeKanbanSnapshot,
+          updated_at: activeKanbanSnapshot.updated_at,
+          deleted_at: null,
+        });
+      }
+      return shouldPushKanban;
+    })();
+
     // Upsert Notes: only send notes with genuinely newer timestamps or new records (or all when forced)
     let notesToUpsert: any[] = [];
     if (notesToPush.length > 0) {
@@ -1049,6 +1266,36 @@ export async function pushToCloud(
         deleted_at: p.deletedAt || null,
       }));
       Promise.resolve(sb.from('household_profiles').upsert(profileRows)).catch(() => {});
+    }
+
+    // Best-effort direct sync to public.kanban_boards & public.kanban_cards when migration is installed
+    if (kanbanSnapshotPushed && activeKanbanSnapshot) {
+      Promise.resolve((async () => {
+        if (activeKanbanSnapshot.boards.length > 0) {
+          await sb
+            .from('kanban_boards')
+            .upsert(activeKanbanSnapshot.boards.map((b) => toDbKanbanBoardRow(b, dashboardId, ownerId)));
+        }
+        if (activeKanbanSnapshot.cards.length > 0) {
+          await sb
+            .from('kanban_cards')
+            .upsert(activeKanbanSnapshot.cards.map((c) => toDbKanbanCardRow(c, dashboardId, ownerId)));
+        }
+        if (activeKanbanSnapshot.deletedCardIds && activeKanbanSnapshot.deletedCardIds.length > 0) {
+          await sb
+            .from('kanban_cards')
+            .delete()
+            .eq('dashboard_id', dashboardId)
+            .in('id', activeKanbanSnapshot.deletedCardIds);
+        }
+        if (activeKanbanSnapshot.deletedBoardIds && activeKanbanSnapshot.deletedBoardIds.length > 0) {
+          await sb
+            .from('kanban_boards')
+            .delete()
+            .eq('dashboard_id', dashboardId)
+            .in('id', activeKanbanSnapshot.deletedBoardIds);
+        }
+      })()).catch(() => {});
     }
 
     // Non-blocking purge of expired tombstones (> 30 days old) in cloud database
@@ -1305,11 +1552,29 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
         }
       }
 
+      // Extract the Multi-Board Kanban Engine system row if present
+      const kanbanEngineRow = widgetsRes.data.find((w: any) => w.id === KANBAN_ENGINE_CLOUD_ROW_ID);
+      if (kanbanEngineRow && !kanbanEngineRow.deleted_at && kanbanEngineRow.config?.id === 'household_kanban') {
+        const snap = kanbanEngineRow.config as KanbanEngineSnapshot;
+        if (overwriteLocal) {
+          await db.transaction('rw', [db.kanbanBoards, db.kanbanCards, db.kanban], async () => {
+            await Promise.all([db.kanbanBoards.clear(), db.kanbanCards.clear()]);
+            if (snap.boards?.length > 0) await db.kanbanBoards.bulkPut(snap.boards);
+            if (snap.cards?.length > 0) await db.kanbanCards.bulkPut(snap.cards);
+            await db.kanban.put(snap);
+          });
+          await useKanbanStore.getState().initKanbanStore();
+        } else {
+          await useKanbanStore.getState().applyRemoteKanbanSnapshot(snap);
+        }
+      }
+
       const canvasWidgetRows = widgetsRes.data.filter(
         (w: any) =>
           w.id !== CHORE_ENGINE_CLOUD_ROW_ID &&
           w.id !== HOUSEHOLD_PROFILES_CLOUD_ROW_ID &&
-          w.id !== MEAL_PLANNER_CLOUD_ROW_ID
+          w.id !== MEAL_PLANNER_CLOUD_ROW_ID &&
+          w.id !== KANBAN_ENGINE_CLOUD_ROW_ID
       );
       const localWidgets = await db.widgets.toArray();
       const localMap = new Map(localWidgets.map((w) => [w.id, w]));
@@ -1421,6 +1686,29 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
       if (toDeleteNoteIds.length > 0) {
         await db.notes.bulkDelete(toDeleteNoteIds);
       }
+    }
+
+    // Best-effort direct pull from public.kanban_boards & public.kanban_cards tables
+    try {
+      const [kbBoardsRes, kbCardsRes] = await Promise.all([
+        sb.from('kanban_boards').select('*').eq('dashboard_id', dashboardId),
+        sb.from('kanban_cards').select('*').eq('dashboard_id', dashboardId),
+      ]);
+      if (!kbBoardsRes.error && !kbCardsRes.error && kbBoardsRes.data && kbBoardsRes.data.length > 0) {
+        const mappedBoards = kbBoardsRes.data.map(mapDbKanbanBoardRow);
+        const mappedCards = (kbCardsRes.data || []).map(mapDbKanbanCardRow);
+        const latestIso = [...mappedBoards, ...mappedCards].reduce((max, item) => {
+          return Date.parse(item.updatedAt) > Date.parse(max) ? item.updatedAt : max;
+        }, new Date().toISOString());
+        await useKanbanStore.getState().applyRemoteKanbanSnapshot({
+          id: 'household_kanban',
+          boards: mappedBoards,
+          cards: mappedCards,
+          updated_at: latestIso,
+        });
+      }
+    } catch {
+      // Table may not be migrated yet; KANBAN_ENGINE_CLOUD_ROW_ID above already synced
     }
 
     lastKnownCloudUpdatedAt = dashRes.data?.updated_at || null;
