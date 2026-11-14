@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.3] - 2026-11-14
+
+### Sticky Note Deletion Sync, Tombstone Precedence & Adaptive Close Controls
+* **Cloud Note Metadata Sync, Monotonic Timestamps & Tombstone Precedence (`src/types/dashboard.ts`, `src/services/syncMerge.ts`, `src/store/dashboardStore.ts`, `src/services/supabase.ts`, `tests/noteSyncAndDeletion.test.ts`):**
+  * Synced `isPinnedToCanvas`, `isShoppingList`, and `textColor` inside `public.notes.freeform_pos` JSONB (stripping tombstoned note payloads to `{}`), switched note/widget/tab mutations to monotonic `nextMonotonicIso` timestamps, persisted in-memory + IndexedDB deletion tombstones (`deletedNoteTimestamps`, `deletedWidgetTimestamps`, `deletedTabTimestamps`), and enforced delete/archive precedence across Realtime broadcasts, Cloud pulls (including empty `notes` responses), and `force: true` backup pushes so stale or tied remote copies cannot resurrect deleted or archived notes.
+* **Adaptive Corkboard Note `✕` / Context Menu & Bidirectional Sync Controls (`src/components/layout/Corkboard.tsx`, `src/components/mobile/MobileCompanion.tsx`, `src/App.tsx`, `src/components/settings/SettingsModal.tsx`, `FEATURES.md`, `ARCHITECTURE.md`, `README.md`):**
+  * Canvases without a `sticky_notes` tile now archive notes directly to Trash on `✕` (and filter unpinned notes on Mobile Companion) instead of leaving hidden `isPinnedToCanvas: false` orphans, while canvases with a Notes Tile keep `✕` unpinning and expose both **Close from Canvas** and **Delete Note** in the context menu (with Archive **Restore** re-pinning `isPinnedToCanvas: true`); flushed pending debounced pushes before Cloud pulls, reconciled unsynced local deletions after pulls/backups, and added a **Sync Now** action in Cloud Sync settings.
+
+---
+
 ## [0.7.2] - 2026-11-14
 
 ### Categorized Widget Catalog, In-Place Mode Switching & Starter Canvas Blueprints

@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.3",
+    date: "November 14, 2026",
+    title: "Sticky Note Deletion Sync, Tombstone Precedence & Adaptive Close Controls",
+    highlights: [
+      "Sticky Note Deletion & Tombstone Protection: Added monotonic timestamps, in-memory + IndexedDB tombstones, and delete/archive tie-breaking across Realtime broadcasts, Cloud pulls, and Back Up to Cloud pushes so deleted or archived notes never resurrect from lagging devices.",
+      "Synced Canvas Pin State & Adaptive Note Close (✕): Synced isPinnedToCanvas, isShoppingList, and textColor via freeform_pos JSONB; on canvases without a Sticky Notes Tile, clicking ✕ now archives notes cleanly to Trash instead of hiding them out of reach, while Archive Restore automatically re-pins them.",
+      "Bidirectional Sync Now & Pre-Pull Flush: Flushed pending debounced pushes before automatic and manual pulls, pushed unsynced local deletions back to Cloud automatically, and added a 1-click Sync Now button in Settings -> Backup & System.",
+    ],
+  },
+  {
     version: "v0.7.2",
     date: "November 14, 2026",
     title: "Categorized Widget Catalog, In-Place Mode Switching & Starter Canvas Blueprints",
