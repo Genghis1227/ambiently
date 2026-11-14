@@ -29,7 +29,11 @@ To ensure consistency, safety, and clear alignment, all contributors must strict
   * Ensure maskable icons (`icon-maskable-*.png`) are calibrated within the 80% safe zone to prevent Android launcher clipping.
   * Ensure splash icons (`purpose: any`) are properly configured with breathing room on the matching background canvas.
   * Update `manifest.json` and the pre-cache list in `sw.js` to ensure the installed PWA never serves stale assets.
-* **Documentation Review:** Before finalizing, verify if documentation (e.g., `README.md`, `FEATURES.md`, or API specs) needs an update to reflect your changes.
+* **Documentation Review (Mandatory Before Every PR):** Before finalizing any branch or opening a Pull Request, inspect and update project documentation whenever user-facing capabilities, settings, architecture, APIs, or deployment workflows change:
+  * `FEATURES.md` — Detailed capability & widget/engine reference.
+  * `README.md` — Top-level feature highlights, setup, and configuration overview.
+  * `ARCHITECTURE.md` — IndexedDB stores/fields, state sync/conflict resolution, `/api/*` edge/server handlers, and container runtime behavior.
+  * `RASPBERRY_PI.md` — Whenever Docker, `compose.yaml`, runtime env vars, or `scripts/pi-kiosk-setup.sh` change.
 * **Push Remote:** Push the local branch to the remote repository:
   * `git push -u origin <branch-name>`
 
@@ -37,7 +41,7 @@ To ensure consistency, safety, and clear alignment, all contributors must strict
 
 ## 4. Versioning (MANDATORY STOPPING POINT)
 > [!CAUTION]
-> **STRICT REQUIREMENT:** Never increment the version number or update the `CHANGELOG.md` autonomously. Confirmation from the project owner is a HARD BLOCK for this section.
+> **STRICT REQUIREMENT:** Never increment the version number (`package.json`) or update `CHANGELOG.md` / `src/data/changelog.ts` autonomously. Confirmation from the project owner is a HARD BLOCK for this section.
 > 
 * **Version Detection:** Check if the application is versioned (e.g., `package.json`, `version.txt`).
 * **Mandatory Approval:** Before pushing your branch or applying any versioning changes, you **MUST** ask the project owner: *"Should the version number be incremented?"*

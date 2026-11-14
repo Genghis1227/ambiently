@@ -11,6 +11,15 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.6.10",
+    date: "November 13, 2026",
+    title: "Persistent Workspace Agent Rules (AGENTS.md) & Pre-PR Documentation Gate",
+    highlights: [
+      "Inline Workflow Rule Expansion (AGENTS.md): Added a root AGENTS.md workspace rule using @[DEVELOPER_WORKFLOW.md](./DEVELOPER_WORKFLOW.md) so the full project workflow loads automatically as a single source of truth on every session.",
+      "Mandatory 4-Doc Pre-PR Checklist (DEVELOPER_WORKFLOW.md): Codified explicit pre-PR verification of FEATURES.md, README.md, ARCHITECTURE.md, and RASPBERRY_PI.md alongside the 4-command validation and release gates.",
+    ],
+  },
+  {
     version: "v0.6.9",
     date: "November 13, 2026",
     title: "Same-Day Chore Skip (0 Pts + Same-Day Undo) & Documentation Sync",
