@@ -58,8 +58,10 @@ import { useMealStore } from '../../stores/useMealStore';
 import { useKanbanStore } from '../../stores/useKanbanStore';
 import type { MealSlot, WeekStartDay, WidgetMealScope } from '../../types/meals';
 import {
+  DEFAULT_KANBAN_ACTIVE_COLUMN,
   KANBAN_COLUMNS,
   resolveWidgetActiveBoardId,
+  resolveWidgetActiveColumnId,
   type KanbanColumnId,
 } from '../../types/kanban';
 import { HouseholdAvatar } from '../common/HouseholdAvatar';
@@ -243,7 +245,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   // Kanban widget states
   const kanbanBoards = useKanbanStore((s) => s.boards);
   const [kanbanBoardId, setKanbanBoardId] = useState<string>('');
-  const [kanbanColumnId, setKanbanColumnId] = useState<KanbanColumnId>('in_progress');
+  const [kanbanColumnId, setKanbanColumnId] = useState<KanbanColumnId>(DEFAULT_KANBAN_ACTIVE_COLUMN);
   const [kanbanDisplayMode, setKanbanDisplayMode] = useState<'tile' | 'view'>('tile');
   const [rssCategoryFilter, setRssCategoryFilter] = useState<'All' | RssFeedCategory>('All');
   const [rssSearchQuery, setRssSearchQuery] = useState('');
@@ -408,12 +410,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     } else if (widget.type === 'kanban') {
       const allBoards = useKanbanStore.getState().boards;
       setKanbanBoardId(resolveWidgetActiveBoardId(widget.config, allBoards));
-      const cfgCol = widget.config?.activeColumnId;
-      setKanbanColumnId(
-        cfgCol === 'todo' || cfgCol === 'in_progress' || cfgCol === 'done'
-          ? cfgCol
-          : 'in_progress'
-      );
+      setKanbanColumnId(resolveWidgetActiveColumnId(widget.config));
       setKanbanDisplayMode(widget.config?.displayMode === 'view' ? 'view' : 'tile');
     }
   }, [widget, isOpen, settings.commonPhotos, settings.defaultWidgetStyle]);

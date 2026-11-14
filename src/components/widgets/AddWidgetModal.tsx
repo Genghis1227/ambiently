@@ -124,11 +124,11 @@ const WIDGET_TEMPLATES: WidgetTemplate[] = [
   {
     type: 'kanban',
     title: 'Project Kanban',
-    description: 'Zero-friction multi-board project workflow with quick-tap column arrows, drag-to-edge flipping, sub-checklists, and archive.',
+    description: 'Zero-friction multi-board workflow starting on To Do; resize wider for 3 columns or drag to edges on compact tiles.',
     icon: Kanban,
     defaultGridPos: { w: 4, h: 7 },
     defaultConfig: {
-      activeColumnId: 'in_progress',
+      activeColumnId: 'todo',
       displayMode: 'tile',
     },
     color: 'from-slate-500/15 to-emerald-500/15 text-slate-200 border-slate-500/30',

@@ -55,7 +55,7 @@ function isInteractiveTarget(target: EventTarget | null): boolean {
 
 export function useKanbanPointerDnD({
   rootRef,
-  activeColumnFallback = 'in_progress',
+  activeColumnFallback = 'todo',
   onDropCard,
   edgeSwitch,
   isLight = false,
