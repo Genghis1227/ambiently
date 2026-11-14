@@ -7,6 +7,7 @@ import {
   Inbox,
   Lock,
   Minimize2,
+  Minus,
   Palmtree,
   Plus,
   RotateCcw,
@@ -82,6 +83,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
   const dashboardWeekStartsOn = useDashboardStore((s) => s.settings.weekStartsOn);
   const completeChore = useChoreStore((s) => s.completeChore);
   const revertChoreSameDay = useChoreStore((s) => s.revertChoreSameDay);
+  const skipChoreInstance = useChoreStore((s) => s.skipChoreInstance);
   const dismissChoreInstance = useChoreStore((s) => s.dismissChoreInstance);
   const proposeWishlistReward = useChoreStore((s) => s.proposeWishlistReward);
   const updateWishlistProposal = useChoreStore((s) => s.updateWishlistProposal);
@@ -181,6 +183,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
     sharedPendingItems,
     reviewByChild,
     completedByChild,
+    sharedCompletedItems,
     todayTotalCount,
     reviewTotalCount,
     completedTotalCount,
@@ -190,6 +193,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
     const rByChild = new Map<string, ChildChoreRowItem[]>();
     const cByChild = new Map<string, ChildChoreRowItem[]>();
     const sharedPending: ChildChoreRowItem[] = [];
+    const sharedCompleted: ChildChoreRowItem[] = [];
 
     for (const p of visibleProfiles) {
       tByChild.set(p.id, []);
@@ -238,12 +242,22 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
             (inst.isOverdue && daysBetweenDateKeys(inst.dateScheduled, todayKey) <= 1)));
       if (!isValidPending) continue;
 
-      const isRelevantDate = inst.dateScheduled === todayKey || inst.isOverdue;
+      const completedToday =
+        Boolean(inst.completedAt) &&
+        localDateKey(new Date(inst.completedAt as string)) === todayKey;
+      const skippedToday =
+        inst.status === 'skipped' &&
+        (inst.dateScheduled === todayKey ||
+          (Boolean(inst.skippedAt) &&
+            localDateKey(new Date(inst.skippedAt as string)) === todayKey));
+      const isRelevantDate =
+        inst.dateScheduled === todayKey || inst.isOverdue || completedToday || skippedToday;
       if (!isRelevantDate && inst.status !== 'awaiting_approval') continue;
 
       const effectivePoints = calculateEffectiveChorePoints(tpl, inst.isOverdue);
       const isShared = tpl.assignedTo === 'shared';
-      const canUndo = canSelfRevertInstance(inst, now);
+      const canUndo =
+        inst.dateScheduled === todayKey && canSelfRevertInstance(inst, now);
 
       if (inst.status === 'pending') {
         if (isShared) {
@@ -299,7 +313,10 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
           }
         }
         if (matchedAny) rCount += 1;
-      } else if (inst.status === 'completed' && inst.dateScheduled === todayKey) {
+      } else if (
+        inst.status === 'completed' &&
+        (inst.dateScheduled === todayKey || completedToday)
+      ) {
         const completers =
           inst.completedBy && inst.completedBy.length > 0
             ? inst.completedBy
@@ -322,6 +339,33 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
           }
         }
         if (matchedAny) cCount += 1;
+      } else if (
+        inst.status === 'skipped' &&
+        (inst.dateScheduled === todayKey || skippedToday)
+      ) {
+        const rowItem: ChildChoreRowItem = {
+          instance: inst,
+          template: tpl,
+          effectivePoints,
+          awardedPointsForChild: 0,
+          isShared,
+          canUndo,
+        };
+        if (!isShared) {
+          if (cByChild.has(tpl.assignedTo)) {
+            cByChild.get(tpl.assignedTo)!.push(rowItem);
+            cCount += 1;
+          }
+        } else if (inst.skippedByProfileId && cByChild.has(inst.skippedByProfileId)) {
+          cByChild.get(inst.skippedByProfileId)!.push(rowItem);
+          cCount += 1;
+        } else if (effectiveScope === 'household') {
+          sharedCompleted.push(rowItem);
+          cCount += 1;
+        } else if (cByChild.has(effectiveScope)) {
+          cByChild.get(effectiveScope)!.push(rowItem);
+          cCount += 1;
+        }
       }
     }
 
@@ -330,6 +374,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
       sharedPendingItems: sharedPending,
       reviewByChild: rByChild,
       completedByChild: cByChild,
+      sharedCompletedItems: sharedCompleted,
       todayTotalCount: tCount,
       reviewTotalCount: rCount,
       completedTotalCount: cCount,
@@ -417,6 +462,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
     const displayPoints = awardedPointsForChild ?? effectivePoints;
     const isOverdue = instance.isOverdue && section === 'today';
     const isCompleted = section === 'completed';
+    const isSkipped = instance.status === 'skipped';
     const isReview = section === 'review';
 
     return (
@@ -454,18 +500,24 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <div
             className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 border transition-colors ${
-              isCompleted
-                ? 'bg-emerald-600/85 border-emerald-500/70 text-white'
-                : isReview
-                  ? isLight
-                    ? 'bg-amber-100 border-amber-300 text-amber-700'
-                    : 'bg-amber-500/20 border-amber-400/50 text-amber-300'
-                  : isLight
-                    ? 'border-slate-300 bg-slate-50 group-hover/row:border-emerald-500'
-                    : 'border-slate-700 bg-slate-950/60 group-hover/row:border-emerald-400/60'
+              isCompleted && isSkipped
+                ? isLight
+                  ? 'bg-slate-200/80 border-slate-300 text-slate-500'
+                  : 'bg-slate-800 border-slate-700 text-slate-400'
+                : isCompleted
+                  ? 'bg-emerald-600/85 border-emerald-500/70 text-white'
+                  : isReview
+                    ? isLight
+                      ? 'bg-amber-100 border-amber-300 text-amber-700'
+                      : 'bg-amber-500/20 border-amber-400/50 text-amber-300'
+                    : isLight
+                      ? 'border-slate-300 bg-slate-50 group-hover/row:border-emerald-500'
+                      : 'border-slate-700 bg-slate-950/60 group-hover/row:border-emerald-400/60'
             }`}
           >
-            {isCompleted ? (
+            {isCompleted && isSkipped ? (
+              <Minus className="w-3.5 h-3.5 stroke-[2.5]" />
+            ) : isCompleted ? (
               <Check className="w-4 h-4 stroke-[2.5]" />
             ) : isReview ? (
               <Clock className="w-3.5 h-3.5" />
@@ -488,6 +540,18 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
               >
                 {template.title}
               </span>
+
+              {isCompleted && isSkipped && (
+                <span
+                  className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium border ${
+                    isLight
+                      ? 'bg-slate-100 text-slate-600 border-slate-200'
+                      : 'bg-slate-800/90 text-slate-400 border-slate-700/70'
+                  }`}
+                >
+                  Skipped
+                </span>
+              )}
 
               {instance.isOverdue && (
                 <span
@@ -528,6 +592,24 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {section === 'today' && !instance.isOverdue && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                skipChoreInstance(instance.instanceId, profile?.id);
+              }}
+              onKeyDown={(e) => e.stopPropagation()}
+              title="Skip for today (no points awarded)"
+              className={`px-2 py-0.5 rounded-lg border text-[11px] font-medium transition-colors cursor-pointer ${
+                isLight
+                  ? 'bg-white hover:bg-slate-100 text-slate-500 hover:text-slate-700 border-slate-200 hover:border-slate-300'
+                  : 'bg-slate-800/80 hover:bg-slate-700/80 text-slate-400 hover:text-slate-200 border-slate-700/60 hover:border-slate-600'
+              }`}
+            >
+              Skip
+            </button>
+          )}
           {section === 'today' && instance.isOverdue && (
             <button
               type="button"
@@ -535,6 +617,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
                 e.stopPropagation();
                 dismissChoreInstance(instance.instanceId);
               }}
+              onKeyDown={(e) => e.stopPropagation()}
               title="Dismiss overdue task"
               className={`px-2 py-0.5 rounded-lg border text-[11px] font-medium transition-colors cursor-pointer ${
                 isLight
@@ -565,20 +648,24 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
 
           <span
             className={`px-2.5 py-1 rounded-full text-xs font-semibold tabular-nums border ${
-              isCompleted
+              isCompleted && isSkipped
                 ? isLight
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                  : 'bg-emerald-950/50 text-emerald-300/90 border-emerald-700/40'
-                : isReview
+                  ? 'bg-slate-100 text-slate-500 border-slate-200'
+                  : 'bg-slate-800/60 text-slate-400 border-slate-700/60'
+                : isCompleted
                   ? isLight
-                    ? 'bg-amber-50 text-amber-700 border-amber-200'
-                    : 'bg-amber-950/50 text-amber-300/90 border-amber-700/40'
-                  : isLight
-                    ? 'bg-slate-100 text-slate-700 border-slate-200'
-                    : 'bg-slate-800/80 text-slate-200 border-slate-700/60'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-emerald-950/50 text-emerald-300/90 border-emerald-700/40'
+                  : isReview
+                    ? isLight
+                      ? 'bg-amber-50 text-amber-700 border-amber-200'
+                      : 'bg-amber-950/50 text-amber-300/90 border-amber-700/40'
+                    : isLight
+                      ? 'bg-slate-100 text-slate-700 border-slate-200'
+                      : 'bg-slate-800/80 text-slate-200 border-slate-700/60'
             }`}
           >
-            +{displayPoints} pt{displayPoints === 1 ? '' : 's'}
+            {isSkipped ? '0 pts' : `+${displayPoints} pt${displayPoints === 1 ? '' : 's'}`}
           </span>
         </div>
       </div>
@@ -791,7 +878,8 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
       badgeTone: isLight
         ? 'bg-slate-200 text-slate-700'
         : 'bg-slate-800 text-slate-300 border border-slate-700/50',
-      renderContent: () => renderChildSubGroups('completed', completedByChild),
+      renderContent: () =>
+        renderChildSubGroups('completed', completedByChild, sharedCompletedItems),
     },
   ];
 

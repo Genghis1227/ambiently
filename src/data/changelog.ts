@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.6.9",
+    date: "November 13, 2026",
+    title: "Same-Day Chore Skip (0 Pts + Same-Day Undo) & Documentation Sync",
+    highlights: [
+      "Same-Day Chore Skip (0 Pts): Tap 'Skip' on any pending chore in Today's Chores when a recurring task (like Homework) doesn't apply for the day—excusing it with 0 points and 0 ledger entries so no manual deduction is needed.",
+      "Transparent 'Skipped • 0 pts' Record & Same-Day Undo: Skipped tasks appear under Completed Today with a neutral 'Skipped' badge and '0 pts' pill so parents stay informed, and can be restored in 1 tap until midnight.",
+      "Smart Rollover & Sync Handling: Skipped chores never carry forward as overdue the next morning, skipped '1× / wk (Any day)' tasks stay excused until next week's start day, and project reference docs (FEATURES.md, README.md, ARCHITECTURE.md) are fully synced.",
+    ],
+  },
+  {
     version: "v0.6.8",
     date: "November 13, 2026",
     title: "Proposals Tray Visibility Fix & Kid Self-Service Proposal Editing",

@@ -103,7 +103,13 @@ export function isWeeklyChoreCompletedInWeek(
 ): boolean {
   for (const inst of instances) {
     if (inst.choreId !== choreId) continue;
-    if (inst.status !== 'completed' && inst.status !== 'awaiting_approval') continue;
+    if (
+      inst.status !== 'completed' &&
+      inst.status !== 'awaiting_approval' &&
+      inst.status !== 'skipped'
+    ) {
+      continue;
+    }
 
     if (inst.dateScheduled >= weekStartKey && inst.dateScheduled <= weekEndKey) {
       return true;
@@ -111,6 +117,12 @@ export function isWeeklyChoreCompletedInWeek(
     if (inst.completedAt) {
       const completedDateKey = localDateKey(new Date(inst.completedAt));
       if (completedDateKey >= weekStartKey && completedDateKey <= weekEndKey) {
+        return true;
+      }
+    }
+    if (inst.skippedAt) {
+      const skippedDateKey = localDateKey(new Date(inst.skippedAt));
+      if (skippedDateKey >= weekStartKey && skippedDateKey <= weekEndKey) {
         return true;
       }
     }
@@ -421,13 +433,14 @@ export function isTemplateDueOnDate(
       return diff >= 0 && diff % interval === 0;
     }
     case 'bounty': {
-      // Bounty chores are one-off claimable tasks: only spawn if no active/completed instance exists
+      // Bounty chores are one-off claimable tasks: only spawn if no active/completed/skipped instance exists
       const hasExisting = existingInstances.some(
         (inst) =>
           inst.choreId === template.id &&
           (inst.status === 'pending' ||
             inst.status === 'awaiting_approval' ||
-            inst.status === 'completed')
+            inst.status === 'completed' ||
+            inst.status === 'skipped')
       );
       return !hasExisting;
     }
@@ -438,16 +451,26 @@ export function isTemplateDueOnDate(
 
 /**
  * Checks if an instance can be self-reverted by a child on the kiosk.
- * Kids can only check and uncheck a chore freely if `dateScheduled === todayLocalYYYYMMDD`
+ * Kids can only check and uncheck (or restore a skipped) chore freely if `dateScheduled === todayLocalYYYYMMDD`
  * (and within the same calendar day). Past-day instances lock permanently at midnight.
  */
 export function canSelfRevertInstance(instance: ActiveChoreInstance, now: Date): boolean {
-  if (instance.status !== 'completed' && instance.status !== 'awaiting_approval') {
+  if (
+    instance.status !== 'completed' &&
+    instance.status !== 'awaiting_approval' &&
+    instance.status !== 'skipped'
+  ) {
     return false;
   }
   const todayKey = localDateKey(now);
   if (instance.dateScheduled !== todayKey) {
     return false;
+  }
+  if (instance.status === 'skipped') {
+    if (instance.skippedAt) {
+      return localDateKey(new Date(instance.skippedAt)) === todayKey;
+    }
+    return true;
   }
   if (instance.completedAt) {
     const completedDateKey = localDateKey(new Date(instance.completedAt));
@@ -728,7 +751,15 @@ export function evaluateChoreRollover(
       if (existingForToday) {
         nextInstances = nextInstances.map((i) =>
           i.instanceId === instanceId
-            ? { ...i, status: 'pending' as const, isOverdue: false, completedBy: undefined, completedAt: undefined }
+            ? {
+                ...i,
+                status: 'pending' as const,
+                isOverdue: false,
+                completedBy: undefined,
+                completedAt: undefined,
+                skippedAt: undefined,
+                skippedByProfileId: undefined,
+              }
             : i
         );
       } else {
@@ -849,7 +880,11 @@ export function mergeChoreSnapshotsAuthoritative(
 
   // 3. Merge Instances: remote wins on conflict when remoteIsParentAuthoritative,
   //    but never let a stale 'pending' instance overwrite an instance that has an active
-  //    (non-reverted) completion in mergedLedger.
+  //    (non-reverted) completion in mergedLedger, or a newer same-day 'skipped' action.
+  const baseAuthTime = Math.max(
+    Date.parse(baseSource.lastParentActionAt || '') || 0,
+    Date.parse(baseSource.updated_at || '') || 0
+  );
   const activeCompletedRefIds = new Set(
     mergedLedger
       .filter((e) => e.type === 'chore_completion' && e.canRevert !== false)
@@ -872,6 +907,14 @@ export function mergeChoreSnapshotsAuthoritative(
       ) {
         continue;
       }
+      if (
+        existing &&
+        existing.status === 'skipped' &&
+        inst.status === 'pending' &&
+        (Date.parse(existing.skippedAt || '') || 0) > baseAuthTime
+      ) {
+        continue;
+      }
       instanceMap.set(inst.instanceId, inst);
     }
   }
@@ -879,10 +922,6 @@ export function mergeChoreSnapshotsAuthoritative(
   // 4. Merge Rewards & Trophies: parent-authoritative source is the source of truth for rewards
   //    (so deleted rewards never resurrect from an older snapshot or DEFAULT_CHORE_SNAPSHOT),
   //    while preserving genuinely new kid proposals and newer kid edits on unpriced (`needs_pricing`) proposals.
-  const baseAuthTime = Math.max(
-    Date.parse(baseSource.lastParentActionAt || '') || 0,
-    Date.parse(baseSource.updated_at || '') || 0
-  );
   const rewardMap = new Map<string, WishlistReward>();
   for (const r of baseSource.rewards) {
     if (!deletedRewardSet.has(r.id)) {

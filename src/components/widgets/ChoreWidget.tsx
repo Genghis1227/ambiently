@@ -7,6 +7,7 @@ import {
   Inbox,
   Lock,
   Maximize2,
+  Minus,
   Palmtree,
   Plus,
   RotateCcw,
@@ -76,6 +77,7 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
   const pendingParentActionsCount = useChoreStore((s) => s.pendingParentActionsCount);
   const completeChore = useChoreStore((s) => s.completeChore);
   const revertChoreSameDay = useChoreStore((s) => s.revertChoreSameDay);
+  const skipChoreInstance = useChoreStore((s) => s.skipChoreInstance);
   const dismissChoreInstance = useChoreStore((s) => s.dismissChoreInstance);
   const proposeWishlistReward = useChoreStore((s) => s.proposeWishlistReward);
   const updateWishlistProposal = useChoreStore((s) => s.updateWishlistProposal);
@@ -259,6 +261,7 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
     sharedPendingItems,
     reviewByChild,
     completedByChild,
+    sharedCompletedItems,
     todayTotalCount,
     reviewTotalCount,
     completedTotalCount,
@@ -267,6 +270,7 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
     const rByChild = new Map<string, ChildChoreRowItem[]>();
     const cByChild = new Map<string, ChildChoreRowItem[]>();
     const sharedPending: ChildChoreRowItem[] = [];
+    const sharedCompleted: ChildChoreRowItem[] = [];
 
     for (const p of visibleProfiles) {
       tByChild.set(p.id, []);
@@ -318,9 +322,14 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
       const completedToday =
         Boolean(inst.completedAt) &&
         localDateKey(new Date(inst.completedAt as string)) === todayKey;
+      const skippedToday =
+        inst.status === 'skipped' &&
+        (inst.dateScheduled === todayKey ||
+          (Boolean(inst.skippedAt) &&
+            localDateKey(new Date(inst.skippedAt as string)) === todayKey));
 
       const isRelevantDate =
-        inst.dateScheduled === todayKey || inst.isOverdue || completedToday;
+        inst.dateScheduled === todayKey || inst.isOverdue || completedToday || skippedToday;
       if (!isRelevantDate && inst.status !== 'awaiting_approval') continue;
 
       const effectivePoints = calculateEffectiveChorePoints(tpl, inst.isOverdue);
@@ -408,6 +417,33 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
           }
         }
         if (matchedAny) cCount += 1;
+      } else if (
+        inst.status === 'skipped' &&
+        (inst.dateScheduled === todayKey || skippedToday)
+      ) {
+        const rowItem: ChildChoreRowItem = {
+          instance: inst,
+          template: tpl,
+          effectivePoints,
+          awardedPointsForChild: 0,
+          isShared,
+          canUndo,
+        };
+        if (!isShared) {
+          if (cByChild.has(tpl.assignedTo)) {
+            cByChild.get(tpl.assignedTo)!.push(rowItem);
+            cCount += 1;
+          }
+        } else if (inst.skippedByProfileId && cByChild.has(inst.skippedByProfileId)) {
+          cByChild.get(inst.skippedByProfileId)!.push(rowItem);
+          cCount += 1;
+        } else if (activeScope === 'household') {
+          sharedCompleted.push(rowItem);
+          cCount += 1;
+        } else if (cByChild.has(activeScope)) {
+          cByChild.get(activeScope)!.push(rowItem);
+          cCount += 1;
+        }
       }
     }
 
@@ -416,6 +452,7 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
       sharedPendingItems: sharedPending,
       reviewByChild: rByChild,
       completedByChild: cByChild,
+      sharedCompletedItems: sharedCompleted,
       todayTotalCount: tCount,
       reviewTotalCount: rCount,
       completedTotalCount: cCount,
@@ -530,6 +567,7 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
     const displayPoints = awardedPointsForChild ?? effectivePoints;
     const isOverdue = instance.isOverdue && section === 'today';
     const isCompleted = section === 'completed';
+    const isSkipped = instance.status === 'skipped';
     const isReview = section === 'review';
 
     return (
@@ -568,16 +606,22 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
           {/* Status Checkbox / Indicator */}
           <div
             className={`w-5 h-5 rounded-lg flex items-center justify-center shrink-0 border transition-colors ${
-              isCompleted
-                ? 'bg-emerald-600/85 border-emerald-500/70 text-white'
-                : isReview
-                  ? 'bg-amber-500/20 border-amber-400/50 text-amber-300'
-                  : isLight
-                    ? 'border-slate-300 bg-slate-100/80 group-hover/row:border-emerald-500/60'
-                    : 'border-slate-700 bg-slate-950/60 group-hover/row:border-emerald-400/60'
+              isCompleted && isSkipped
+                ? isLight
+                  ? 'bg-slate-200/80 border-slate-300 text-slate-500'
+                  : 'bg-slate-800 border-slate-700 text-slate-400'
+                : isCompleted
+                  ? 'bg-emerald-600/85 border-emerald-500/70 text-white'
+                  : isReview
+                    ? 'bg-amber-500/20 border-amber-400/50 text-amber-300'
+                    : isLight
+                      ? 'border-slate-300 bg-slate-100/80 group-hover/row:border-emerald-500/60'
+                      : 'border-slate-700 bg-slate-950/60 group-hover/row:border-emerald-400/60'
             }`}
           >
-            {isCompleted ? (
+            {isCompleted && isSkipped ? (
+              <Minus className="w-3 h-3 stroke-[2.5]" />
+            ) : isCompleted ? (
               <Check className="w-3.5 h-3.5 stroke-[2.5]" />
             ) : isReview ? (
               <Clock className="w-3 h-3" />
@@ -603,6 +647,18 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
               >
                 {template.title}
               </span>
+
+              {isCompleted && isSkipped && (
+                <span
+                  className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium border ${
+                    isLight
+                      ? 'bg-slate-100 text-slate-600 border-slate-200'
+                      : 'bg-slate-800/90 text-slate-400 border-slate-700/70'
+                  }`}
+                >
+                  Skipped
+                </span>
+              )}
 
               {/* Quiet "Yesterday" overdue pill (zero harsh red, zero flashing) */}
               {instance.isOverdue && (
@@ -646,8 +702,26 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
           </div>
         </div>
 
-        {/* Right Side: Points Pill & Same-Day Undo / Past-Day Lock */}
+        {/* Right Side: Skip / Dismiss / Same-Day Undo & Points Pill */}
         <div className="flex items-center gap-1.5 shrink-0">
+          {section === 'today' && !instance.isOverdue && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                skipChoreInstance(instance.instanceId, profile?.id);
+              }}
+              onKeyDown={(e) => e.stopPropagation()}
+              title="Skip for today (no points awarded)"
+              className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer ${
+                isLight
+                  ? 'text-slate-500 hover:text-slate-800 hover:bg-slate-200/70'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/80'
+              }`}
+            >
+              Skip
+            </button>
+          )}
           {section === 'today' && instance.isOverdue && (
             <button
               type="button"
@@ -655,6 +729,7 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
                 e.stopPropagation();
                 dismissChoreInstance(instance.instanceId);
               }}
+              onKeyDown={(e) => e.stopPropagation()}
               title="Dismiss overdue task"
               className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer ${
                 isLight
@@ -686,20 +761,24 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
 
           <span
             className={`px-2 py-0.5 rounded-full text-[11px] font-semibold tabular-nums border ${
-              isCompleted
+              isCompleted && isSkipped
                 ? isLight
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                  : 'bg-emerald-950/50 text-emerald-300/90 border-emerald-700/40'
-                : isReview
+                  ? 'bg-slate-100 text-slate-500 border-slate-200/80'
+                  : 'bg-slate-800/60 text-slate-400 border-slate-700/60'
+                : isCompleted
                   ? isLight
-                    ? 'bg-amber-50 text-amber-700 border-amber-200'
-                    : 'bg-amber-950/50 text-amber-300/90 border-amber-700/40'
-                  : isLight
-                    ? 'bg-slate-100 text-slate-700 border-slate-200/80'
-                    : 'bg-slate-800/80 text-slate-200 border-slate-700/60'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-emerald-950/50 text-emerald-300/90 border-emerald-700/40'
+                  : isReview
+                    ? isLight
+                      ? 'bg-amber-50 text-amber-700 border-amber-200'
+                      : 'bg-amber-950/50 text-amber-300/90 border-amber-700/40'
+                    : isLight
+                      ? 'bg-slate-100 text-slate-700 border-slate-200/80'
+                      : 'bg-slate-800/80 text-slate-200 border-slate-700/60'
             }`}
           >
-            +{displayPoints} pt{displayPoints === 1 ? '' : 's'}
+            {isSkipped ? '0 pts' : `+${displayPoints} pt${displayPoints === 1 ? '' : 's'}`}
           </span>
         </div>
       </div>
@@ -920,7 +999,8 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
       badgeTone: isLight
         ? 'bg-slate-200 text-slate-700'
         : 'bg-slate-800 text-slate-300 border border-slate-700/50',
-      renderContent: () => renderChildSubGroups('completed', completedByChild),
+      renderContent: () =>
+        renderChildSubGroups('completed', completedByChild, sharedCompletedItems),
     },
   ];
 
