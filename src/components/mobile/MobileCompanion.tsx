@@ -28,6 +28,7 @@ import {
   Smartphone,
   Utensils,
   Lock,
+  Kanban,
 } from 'lucide-react';
 import type { DashboardTab, DashboardWidget, StickyNoteItem, WidgetThemeMode } from '../../types/dashboard';
 import { ShoppingListNoteBody } from '../common/ShoppingListNoteBody';
@@ -68,6 +69,7 @@ import { TextBoxWidget } from '../widgets/TextBoxWidget';
 import { ImageWidget } from '../widgets/ImageWidget';
 import { ChoreWidget } from '../widgets/ChoreWidget';
 import { MealPlannerWidget } from '../widgets/MealPlannerWidget';
+import { KanbanWidget } from '../widgets/KanbanWidget';
 
 interface MobileCompanionProps {
   tabs: DashboardTab[];
@@ -301,6 +303,8 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return CheckSquare;
       case 'meals':
         return Utensils;
+      case 'kanban':
+        return Kanban;
       default:
         return LayoutGrid;
     }
@@ -336,6 +340,8 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return 'Chores & Rewards';
       case 'meals':
         return 'Meal Planner';
+      case 'kanban':
+        return 'Project Kanban';
       default:
         return 'Widget';
     }
@@ -514,6 +520,20 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return (
           <div className="max-h-96 overflow-y-auto">
             <MealPlannerWidget
+              title={widget.title}
+              config={widget.config}
+              isLight={isLight}
+              onUpdateConfig={(updates) =>
+                onUpdateWidget?.(widget.id, { config: { ...widget.config, ...updates } })
+              }
+            />
+          </div>
+        );
+      case 'kanban':
+        return (
+          <div className="h-[26rem] overflow-hidden">
+            <KanbanWidget
+              widgetId={widget.id}
               title={widget.title}
               config={widget.config}
               isLight={isLight}

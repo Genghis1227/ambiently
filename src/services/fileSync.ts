@@ -8,6 +8,8 @@ import type { MealPlannerSnapshot } from '../types/meals';
 import { useChoreStore } from '../store/choreStore';
 import { useProfileStore } from '../stores/useProfileStore';
 import { useMealStore } from '../stores/useMealStore';
+import { useKanbanStore } from '../stores/useKanbanStore';
+import type { KanbanEngineSnapshot } from '../types/kanban';
 import { inferCuratedCategoryId } from '../data/curatedScenery';
 import { sanitizeRestoredPhotoWidget } from '../utils/photoSourceIsolation';
 import { normalizePinLockSettings } from '../utils/pinValidation';
@@ -24,6 +26,7 @@ export interface LocalExportPayload {
   profiles?: HouseholdProfile[];
   chores?: ChoreEngineSnapshot;
   meals?: MealPlannerSnapshot;
+  kanban?: KanbanEngineSnapshot;
 }
 
 export type FileSyncStatus = 'connected' | 'needs_permission' | 'unbound' | 'unsupported';
@@ -156,6 +159,7 @@ export async function downloadBackupFile(
     profiles: useProfileStore.getState().profiles,
     chores: useChoreStore.getState().snapshot,
     meals: useMealStore.getState().snapshot,
+    kanban: useKanbanStore.getState().snapshot,
   };
 
   const jsonStr = JSON.stringify(payload, null, 2);
@@ -263,6 +267,22 @@ export async function restoreBackupToDatabase(
     if (payload.meals && payload.meals.id === 'household_meals') {
       await db.meals.put(payload.meals);
       await useMealStore.getState().initMealStore();
+    }
+
+    // 8. Restore Kanban boards & cards if present
+    if (payload.kanban && payload.kanban.id === 'household_kanban') {
+      const snap = payload.kanban;
+      await db.transaction('rw', [db.kanbanBoards, db.kanbanCards, db.kanban], async () => {
+        await Promise.all([db.kanbanBoards.clear(), db.kanbanCards.clear()]);
+        if (Array.isArray(snap.boards) && snap.boards.length > 0) {
+          await db.kanbanBoards.bulkPut(snap.boards);
+        }
+        if (Array.isArray(snap.cards) && snap.cards.length > 0) {
+          await db.kanbanCards.bulkPut(snap.cards);
+        }
+        await db.kanban.put(snap);
+      });
+      await useKanbanStore.getState().initKanbanStore();
     }
 
     return { success: true };

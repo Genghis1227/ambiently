@@ -50,6 +50,7 @@ import { MediaEmbedWidget } from '../widgets/MediaEmbedWidget';
 import { ImageWidget } from '../widgets/ImageWidget';
 import { ChoreWidget } from '../widgets/ChoreWidget';
 import { MealPlannerWidget } from '../widgets/MealPlannerWidget';
+import { KanbanWidget } from '../widgets/KanbanWidget';
 import { ShoppingListNoteBody } from '../common/ShoppingListNoteBody';
 import { categorizeIngredient, parseIngredient } from '../../utils/ingredientAggregator';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -60,6 +61,10 @@ import { inferCuratedCategoryId } from '../../services/photos';
 
 const ChoreDashboardView = React.lazy(() =>
   import('../chores/ChoreDashboardView').then((m) => ({ default: m.ChoreDashboardView }))
+);
+
+const KanbanBoardView = React.lazy(() =>
+  import('../kanban/KanbanBoardView').then((m) => ({ default: m.KanbanBoardView }))
 );
 
 const WidgetSettingsModal = React.lazy(() =>
@@ -346,6 +351,31 @@ const MemoizedCanvasWidgetBody: React.FC<CanvasWidgetBodyProps> = React.memo(({
           isLight={isWidgetLight}
           onUpdateConfig={handleConfigUpdate}
         />
+      ) : widget.type === 'kanban' ? (
+        isFullScreen ? (
+          <React.Suspense fallback={null}>
+            <KanbanBoardView
+              isOpen={true}
+              mode="canvas"
+              widgetId={widget.id}
+              title={widget.title}
+              config={widget.config}
+              isLight={isWidgetLight}
+              dockPaddingClass={dockPaddingClass}
+              onUpdateConfig={handleConfigUpdate}
+              onOpenWidgetSettings={handleOpenSettings}
+            />
+          </React.Suspense>
+        ) : (
+          <KanbanWidget
+            widgetId={widget.id}
+            title={widget.title}
+            config={widget.config}
+            isLight={isWidgetLight}
+            variant="tile"
+            onUpdateConfig={handleConfigUpdate}
+          />
+        )
       ) : null}
     </TileErrorBoundary>
   );
@@ -1571,7 +1601,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
         const isFullScreen =
           Boolean(pos.isFullScreen) ||
-          (widget.type === 'chores' && widget.config?.displayMode === 'hub');
+          (widget.type === 'chores' && widget.config?.displayMode === 'hub') ||
+          (widget.type === 'kanban' && widget.config?.displayMode === 'view');
         const isDragging = draggingId === widget.id;
         const isRotating = rotatingId === widget.id;
         const isResizing = resizingId === widget.id;
@@ -1841,6 +1872,11 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                           freeformPos: nextPos,
                           config: { ...widget.config, displayMode: 'tile' },
                         });
+                      } else if (widget.type === 'kanban' && onUpdateWidget) {
+                        onUpdateWidget(widget.id, {
+                          freeformPos: nextPos,
+                          config: { ...widget.config, displayMode: 'tile' },
+                        });
                       } else {
                         onUpdateWidgetPos(widget.id, widget.gridPos, nextPos);
                       }
@@ -1858,6 +1894,11 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                         onUpdateWidget(widget.id, {
                           freeformPos: nextPos,
                           config: { ...widget.config, displayMode: 'hub' },
+                        });
+                      } else if (widget.type === 'kanban' && onUpdateWidget) {
+                        onUpdateWidget(widget.id, {
+                          freeformPos: nextPos,
+                          config: { ...widget.config, displayMode: 'view' },
                         });
                       } else {
                         onUpdateWidgetPos(widget.id, widget.gridPos, nextPos);

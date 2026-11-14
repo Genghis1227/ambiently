@@ -26,6 +26,7 @@ const WIDGET_PRIORITY: Record<string, number> = {
   embed: 3,
   clock_weather: 4,
   sticky_notes: 5,
+  kanban: 5,
   weather: 6,
   clock: 7,
   world_clock: 7,

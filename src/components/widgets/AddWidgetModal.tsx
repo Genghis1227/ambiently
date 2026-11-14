@@ -17,6 +17,7 @@ import {
   Sparkles,
   CheckSquare,
   Utensils,
+  Kanban,
 } from 'lucide-react';
 import type { WidgetType, DashboardWidget } from '../../types/dashboard';
 
@@ -119,6 +120,18 @@ const WIDGET_TEMPLATES: WidgetTemplate[] = [
       showCookAvatar: true,
     },
     color: 'from-amber-500/15 to-emerald-500/15 text-amber-300 border-amber-500/30',
+  },
+  {
+    type: 'kanban',
+    title: 'Project Kanban',
+    description: 'Zero-friction multi-board project workflow with quick-tap column arrows, drag-to-edge flipping, sub-checklists, and archive.',
+    icon: Kanban,
+    defaultGridPos: { w: 4, h: 7 },
+    defaultConfig: {
+      activeColumnId: 'in_progress',
+      displayMode: 'tile',
+    },
+    color: 'from-slate-500/15 to-emerald-500/15 text-slate-200 border-slate-500/30',
   },
   {
     type: 'calendar',

@@ -7,6 +7,7 @@ import type {
 } from '../utils/photoSyncPolicy';
 export type { ChoreWidgetConfig } from './chores';
 export type { MealWidgetConfig } from './meals';
+export type { KanbanWidgetConfig } from './kanban';
 export type { PhotoAutoSyncInterval, PlexPhotoSyncConfig, PhotoTargetSyncMeta };
 
 export type DockPosition = 'left' | 'top' | 'right' | 'bottom';
@@ -43,7 +44,8 @@ export type WidgetType =
   | 'textbox'
   | 'image'
   | 'chores'
-  | 'meals';
+  | 'meals'
+  | 'kanban';
 
 export interface RssWidgetConfig {
   feedUrl?: string;
