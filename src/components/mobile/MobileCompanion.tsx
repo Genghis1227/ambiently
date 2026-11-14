@@ -411,6 +411,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
             sources={widget.config?.sources}
             defaultView={widget.config?.defaultView}
             multiDayLayout={widget.config?.multiDayLayout}
+            showMeals={widget.config?.showMeals !== false}
             isLight={isLight}
           />
         );

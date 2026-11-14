@@ -8,9 +8,10 @@ export interface CalendarEvent {
   summary: string;
   description?: string;
   location?: string;
-  start: string; // ISO string
+  start: string; // ISO string or YYYY-MM-DD for all-day / meal entries
   end?: string;  // ISO string
   isAllDay: boolean;
+  mealSlot?: 'breakfast' | 'lunch' | 'dinner';
 }
 
 export interface CalendarSource {

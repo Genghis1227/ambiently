@@ -249,6 +249,7 @@ const MemoizedCanvasWidgetBody: React.FC<CanvasWidgetBodyProps> = React.memo(({
           sources={widget.config?.sources}
           defaultView={widget.config?.defaultView}
           multiDayLayout={widget.config?.multiDayLayout}
+          showMeals={widget.config?.showMeals !== false}
           isLight={isWidgetLight}
           onUpdateConfig={handleConfigUpdate}
         />

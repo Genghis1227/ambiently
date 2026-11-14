@@ -1,6 +1,6 @@
 export type MealSlot = 'breakfast' | 'lunch' | 'dinner';
 
-export type WidgetMealScope = 'tomorrow' | 'three_day' | 'full_week';
+export type WidgetMealScope = 'today' | 'tomorrow' | 'three_day' | 'full_week';
 
 export type DefaultGroceryCategory =
   | 'Produce'

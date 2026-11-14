@@ -169,6 +169,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   // Calendar states
   const [calendarDefaultView, setCalendarDefaultView] = useState<'agenda' | '3day' | 'week' | 'month'>('agenda');
   const [multiDayLayout, setMultiDayLayout] = useState<'cards' | 'timeline'>(widget?.config?.multiDayLayout || 'cards');
+  const [calendarShowMeals, setCalendarShowMeals] = useState<boolean>(true);
   const [calendarSources, setCalendarSources] = useState<CalendarSource[]>(DEFAULT_CALENDAR_SOURCES);
   const [newCalName, setNewCalName] = useState('');
   const [newCalUrl, setNewCalUrl] = useState('');
@@ -338,6 +339,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     } else if (widget.type === 'calendar') {
       setCalendarDefaultView(widget.config?.defaultView || 'agenda');
       setMultiDayLayout(widget.config?.multiDayLayout || 'cards');
+      setCalendarShowMeals(widget.config?.showMeals !== false);
       setCalendarSources(
         Array.isArray(widget.config?.sources) && widget.config.sources.length > 0
           ? widget.config.sources
@@ -394,7 +396,10 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     } else if (widget.type === 'meals') {
       const cfgScope = widget.config?.scope;
       setMealScope(
-        cfgScope === 'tomorrow' || cfgScope === 'three_day' || cfgScope === 'full_week'
+        cfgScope === 'today' ||
+          cfgScope === 'tomorrow' ||
+          cfgScope === 'three_day' ||
+          cfgScope === 'full_week'
           ? cfgScope
           : 'three_day'
       );
@@ -648,6 +653,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     } else if (widget.type === 'calendar') {
       configUpdates.defaultView = calendarDefaultView;
       configUpdates.multiDayLayout = multiDayLayout;
+      configUpdates.showMeals = calendarShowMeals;
       configUpdates.sources = calendarSources;
     } else if (widget.type === 'embed') {
       configUpdates.preset = embedPreset;
@@ -2325,6 +2331,32 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                 </div>
               </div>
 
+              <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-gray-950/80 border border-gray-800">
+                <div>
+                  <span className="text-xs font-semibold text-gray-200 block">
+                    Show Planned Family Meals
+                  </span>
+                  <span className="text-[10px] text-gray-400 block mt-0.5">
+                    Overlay Breakfast, Lunch, and Dinner entries from your Family Meal Planner on the calendar.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={calendarShowMeals}
+                  onClick={() => setCalendarShowMeals((prev) => !prev)}
+                  className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer shrink-0 ${
+                    calendarShowMeals ? 'bg-emerald-600' : 'bg-gray-700'
+                  }`}
+                >
+                  <div
+                    className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                      calendarShowMeals ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
               {/* Active Calendar Feeds List */}
               <div className="space-y-2 pt-2 border-t border-gray-800/70">
                 <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
@@ -3356,9 +3388,10 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                   <p className="text-[11px] text-gray-400 mb-2.5">
                     Choose how many upcoming days this Bento tile displays at a glance.
                   </p>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {(
                       [
+                        { id: 'today', label: 'Today', desc: 'Focused today view' },
                         { id: 'tomorrow', label: 'Tomorrow', desc: 'Compact next-day' },
                         { id: 'three_day', label: '3-Day Outlook', desc: 'Today + 2 days' },
                         { id: 'full_week', label: 'Full Week', desc: '7-box weekly grid' },

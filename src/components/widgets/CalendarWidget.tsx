@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { formatHourLabel, startOfWeek, useTimePrefs, weekdayLabels } from '../../utils/timePrefs';
 import {
   Calendar as CalendarIcon,
@@ -19,6 +19,14 @@ import {
   getVisibleCalendarFeedProblems,
   type CalendarFeedStatus,
 } from '../../services/feeds';
+import { useMealStore } from '../../stores/useMealStore';
+import { localDateKey } from '../../utils/dateKey';
+import {
+  MEAL_PLANNER_CALENDAR_ID,
+  MEAL_SLOT_CALENDAR_META,
+  MEAL_SLOT_ORDER,
+  scheduledMealsToCalendarEvents,
+} from '../../utils/mealCalendarEvents';
 import { CalendarUrlGuideModal } from '../calendar/CalendarUrlGuideModal';
 
 export type CalendarViewMode = 'agenda' | '3day' | 'week' | 'month';
@@ -28,6 +36,7 @@ interface CalendarWidgetProps {
   sources?: CalendarSource[];
   defaultView?: CalendarViewMode;
   multiDayLayout?: MultiDayLayout;
+  showMeals?: boolean;
   onUpdateConfig?: (updates: Record<string, any>) => void;
   isLight?: boolean;
 }
@@ -135,6 +144,7 @@ function parseEventLocalDate(dateStr: string, isAllDay?: boolean): Date {
 }
 
 function formatEventTime(evt: CalendarEvent, hour12: boolean = true): string {
+  if (evt.mealSlot) return MEAL_SLOT_CALENDAR_META[evt.mealSlot].label;
   if (evt.isAllDay) return 'All Day';
   const start = new Date(evt.start);
   return start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hourCycle: hour12 ? 'h12' : 'h23' }).replace(' ', '');
@@ -173,7 +183,13 @@ function sortDayEvents(dayEvents: CalendarEvent[]): CalendarEvent[] {
     if (!a.isAllDay && b.isAllDay) return 1;
     const aTime = parseEventLocalDate(a.start, a.isAllDay).getTime();
     const bTime = parseEventLocalDate(b.start, b.isAllDay).getTime();
-    return aTime - bTime;
+    if (aTime !== bTime) return aTime - bTime;
+    if (a.mealSlot && b.mealSlot) {
+      return MEAL_SLOT_ORDER[a.mealSlot] - MEAL_SLOT_ORDER[b.mealSlot];
+    }
+    if (!a.mealSlot && b.mealSlot) return -1;
+    if (a.mealSlot && !b.mealSlot) return 1;
+    return 0;
   });
 }
 
@@ -286,9 +302,11 @@ const TimelineGridView: React.FC<{
                       onClick={() => onSelectDay({ date: col.date, events: col.events })}
                       style={{ backgroundColor: evt.color || '#3b82f6' }}
                       className="text-[9.5px] md:text-[11px] font-bold text-white px-1.5 py-0.5 rounded truncate cursor-pointer shadow-xs hover:brightness-110"
-                      title={evt.summary}
+                      title={evt.mealSlot ? `${MEAL_SLOT_CALENDAR_META[evt.mealSlot].label}: ${evt.summary}` : evt.summary}
                     >
-                      {evt.summary}
+                      {evt.mealSlot
+                        ? `${MEAL_SLOT_CALENDAR_META[evt.mealSlot].label}: ${evt.summary}`
+                        : evt.summary}
                     </div>
                   ))}
               </div>
@@ -425,10 +443,13 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
   sources = DEFAULT_SOURCES,
   defaultView = 'agenda',
   multiDayLayout: multiDayLayoutProp = 'cards',
+  showMeals = true,
   onUpdateConfig,
   isLight = false,
 }) => {
   const { hour12, weekStartsOn } = useTimePrefs();
+  const scheduledMeals = useMealStore((s) => s.scheduledMeals);
+  const isMealStoreInitialized = useMealStore((s) => s.isInitialized);
   const [view, setView] = useState<CalendarViewMode>(defaultView);
   const [multiDayLayout, setMultiDayLayout] = useState<MultiDayLayout>(multiDayLayoutProp);
   const timeGridRef = useRef<HTMLDivElement>(null);
@@ -444,6 +465,12 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
   const [baseDate, setBaseDate] = useState(new Date());
   const [selectedDayDetail, setSelectedDayDetail] = useState<{ date: Date; events: CalendarEvent[] } | null>(null);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isMealStoreInitialized) {
+      void useMealStore.getState().initMealStore();
+    }
+  }, [isMealStoreInitialized]);
 
   useEffect(() => {
     setView(defaultView);
@@ -550,15 +577,42 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
 
   const now = new Date();
 
+  const mealEvents = useMemo(
+    () => (showMeals ? scheduledMealsToCalendarEvents(scheduledMeals) : []),
+    [showMeals, scheduledMeals]
+  );
+  const combinedEvents = useMemo(
+    () => [...events, ...mealEvents],
+    [events, mealEvents]
+  );
+
   // Agenda view events (filtered from baseDate)
   const agendaStartMs = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate()).getTime() - 24 * 60 * 60 * 1000;
   // Also keeps events that started earlier and are still going on (a week-long trip, a holiday)
   const baseDayStartMs = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate()).getTime();
-  const agendaEvents = events.filter(
-    (e) =>
-      parseEventLocalDate(e.start, e.isAllDay).getTime() >= agendaStartMs ||
-      (e.end ? parseEventLocalDate(e.end, e.isAllDay).getTime() > baseDayStartMs : false)
-  );
+  const baseDateKey = localDateKey(baseDate);
+  const agendaEvents = combinedEvents
+    .filter((e) => {
+      if (e.calendarId === MEAL_PLANNER_CALENDAR_ID) {
+        return e.start >= baseDateKey;
+      }
+      return (
+        parseEventLocalDate(e.start, e.isAllDay).getTime() >= agendaStartMs ||
+        (e.end ? parseEventLocalDate(e.end, e.isAllDay).getTime() > baseDayStartMs : false)
+      );
+    })
+    .slice()
+    .sort((a, b) => {
+      const aTime = parseEventLocalDate(a.start, a.isAllDay).getTime();
+      const bTime = parseEventLocalDate(b.start, b.isAllDay).getTime();
+      if (aTime !== bTime) return aTime - bTime;
+      if (a.mealSlot && b.mealSlot) {
+        return MEAL_SLOT_ORDER[a.mealSlot] - MEAL_SLOT_ORDER[b.mealSlot];
+      }
+      if (!a.mealSlot && b.mealSlot) return -1;
+      if (a.mealSlot && !b.mealSlot) return 1;
+      return 0;
+    });
 
   // Month View calculations
   const startOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
@@ -572,7 +626,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
     return {
       date: d,
       isToday: d.toDateString() === now.toDateString(),
-      events: events.filter((e) => isEventOnDate(e, d)),
+      events: combinedEvents.filter((e) => isEventOnDate(e, d)),
     };
   });
 
@@ -584,7 +638,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
     return {
       date: d,
       isToday: d.toDateString() === now.toDateString(),
-      events: events.filter((e) => isEventOnDate(e, d)),
+      events: combinedEvents.filter((e) => isEventOnDate(e, d)),
     };
   });
   const weekEnd = weekDays[6].date;
@@ -873,7 +927,9 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                     <div className={`flex items-center flex-wrap gap-x-3 gap-y-1 mt-1 text-xs font-medium ${isLight ? 'text-slate-600' : 'text-gray-300'}`}>
                       <span className={`flex items-center gap-1.5 font-mono ${isLight ? 'text-slate-700' : 'text-gray-300'}`}>
                         <Clock className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                        {evt.isAllDay
+                        {evt.mealSlot
+                          ? MEAL_SLOT_CALENDAR_META[evt.mealSlot].label
+                          : evt.isAllDay
                           ? 'All Day'
                           : startDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hourCycle: hour12 ? 'h12' : 'h23' })}
                         {evt.end && !evt.isAllDay && ` – ${new Date(evt.end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hourCycle: hour12 ? 'h12' : 'h23' })}`}
@@ -1026,7 +1082,9 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                             <div className="flex items-center justify-between gap-1 text-[10px] md:text-[11px] font-mono leading-none mb-1">
                               <span className="flex items-center gap-1 font-semibold text-blue-400 truncate">
                                 <Clock className="w-3 h-3 shrink-0" />
-                                {evt.isAllDay
+                                {evt.mealSlot
+                                  ? MEAL_SLOT_CALENDAR_META[evt.mealSlot].label
+                                  : evt.isAllDay
                                   ? 'All Day'
                                   : startDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hourCycle: hour12 ? 'h12' : 'h23' })}
                                 {evt.end && !evt.isAllDay && ` – ${new Date(evt.end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hourCycle: hour12 ? 'h12' : 'h23' })}`}
@@ -1167,7 +1225,11 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                             title={`${evt.summary} (${evt.isAllDay ? 'All Day' : formatTimeShort(startDate, hour12)})${evt.location ? ` • ${evt.location}` : ''}`}
                           >
                             <div className="text-[9.5px] font-mono font-bold text-blue-400 truncate leading-none mb-0.5">
-                              {evt.isAllDay ? 'All Day' : formatTimeShort(startDate, hour12)}
+                              {evt.mealSlot
+                                ? MEAL_SLOT_CALENDAR_META[evt.mealSlot].shortLabel
+                                : evt.isAllDay
+                                ? 'All Day'
+                                : formatTimeShort(startDate, hour12)}
                             </div>
                             <div className={`text-[11px] font-bold truncate leading-tight ${
                               isLight ? 'text-slate-900' : 'text-white'
@@ -1216,7 +1278,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
               const day = i + 1;
               const dateObj = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
               const isToday = dateObj.toDateString() === now.toDateString();
-              const dayEvents = events.filter((e) => isEventOnDate(e, dateObj));
+              const dayEvents = sortDayEvents(combinedEvents.filter((e) => isEventOnDate(e, dateObj)));
 
               return (
                 <div
@@ -1272,7 +1334,11 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                         }}
                         className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-semibold truncate border-l-4 leading-tight shadow-2xs"
                       >
-                        {!de.isAllDay ? (
+                        {de.mealSlot ? (
+                          <span className="text-[9px] uppercase font-bold tracking-wider px-1 py-0.2 rounded bg-black/25 shrink-0">
+                            {MEAL_SLOT_CALENDAR_META[de.mealSlot].shortLabel}
+                          </span>
+                        ) : !de.isAllDay ? (
                           <span className="font-mono text-[10px] md:text-[11px] opacity-80 shrink-0">
                             {formatTimeShort(new Date(de.start), hour12)}
                           </span>

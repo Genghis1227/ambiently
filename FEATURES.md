@@ -107,8 +107,8 @@ Every widget features a top-right **Tile Settings (`⚙️`)** button to customi
   * **City-Lookup World Timezone Clock (`WorldClockWidget.tsx`):** Search any global city (e.g., *Tokyo*, *London*, *Ho Chi Minh City*, *New York*) to automatically resolve its IANA timezone, displaying either a **Single-City Hero Timezone Clock** or a **Multi-City World Timezone Board** with day/night icons (`Sun` / `Moon`), timezone abbreviations, and relative hour offsets (`+15h ahead`, `-2h behind`).
   * Powered by **Open-Meteo API** (zero API key required) with a 1-click **City Geocoding Lookup** in Tile Settings, Fahrenheit/Celsius toggle, current temperature, "feels like", high/lows, and daily forecast strip.
 * **Multi-Source Calendar (`CalendarWidget.tsx`):**
-  * Toggle between **Chronological Agenda View** and **Monthly Calendar Grid**.
-  * Add, toggle, color-tag, or remove multiple public/secret `.ics` and `webcal://` URLs (Google Calendar, Apple iCloud, Outlook) in Tile Settings, parsed via our Cloudflare Pages Edge proxy (`/api/ical`).
+  * Toggle between **Chronological Agenda View**, **3-Day**, **Weekly**, and **Monthly Calendar Grid** (with Card or 24-Hour Timeline layouts).
+  * Add, toggle, color-tag, or remove multiple public/secret `.ics` and `webcal://` URLs (Google Calendar, Apple iCloud, Outlook) in Tile Settings, parsed via our Cloudflare Pages Edge proxy (`/api/ical`), and toggle the **Show Planned Family Meals** (`showMeals`) overlay to display scheduled *Breakfast*, *Lunch*, and *Dinner* entries directly inside every calendar view.
 * **Ambient Stream & Web Embed Tile (`MediaEmbedWidget.tsx`):**
   * Embed live video/audio streams or web dashboards directly on any canvas with 1-click presets (*Lofi Hip Hop Radio*, *4K Cozy Fireplace*, *NASA ISS Live Earth View*, *Live Weather Radar via Windy.com*) or any custom YouTube / web embed URL, complete with quick audio mute/unmute and reload controls.
 * **Daily Quotes & Custom Family Affirmations (`QuotesWidget.tsx`):**
@@ -147,7 +147,7 @@ Every widget features a top-right **Tile Settings (`⚙️`)** button to customi
 ## 6. Family Meal Planner, Smart Grocery Aggregator & Cooking Mode (`v0.5.0` – `v0.5.9`)
 
 * **Flexible Calendar Scopes, Interactive Date Picker & Household Strip (`MealPlannerWidget.tsx`, `useMealStore.ts`):**
-  * Add a **Family Meal Planner** widget to any canvas and switch between **Tomorrow**, **3-Day**, or **Full Week (7-Day)** views across configurable meal slots (*Breakfast*, *Lunch*, *Dinner*, *Snack*).
+  * Add a **Family Meal Planner** widget to any canvas and switch between **Today**, **Tomorrow**, **3-Day**, or **Full Week (7-Day)** views across *Breakfast*, *Lunch*, and *Dinner* slots (always displaying any populated meal on a day even when empty-slot prompts are filtered in Tile Settings).
   * **Interactive Month Calendar Selector:** Click the date range pill in the widget header (or the date badge inside the Meal Entry modal) to jump straight to any future week or date via an interactive month grid with scheduled-meal indicator dots and a 1-tap *Today* shortcut.
   * **Household Profile Strip & Inline 1-Tap Cook Picker:** Displays your household avatars directly in the Meal Planner header with quick access to Household settings, plus an inline avatar/name cook badge on every meal card so anyone can claim or reassign cooking duties in a single tap without opening the full editor.
   * **Automatic 21-Day Past Meal Pruning:** Scheduled meal entries older than 21 days in the past are automatically pruned on load and save (recording tombstones for cloud sync) while keeping all saved recipes in your **Recipe Book** untouched.
