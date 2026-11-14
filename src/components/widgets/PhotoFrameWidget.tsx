@@ -6,6 +6,8 @@ import {
   cachePhotosLocally,
   getOptimizedPhotoUrl,
   formatPhotoDate,
+  inferCuratedCategoryId,
+  resolveCuratedPhotos,
   type PhotoItem,
   type PhotoDisplayStyle,
 } from '../../services/photos';
@@ -216,6 +218,8 @@ interface PhotoFrameWidgetProps {
   rotationIntervalSec?: number;
   useCommonSource?: boolean;
   customPhotos?: PhotoItem[];
+  sourceType?: 'plex' | 'local' | 'web' | 'curated';
+  curatedCategoryId?: string;
   initialSourceLabel?: string;
   initialPolaroidCount?: number;
   initialPolaroidSizeMode?: PolaroidSizeMode;
@@ -233,6 +237,8 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   rotationIntervalSec = 15,
   useCommonSource,
   customPhotos,
+  sourceType,
+  curatedCategoryId,
   initialSourceLabel = 'Curated',
   initialPolaroidCount = 12,
   initialPolaroidSizeMode = 'mixed',
@@ -245,6 +251,8 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
 }) => {
   const commonPhotos = useDashboardStore((s) => s.settings.commonPhotos);
   const commonPhotoSourceLabel = useDashboardStore((s) => s.settings.commonPhotoSourceLabel);
+  const commonPhotoSourceType = useDashboardStore((s) => s.settings.commonPhotoSourceType);
+  const commonPhotoCuratedCategory = useDashboardStore((s) => s.settings.commonPhotoCuratedCategory);
   const commonPhotoShowDateTaken = useDashboardStore((s) => s.settings.commonPhotoShowDateTaken);
   const photoSyncState = useDashboardStore((s) => s.photoSyncState);
 
@@ -253,16 +261,30 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     !photoSyncState?.isSilent &&
     (!photoSyncState?.targetWidgetId || photoSyncState?.targetWidgetId === widgetId);
 
-  const isUsingCommonSource =
-    useCommonSource !== false && Boolean(commonPhotos && commonPhotos.length > 0);
-  const showDateTaken = propShowDateTaken ?? (isUsingCommonSource ? (commonPhotoShowDateTaken ?? false) : false);
+  const isUsingCommonSource = useCommonSource !== false;
+  const showDateTaken =
+    propShowDateTaken ?? (isUsingCommonSource ? (commonPhotoShowDateTaken ?? false) : false);
+  const isTileCurated =
+    !isUsingCommonSource &&
+    (sourceType === 'curated' ||
+      (!sourceType &&
+        !customPhotos?.length &&
+        Boolean(curatedCategoryId || inferCuratedCategoryId(undefined, initialSourceLabel))));
   const resolvedPhotos = isUsingCommonSource
-    ? commonPhotos!
+    ? commonPhotos && commonPhotos.length > 0
+      ? commonPhotos
+      : commonPhotoSourceType === 'curated' || commonPhotoCuratedCategory
+      ? resolveCuratedPhotos(commonPhotoCuratedCategory, commonPhotoSourceLabel)
+      : useCommonSource === undefined && customPhotos && customPhotos.length > 0
+      ? customPhotos
+      : CURATED_AMBIENT_PHOTOS
+    : isTileCurated
+    ? resolveCuratedPhotos(curatedCategoryId, initialSourceLabel)
     : customPhotos && customPhotos.length > 0
     ? customPhotos
     : CURATED_AMBIENT_PHOTOS;
   const resolvedLabel = isUsingCommonSource
-    ? commonPhotoSourceLabel || initialSourceLabel || 'Shared Library'
+    ? commonPhotoSourceLabel || (commonPhotos?.length ? 'Shared Library' : 'Curated')
     : initialSourceLabel || (customPhotos?.length ? 'Custom Photos' : 'Curated');
 
   const stateKey = widgetId || `photo-state-${resolvedLabel || 'ambient'}`;
@@ -298,9 +320,13 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   const prevPhotoOrderRef = useRef(photoOrder);
 
   const [hasLocalPlexAuth, setHasLocalPlexAuth] = useState(true);
-  const isPlexSource =
-    sourceLabel?.toLowerCase().includes('plex') ||
-    photos.some((p) => p.source === 'plex');
+  const isPlexSource = isUsingCommonSource
+    ? commonPhotoSourceType === 'plex' ||
+      sourceLabel?.toLowerCase().includes('plex') ||
+      photos.some((p) => p.source === 'plex')
+    : sourceType === 'plex' ||
+      sourceLabel?.toLowerCase().includes('plex') ||
+      photos.some((p) => p.source === 'plex');
 
   useEffect(() => {
     if (!isPlexSource) {

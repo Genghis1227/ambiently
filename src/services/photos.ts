@@ -44,10 +44,18 @@ import {
   ALL_CURATED_PHOTOS,
   CURATED_CATEGORIES,
   getCuratedCategoryById,
+  inferCuratedCategoryId,
+  resolveCuratedPhotos,
   type CuratedCategory,
 } from '../data/curatedScenery';
 
-export { CURATED_CATEGORIES, getCuratedCategoryById, type CuratedCategory };
+export {
+  CURATED_CATEGORIES,
+  getCuratedCategoryById,
+  inferCuratedCategoryId,
+  resolveCuratedPhotos,
+  type CuratedCategory,
+};
 export const CURATED_AMBIENT_PHOTOS: PhotoItem[] = ALL_CURATED_PHOTOS;
 
 // Offline photo cache. Keeps copies of up to 50 recent web photos so the photo frame still shows

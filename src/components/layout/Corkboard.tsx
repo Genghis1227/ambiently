@@ -56,6 +56,7 @@ import { useDashboardStore } from '../../store/dashboardStore';
 import { CANVAS_THEMES, isCanvasThemeLight } from '../../data/canvasThemes';
 import { findOpenCanvasSpot } from '../../utils/autoLayout';
 import { isStickerCapableWidget, isWidgetStickerMode } from '../../utils/widgetStickerMode';
+import { inferCuratedCategoryId } from '../../services/photos';
 
 const ChoreDashboardView = React.lazy(() =>
   import('../chores/ChoreDashboardView').then((m) => ({ default: m.ChoreDashboardView }))
@@ -1725,6 +1726,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   initialStyle={widget.config?.displayStyle || 'ken_burns'}
                   rotationIntervalSec={widget.config?.rotationIntervalSec || 15}
                   customPhotos={widget.config?.customPhotos}
+                  sourceType={widget.config?.sourceType}
+                  curatedCategoryId={widget.config?.curatedCategoryId}
                   initialSourceLabel={widget.config?.sourceLabel}
                   initialPolaroidCount={widget.config?.polaroidCount || 12}
                   initialPolaroidSizeMode={widget.config?.polaroidSizeMode || 'mixed'}
@@ -2617,12 +2620,15 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             }}
             onOpenPhotoSources={(asCommonSource) => {
               if (editingWidget) {
+                const latestWidget =
+                  useDashboardStore.getState().widgets.find((w) => w.id === editingWidget.id) ||
+                  editingWidget;
                 setPhotoSourcesTarget({
-                  widget: editingWidget,
+                  widget: latestWidget,
                   isCommon:
                     asCommonSource !== undefined
                       ? asCommonSource
-                      : editingWidget.config?.useCommonSource !== false,
+                      : latestWidget.config?.useCommonSource !== false,
                 });
               }
             }}
@@ -2651,31 +2657,51 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               currentSourceLabel={
                 isUsingCommon
                   ? settings.commonPhotoSourceLabel ||
-                    (settings.commonPhotos?.length ? 'Shared Library' : activePhotoWidget.config?.sourceLabel)
+                    (settings.commonPhotos?.length ? 'Shared Library' : undefined)
                   : activePhotoWidget.config?.sourceLabel
               }
               currentSourceType={
                 isUsingCommon
-                  ? settings.commonPhotoSourceType || activePhotoWidget.config?.sourceType
-                  : activePhotoWidget.config?.sourceType || settings.commonPhotoSourceType
+                  ? settings.commonPhotoSourceType
+                  : activePhotoWidget.config?.sourceType
+              }
+              currentCuratedCategoryId={
+                isUsingCommon
+                  ? settings.commonPhotoCuratedCategory
+                  : activePhotoWidget.config?.curatedCategoryId
               }
               currentPhotoCount={
                 isUsingCommon
-                  ? (settings.commonPhotos?.length ?? activePhotoWidget.config?.customPhotos?.length)
-                  : (activePhotoWidget.config?.customPhotos?.length ?? settings.commonPhotos?.length)
+                  ? settings.commonPhotos?.length
+                  : activePhotoWidget.config?.customPhotos?.length
               }
-              onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType, applyToAll, plexSyncConfig) => {
+              onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType, applyToAll, plexSyncConfig, curatedCategoryId) => {
                 if (applyToAll) {
-                  applyCommonPhotosToAllWidgets(newPhotos, sourceName, sourceUrl, sourceType, plexSyncConfig);
+                  applyCommonPhotosToAllWidgets(
+                    newPhotos,
+                    sourceName,
+                    sourceUrl,
+                    sourceType,
+                    plexSyncConfig,
+                    curatedCategoryId,
+                    activePhotoWidget.id
+                  );
                 } else if (onUpdateWidget && newPhotos.length > 0) {
-                  onUpdateWidget(activePhotoWidget.id, {
+                  const latestPhotoWidget =
+                    useDashboardStore.getState().widgets.find((w) => w.id === activePhotoWidget.id) ||
+                    activePhotoWidget;
+                  onUpdateWidget(latestPhotoWidget.id, {
                     config: {
-                      ...activePhotoWidget.config,
+                      ...latestPhotoWidget.config,
                       useCommonSource: false,
                       customPhotos: newPhotos,
                       sourceLabel: sourceName,
                       sourceUrl: sourceType === 'web' ? (sourceUrl || '') : undefined,
-                      sourceType: sourceType || activePhotoWidget.config?.sourceType,
+                      sourceType: sourceType || latestPhotoWidget.config?.sourceType,
+                      curatedCategoryId:
+                        sourceType === 'curated'
+                          ? (curatedCategoryId || inferCuratedCategoryId(undefined, sourceName) || 'all')
+                          : undefined,
                       plexSyncConfig: sourceType === 'plex' ? plexSyncConfig : undefined,
                     },
                   });

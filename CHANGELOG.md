@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.11] - 2026-11-14
+
+### Per-Tile Photo Source Isolation, Confirmed PIN Setup, Settings Lock Enforcement & Sticker Cloud Restore
+* **Per-Tile Photo Source Isolation Across Backups, Cloud Sync & Plex Pairing (`src/utils/photoSourceIsolation.ts`, `src/data/curatedScenery.ts`, `src/services/photos.ts`, `src/services/supabase.ts`, `src/services/fileSync.ts`, `src/services/syncMerge.ts`, `src/store/dashboardStore.ts`, `src/components/widgets/PhotoFrameWidget.tsx`, `src/components/photos/PhotoSourcesModal.tsx`, `src/components/widgets/WidgetSettingsModal.tsx`, `src/components/common/PlexReauthBanner.tsx`, `src/App.tsx`, `tests/photoSourceIsolation.test.ts`):**
+  * Photo Frame tiles configured with **This Tile Only** (`useCommonSource: false`) retain their independent source metadata (`sourceType`, `curatedCategoryId`, `plexSyncConfig`, `sourceUrl`) across JSON backups, Cloud Sync restores, and Plex re-authentication without leaking or inheriting the **Shared Board Library**.
+* **Double-Entry 4-Digit PIN Confirmation & Non-Destructive Change PIN (`src/utils/pinValidation.ts`, `src/components/settings/SettingsModal.tsx`, `src/components/chores/ParentChoreDrawer.tsx`, `tests/pinValidation.test.ts`):**
+  * Requires matching **Confirm PIN** entry in both **Settings → Household** and the **Parent Chore Drawer** quick-setup banner when setting or updating a Parent PIN, and keeps the existing PIN and kiosk locks intact until the new PIN is confirmed.
+* **Enforced Per-Open Settings PIN Lock & Legacy Lock Auto-Repair (`src/types/dashboard.ts`, `src/services/db.ts`, `src/utils/pinValidation.ts`, `src/store/dashboardStore.ts`, `src/App.tsx`, `src/components/mobile/MobileCompanion.tsx`, `src/components/chores/ParentChoreDrawer.tsx`, `src/services/supabase.ts`, `src/services/syncMerge.ts`):**
+  * Prompts for the Parent PIN on every attempt to open **Settings**, **Household Sharing**, or **Plex Pairing** (on both desktop Dock and Mobile Companion viewports) and re-locks automatically when those modals or the Parent Chore Drawer close.
+  * Distinguishes explicit **Require PIN for Command Center Settings** opt-outs (`settingsPinOptOut`), strips device-local PIN/lock flags from shared Cloud Sync payloads, and heals legacy `lockSettingsAccess: false` residue on startup and restore.
+* **Sticker / No Outline Cloud Sync & Authoritative Restore (`src/services/supabase.ts`, `src/services/syncMerge.ts`, `src/store/dashboardStore.ts`, `src/components/settings/SettingsModal.tsx`, `src/components/widgets/WidgetSettingsModal.tsx`, `src/components/layout/Corkboard.tsx`, `src/components/mobile/MobileCompanion.tsx`, `tests/widgetStickerMode.test.ts`):**
+  * Flushes pending Cloud Sync auto-pushes before sign-out, wipe, or tab hide, saves tile style overrides before opening Photo Sources, syncs Mobile Companion tile previews with `isWidgetStickerMode`, and applies authoritative restore for `defaultWidgetStyle` and per-tile `transparentBg`/`bgStyle` via **Restore from Cloud** and fresh-browser sign-in.
+
+---
+
 ## [0.6.10] - 2026-11-13
 
 ### Persistent Workspace Agent Rules (`AGENTS.md`) & Pre-PR Documentation Checklist

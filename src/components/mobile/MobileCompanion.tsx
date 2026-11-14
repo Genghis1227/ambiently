@@ -27,6 +27,7 @@ import {
   Cloud,
   Smartphone,
   Utensils,
+  Lock,
 } from 'lucide-react';
 import type { DashboardTab, DashboardWidget, StickyNoteItem, WidgetThemeMode } from '../../types/dashboard';
 import { ShoppingListNoteBody } from '../common/ShoppingListNoteBody';
@@ -47,6 +48,9 @@ import { WorldClockWidget } from '../widgets/WorldClockWidget';
 import { WeatherWidget } from '../widgets/WeatherWidget';
 import { CountdownWidget } from '../widgets/CountdownWidget';
 import { PhotoFrameWidget } from '../widgets/PhotoFrameWidget';
+import { inferCuratedCategoryId } from '../../services/photos';
+import { isWidgetStickerMode } from '../../utils/widgetStickerMode';
+import { isSettingsPinRequired } from '../../utils/pinValidation';
 import { RssWidget } from '../widgets/RssWidget';
 import { QuotesWidget } from '../widgets/QuotesWidget';
 import { MediaEmbedWidget } from '../widgets/MediaEmbedWidget';
@@ -413,6 +417,8 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
               initialStyle={widget.config?.displayStyle || 'ken_burns'}
               rotationIntervalSec={widget.config?.rotationIntervalSec || 15}
               customPhotos={widget.config?.customPhotos}
+              sourceType={widget.config?.sourceType}
+              curatedCategoryId={widget.config?.curatedCategoryId}
               initialSourceLabel={widget.config?.sourceLabel}
               initialPolaroidCount={widget.config?.polaroidCount || 12}
               initialPolaroidSizeMode={widget.config?.polaroidSizeMode || 'mixed'}
@@ -453,7 +459,8 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
             longitude={widget.config?.longitude}
           />
         );
-      case 'textbox':
+      case 'textbox': {
+        const isFrameless = isWidgetStickerMode(widget, settings.defaultWidgetStyle || 'auto');
         return (
           <TextBoxWidget
             content={widget.config?.content}
@@ -466,19 +473,23 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
             textTransform={widget.config?.textTransform}
             letterSpacing={widget.config?.letterSpacing}
             bgStyle={widget.config?.bgStyle}
+            transparentBg={isFrameless}
             isLight={isLight}
           />
         );
-      case 'image':
+      }
+      case 'image': {
+        const isFrameless = isWidgetStickerMode(widget, settings.defaultWidgetStyle || 'auto');
         return (
           <div className="h-44 w-full">
             <ImageWidget
               id={widget.id}
-              config={widget.config || {}}
+              config={{ ...(widget.config || {}), transparentBg: isFrameless }}
               onUpdateConfig={(updates) => onUpdateWidget?.(widget.id, { config: { ...widget.config, ...updates } })}
             />
           </div>
         );
+      }
       case 'sticky_notes':
         return (
           <div className="p-3 text-xs text-gray-400 bg-gray-950/60 rounded-xl text-center">
@@ -566,9 +577,13 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
             <button
               onClick={onOpenSettings}
               className="p-1.5 rounded-lg bg-gray-800/80 text-gray-400 hover:text-white cursor-pointer"
-              title="Settings & Boards"
+              title={isSettingsPinRequired(settings) ? 'Settings & Lock (PIN Protected)' : 'Settings & Boards'}
             >
-              <Settings className="w-4 h-4" />
+              {isSettingsPinRequired(settings) ? (
+                <Lock className="w-4 h-4 text-blue-400" />
+              ) : (
+                <Settings className="w-4 h-4" />
+              )}
             </button>
           </div>
         </div>
@@ -1057,12 +1072,15 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
             widget={editingWidget}
             onOpenPhotoSources={(asCommonSource) => {
               if (editingWidget) {
+                const latestWidget =
+                  useDashboardStore.getState().widgets.find((w) => w.id === editingWidget.id) ||
+                  editingWidget;
                 setPhotoSourcesTarget({
-                  widget: editingWidget,
+                  widget: latestWidget,
                   isCommon:
                     asCommonSource !== undefined
                       ? asCommonSource
-                      : editingWidget.config?.useCommonSource !== false,
+                      : latestWidget.config?.useCommonSource !== false,
                 });
               }
             }}
@@ -1095,31 +1113,51 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
               currentSourceLabel={
                 isUsingCommon
                   ? settings.commonPhotoSourceLabel ||
-                    (settings.commonPhotos?.length ? 'Shared Library' : activePhotoWidget.config?.sourceLabel)
+                    (settings.commonPhotos?.length ? 'Shared Library' : undefined)
                   : activePhotoWidget.config?.sourceLabel
               }
               currentSourceType={
                 isUsingCommon
-                  ? settings.commonPhotoSourceType || activePhotoWidget.config?.sourceType
-                  : activePhotoWidget.config?.sourceType || settings.commonPhotoSourceType
+                  ? settings.commonPhotoSourceType
+                  : activePhotoWidget.config?.sourceType
+              }
+              currentCuratedCategoryId={
+                isUsingCommon
+                  ? settings.commonPhotoCuratedCategory
+                  : activePhotoWidget.config?.curatedCategoryId
               }
               currentPhotoCount={
                 isUsingCommon
-                  ? (settings.commonPhotos?.length ?? activePhotoWidget.config?.customPhotos?.length)
-                  : (activePhotoWidget.config?.customPhotos?.length ?? settings.commonPhotos?.length)
+                  ? settings.commonPhotos?.length
+                  : activePhotoWidget.config?.customPhotos?.length
               }
-              onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType, applyToAll, plexSyncConfig) => {
+              onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType, applyToAll, plexSyncConfig, curatedCategoryId) => {
                 if (applyToAll) {
-                  applyCommonPhotosToAllWidgets(newPhotos, sourceName, sourceUrl, sourceType, plexSyncConfig);
+                  applyCommonPhotosToAllWidgets(
+                    newPhotos,
+                    sourceName,
+                    sourceUrl,
+                    sourceType,
+                    plexSyncConfig,
+                    curatedCategoryId,
+                    activePhotoWidget.id
+                  );
                 } else if (onUpdateWidget && newPhotos.length > 0) {
-                  onUpdateWidget(activePhotoWidget.id, {
+                  const latestPhotoWidget =
+                    useDashboardStore.getState().widgets.find((w) => w.id === activePhotoWidget.id) ||
+                    activePhotoWidget;
+                  onUpdateWidget(latestPhotoWidget.id, {
                     config: {
-                      ...activePhotoWidget.config,
+                      ...latestPhotoWidget.config,
                       useCommonSource: false,
                       customPhotos: newPhotos,
                       sourceLabel: sourceName,
                       sourceUrl: sourceType === 'web' ? (sourceUrl || '') : undefined,
-                      sourceType: sourceType || activePhotoWidget.config?.sourceType,
+                      sourceType: sourceType || latestPhotoWidget.config?.sourceType,
+                      curatedCategoryId:
+                        sourceType === 'curated'
+                          ? (curatedCategoryId || inferCuratedCategoryId(undefined, sourceName) || 'all')
+                          : undefined,
                       plexSyncConfig: sourceType === 'plex' ? plexSyncConfig : undefined,
                     },
                   });

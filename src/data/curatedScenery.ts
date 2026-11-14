@@ -1018,3 +1018,26 @@ export const CURATED_CATEGORIES: CuratedCategory[] = [
 export function getCuratedCategoryById(id: string): CuratedCategory {
   return CURATED_CATEGORIES.find((c) => c.id === id) || CURATED_CATEGORIES[0];
 }
+
+export function inferCuratedCategoryId(curatedCategoryId?: string, sourceLabel?: string): string | undefined {
+  if (curatedCategoryId && CURATED_CATEGORIES.some((c) => c.id === curatedCategoryId)) {
+    return curatedCategoryId;
+  }
+  if (!sourceLabel || !sourceLabel.trim()) return undefined;
+  const trimmed = sourceLabel.trim();
+  const lower = trimmed.toLowerCase();
+  if (lower === 'curated' || lower === 'curated ambient' || lower === 'curated scenery') {
+    return 'all';
+  }
+  const parenMatch = trimmed.match(/^curated\s*\((.+)\)$/i);
+  const candidate = (parenMatch ? parenMatch[1] : trimmed).trim().toLowerCase();
+  const matched = CURATED_CATEGORIES.find(
+    (c) => c.name.toLowerCase() === candidate || c.id.toLowerCase() === candidate
+  );
+  return matched?.id;
+}
+
+export function resolveCuratedPhotos(curatedCategoryId?: string, sourceLabel?: string): PhotoItem[] {
+  const id = inferCuratedCategoryId(curatedCategoryId, sourceLabel);
+  return id ? getCuratedCategoryById(id).photos : ALL_CURATED_PHOTOS;
+}

@@ -2,7 +2,20 @@ import { createClient, type SupabaseClient, type User, type RealtimeChannel } fr
 import { db, DEFAULT_SETTINGS, DEFAULT_TABS, DEFAULT_WIDGETS, DEFAULT_NOTES, DEFAULT_CHORE_SNAPSHOT, DEFAULT_HOUSEHOLD_PROFILES, DEFAULT_MEAL_SNAPSHOT } from './db';
 import { stripPlexTokens } from './plexLinks';
 import { isBoardFullError, setSyncRefusal } from './syncRefusal';
-import { keepLocalNoteFields, keepLocalTabFields, keepLocalWidgetFields } from './syncMerge';
+import {
+  keepLocalNoteFields,
+  keepLocalTabFields,
+  keepLocalWidgetFields,
+  mergeCloudSettingsForLocal,
+  shouldAcceptCloudRow,
+  shouldAcceptCloudSettings,
+} from './syncMerge';
+import { resolveCuratedPhotos } from '../data/curatedScenery';
+import {
+  isSameCommonPhotoSource,
+  isSameWidgetPhotoSource,
+  sanitizeRestoredPhotoWidget,
+} from '../utils/photoSourceIsolation';
 import type { DashboardTab, DashboardWidget, StickyNoteItem, AppSettings } from '../types/dashboard';
 import type { ChoreEngineSnapshot } from '../types/chores';
 import type { HouseholdProfile } from '../types/profiles';
@@ -82,6 +95,7 @@ function deviceOwnSettings(settings?: AppSettings): Partial<AppSettings> {
     lockFullscreenKiosk: settings.lockFullscreenKiosk,
     lockCanvasEditing: settings.lockCanvasEditing,
     lockSettingsAccess: settings.lockSettingsAccess,
+    settingsPinOptOut: settings.settingsPinOptOut,
     displayDensity: settings.displayDensity,
   };
 }
@@ -669,7 +683,8 @@ export async function pushToCloud(
   settings: AppSettings,
   tabs: DashboardTab[],
   widgets: DashboardWidget[],
-  notes: StickyNoteItem[]
+  notes: StickyNoteItem[],
+  options?: { force?: boolean }
 ): Promise<{ success: boolean; error?: string }> {
   const sb = getSupabase();
   const user = await getCurrentUser();
@@ -689,7 +704,8 @@ export async function pushToCloud(
     }
 
     // 1. Query Dexie to include all active and soft-deleted records so remote devices sync additions and deletions
-    const [dbTabs, dbWidgets, dbNotes, dbChoreSnapshot, dbProfiles, dbMealSnapshot] = await Promise.all([
+    const [dbSettings, dbTabs, dbWidgets, dbNotes, dbChoreSnapshot, dbProfiles, dbMealSnapshot] = await Promise.all([
+      db.settings.get('global'),
       db.tabs.toArray(),
       db.widgets.toArray(),
       db.notes.toArray(),
@@ -697,6 +713,11 @@ export async function pushToCloud(
       db.profiles.toArray(),
       db.meals.get('household_meals'),
     ]);
+
+    const propSettingsTime = Date.parse(settings?.updated_at || '') || 0;
+    const dbSettingsTime = Date.parse(dbSettings?.updated_at || '') || 0;
+    const activeSettings =
+      dbSettings && dbSettingsTime >= propSettingsTime ? dbSettings : settings;
 
     const tabsToPush = dbTabs.length > 0 ? dbTabs : tabs;
     const widgetsToPush = dbWidgets.length > 0 ? dbWidgets : widgets;
@@ -718,26 +739,27 @@ export async function pushToCloud(
     // Settings are sent when they changed on this device since it last synced them, unless another
     // device has saved newer ones since. Only then is the cloud's settings time read, which reads the
     // settings themselves, so most syncs don't.
-    const localSettingsTime = Date.parse(settings.updated_at || '') || 0;
+    const localSettingsTime = Date.parse(activeSettings.updated_at || '') || 0;
     let shouldUpsertDash = false;
     if (!isMember) {
       const knownCloudSettingsTime = getKnownCloudSettingsAt(dashboardId);
-      if (!remoteDashRes.data) {
+      if (options?.force || !remoteDashRes.data) {
         shouldUpsertDash = true;
       } else if (knownCloudSettingsTime === null || localSettingsTime > knownCloudSettingsTime) {
-        const { data: cloudSettings } = await sb
+        const { data: cloudDashRow } = await sb
           .from('dashboards')
-          .select('settings_updated_at:settings->>updated_at')
+          .select('settings')
           .eq('id', dashboardId)
           .maybeSingle();
-        const cloudSettingsAt = (cloudSettings as { settings_updated_at?: string | null } | null)?.settings_updated_at;
+        const cloudSettingsAt =
+          ((cloudDashRow?.settings ?? null) as Partial<AppSettings> | null)?.updated_at || null;
         const cloudSettingsTime = Date.parse(cloudSettingsAt || '') || 0;
         shouldUpsertDash = localSettingsTime > cloudSettingsTime;
         if (!shouldUpsertDash && cloudSettingsAt) setKnownCloudSettingsAt(dashboardId, cloudSettingsAt);
       }
     }
 
-    // Upsert Tabs: only send tabs with genuinely newer timestamps or new records
+    // Upsert Tabs: only send tabs with genuinely newer timestamps or new records (or all when forced)
     let tabsToUpsert: any[] = [];
     if (tabsToPush.length > 0) {
       const formattedTabs = tabsToPush.map((t, idx) => ({
@@ -754,6 +776,7 @@ export async function pushToCloud(
       }));
 
       tabsToUpsert = formattedTabs.filter((t) => {
+        if (options?.force) return true;
         const remoteTime = remoteTabsMap.get(t.id);
         if (remoteTime === undefined) return true;
         return new Date(t.updated_at || 0).getTime() > remoteTime;
@@ -788,6 +811,7 @@ export async function pushToCloud(
       });
 
       widgetsToUpsert = formattedWidgets.filter((w) => {
+        if (options?.force) return true;
         const remoteTime = remoteWidgetsMap.get(w.id);
         if (remoteTime === undefined) return true;
         return new Date(w.updated_at || 0).getTime() > remoteTime;
@@ -800,9 +824,10 @@ export async function pushToCloud(
       const localChoreTime = new Date(activeChoreSnapshot.updated_at || 0).getTime();
       const remoteChoreTime = remoteWidgetsMap.get(CHORE_ENGINE_CLOUD_ROW_ID);
       const shouldPushChores =
-        remoteChoreTime === undefined
+        Boolean(options?.force) ||
+        (remoteChoreTime === undefined
           ? localChoreTime > 0
-          : localChoreTime > remoteChoreTime;
+          : localChoreTime > remoteChoreTime);
 
       if (shouldPushChores) {
         widgetsToUpsert.push({
@@ -830,9 +855,10 @@ export async function pushToCloud(
       );
       const remoteProfilesRowTime = remoteWidgetsMap.get(HOUSEHOLD_PROFILES_CLOUD_ROW_ID);
       const shouldPushProfilesRow =
-        remoteProfilesRowTime === undefined
+        Boolean(options?.force) ||
+        (remoteProfilesRowTime === undefined
           ? latestProfileTime > 0
-          : latestProfileTime > remoteProfilesRowTime;
+          : latestProfileTime > remoteProfilesRowTime);
 
       if (shouldPushProfilesRow) {
         const latestIso = new Date(latestProfileTime || Date.now()).toISOString();
@@ -858,9 +884,10 @@ export async function pushToCloud(
       const localMealTime = new Date(activeMealSnapshot.updated_at || 0).getTime();
       const remoteMealTime = remoteWidgetsMap.get(MEAL_PLANNER_CLOUD_ROW_ID);
       const shouldPushMeals =
-        remoteMealTime === undefined
+        Boolean(options?.force) ||
+        (remoteMealTime === undefined
           ? localMealTime > 0
-          : localMealTime > remoteMealTime;
+          : localMealTime > remoteMealTime);
 
       if (shouldPushMeals) {
         widgetsToUpsert.push({
@@ -879,7 +906,7 @@ export async function pushToCloud(
       }
     }
 
-    // Upsert Notes: only send notes with genuinely newer timestamps or new records
+    // Upsert Notes: only send notes with genuinely newer timestamps or new records (or all when forced)
     let notesToUpsert: any[] = [];
     if (notesToPush.length > 0) {
       const formattedNotes = notesToPush.map((n) => {
@@ -909,6 +936,7 @@ export async function pushToCloud(
       });
 
       notesToUpsert = formattedNotes.filter((n) => {
+        if (options?.force) return true;
         const remoteTime = remoteNotesMap.get(n.id);
         if (remoteTime === undefined) return true;
         return new Date(n.updated_at || 0).getTime() > remoteTime;
@@ -962,7 +990,7 @@ export async function pushToCloud(
         return acc;
       }, {} as Record<string, any>);
 
-      let settingsToPush = { ...settings };
+      let settingsToPush = { ...activeSettings };
       // Strip commonPhotos array from cloud sync payload to keep database pure config (< 5 KB)
       if ('commonPhotos' in settingsToPush) {
         const { commonPhotos: _, ...restSettings } = settingsToPush;
@@ -971,20 +999,25 @@ export async function pushToCloud(
 
       const cloudSafeSettings = stripPlexTokens({
         ...settingsToPush,
+        pinLockEnabled: false,
         pinHash: null,
+        lockCanvasEditing: false,
+        lockFullscreenKiosk: false,
+        lockSettingsAccess: true,
+        settingsPinOptOut: false,
         canvasThemes: tabThemeMeta,
       });
 
       const { error: dashErr } = await sb.from('dashboards').upsert({
         id: dashboardId,
         user_id: ownerId,
-        title: settings.dashboardTitle,
+        title: activeSettings.dashboardTitle,
         settings: cloudSafeSettings,
         invite_code: null,
         updated_at: nowIso,
       });
       if (dashErr) skipIfBoardFull(dashErr);
-      else setKnownCloudSettingsAt(dashboardId, settings.updated_at);
+      else setKnownCloudSettingsAt(dashboardId, activeSettings.updated_at);
     }
     // Saving a tab, widget or note moves the board's updated_at in the database (the touch trigger in
     // supabase/schema.sql), for members too, so the app doesn't send a separate update for it
@@ -1054,11 +1087,11 @@ export async function pushToCloud(
 type PullResult = { success: boolean; hasChanges?: boolean; error?: string };
 
 // Startup, sign-in and screen wake can each ask for a pull at the same moment. They share one download.
-const pullsInFlight = new Map<'full' | 'check', Promise<PullResult>>();
+const pullsInFlight = new Map<'restore' | 'full' | 'check', Promise<PullResult>>();
 
 // Pull latest changes from Supabase Cloud to local Dexie (Strictly authenticated only)
-export function pullFromCloud(options?: { force?: boolean }): Promise<PullResult> {
-  const kind = options?.force ? 'full' : 'check';
+export function pullFromCloud(options?: { force?: boolean; overwriteLocal?: boolean }): Promise<PullResult> {
+  const kind = options?.overwriteLocal ? 'restore' : options?.force ? 'full' : 'check';
   const running = pullsInFlight.get(kind);
   if (running) return running;
   const pull = pullFromCloudOnce(options).finally(() => pullsInFlight.delete(kind));
@@ -1066,7 +1099,7 @@ export function pullFromCloud(options?: { force?: boolean }): Promise<PullResult
   return pull;
 }
 
-async function pullFromCloudOnce(options?: { force?: boolean }): Promise<PullResult> {
+async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: boolean }): Promise<PullResult> {
   const sb = getSupabase();
   const user = await getCurrentUser();
   if (!sb || !user) return { success: false, error: 'Not authenticated' };
@@ -1077,9 +1110,10 @@ async function pullFromCloudOnce(options?: { force?: boolean }): Promise<PullRes
     // This device holds another board's copy, which this pull replaces
     const localBoard = getLocalBoard();
     const switchingBoards = localBoard !== null && localBoard !== dashboardId;
+    const overwriteLocal = Boolean(options?.overwriteLocal);
 
     // Fast-path: Check lightweight dashboard revision before scanning full tables with JSON payloads
-    if (!options?.force && !switchingBoards) {
+    if (!options?.force && !overwriteLocal && !switchingBoards) {
       const { data: dashHead, error: headErr } = await sb
         .from('dashboards')
         .select('updated_at')
@@ -1123,6 +1157,8 @@ async function pullFromCloudOnce(options?: { force?: boolean }): Promise<PullRes
       return { success: false, error: 'No cloud backup found for this account.' };
     }
 
+    const joiningExistingCloudBoard = localBoard === null && Boolean(dashRes.data);
+
     const cloudSettings = dashRes.data?.settings;
     if (cloudSettings && Object.keys(cloudSettings).length > 0) {
       const currentSettings = await db.settings.get('global');
@@ -1136,25 +1172,42 @@ async function pullFromCloudOnce(options?: { force?: boolean }): Promise<PullRes
       // the board's settings, so a member's device always follows the owner's.
       const firstSyncThisWay = getKnownCloudSettingsAt(dashboardId) === null;
       const boardTime = Date.parse(dashRes.data.updated_at || '') || 0;
-      const cloudIsNewer = target?.isMember
-        ? cloudTime !== localTime
-        : firstSyncThisWay
-          ? boardTime >= localTime
-          : cloudTime > localTime;
+      const acceptCloudSettings = shouldAcceptCloudSettings({
+        switchingBoards,
+        joiningExistingCloudBoard,
+        overwriteLocal,
+        hasLocalSettings: Boolean(currentSettings),
+        isMember: Boolean(target?.isMember),
+        firstSyncThisWay,
+        localTime,
+        cloudTime,
+        boardTime,
+      });
       setKnownCloudSettingsAt(dashboardId, cloudSettingsAt);
-      if (switchingBoards || !currentSettings || cloudIsNewer) {
-        await db.settings.put({
-          ...dashRes.data.settings,
-          // Preserve local photo catalog when cloud sync is pure configuration
-          commonPhotos: currentSettings?.commonPhotos?.length
+      if (acceptCloudSettings) {
+        const cloudPhotoType = dashRes.data.settings?.commonPhotoSourceType;
+        const resolvedCommonPhotos =
+          cloudPhotoType === 'curated' || dashRes.data.settings?.commonPhotoCuratedCategory
+            ? resolveCuratedPhotos(
+                dashRes.data.settings?.commonPhotoCuratedCategory,
+                dashRes.data.settings?.commonPhotoSourceLabel
+              )
+            : !switchingBoards &&
+              currentSettings?.commonPhotos?.length &&
+              isSameCommonPhotoSource(dashRes.data.settings, currentSettings)
             ? currentSettings.commonPhotos
-            : (dashRes.data.settings?.commonPhotos || []),
-          // Preserve local device PIN lock state rather than overwriting from cloud
-          pinHash: currentSettings?.pinHash ?? null,
-          pinLockEnabled: currentSettings?.pinLockEnabled ?? false,
-          id: 'global',
-          updated_at: cloudSettingsAt,
-        });
+            : (dashRes.data.settings?.commonPhotos || []);
+
+        await db.settings.put(
+          mergeCloudSettingsForLocal({
+            defaultSettings: DEFAULT_SETTINGS,
+            cloudSettings: dashRes.data.settings,
+            currentSettings,
+            resolvedCommonPhotos,
+            cloudSettingsAt,
+            preserveDeviceLocks: true,
+          })
+        );
       }
     }
 
@@ -1165,8 +1218,13 @@ async function pullFromCloudOnce(options?: { force?: boolean }): Promise<PullRes
       const cloudTabIds = new Set(tabsRes.data.map((t: any) => t.id));
 
       const tabsToPut: DashboardTab[] = [];
+      const toDeleteTabIds: string[] = [];
       for (let idx = 0; idx < tabsRes.data.length; idx++) {
         const t = tabsRes.data[idx];
+        if (overwriteLocal && t.deleted_at) {
+          toDeleteTabIds.push(t.id);
+          continue;
+        }
         const mapped: DashboardTab = {
           id: t.id,
           name: t.name,
@@ -1185,21 +1243,16 @@ async function pullFromCloudOnce(options?: { force?: boolean }): Promise<PullRes
         };
 
         const local = localMap.get(t.id);
-        if (!local) {
-          tabsToPut.push(mapped);
-        } else {
-          const localTime = new Date(local.updated_at || 0).getTime();
-          const cloudTime = new Date(mapped.updated_at || 0).getTime();
-          if (cloudTime >= localTime) {
-            tabsToPut.push(keepLocalTabFields(mapped, local));
-          }
+        const localTime = local ? new Date(local.updated_at || 0).getTime() : 0;
+        const cloudTime = new Date(mapped.updated_at || 0).getTime();
+        if (shouldAcceptCloudRow({ overwriteLocal, hasLocalRow: Boolean(local), localTime, cloudTime })) {
+          tabsToPut.push(!local || overwriteLocal ? mapped : keepLocalTabFields(mapped, local));
         }
       }
 
-      // Clean up default placeholder tab if cloud already has tabs
-      const toDeleteTabIds: string[] = [];
+      // Clean up default placeholder tab (or removed local tabs during authoritative restore)
       for (const lt of localTabs) {
-        if (!cloudTabIds.has(lt.id) && lt.id === 'tab-corkboard') {
+        if (!cloudTabIds.has(lt.id) && (overwriteLocal || lt.id === 'tab-corkboard')) {
           toDeleteTabIds.push(lt.id);
         }
       }
@@ -1220,23 +1273,39 @@ async function pullFromCloudOnce(options?: { force?: boolean }): Promise<PullRes
         !householdProfilesRow.deleted_at &&
         Array.isArray(householdProfilesRow.config?.profiles)
       ) {
-        await useProfileStore
-          .getState()
-          .applyRemoteProfiles(householdProfilesRow.config.profiles as HouseholdProfile[]);
+        if (overwriteLocal) {
+          await db.profiles.clear();
+          await db.profiles.bulkPut(householdProfilesRow.config.profiles as HouseholdProfile[]);
+          await useProfileStore.getState().initProfileStore();
+        } else {
+          await useProfileStore
+            .getState()
+            .applyRemoteProfiles(householdProfilesRow.config.profiles as HouseholdProfile[]);
+        }
       }
 
       // Extract the household Chore Engine system row if present
       const choreEngineRow = widgetsRes.data.find((w: any) => w.id === CHORE_ENGINE_CLOUD_ROW_ID);
       if (choreEngineRow && !choreEngineRow.deleted_at && choreEngineRow.config?.id === 'household_chores') {
-        await useChoreStore.getState().applyRemoteSnapshot(choreEngineRow.config as ChoreEngineSnapshot);
+        if (overwriteLocal) {
+          await db.chores.put(choreEngineRow.config as ChoreEngineSnapshot);
+          await useChoreStore.getState().initChoreStore();
+        } else {
+          await useChoreStore.getState().applyRemoteSnapshot(choreEngineRow.config as ChoreEngineSnapshot);
+        }
       }
 
       // Extract the Meal Planner & Smart Shopping List system row if present
       const mealPlannerRow = widgetsRes.data.find((w: any) => w.id === MEAL_PLANNER_CLOUD_ROW_ID);
       if (mealPlannerRow && !mealPlannerRow.deleted_at && mealPlannerRow.config?.id === 'household_meals') {
-        await useMealStore
-          .getState()
-          .applyRemoteMealSnapshot(mealPlannerRow.config as MealPlannerSnapshot);
+        if (overwriteLocal) {
+          await db.meals.put(mealPlannerRow.config as MealPlannerSnapshot);
+          await useMealStore.getState().initMealStore();
+        } else {
+          await useMealStore
+            .getState()
+            .applyRemoteMealSnapshot(mealPlannerRow.config as MealPlannerSnapshot);
+        }
       }
 
       const canvasWidgetRows = widgetsRes.data.filter(
@@ -1250,17 +1319,23 @@ async function pullFromCloudOnce(options?: { force?: boolean }): Promise<PullRes
       const cloudWidgetIds = new Set(canvasWidgetRows.map((w: any) => w.id));
 
       const widgetsToPut: DashboardWidget[] = [];
+      const toDeleteWidgetIds: string[] = [];
       for (const w of canvasWidgetRows) {
+        if (overwriteLocal && w.deleted_at) {
+          toDeleteWidgetIds.push(w.id);
+          continue;
+        }
         const local = localMap.get(w.id);
         const config = {
           ...(w.config || {}),
-          // Preserve local customPhotos when cloud widget config is pure configuration
-          customPhotos: local?.config?.customPhotos?.length
-            ? local.config.customPhotos
-            : (w.config?.customPhotos || []),
+          // Preserve local customPhotos only when cloud widget config still targets the same album
+          customPhotos:
+            local?.config?.customPhotos?.length && isSameWidgetPhotoSource(w.config, local.config)
+              ? local.config.customPhotos
+              : (w.config?.customPhotos || []),
         };
 
-        const mapped: DashboardWidget = {
+        const mapped: DashboardWidget = sanitizeRestoredPhotoWidget({
           id: w.id,
           tabId: w.tab_id,
           type: w.type,
@@ -1270,24 +1345,19 @@ async function pullFromCloudOnce(options?: { force?: boolean }): Promise<PullRes
           config,
           updated_at: w.updated_at,
           deleted_at: w.deleted_at,
-        };
+        }).widget;
 
-        if (!local) {
-          widgetsToPut.push(mapped);
-        } else {
-          const localTime = new Date(local.updated_at || 0).getTime();
-          const cloudTime = new Date(mapped.updated_at || 0).getTime();
-          if (cloudTime >= localTime) {
-            widgetsToPut.push(keepLocalWidgetFields(mapped, local));
-          }
+        const localTime = local ? new Date(local.updated_at || 0).getTime() : 0;
+        const cloudTime = new Date(mapped.updated_at || 0).getTime();
+        if (shouldAcceptCloudRow({ overwriteLocal, hasLocalRow: Boolean(local), localTime, cloudTime })) {
+          widgetsToPut.push(!local ? mapped : keepLocalWidgetFields(mapped, local));
         }
       }
 
-      // Clean up seeded default widgets that do not exist in cloud
+      // Clean up seeded default widgets (or removed local widgets during authoritative restore)
       const defaultWidgetIds = new Set(['widget-clock', 'widget-notes-tile', 'widget-photo-tile', 'widget-countdown-tile']);
-      const toDeleteWidgetIds: string[] = [];
       for (const lw of localWidgets) {
-        if (!cloudWidgetIds.has(lw.id) && defaultWidgetIds.has(lw.id)) {
+        if (!cloudWidgetIds.has(lw.id) && (overwriteLocal || defaultWidgetIds.has(lw.id))) {
           toDeleteWidgetIds.push(lw.id);
         }
       }
@@ -1306,7 +1376,12 @@ async function pullFromCloudOnce(options?: { force?: boolean }): Promise<PullRes
       const cloudNoteIds = new Set(notesRes.data.map((n: any) => n.id));
 
       const notesToPut: StickyNoteItem[] = [];
+      const toDeleteNoteIds: string[] = [];
       for (const n of notesRes.data) {
+        if (overwriteLocal && n.deleted_at) {
+          toDeleteNoteIds.push(n.id);
+          continue;
+        }
         const isShoppingList = Boolean(
           n.is_shopping_list || n.freeform_pos?.isShoppingList
         );
@@ -1329,21 +1404,16 @@ async function pullFromCloudOnce(options?: { force?: boolean }): Promise<PullRes
         };
 
         const local = localMap.get(n.id);
-        if (!local) {
-          notesToPut.push(mapped);
-        } else {
-          const localTime = new Date(local.updated_at || 0).getTime();
-          const cloudTime = new Date(mapped.updated_at || 0).getTime();
-          if (cloudTime >= localTime) {
-            notesToPut.push(keepLocalNoteFields(mapped, local));
-          }
+        const localTime = local ? new Date(local.updated_at || 0).getTime() : 0;
+        const cloudTime = new Date(mapped.updated_at || 0).getTime();
+        if (shouldAcceptCloudRow({ overwriteLocal, hasLocalRow: Boolean(local), localTime, cloudTime })) {
+          notesToPut.push(!local || overwriteLocal ? mapped : keepLocalNoteFields(mapped, local));
         }
       }
 
       const defaultNoteIds = new Set(['note-welcome', 'note-groceries']);
-      const toDeleteNoteIds: string[] = [];
       for (const ln of localNotes) {
-        if (!cloudNoteIds.has(ln.id) && defaultNoteIds.has(ln.id)) {
+        if (!cloudNoteIds.has(ln.id) && (overwriteLocal || defaultNoteIds.has(ln.id))) {
           toDeleteNoteIds.push(ln.id);
         }
       }

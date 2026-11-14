@@ -23,6 +23,7 @@ import { photoSyncService } from './services/photoSyncService';
 import { UpdateNotificationBanner } from './components/common/UpdateNotificationBanner';
 import { PlexReauthBanner } from './components/common/PlexReauthBanner';
 import { SyncRefusedBanner } from './components/common/SyncRefusedBanner';
+import { isCanvasPinLocked, isSettingsPinRequired } from './utils/pinValidation';
 
 const SettingsModal = lazy(() =>
   import('./components/settings/SettingsModal').then((m) => ({ default: m.SettingsModal }))
@@ -69,8 +70,8 @@ export function App() {
     notes,
     setActiveTabId,
     rotateToTab,
-    isUnlocked,
     unlockKiosk,
+    lockKiosk,
     isCarouselPaused,
     pauseCarouselTemporarily,
     updateSettings,
@@ -266,9 +267,9 @@ export function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Granular protection controls (active only when PIN protection is configured and session is not unlocked)
-  const isSettingsLocked = Boolean(settings.pinLockEnabled && settings.lockSettingsAccess !== false && !isUnlocked);
-  const isCanvasLocked = Boolean(settings.pinLockEnabled && settings.lockCanvasEditing && !isUnlocked);
+  // Granular protection controls (Settings/Share/Plex verify PIN on each open; Canvas locks stay enforced whenever active)
+  const isSettingsLocked = isSettingsPinRequired(settings);
+  const isCanvasLocked = isCanvasPinLocked(settings);
 
   // Keyboard shortcuts:
   // '\' (backslash) to toggle toolbar visibility
@@ -703,10 +704,21 @@ export function App() {
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
+    let plexRescanTimer: ReturnType<typeof setTimeout> | null = null;
+    const handlePlexAuthChanged = () => {
+      if (plexRescanTimer) clearTimeout(plexRescanTimer);
+      plexRescanTimer = setTimeout(() => {
+        void photoSyncService.runDueAutoSyncs();
+      }, 5000);
+    };
+    window.addEventListener('plex_auth_changed', handlePlexAuthChanged);
+
     return () => {
       clearTimeout(bootTimer);
       clearInterval(intervalTimer);
       document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('plex_auth_changed', handlePlexAuthChanged);
+      if (plexRescanTimer) clearTimeout(plexRescanTimer);
     };
   }, [isInitialized]);
 
@@ -853,7 +865,10 @@ export function App() {
           <Suspense fallback={null}>
             <SettingsModal
               isOpen={isSettingsOpen}
-              onClose={() => setIsSettingsOpen(false)}
+              onClose={() => {
+                setIsSettingsOpen(false);
+                lockKiosk();
+              }}
               onOpenQuickStart={() => setIsQuickStartOpen(true)}
             />
           </Suspense>
@@ -867,6 +882,15 @@ export function App() {
               onOpenChoresHub={() => setChoreFullScreenOpen(true)}
             />
           </Suspense>
+        )}
+        {pinChallenge && (
+          <PinOverlay
+            title={pinChallenge.title}
+            subtitle={pinChallenge.subtitle}
+            onUnlock={handlePinUnlock}
+            onPinRemoved={finishPinChallenge}
+            onCancel={() => setPinChallenge(null)}
+          />
         )}
       </>
     );
@@ -952,7 +976,7 @@ export function App() {
         tabs={visibleTabs}
         activeTabId={activeTabIdResolved}
         dockPosition={settings.dockPosition}
-        isLocked={Boolean(settings.pinLockEnabled)}
+        isLocked={isSettingsLocked}
         isCanvasLocked={isCanvasLocked}
         onSelectTab={setActiveTabId}
         onOpenSettings={handleOpenSettings}
@@ -995,26 +1019,78 @@ export function App() {
       <SyncRefusedBanner />
 
       {/* Dedicated Plex Pairing Modal */}
-      {isPlexPairingModalOpen && (
-        <Suspense fallback={null}>
-          <PhotoSourcesModal
-            isOpen={true}
-            onClose={() => setIsPlexPairingModalOpen(false)}
-            initialTab="plex"
-            isCommonSource={true}
-            currentSourceLabel={settings.commonPhotoSourceLabel || 'Plex Photos'}
-            currentSourceType="plex"
-            currentPhotoCount={settings.commonPhotos?.length}
-            onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType, _applyToAll, plexSyncConfig) => {
-              applyCommonPhotosToAllWidgets(newPhotos, sourceName, sourceUrl, sourceType, plexSyncConfig);
-              setIsPlexPairingModalOpen(false);
-              if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('plex_auth_changed', { detail: { hasToken: true } }));
+      {isPlexPairingModalOpen && (() => {
+        const isCommonPlex =
+          settings.commonPhotoSourceType === 'plex' ||
+          Boolean(settings.commonPhotoSourceLabel?.toLowerCase().includes('plex')) ||
+          Boolean(settings.commonPhotos?.some((p) => p.source === 'plex'));
+        const firstPlexWidget = !isCommonPlex
+          ? widgets.find(
+              (w) =>
+                !w.deleted_at &&
+                w.type === 'photo_frame' &&
+                w.config?.useCommonSource === false &&
+                (w.config?.sourceType === 'plex' ||
+                  w.config?.sourceLabel?.toLowerCase().includes('plex'))
+            )
+          : undefined;
+        const pairingAsCommon = isCommonPlex || !firstPlexWidget;
+
+        return (
+          <Suspense fallback={null}>
+            <PhotoSourcesModal
+              isOpen={true}
+              onClose={() => {
+                setIsPlexPairingModalOpen(false);
+                lockKiosk();
+              }}
+              initialTab="plex"
+              isCommonSource={pairingAsCommon}
+              targetWidgetId={pairingAsCommon ? undefined : firstPlexWidget?.id}
+              currentSourceLabel={
+                pairingAsCommon
+                  ? (settings.commonPhotoSourceLabel || 'Plex Photos')
+                  : (firstPlexWidget?.config?.sourceLabel || 'Plex Photos')
               }
-            }}
-          />
-        </Suspense>
-      )}
+              currentSourceType="plex"
+              currentPhotoCount={
+                pairingAsCommon
+                  ? settings.commonPhotos?.length
+                  : firstPlexWidget?.config?.customPhotos?.length
+              }
+              onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType, applyToAll, plexSyncConfig, curatedCategoryId) => {
+                if (applyToAll || pairingAsCommon || !firstPlexWidget) {
+                  applyCommonPhotosToAllWidgets(
+                    newPhotos,
+                    sourceName,
+                    sourceUrl,
+                    sourceType,
+                    plexSyncConfig,
+                    curatedCategoryId
+                  );
+                } else {
+                  updateWidget(firstPlexWidget.id, {
+                    config: {
+                      ...firstPlexWidget.config,
+                      useCommonSource: false,
+                      customPhotos: newPhotos,
+                      sourceLabel: sourceName,
+                      sourceType: sourceType || 'plex',
+                      sourceUrl: sourceType === 'web' ? (sourceUrl || '') : undefined,
+                      plexSyncConfig: sourceType === 'plex' ? plexSyncConfig : undefined,
+                      curatedCategoryId: undefined,
+                    },
+                  });
+                }
+                setIsPlexPairingModalOpen(false);
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('plex_auth_changed', { detail: { hasToken: true } }));
+                }
+              }}
+            />
+          </Suspense>
+        );
+      })()}
 
       {/* Parent PIN Challenge Overlay */}
       {pinChallenge && (
@@ -1029,7 +1105,15 @@ export function App() {
 
       <Suspense fallback={null}>
         {/* Household sharing, opened from the dock's quick menu */}
-        {isShareOpen && <ShareBoardModal isOpen={isShareOpen} onClose={() => setIsShareOpen(false)} />}
+        {isShareOpen && (
+          <ShareBoardModal
+            isOpen={isShareOpen}
+            onClose={() => {
+              setIsShareOpen(false);
+              lockKiosk();
+            }}
+          />
+        )}
 
         {/* Local Backup Info Modal */}
         {isBackupModalOpen && (
@@ -1066,7 +1150,10 @@ export function App() {
         {isSettingsOpen && (
           <SettingsModal
             isOpen={isSettingsOpen}
-            onClose={() => setIsSettingsOpen(false)}
+            onClose={() => {
+              setIsSettingsOpen(false);
+              lockKiosk();
+            }}
             onOpenQuickStart={() => setIsQuickStartOpen(true)}
           />
         )}
@@ -1077,8 +1164,8 @@ export function App() {
             isOpen={isQuickStartOpen}
             onClose={() => setIsQuickStartOpen(false)}
             onOpenSettings={handleOpenSettings}
-            onOpenAddWidget={() => setIsAddWidgetOpen(true)}
-            onOpenCreateNote={() => setIsNoteCreatorOpen(true)}
+            onOpenAddWidget={isCanvasLocked ? undefined : () => setIsAddWidgetOpen(true)}
+            onOpenCreateNote={isCanvasLocked ? undefined : () => setIsNoteCreatorOpen(true)}
             onOpenChoresHub={() => setChoreFullScreenOpen(true)}
           />
         )}

@@ -30,6 +30,8 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useDashboardStore } from '../../store/dashboardStore';
+import { resolveCuratedPhotos } from '../../services/photos';
+import { normalizeTileOnlyWidgetConfig } from '../../utils/photoSourceIsolation';
 import { photoSyncService } from '../../services/photoSyncService';
 import {
   formatCooldownRemaining,
@@ -564,7 +566,21 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.eventName = title.trim() || 'Upcoming Milestone';
       configUpdates.targetDate = iso;
     } else if (widget.type === 'photo_frame') {
-      configUpdates.useCommonSource = useCommonSource;
+      if (useCommonSource) {
+        configUpdates.useCommonSource = true;
+        if (
+          widget.config?.useCommonSource === false &&
+          !(Array.isArray(widget.config?.customPhotos) && widget.config.customPhotos.length > 0)
+        ) {
+          configUpdates.sourceType = undefined;
+          configUpdates.sourceLabel = undefined;
+          configUpdates.sourceUrl = undefined;
+          configUpdates.plexSyncConfig = undefined;
+          configUpdates.curatedCategoryId = undefined;
+        }
+      } else {
+        Object.assign(configUpdates, normalizeTileOnlyWidgetConfig(widget.config));
+      }
       configUpdates.displayStyle = photoStyle;
       configUpdates.rotationIntervalSec = photoIntervalSec;
       configUpdates.polaroidCount = polaroidCount;
@@ -873,7 +889,23 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
           )}
 
           {/* Photo Frame Settings */}
-          {widget.type === 'photo_frame' && (
+          {widget.type === 'photo_frame' && (() => {
+            const tilePreviewConfig =
+              !useCommonSource && widget.config?.useCommonSource !== false
+                ? { ...widget.config, ...normalizeTileOnlyWidgetConfig(widget.config) }
+                : widget.config;
+            const sharedPhotoCount = settings.commonPhotos?.length
+              ? settings.commonPhotos.length
+              : settings.commonPhotoSourceType === 'curated' || settings.commonPhotoCuratedCategory
+              ? resolveCuratedPhotos(settings.commonPhotoCuratedCategory, settings.commonPhotoSourceLabel).length
+              : 0;
+            const tilePhotoCount = tilePreviewConfig?.customPhotos?.length
+              ? tilePreviewConfig.customPhotos.length
+              : tilePreviewConfig?.sourceType === 'curated' || tilePreviewConfig?.curatedCategoryId
+              ? resolveCuratedPhotos(tilePreviewConfig?.curatedCategoryId, tilePreviewConfig?.sourceLabel).length
+              : 0;
+
+            return (
             <div className="space-y-4 pt-2 border-t border-gray-800">
               {/* Photo Source Mode: Common vs Tile-Specific */}
               <div>
@@ -894,7 +926,9 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                           widget.config.sourceLabel || 'Google Photos & Web',
                           widget.config.sourceUrl,
                           widget.config.sourceType || 'web',
-                          widget.config.plexSyncConfig
+                          widget.config.plexSyncConfig,
+                          widget.config.curatedCategoryId,
+                          widget.id
                         );
                         setSyncSuccessMessage(
                           `✓ Synced ${widget.config.customPhotos.length.toLocaleString()} photos as the Shared Board Library!`
@@ -914,7 +948,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                       <span>Shared Board Library</span>
                     </div>
                     <span className="text-[10px] text-gray-400">
-                      Syncs with all shared photo frames ({settings.commonPhotos?.length ? `${settings.commonPhotos.length.toLocaleString()} photos` : 'Curated Scenery'})
+                      Syncs with all shared photo frames ({sharedPhotoCount ? `${sharedPhotoCount.toLocaleString()} photos` : 'Curated Scenery'})
                     </span>
                   </button>
 
@@ -932,7 +966,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                       <span>This Tile Only</span>
                     </div>
                     <span className="text-[10px] text-gray-400">
-                      Independent album ({widget.config?.customPhotos?.length ? `${widget.config.customPhotos.length.toLocaleString()} photos` : 'Curated Scenery'})
+                      Independent album ({tilePhotoCount ? `${tilePhotoCount.toLocaleString()} photos` : 'Curated Scenery'})
                     </span>
                   </button>
                 </div>
@@ -984,7 +1018,9 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                         widget.config.sourceLabel || (widget.config.sourceType === 'plex' ? 'Plex Media Server' : 'Google Photos & Web'),
                         widget.config.sourceType === 'web' ? widget.config.sourceUrl : undefined,
                         widget.config.sourceType || 'web',
-                        widget.config.plexSyncConfig
+                        widget.config.plexSyncConfig,
+                        widget.config.curatedCategoryId,
+                        widget.id
                       );
                       setUseCommonSource(true);
                       setSyncSuccessMessage(
@@ -1009,7 +1045,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      onClose();
+                      handleSave();
                       onOpenPhotoSources(useCommonSource);
                     }}
                     className="w-full flex items-center justify-between p-3.5 rounded-xl bg-gradient-to-r from-amber-500/15 via-blue-500/15 to-purple-500/15 border border-amber-500/30 hover:border-amber-400 text-white transition-all cursor-pointer group shadow-lg"
@@ -1025,11 +1061,11 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                           </span>
                           {(useCommonSource
                             ? (settings.commonPhotoSourceLabel || (settings.commonPhotos?.length ? 'Shared Library' : undefined))
-                            : widget.config?.sourceLabel) && (
+                            : tilePreviewConfig?.sourceLabel) && (
                             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold truncate max-w-[160px]">
                               {useCommonSource
                                 ? (settings.commonPhotoSourceLabel || 'Shared Library')
-                                : widget.config?.sourceLabel}
+                                : tilePreviewConfig?.sourceLabel}
                             </span>
                           )}
                         </div>
@@ -1040,12 +1076,12 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                         {(() => {
                           const activeType = useCommonSource
                             ? (settings.commonPhotoSourceType || 'curated')
-                            : (widget.config?.sourceType || 'curated');
+                            : (tilePreviewConfig?.sourceType || 'curated');
 
                           if (activeType === 'web') {
                             const activeUrl = useCommonSource
-                              ? (settings.commonPhotoSourceUrl || widget.config?.sourceUrl)
-                              : widget.config?.sourceUrl;
+                              ? settings.commonPhotoSourceUrl
+                              : tilePreviewConfig?.sourceUrl;
                             if (!activeUrl) return null;
                             return (
                               <div className="text-[10px] font-mono text-blue-300/90 truncate max-w-[340px] mt-1 bg-black/40 px-2 py-0.5 rounded border border-blue-500/20">
@@ -1057,7 +1093,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                           if (activeType === 'plex') {
                             const label = useCommonSource
                               ? (settings.commonPhotoSourceLabel || 'Plex Library')
-                              : (widget.config?.sourceLabel || 'Plex Library');
+                              : (tilePreviewConfig?.sourceLabel || 'Plex Library');
                             return (
                               <div className="text-[10px] font-mono text-amber-300/90 truncate max-w-[340px] mt-1 bg-amber-950/40 px-2 py-0.5 rounded border border-amber-500/30 flex items-center gap-1.5">
                                 <span>📺</span>
@@ -1069,7 +1105,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                           if (activeType === 'local') {
                             const label = useCommonSource
                               ? (settings.commonPhotoSourceLabel || 'Local PC / NAS')
-                              : (widget.config?.sourceLabel || 'Local PC / NAS');
+                              : (tilePreviewConfig?.sourceLabel || 'Local PC / NAS');
                             return (
                               <div className="text-[10px] font-mono text-emerald-300/90 truncate max-w-[340px] mt-1 bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-500/30 flex items-center gap-1.5">
                                 <span>📁</span>
@@ -1093,16 +1129,16 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
               {(() => {
                 const activeType = useCommonSource
                   ? settings.commonPhotoSourceType
-                  : widget.config?.sourceType;
+                  : tilePreviewConfig?.sourceType;
                 const activeUrl = useCommonSource
-                  ? (settings.commonPhotoSourceUrl || widget.config?.sourceUrl)
-                  : widget.config?.sourceUrl;
+                  ? settings.commonPhotoSourceUrl
+                  : tilePreviewConfig?.sourceUrl;
                 const activePlexConfig = useCommonSource
                   ? settings.commonPhotoPlexConfig
-                  : widget.config?.plexSyncConfig;
+                  : tilePreviewConfig?.plexSyncConfig;
                 const activeLabel = useCommonSource
                   ? settings.commonPhotoSourceLabel
-                  : widget.config?.sourceLabel;
+                  : tilePreviewConfig?.sourceLabel;
 
                 if (!isTargetRescannable(activeType, activeUrl, activePlexConfig, activeLabel)) {
                   return null;
@@ -1427,7 +1463,8 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                 </button>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* Ambient Stream & Web Embed Settings */}
           {widget.type === 'embed' && (

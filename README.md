@@ -47,10 +47,10 @@
 * **📱 Mobile Companion Remote & Vertical Tile Stream:**
   * **Full Canvas Live Stream:** Seamless single-column vertical feed rendering live preview cards for all widgets (Clock, Weather, Countdown, Photos, RSS, Quotes, Media, Notes, Chores, Meal Planner) with independent mobile reordering (`▲` / `▼`) and `100dvh` momentum touch scrolling.
 * **🖼️ Multi-Source Ambient Photo Frame & Scheduled Library Rescan:**
-  * Stream slideshows in *Ken Burns*, *Mosaic Collage*, *Scattered Polaroids*, or *Filmstrip* styles from **Google Photos Shared Albums** (tested with 7,500+ photos), **Google Drive Shared Folders**, **Local / NAS Folders**, **Plex Media Server** (QR PIN auth), or **Curated Scenic Presets**, with automatic background library rescans (*Daily 24h* default, *Weekly 7d*, or *Manual Only*) and 15-minute cooldown-protected **Rescan Now** to pick up new uploads without spamming upstream servers.
+  * Stream slideshows in *Ken Burns*, *Mosaic Collage*, *Scattered Polaroids*, or *Filmstrip* styles from **Google Photos Shared Albums** (tested with 7,500+ photos), **Google Drive Shared Folders**, **Local / NAS Folders**, **Plex Media Server** (QR PIN auth), or **Curated Scenic Presets**, either linked to the **Shared Board Library** or isolated per tile (**This Tile Only**) across restores and Plex pairing, with automatic background library rescans (*Daily 24h* default, *Weekly 7d*, or *Manual Only*) and 15-minute cooldown-protected **Rescan Now**.
 * **📅 Multi-Calendar Feeds:** Unified chronological agenda & monthly grid parsing multiple `webcal://` and `.ics` feeds with per-calendar color tags, smart rate-limit protection, and a built-in US Holidays fallback.
 * **🔒 Kiosk Security & Hardware Polish:**
-  * Screen Wake Lock API, Fullscreen Mode, Scheduled Night Mode with pixel-shifting OLED clock, Kid-Proof 4-digit PIN lock (with email recovery when signed in), and Display Density scaling (`75%` to `150%`).
+  * Screen Wake Lock API, Fullscreen Mode, Scheduled Night Mode with pixel-shifting OLED clock, Kid-Proof 4-digit PIN lock with double-entry confirmation on setup/change (and email recovery when signed in), and Display Density scaling (`75%` to `150%`).
 
 ---
 
