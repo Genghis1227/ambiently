@@ -54,6 +54,8 @@ export interface RssWidgetConfig {
 
 export interface ImageWidgetConfig {
   url?: string;
+  mp4Url?: string;
+  mediaSource?: 'giphy_gif' | 'giphy_sticker' | 'wikimedia' | 'upload' | 'custom';
   title?: string;
   caption?: string;
   fit?: 'contain' | 'cover' | 'fill';

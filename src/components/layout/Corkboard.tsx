@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import type {
   StickyNoteItem,
   StickyNoteChecklistItem,
@@ -121,6 +121,236 @@ const FONT_SIZE_CLASSES: Record<NonNullable<StickyNoteItem['fontSize']>, string>
   xl: 'text-base md:text-xl leading-snug font-semibold',
 };
 
+function isPortalEvent(e: { currentTarget: EventTarget & Element; target: EventTarget | null }): boolean {
+  return e.target instanceof Node && !e.currentTarget.contains(e.target);
+}
+
+interface StickyCanvasActions {
+  onAddNote: (note: Partial<StickyNoteItem>) => void;
+  onUpdateNote: (noteId: string, updates: Partial<StickyNoteItem>) => void;
+  onDeleteNote: (noteId: string) => void;
+  onPermanentlyDeleteNote?: (noteId: string) => void;
+  onPermanentlyDeleteNotes?: (noteIds: string[]) => void;
+  onPinNoteToCanvas: (noteId: string) => void;
+  onUnpinNoteFromCanvas: (noteId: string) => void;
+}
+
+interface CanvasWidgetBodyProps {
+  widget: DashboardWidget;
+  isWidgetLight: boolean;
+  isFramelessWidget: boolean;
+  isFullScreen: boolean;
+  isCanvasLocked: boolean;
+  dockPaddingClass: string;
+  canUpdateWidget: boolean;
+  onUpdateWidgetConfig: (widgetId: string, config: Record<string, any>) => void;
+  onOpenWidgetSettings: (widget: DashboardWidget) => void;
+  stickyNotes?: StickyNoteItem[];
+  stickyActions?: StickyCanvasActions;
+}
+
+const MemoizedCanvasWidgetBody: React.FC<CanvasWidgetBodyProps> = React.memo(({
+  widget,
+  isWidgetLight,
+  isFramelessWidget,
+  isFullScreen,
+  isCanvasLocked,
+  dockPaddingClass,
+  canUpdateWidget,
+  onUpdateWidgetConfig,
+  onOpenWidgetSettings,
+  stickyNotes,
+  stickyActions,
+}) => {
+  const handleConfigUpdate = useCallback(
+    (updates: Record<string, any>) => {
+      if (!canUpdateWidget) return;
+      onUpdateWidgetConfig(widget.id, { ...widget.config, ...updates });
+    },
+    [canUpdateWidget, onUpdateWidgetConfig, widget.id, widget.config]
+  );
+
+  const handleOpenSettings = useMemo(
+    () => (!isCanvasLocked && canUpdateWidget ? () => onOpenWidgetSettings(widget) : undefined),
+    [isCanvasLocked, canUpdateWidget, onOpenWidgetSettings, widget]
+  );
+
+  const imageWidgetConfig = useMemo(
+    () => ({ ...(widget.config || {}), transparentBg: isFramelessWidget }),
+    [widget.config, isFramelessWidget]
+  );
+
+  return (
+    <TileErrorBoundary label={widget.title} resetKey={widget.updated_at}>
+      {widget.type === 'weather' ? (
+        <WeatherWidget
+          locationName={widget.config?.locationName}
+          latitude={widget.config?.latitude}
+          longitude={widget.config?.longitude}
+          unit={widget.config?.unit || 'F'}
+          isLight={isWidgetLight}
+          transparentBg={isFramelessWidget}
+        />
+      ) : widget.type === 'clock' ? (
+        <ClockWidget
+          title={widget.title}
+          clockFace={widget.config?.clockFace || 'digital'}
+          showSeconds={widget.config?.showSeconds ?? true}
+          timezone={widget.config?.timezone}
+          locationName={widget.config?.locationName}
+          isLight={isWidgetLight}
+          transparentBg={isFramelessWidget}
+        />
+      ) : widget.type === 'world_clock' ? (
+        <WorldClockWidget
+          title={widget.title}
+          cities={widget.config?.cities}
+          clockFace={widget.config?.clockFace || 'digital'}
+          showSeconds={widget.config?.showSeconds ?? true}
+          isLight={isWidgetLight}
+          transparentBg={isFramelessWidget}
+          onUpdateConfig={handleConfigUpdate}
+        />
+      ) : widget.type === 'clock_weather' ? (
+        <ClockWeatherWidget
+          locationName={widget.config?.locationName}
+          latitude={widget.config?.latitude}
+          longitude={widget.config?.longitude}
+          unit={widget.config?.unit || 'F'}
+          clockFace={widget.config?.clockFace || widget.config?.face || 'digital'}
+          showSeconds={widget.config?.showSeconds ?? true}
+          timezone={widget.config?.timezone}
+          clockAlign={widget.config?.clockAlign || 'center'}
+          isLight={isWidgetLight}
+          transparentBg={isFramelessWidget}
+        />
+      ) : widget.type === 'countdown' ? (
+        <CountdownWidget
+          eventName={widget.title || widget.config?.eventName}
+          targetDate={widget.config?.targetDate}
+          isLight={isWidgetLight}
+          transparentBg={isFramelessWidget}
+        />
+      ) : widget.type === 'quotes' ? (
+        <QuotesWidget
+          customQuotes={widget.config?.customQuotes}
+          quoteMode={widget.config?.quoteMode}
+          rotationIntervalSec={widget.config?.rotationIntervalSec ?? widget.config?.quoteIntervalSec}
+          isLight={isWidgetLight}
+          transparentBg={isFramelessWidget}
+        />
+      ) : widget.type === 'calendar' ? (
+        <CalendarWidget
+          sources={widget.config?.sources}
+          defaultView={widget.config?.defaultView}
+          multiDayLayout={widget.config?.multiDayLayout}
+          isLight={isWidgetLight}
+          onUpdateConfig={handleConfigUpdate}
+        />
+      ) : widget.type === 'rss' ? (
+        <RssWidget
+          feedUrl={widget.config?.feedUrl}
+          textSize={widget.config?.textSize}
+          showSnippet={widget.config?.showSnippet !== false}
+          isLight={isWidgetLight}
+          onUpdateConfig={handleConfigUpdate}
+        />
+      ) : widget.type === 'photo_frame' ? (
+        <PhotoFrameWidget
+          widgetId={widget.id}
+          useCommonSource={widget.config?.useCommonSource}
+          initialStyle={widget.config?.displayStyle || 'ken_burns'}
+          rotationIntervalSec={widget.config?.rotationIntervalSec || 15}
+          customPhotos={widget.config?.customPhotos}
+          sourceType={widget.config?.sourceType}
+          curatedCategoryId={widget.config?.curatedCategoryId}
+          initialSourceLabel={widget.config?.sourceLabel}
+          initialPolaroidCount={widget.config?.polaroidCount || 12}
+          initialPolaroidSizeMode={widget.config?.polaroidSizeMode || 'mixed'}
+          photoOrder={widget.config?.photoOrder || 'random'}
+          showCaptions={widget.config?.showCaptions ?? true}
+          showDateTaken={widget.config?.showDateTaken}
+          mosaicKenBurns={widget.config?.mosaicKenBurns ?? false}
+          transparentBg={isFramelessWidget}
+          onUpdateConfig={handleConfigUpdate}
+        />
+      ) : widget.type === 'embed' ? (
+        <MediaEmbedWidget
+          preset={widget.config?.preset || 'lofi'}
+          customUrl={widget.config?.customUrl}
+          muted={widget.config?.muted ?? true}
+          latitude={widget.config?.latitude}
+          longitude={widget.config?.longitude}
+          onUpdateConfig={handleConfigUpdate}
+        />
+      ) : widget.type === 'textbox' ? (
+        <TextBoxWidget
+          content={widget.config?.content}
+          fontSize={widget.config?.fontSize}
+          fontWeight={widget.config?.fontWeight}
+          textAlign={widget.config?.textAlign}
+          fontFamily={widget.config?.fontFamily}
+          textColor={widget.config?.textColor}
+          textShadow={widget.config?.textShadow}
+          textTransform={widget.config?.textTransform}
+          letterSpacing={widget.config?.letterSpacing}
+          bgStyle={widget.config?.bgStyle}
+          transparentBg={isFramelessWidget}
+          isLight={isWidgetLight}
+          onUpdateConfig={handleConfigUpdate}
+        />
+      ) : widget.type === 'image' ? (
+        <ImageWidget
+          id={widget.id}
+          config={imageWidgetConfig}
+          onUpdateConfig={handleConfigUpdate}
+        />
+      ) : widget.type === 'sticky_notes' && stickyActions ? (
+        <StickyNotesWidget
+          notes={stickyNotes || []}
+          onAddNote={stickyActions.onAddNote}
+          onUpdateNote={stickyActions.onUpdateNote}
+          onDeleteNote={stickyActions.onDeleteNote}
+          onPermanentlyDeleteNote={stickyActions.onPermanentlyDeleteNote}
+          onPermanentlyDeleteNotes={stickyActions.onPermanentlyDeleteNotes}
+          onPinNoteToCanvas={stickyActions.onPinNoteToCanvas}
+          onUnpinNoteFromCanvas={stickyActions.onUnpinNoteFromCanvas}
+          isLight={isWidgetLight}
+        />
+      ) : widget.type === 'chores' ? (
+        isFullScreen ? (
+          <React.Suspense fallback={null}>
+            <ChoreDashboardView
+              isOpen={true}
+              mode="canvas"
+              title={widget.title}
+              config={widget.config}
+              isLight={isWidgetLight}
+              dockPaddingClass={dockPaddingClass}
+              onOpenWidgetSettings={handleOpenSettings}
+            />
+          </React.Suspense>
+        ) : (
+          <ChoreWidget
+            title={widget.title}
+            config={widget.config}
+            isLight={isWidgetLight}
+            variant="tile"
+            onUpdateConfig={handleConfigUpdate}
+          />
+        )
+      ) : widget.type === 'meals' ? (
+        <MealPlannerWidget
+          title={widget.title}
+          config={widget.config}
+          isLight={isWidgetLight}
+          onUpdateConfig={handleConfigUpdate}
+        />
+      ) : null}
+    </TileErrorBoundary>
+  );
+});
+
 export const Corkboard: React.FC<CorkboardProps> = ({
   notes,
   widgets = [],
@@ -165,11 +395,37 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
   const notesRef = useRef(notes);
   const widgetsRef = useRef(widgets);
+  const actionsRef = useRef({
+    onUpdateWidget,
+    onAddNote,
+    onUpdateNote,
+    onDeleteNote,
+    onPermanentlyDeleteNote,
+    onPermanentlyDeleteNotes,
+  });
 
   useEffect(() => {
     notesRef.current = notes;
     widgetsRef.current = widgets;
   }, [notes, widgets]);
+
+  useEffect(() => {
+    actionsRef.current = {
+      onUpdateWidget,
+      onAddNote,
+      onUpdateNote,
+      onDeleteNote,
+      onPermanentlyDeleteNote,
+      onPermanentlyDeleteNotes,
+    };
+  }, [
+    onUpdateWidget,
+    onAddNote,
+    onUpdateNote,
+    onDeleteNote,
+    onPermanentlyDeleteNote,
+    onPermanentlyDeleteNotes,
+  ]);
 
   const [editingWidget, setEditingWidget] = useState<DashboardWidget | null>(null);
   const [confirmDeleteAllTrash, setConfirmDeleteAllTrash] = useState(false);
@@ -563,9 +819,38 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     }, 2500);
   };
 
-  const handleUnpinNoteFromCanvas = (noteId: string) => {
-    onUpdateNote(noteId, { isPinnedToCanvas: false });
-  };
+  const handleUnpinNoteFromCanvas = useCallback((noteId: string) => {
+    actionsRef.current.onUpdateNote(noteId, { isPinnedToCanvas: false });
+  }, []);
+
+  const handlePinNoteRef = useRef(handlePinNoteToCanvas);
+  useEffect(() => {
+    handlePinNoteRef.current = handlePinNoteToCanvas;
+  });
+
+  const handleUpdateWidgetConfig = useCallback(
+    (widgetId: string, config: Record<string, any>) => {
+      actionsRef.current.onUpdateWidget?.(widgetId, { config });
+    },
+    []
+  );
+
+  const handleOpenWidgetSettings = useCallback((target: DashboardWidget) => {
+    setEditingWidget(target);
+  }, []);
+
+  const stickyActions = useMemo<StickyCanvasActions>(
+    () => ({
+      onAddNote: (note) => actionsRef.current.onAddNote(note),
+      onUpdateNote: (noteId, updates) => actionsRef.current.onUpdateNote(noteId, updates),
+      onDeleteNote: (noteId) => actionsRef.current.onDeleteNote(noteId),
+      onPermanentlyDeleteNote: (noteId) => actionsRef.current.onPermanentlyDeleteNote?.(noteId),
+      onPermanentlyDeleteNotes: (noteIds) => actionsRef.current.onPermanentlyDeleteNotes?.(noteIds),
+      onPinNoteToCanvas: (noteId) => handlePinNoteRef.current(noteId),
+      onUnpinNoteFromCanvas: (noteId) => handleUnpinNoteFromCanvas(noteId),
+    }),
+    [handleUnpinNoteFromCanvas]
+  );
 
   const openNoteEditorForExisting = (note: StickyNoteItem) => {
     if (isCanvasLocked) return;
@@ -1309,16 +1594,24 @@ export const Corkboard: React.FC<CorkboardProps> = ({
           <div
             key={widget.id}
             data-canvas-card="true"
-            onPointerEnter={() => setHoveredCardId(widget.id)}
-            onPointerLeave={() => setHoveredCardId((prev) => (prev === widget.id ? null : prev))}
-            onPointerDown={(e) => !isFullScreen && !isCanvasLocked && handlePointerDown(e, widget.id, 'widget', pos)}
-            onPointerDownCapture={() => {
+            onPointerEnter={(e) => {
+              if (!isPortalEvent(e)) setHoveredCardId(widget.id);
+            }}
+            onPointerLeave={(e) => {
+              if (!isPortalEvent(e)) setHoveredCardId((prev) => (prev === widget.id ? null : prev));
+            }}
+            onPointerDown={(e) => {
+              if (isPortalEvent(e)) return;
+              if (!isFullScreen && !isCanvasLocked) handlePointerDown(e, widget.id, 'widget', pos);
+            }}
+            onPointerDownCapture={(e) => {
+              if (isPortalEvent(e)) return;
               if (!isFullScreen && !isCanvasLocked && !pos?.isBackground && (pos?.zIndex || 1) < getTopZIndex()) {
                 handleBringToFront(widget.id, 'widget');
               }
             }}
             onContextMenu={(e) => {
-              if (isCanvasLocked) return;
+              if (isPortalEvent(e) || isCanvasLocked) return;
               e.preventDefault();
               e.stopPropagation();
               setContextMenu({
@@ -1365,6 +1658,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                     WebkitTouchCallout: 'none',
                     userSelect: 'none',
                     WebkitUserSelect: 'none',
+                    willChange: isActiveManipulating ? 'left, top, width, height, transform' : 'auto',
                     transition: isActiveManipulating
                       ? 'none'
                       : 'left 0.3s cubic-bezier(0.22, 1, 0.36, 1), top 0.3s cubic-bezier(0.22, 1, 0.36, 1), width 0.3s cubic-bezier(0.22, 1, 0.36, 1), height 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.25s ease-out, box-shadow 0.2s',
@@ -1627,231 +1921,19 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   : 'overflow-hidden'
               } rounded-[inherit]`}
             >
-              <TileErrorBoundary label={widget.title} resetKey={widget.updated_at}>
-              {widget.type === 'weather' ? (
-                <WeatherWidget
-                  locationName={widget.config?.locationName}
-                  latitude={widget.config?.latitude}
-                  longitude={widget.config?.longitude}
-                  unit={widget.config?.unit || 'F'}
-                  isLight={isWidgetLight}
-                  transparentBg={isFramelessWidget}
-                />
-              ) : widget.type === 'clock' ? (
-                <ClockWidget
-                  title={widget.title}
-                  clockFace={widget.config?.clockFace || 'digital'}
-                  showSeconds={widget.config?.showSeconds ?? true}
-                  timezone={widget.config?.timezone}
-                  locationName={widget.config?.locationName}
-                  isLight={isWidgetLight}
-                  transparentBg={isFramelessWidget}
-                />
-              ) : widget.type === 'world_clock' ? (
-                <WorldClockWidget
-                  title={widget.title}
-                  cities={widget.config?.cities}
-                  clockFace={widget.config?.clockFace || 'digital'}
-                  showSeconds={widget.config?.showSeconds ?? true}
-                  isLight={isWidgetLight}
-                  transparentBg={isFramelessWidget}
-                  onUpdateConfig={(updates) => {
-                    if (onUpdateWidget) {
-                      onUpdateWidget(widget.id, {
-                        config: { ...widget.config, ...updates },
-                      });
-                    }
-                  }}
-                />
-              ) : widget.type === 'clock_weather' ? (
-                <ClockWeatherWidget
-                  locationName={widget.config?.locationName}
-                  latitude={widget.config?.latitude}
-                  longitude={widget.config?.longitude}
-                  unit={widget.config?.unit || 'F'}
-                  clockFace={widget.config?.clockFace || widget.config?.face || 'digital'}
-                  showSeconds={widget.config?.showSeconds ?? true}
-                  timezone={widget.config?.timezone}
-                  clockAlign={widget.config?.clockAlign || 'center'}
-                  isLight={isWidgetLight}
-                  transparentBg={isFramelessWidget}
-                />
-              ) : widget.type === 'countdown' ? (
-                <CountdownWidget
-                  eventName={widget.title || widget.config?.eventName}
-                  targetDate={widget.config?.targetDate}
-                  isLight={isWidgetLight}
-                  transparentBg={isFramelessWidget}
-                />
-              ) : widget.type === 'quotes' ? (
-                <QuotesWidget
-                  customQuotes={widget.config?.customQuotes}
-                  quoteMode={widget.config?.quoteMode}
-                  rotationIntervalSec={widget.config?.rotationIntervalSec ?? widget.config?.quoteIntervalSec}
-                  isLight={isWidgetLight}
-                  transparentBg={isFramelessWidget}
-                />
-              ) : widget.type === 'calendar' ? (
-                <CalendarWidget
-                  sources={widget.config?.sources}
-                  defaultView={widget.config?.defaultView}
-                  multiDayLayout={widget.config?.multiDayLayout}
-                  isLight={isWidgetLight}
-                  onUpdateConfig={(updates) => {
-                    if (onUpdateWidget) {
-                      onUpdateWidget(widget.id, {
-                        config: { ...widget.config, ...updates },
-                      });
-                    }
-                  }}
-                />
-              ) : widget.type === 'rss' ? (
-                <RssWidget
-                  feedUrl={widget.config?.feedUrl}
-                  textSize={widget.config?.textSize}
-                  showSnippet={widget.config?.showSnippet !== false}
-                  isLight={isWidgetLight}
-                  onUpdateConfig={(updates) => {
-                    if (onUpdateWidget) {
-                      onUpdateWidget(widget.id, {
-                        config: { ...widget.config, ...updates },
-                      });
-                    }
-                  }}
-                />
-              ) : widget.type === 'photo_frame' ? (
-                <PhotoFrameWidget
-                  widgetId={widget.id}
-                  useCommonSource={widget.config?.useCommonSource}
-                  initialStyle={widget.config?.displayStyle || 'ken_burns'}
-                  rotationIntervalSec={widget.config?.rotationIntervalSec || 15}
-                  customPhotos={widget.config?.customPhotos}
-                  sourceType={widget.config?.sourceType}
-                  curatedCategoryId={widget.config?.curatedCategoryId}
-                  initialSourceLabel={widget.config?.sourceLabel}
-                  initialPolaroidCount={widget.config?.polaroidCount || 12}
-                  initialPolaroidSizeMode={widget.config?.polaroidSizeMode || 'mixed'}
-                  photoOrder={widget.config?.photoOrder || 'random'}
-                  showCaptions={widget.config?.showCaptions ?? true}
-                  showDateTaken={widget.config?.showDateTaken}
-                  mosaicKenBurns={widget.config?.mosaicKenBurns ?? false}
-                  transparentBg={isFramelessWidget}
-                  onUpdateConfig={(updates) => {
-                    if (onUpdateWidget) {
-                      onUpdateWidget(widget.id, {
-                        config: { ...widget.config, ...updates },
-                      });
-                    }
-                  }}
-                />
-              ) : widget.type === 'embed' ? (
-                <MediaEmbedWidget
-                  preset={widget.config?.preset || 'lofi'}
-                  customUrl={widget.config?.customUrl}
-                  muted={widget.config?.muted ?? true}
-                  latitude={widget.config?.latitude}
-                  longitude={widget.config?.longitude}
-                  onUpdateConfig={(updates) => {
-                    if (onUpdateWidget) {
-                      onUpdateWidget(widget.id, {
-                        config: { ...widget.config, ...updates },
-                      });
-                    }
-                  }}
-                />
-              ) : widget.type === 'textbox' ? (
-                <TextBoxWidget
-                  content={widget.config?.content}
-                  fontSize={widget.config?.fontSize}
-                  fontWeight={widget.config?.fontWeight}
-                  textAlign={widget.config?.textAlign}
-                  fontFamily={widget.config?.fontFamily}
-                  textColor={widget.config?.textColor}
-                  textShadow={widget.config?.textShadow}
-                  textTransform={widget.config?.textTransform}
-                  letterSpacing={widget.config?.letterSpacing}
-                  bgStyle={widget.config?.bgStyle}
-                  transparentBg={isFramelessWidget}
-                  isLight={isWidgetLight}
-                  onUpdateConfig={(updates) => {
-                    if (onUpdateWidget) {
-                      onUpdateWidget(widget.id, {
-                        config: { ...widget.config, ...updates },
-                      });
-                    }
-                  }}
-                />
-              ) : widget.type === 'image' ? (
-                <ImageWidget
-                  id={widget.id}
-                  config={{ ...(widget.config || {}), transparentBg: isFramelessWidget }}
-                  onUpdateConfig={(updates) => {
-                    if (onUpdateWidget) {
-                      onUpdateWidget(widget.id, {
-                        config: { ...widget.config, ...updates },
-                      });
-                    }
-                  }}
-                />
-              ) : widget.type === 'sticky_notes' ? (
-                <StickyNotesWidget
-                  notes={notes}
-                  onAddNote={onAddNote}
-                  onUpdateNote={onUpdateNote}
-                  onDeleteNote={onDeleteNote}
-                  onPermanentlyDeleteNote={onPermanentlyDeleteNote}
-                  onPermanentlyDeleteNotes={onPermanentlyDeleteNotes}
-                  onPinNoteToCanvas={handlePinNoteToCanvas}
-                  onUnpinNoteFromCanvas={handleUnpinNoteFromCanvas}
-                  isLight={isWidgetLight}
-                />
-              ) : widget.type === 'chores' ? (
-                isFullScreen ? (
-                  <React.Suspense fallback={null}>
-                    <ChoreDashboardView
-                      isOpen={true}
-                      mode="canvas"
-                      title={widget.title}
-                      config={widget.config}
-                      isLight={isWidgetLight}
-                      dockPaddingClass={dockPaddingClass}
-                      onOpenWidgetSettings={
-                        !isCanvasLocked && onUpdateWidget
-                          ? () => setEditingWidget(widget)
-                          : undefined
-                      }
-                    />
-                  </React.Suspense>
-                ) : (
-                  <ChoreWidget
-                    title={widget.title}
-                    config={widget.config}
-                    isLight={isWidgetLight}
-                    variant="tile"
-                    onUpdateConfig={(updates) => {
-                      if (onUpdateWidget) {
-                        onUpdateWidget(widget.id, {
-                          config: { ...widget.config, ...updates },
-                        });
-                      }
-                    }}
-                  />
-                )
-              ) : widget.type === 'meals' ? (
-                <MealPlannerWidget
-                  title={widget.title}
-                  config={widget.config}
-                  isLight={isWidgetLight}
-                  onUpdateConfig={(updates) => {
-                    if (onUpdateWidget) {
-                      onUpdateWidget(widget.id, {
-                        config: { ...widget.config, ...updates },
-                      });
-                    }
-                  }}
-                />
-              ) : null}
-              </TileErrorBoundary>
+              <MemoizedCanvasWidgetBody
+                widget={widget}
+                isWidgetLight={isWidgetLight}
+                isFramelessWidget={isFramelessWidget}
+                isFullScreen={isFullScreen}
+                isCanvasLocked={isCanvasLocked}
+                dockPaddingClass={dockPaddingClass}
+                canUpdateWidget={Boolean(onUpdateWidget)}
+                onUpdateWidgetConfig={handleUpdateWidgetConfig}
+                onOpenWidgetSettings={handleOpenWidgetSettings}
+                stickyNotes={widget.type === 'sticky_notes' ? notes : undefined}
+                stickyActions={widget.type === 'sticky_notes' ? stickyActions : undefined}
+              />
             </div>
           </div>
         );
@@ -1891,16 +1973,24 @@ export const Corkboard: React.FC<CorkboardProps> = ({
           <div
             key={note.id}
             data-canvas-card="true"
-            onPointerEnter={() => setHoveredCardId(note.id)}
-            onPointerLeave={() => setHoveredCardId((prev) => (prev === note.id ? null : prev))}
-            onPointerDown={(e) => !isCanvasLocked && handlePointerDown(e, note.id, 'note', pos)}
-            onPointerDownCapture={() => {
+            onPointerEnter={(e) => {
+              if (!isPortalEvent(e)) setHoveredCardId(note.id);
+            }}
+            onPointerLeave={(e) => {
+              if (!isPortalEvent(e)) setHoveredCardId((prev) => (prev === note.id ? null : prev));
+            }}
+            onPointerDown={(e) => {
+              if (isPortalEvent(e)) return;
+              if (!isCanvasLocked) handlePointerDown(e, note.id, 'note', pos);
+            }}
+            onPointerDownCapture={(e) => {
+              if (isPortalEvent(e)) return;
               if (!isCanvasLocked && !pos?.isBackground && (pos?.zIndex || 1) < getTopZIndex()) {
                 handleBringToFront(note.id, 'note');
               }
             }}
             onContextMenu={(e) => {
-              if (isCanvasLocked) return;
+              if (isPortalEvent(e) || isCanvasLocked) return;
               e.preventDefault();
               e.stopPropagation();
               setContextMenu({
@@ -1916,6 +2006,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             }}
             onPointerMove={handlePointerMove}
             onPointerUp={(e) => {
+              if (isPortalEvent(e)) return;
               handlePointerUp(e);
               if (!isDraggingRef.current) {
                 const now = Date.now();
@@ -1949,6 +2040,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               WebkitTouchCallout: 'none',
               userSelect: 'none',
               WebkitUserSelect: 'none',
+              willChange: isActiveManipulating ? 'left, top, width, height, transform' : 'auto',
               transition: isActiveManipulating
                 ? 'none'
                 : 'left 0.3s cubic-bezier(0.22, 1, 0.36, 1), top 0.3s cubic-bezier(0.22, 1, 0.36, 1), width 0.3s cubic-bezier(0.22, 1, 0.36, 1), height 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.25s ease-out, box-shadow 0.2s',

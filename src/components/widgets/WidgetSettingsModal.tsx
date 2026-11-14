@@ -41,7 +41,7 @@ import {
   isTargetRescannable,
 } from '../../utils/photoSyncPolicy';
 import { isWidgetStickerMode } from '../../utils/widgetStickerMode';
-import type { DashboardWidget, WidgetThemeMode } from '../../types/dashboard';
+import type { DashboardWidget, ImageWidgetConfig, WidgetThemeMode } from '../../types/dashboard';
 import { type CalendarSource, normalizeCalendarUrl, testCalendarFeed } from '../../services/feeds';
 import { CalendarUrlGuideModal } from '../calendar/CalendarUrlGuideModal';
 import type { QuoteItem } from '../../services/quotes';
@@ -49,7 +49,9 @@ import { EMBED_PRESETS, type EmbedPresetId } from './MediaEmbedWidget';
 import { DEFAULT_WORLD_CITIES, type WorldClockCity, getZoneOffsetMinutes } from './WorldClockWidget';
 import type { TextBoxConfig } from './TextBoxWidget';
 import { CURATED_RSS_FEEDS, RSS_FEED_CATEGORIES, type RssFeedCategory } from '../../data/curatedFeeds';
-import { MediaSearchModal } from './MediaSearchModal';
+import { MediaSearchModal, type MediaSelectionMeta } from './MediaSearchModal';
+import { resolveOptimizedImageMedia } from '../../utils/mediaOptimization';
+import { useVaultMediaUrl } from '../../utils/localMediaVault';
 import { Sparkles, Utensils } from 'lucide-react';
 import { useChoreStore } from '../../store/choreStore';
 import { useMealStore } from '../../stores/useMealStore';
@@ -195,11 +197,19 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
 
   // Single Image / GIF states
   const [imageUrl, setImageUrl] = useState('');
+  const [imageMp4Url, setImageMp4Url] = useState<string | undefined>(undefined);
+  const [imageMediaSource, setImageMediaSource] = useState<ImageWidgetConfig['mediaSource'] | undefined>(undefined);
   const [imageFit, setImageFit] = useState<'contain' | 'cover' | 'fill'>('contain');
   const [imageCaption, setImageCaption] = useState('');
   const [imageTransparentBg, setImageTransparentBg] = useState(true);
   const [imageLinkUrl, setImageLinkUrl] = useState('');
   const [isMediaSearchOpen, setIsMediaSearchOpen] = useState(false);
+  const { resolvedUrl: resolvedImagePreviewUrl } = useVaultMediaUrl(imageUrl);
+  const previewMedia = resolveOptimizedImageMedia({
+    url: resolvedImagePreviewUrl,
+    mp4Url: imageMp4Url,
+    mediaSource: imageMediaSource,
+  });
 
   // Chores widget states
   const choreProfiles = useChoreStore((s) => s.snapshot.profiles);
@@ -350,6 +360,8 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       );
     } else if (widget.type === 'image') {
       setImageUrl(widget.config?.url || '');
+      setImageMp4Url(widget.config?.mp4Url || undefined);
+      setImageMediaSource(widget.config?.mediaSource || undefined);
       setImageFit(widget.config?.fit || 'contain');
       setImageCaption(widget.config?.caption || '');
       setImageTransparentBg(resolvedStickerMode);
@@ -641,6 +653,8 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.transparentBg = textTransparentBg;
     } else if (widget.type === 'image') {
       configUpdates.url = imageUrl.trim();
+      configUpdates.mp4Url = imageMp4Url;
+      configUpdates.mediaSource = imageMediaSource;
       configUpdates.fit = imageFit;
       configUpdates.caption = imageCaption.trim();
       configUpdates.transparentBg = imageTransparentBg;
@@ -2950,9 +2964,19 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                         : 'bg-black/50'
                     }`}
                   >
-                    {imageUrl ? (
+                    {previewMedia.videoUrl ? (
+                      <video
+                        src={previewMedia.videoUrl}
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        className="w-full h-full"
+                        style={{ objectFit: imageFit }}
+                      />
+                    ) : previewMedia.optimizedImgUrl || previewMedia.fallbackImgUrl ? (
                       <img
-                        src={imageUrl}
+                        src={previewMedia.optimizedImgUrl || previewMedia.fallbackImgUrl}
                         alt="Preview"
                         className="w-full h-full"
                         style={{ objectFit: imageFit }}
@@ -2986,7 +3010,11 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                 <input
                   type="url"
                   value={imageUrl}
-                  onChange={(e) => setImageUrl(e.target.value)}
+                  onChange={(e) => {
+                    setImageUrl(e.target.value);
+                    setImageMp4Url(undefined);
+                    setImageMediaSource('custom');
+                  }}
                   placeholder="https://.../animation.gif"
                   className="w-full rounded-xl bg-gray-950 border border-gray-800 p-2.5 text-xs text-white focus:outline-none focus:border-blue-500 font-mono"
                 />
@@ -3465,8 +3493,10 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       <MediaSearchModal
         isOpen={isMediaSearchOpen}
         onClose={() => setIsMediaSearchOpen(false)}
-        onSelect={(selectedUrl, selectedTitle) => {
+        onSelect={(selectedUrl, selectedTitle, meta?: MediaSelectionMeta) => {
           setImageUrl(selectedUrl);
+          setImageMp4Url(meta?.mp4Url);
+          setImageMediaSource(meta?.mediaSource);
           if (selectedTitle && !imageCaption) {
             setImageCaption(selectedTitle);
           }

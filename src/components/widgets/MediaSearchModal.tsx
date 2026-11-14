@@ -15,11 +15,18 @@ import {
   searchWikimediaImages,
   type MediaSearchResult,
 } from '../../services/mediaSearch';
+import type { ImageWidgetConfig } from '../../types/dashboard';
+import { storeUploadedMediaInVault } from '../../utils/localMediaVault';
+
+export interface MediaSelectionMeta {
+  mp4Url?: string;
+  mediaSource?: ImageWidgetConfig['mediaSource'];
+}
 
 interface MediaSearchModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelect: (url: string, title?: string) => void;
+  onSelect: (url: string, title?: string, meta?: MediaSelectionMeta) => void;
   initialUrl?: string;
 }
 
@@ -36,8 +43,17 @@ export const MediaSearchModal: React.FC<MediaSearchModalProps> = ({
   const [results, setResults] = useState<MediaSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [customUrl, setCustomUrl] = useState(initialUrl);
+  const [uploadError, setUploadError] = useState('');
+  const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setCustomUrl(initialUrl);
+      setUploadError('');
+    }
+  }, [isOpen, initialUrl]);
 
   // Close modal on Escape key press
   useEffect(() => {
@@ -49,59 +65,69 @@ export const MediaSearchModal: React.FC<MediaSearchModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  // Load results when tab or query changes
+  // Load results when tab or query changes (debounced + abortable so grid stays rock-steady)
   useEffect(() => {
     if (!isOpen) return;
     if (activeTab === 'custom') return;
 
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    const controller = new AbortController();
 
     debounceTimerRef.current = setTimeout(async () => {
       setLoading(true);
       try {
+        let data: MediaSearchResult[] = [];
         if (activeTab === 'gifs') {
-          const data = await searchGiphy(query, 'gifs', 24);
-          setResults(data);
+          data = await searchGiphy(query, 'gifs', 24, controller.signal);
         } else if (activeTab === 'stickers') {
-          const data = await searchGiphy(query, 'stickers', 24);
-          setResults(data);
+          data = await searchGiphy(query, 'stickers', 24, controller.signal);
         } else if (activeTab === 'images') {
-          const data = await searchWikimediaImages(query || 'landscape', 24);
+          data = await searchWikimediaImages(query || 'landscape', 24, controller.signal);
+        }
+        if (!controller.signal.aborted) {
           setResults(data);
         }
       } catch (err) {
-        console.error('Error fetching media:', err);
+        if (!controller.signal.aborted) {
+          console.error('Error fetching media:', err);
+        }
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       }
     }, query ? 350 : 0);
 
     return () => {
+      controller.abort();
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     };
   }, [isOpen, activeTab, query]);
 
   if (!isOpen) return null;
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      if (dataUrl) {
-        onSelect(dataUrl, file.name);
-        onClose();
-      }
-    };
-    reader.readAsDataURL(file);
+    setUploadError('');
+    setUploading(true);
+    try {
+      const { vaultUrl, title } = await storeUploadedMediaInVault(file);
+      onSelect(vaultUrl, title, { mp4Url: undefined, mediaSource: 'upload' });
+      onClose();
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Failed to process uploaded file.');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleCustomSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customUrl.trim()) return;
-    onSelect(customUrl.trim());
+    onSelect(customUrl.trim(), undefined, { mp4Url: undefined, mediaSource: 'custom' });
     onClose();
   };
 
@@ -109,14 +135,21 @@ export const MediaSearchModal: React.FC<MediaSearchModalProps> = ({
     <div
       role="dialog"
       aria-modal="true"
+      onPointerDown={(e) => e.stopPropagation()}
+      onPointerMove={(e) => e.stopPropagation()}
+      onPointerUp={(e) => e.stopPropagation()}
+      onPointerEnter={(e) => e.stopPropagation()}
+      onPointerLeave={(e) => e.stopPropagation()}
+      onContextMenu={(e) => e.stopPropagation()}
       onClick={(e) => {
+        e.stopPropagation();
         if (e.target === e.currentTarget) onClose();
       }}
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 select-none animate-in fade-in duration-150"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
+        className="w-full max-w-2xl h-[min(680px,85vh)] rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl flex flex-col overflow-hidden"
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-800 p-4 bg-gray-950/80 shrink-0">
@@ -154,6 +187,10 @@ export const MediaSearchModal: React.FC<MediaSearchModalProps> = ({
               key={tab.id}
               type="button"
               onClick={() => {
+                if (tab.id !== activeTab) {
+                  setResults([]);
+                  setUploadError('');
+                }
                 setActiveTab(tab.id);
                 setQuery('');
               }}
@@ -186,17 +223,22 @@ export const MediaSearchModal: React.FC<MediaSearchModalProps> = ({
                     ? 'Search photos (e.g., mountains, sunset, architecture)...'
                     : 'Search animated GIFs on GIPHY (e.g., cheers, celebration, dance)...'
                 }
-                className="w-full pl-9 pr-8 py-2 rounded-xl bg-gray-950 border border-gray-800 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+                className="w-full pl-9 pr-14 py-2 rounded-xl bg-gray-950 border border-gray-800 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
               />
-              {query && (
-                <button
-                  type="button"
-                  onClick={() => setQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 p-0.5"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
+              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                {loading && results.length > 0 && (
+                  <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />
+                )}
+                {query && (
+                  <button
+                    type="button"
+                    onClick={() => setQuery('')}
+                    className="text-gray-500 hover:text-gray-300 p-0.5 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
             {activeTab === 'gifs' || activeTab === 'stickers' ? (
               <span className="text-[10px] font-black tracking-widest text-gray-500 uppercase px-1.5 shrink-0">
@@ -245,7 +287,7 @@ export const MediaSearchModal: React.FC<MediaSearchModalProps> = ({
                 </span>
               </div>
 
-              <div className="text-center">
+              <div className="text-center space-y-2">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -255,25 +297,33 @@ export const MediaSearchModal: React.FC<MediaSearchModalProps> = ({
                 />
                 <button
                   type="button"
+                  disabled={uploading}
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-full py-6 px-4 rounded-2xl border-2 border-dashed border-gray-700/80 hover:border-blue-500/60 bg-gray-950/50 hover:bg-blue-500/5 text-gray-400 hover:text-blue-300 flex flex-col items-center justify-center gap-2 transition-all cursor-pointer group"
+                  className="w-full py-6 px-4 rounded-2xl border-2 border-dashed border-gray-700/80 hover:border-blue-500/60 bg-gray-950/50 hover:bg-blue-500/5 disabled:opacity-60 text-gray-400 hover:text-blue-300 flex flex-col items-center justify-center gap-2 transition-all cursor-pointer group"
                 >
                   <div className="w-10 h-10 rounded-full bg-gray-800/80 group-hover:bg-blue-500/20 flex items-center justify-center transition-colors">
-                    <Upload className="w-5 h-5 text-gray-400 group-hover:text-blue-400" />
+                    {uploading ? (
+                      <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
+                    ) : (
+                      <Upload className="w-5 h-5 text-gray-400 group-hover:text-blue-400" />
+                    )}
                   </div>
                   <div>
                     <span className="text-xs font-semibold block text-white">
-                      Upload from Computer / Device
+                      {uploading ? 'Optimizing & saving locally...' : 'Upload from Computer / Device'}
                     </span>
                     <span className="text-[10px] text-gray-500">
-                      PNG, JPG, GIF, WebP up to 10MB
+                      PNG, JPG, GIF, WebP up to 10MB (saved locally on this device)
                     </span>
                   </div>
                 </button>
+                {uploadError && (
+                  <p className="text-[11px] text-red-400 font-medium">{uploadError}</p>
+                )}
               </div>
             </div>
-          ) : loading ? (
-            /* Loading Spinner */
+          ) : loading && results.length === 0 ? (
+            /* Initial Loading Spinner */
             <div className="flex flex-col items-center justify-center h-64 gap-3 text-gray-400">
               <Loader2 className="w-7 h-7 text-blue-400 animate-spin" />
               <span className="text-xs font-medium">Searching {activeTab === 'images' ? 'images' : 'GIPHY'}...</span>
@@ -287,13 +337,20 @@ export const MediaSearchModal: React.FC<MediaSearchModalProps> = ({
             </div>
           ) : (
             /* Masonry-Style Responsive Grid */
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
+            <div
+              className={`grid grid-cols-3 sm:grid-cols-4 gap-2.5 transition-opacity ${
+                loading ? 'opacity-55 pointer-events-none' : 'opacity-100'
+              }`}
+            >
               {results.map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => {
-                    onSelect(item.url, item.title);
+                    onSelect(item.url, item.title, {
+                      mp4Url: item.mp4Url,
+                      mediaSource: item.source,
+                    });
                     onClose();
                   }}
                   title={item.title}
@@ -307,6 +364,7 @@ export const MediaSearchModal: React.FC<MediaSearchModalProps> = ({
                     src={item.previewUrl}
                     alt={item.title}
                     loading="lazy"
+                    decoding="async"
                     className={`w-full h-full ${
                       activeTab === 'stickers' ? 'object-contain p-2' : 'object-cover'
                     }`}

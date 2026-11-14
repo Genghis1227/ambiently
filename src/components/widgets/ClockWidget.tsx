@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useTimePrefs } from '../../utils/timePrefs';
+import { useSharedClock } from '../../utils/sharedClock';
 import { getFormattedTimeForZone } from './WorldClockWidget';
 
 interface ClockWidgetProps {
@@ -22,33 +23,7 @@ export const ClockWidget: React.FC<ClockWidgetProps> = ({
   transparentBg = false,
 }) => {
   const { hour12 } = useTimePrefs();
-  const [time, setTime] = useState(new Date());
-
-  useEffect(() => {
-    let timer: ReturnType<typeof setInterval> | null = null;
-
-    const startTimer = () => {
-      if (timer) clearInterval(timer);
-      setTime(new Date());
-      timer = setInterval(() => {
-        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-        setTime(new Date());
-      }, showSeconds ? 1000 : 10000);
-    };
-
-    const handleVisibility = () => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        startTimer();
-      }
-    };
-
-    startTimer();
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => {
-      if (timer) clearInterval(timer);
-      document.removeEventListener('visibilitychange', handleVisibility);
-    };
-  }, [showSeconds]);
+  const time = useSharedClock(showSeconds ? 'second' : '10s');
 
   const zt = getFormattedTimeForZone(time, timezone, hour12);
 

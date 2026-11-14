@@ -11,6 +11,17 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.6.12",
+    date: "November 14, 2026",
+    title: "GIF MP4/WebP Caching, Search Bounce Fix & Canvas Performance Engine",
+    highlights: [
+      "Eliminated GIF Search & Canvas Bounce: Fixed MediaSearchModal dialog height, kept search results mounted during debounced queries with AbortController cancellation, and isolated portal pointer events so clicking inside modals never bounces underlying canvas tiles.",
+      "GPU-Accelerated MP4 & Animated WebP Playback: Opaque GIPHY GIFs now stream as hardware-decoded looping MP4 videos (~80–90% smaller) while transparent GIPHY Stickers preserve crisp alpha edges via animated WebP—without per-frame CSS drop-shadow blur overhead.",
+      "Bounded Offline Media Cache & Device-Local Vault Uploads: Added a 120-entry Workbox CacheFirst media cache plus CORS Blob warming for GIPHY and Wikimedia assets, and moved uploaded images/GIFs into IndexedDB binary Blobs (vault://local-media:*) with JSON backup round-tripping.",
+      "Canvas-Wide CPU/GPU Optimizations: Added Night Mode and hidden-tab animation suspension, a single wall-clock-aligned shared ticker across all clock and countdown tiles, and memoized Corkboard widget subtrees during drag/resize/rotate gestures.",
+    ],
+  },
+  {
     version: "v0.6.11",
     date: "November 14, 2026",
     title: "Per-Tile Photo Source Isolation, Confirmed PIN Setup & Sticker Cloud Restore",

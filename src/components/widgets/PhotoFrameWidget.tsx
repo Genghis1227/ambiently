@@ -15,6 +15,7 @@ import { useDashboardStore } from '../../store/dashboardStore';
 import { getPlexToken } from '../../services/plex';
 import { addPlexToken } from '../../services/plexLinks';
 import { usePlexServerTokens } from '../../hooks/usePlexServerTokens';
+import { useDisplayActivity } from '../../utils/displayActivity';
 
 
 export type PolaroidDensity = 6 | 12 | 18 | 24 | 32;
@@ -318,6 +319,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   const [photoFocals, setPhotoFocals] = useState<Record<string, string>>({});
   const topZIndexRef = useRef(30);
   const prevPhotoOrderRef = useRef(photoOrder);
+  const { shouldPauseAnimations } = useDisplayActivity();
 
   const [hasLocalPlexAuth, setHasLocalPlexAuth] = useState(true);
   const isPlexSource = isUsingCommonSource
@@ -380,9 +382,9 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     });
   }, [photos, polaroidSlots]);
 
-  // Randomly update one polaroid at a time from source photos
+  // Randomly update one polaroid at a time from source photos (paused when off-screen or in Night Mode)
   useEffect(() => {
-    if (style !== 'polaroid' || photos.length === 0) return;
+    if (shouldPauseAnimations || style !== 'polaroid' || photos.length === 0) return;
 
     // Staggered shuffle interval (faster on dense boards to keep them dynamic)
     const baseShuffle = polaroidCount >= 18 ? 2500 : 3800;
@@ -430,7 +432,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     }, shuffleMs);
 
     return () => clearInterval(timer);
-  }, [style, photos, intervalSec, polaroidCount, polaroidSlots]);
+  }, [style, photos, intervalSec, polaroidCount, polaroidSlots, shouldPauseAnimations]);
 
   const handleShufflePolaroid = (slotIdx: number) => {
     setScatteredPolaroids((prev) => {
@@ -542,7 +544,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   }, [photos]);
 
   useEffect(() => {
-    if (style !== 'mosaic' || photos.length <= 1) return;
+    if (shouldPauseAnimations || style !== 'mosaic' || photos.length <= 1) return;
 
     // Staggered quadrant rotation: swap one photo every rotation interval
     const timer = setInterval(() => {
@@ -573,7 +575,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     }, intervalSec * 1000);
 
     return () => clearInterval(timer);
-  }, [style, photos, intervalSec, photoOrder, resetTrigger]);
+  }, [style, photos, intervalSec, photoOrder, resetTrigger, shouldPauseAnimations]);
 
   const handleShuffleMosaicSlot = useCallback((slotIdx: number) => {
     if (photos.length <= 1) return;
@@ -937,7 +939,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
 
   // Slideshow auto-rotation for Ken Burns
   useEffect(() => {
-    if (style !== 'ken_burns' || photos.length <= 1) return;
+    if (shouldPauseAnimations || style !== 'ken_burns' || photos.length <= 1) return;
     const interval = setInterval(() => {
       setCurrentIndex((prev) => {
         kenBurnsHistoryRef.current.push(prev);
@@ -953,18 +955,18 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
       });
     }, intervalSec * 1000);
     return () => clearInterval(interval);
-  }, [photos, intervalSec, photoOrder, resetTrigger, style]);
+  }, [photos, intervalSec, photoOrder, resetTrigger, style, shouldPauseAnimations]);
 
   // Filmstrip continuous reel index & auto-rotation
   const [filmstripIndex, setFilmstripIndex] = useState(() => savedState?.filmstripIndex ?? 0);
 
   useEffect(() => {
-    if (style !== 'filmstrip' || photos.length <= 1) return;
+    if (shouldPauseAnimations || style !== 'filmstrip' || photos.length <= 1) return;
     const interval = setInterval(() => {
       setFilmstripIndex((prev) => prev + 1);
     }, intervalSec * 1000);
     return () => clearInterval(interval);
-  }, [style, photos, intervalSec, resetTrigger]);
+  }, [style, photos, intervalSec, resetTrigger, shouldPauseAnimations]);
 
   // Keyboard arrow buttons navigation while hovered
   useEffect(() => {
