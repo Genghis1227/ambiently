@@ -412,14 +412,41 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
+  const handleSyncCloud = async () => {
+    setSyncLoading(true);
+    await flushPendingCloudPush();
+    const pullRes = await pullFromCloud({ force: true });
+    if (!pullRes.success && pullRes.error && !pullRes.error.includes('No cloud backup')) {
+      setSyncLoading(false);
+      setAuthMessage(pullRes.error);
+      return;
+    }
+    await useDashboardStore.getState().initStore();
+    const st = useDashboardStore.getState();
+    const pushRes = await pushToCloud(st.settings, st.tabs, st.widgets, st.notes);
+    await pullFromCloud({ force: true }).catch(() => {});
+    await useDashboardStore.getState().initStore();
+    setSyncLoading(false);
+    if (pushRes.success) {
+      setAuthMessage('Synced! Latest changes and deletions are up to date across devices.');
+    } else {
+      setAuthMessage(pushRes.error || 'Cloud sync failed');
+    }
+  };
+
   const handlePushCloud = async () => {
     setSyncLoading(true);
     cancelPendingCloudPush();
     const res = await pushToCloud(settings, tabs, widgets, notes, { force: true });
-    setSyncLoading(false);
     if (res.success) {
+      const pullAfter = await pullFromCloud({ force: true }).catch(() => null);
+      if (pullAfter?.success && pullAfter.hasChanges) {
+        await useDashboardStore.getState().initStore();
+      }
+      setSyncLoading(false);
       setAuthMessage('Dashboard successfully backed up to the cloud!');
     } else {
+      setSyncLoading(false);
       setAuthMessage(res.error || 'Cloud sync failed');
     }
   };
@@ -1692,19 +1719,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <p className="text-[11px] text-gray-400">
                     Your widgets, notes, and settings stay synchronized across all your signed-in devices.
                   </p>
-                  <div className="flex items-center gap-2 pt-1">
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <button
+                      onClick={handleSyncCloud}
+                      disabled={syncLoading}
+                      className="flex-1 min-w-[115px] py-1.5 px-3 rounded-lg bg-emerald-600/25 border border-emerald-500/50 hover:bg-emerald-600/35 text-xs font-semibold text-emerald-200 flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${syncLoading ? 'animate-spin' : ''}`} />
+                      Sync Now
+                    </button>
                     <button
                       onClick={handlePushCloud}
                       disabled={syncLoading}
-                      className="flex-1 py-1.5 px-3 rounded-lg bg-cyan-600/30 border border-cyan-500/50 hover:bg-cyan-600/40 text-xs font-semibold text-cyan-200 flex items-center justify-center gap-1.5 cursor-pointer"
+                      className="flex-1 min-w-[130px] py-1.5 px-3 rounded-lg bg-cyan-600/30 border border-cyan-500/50 hover:bg-cyan-600/40 text-xs font-semibold text-cyan-200 flex items-center justify-center gap-1.5 cursor-pointer"
                     >
-                      <RefreshCw className={`w-3.5 h-3.5 ${syncLoading ? 'animate-spin' : ''}`} />
+                      <Cloud className="w-3.5 h-3.5" />
                       Back Up to Cloud
                     </button>
                     <button
                       onClick={handlePullCloud}
                       disabled={syncLoading}
-                      className="flex-1 py-1.5 px-3 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs font-semibold text-gray-300 flex items-center justify-center gap-1.5 cursor-pointer"
+                      className="flex-1 min-w-[130px] py-1.5 px-3 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs font-semibold text-gray-300 flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       Restore from Cloud
                     </button>

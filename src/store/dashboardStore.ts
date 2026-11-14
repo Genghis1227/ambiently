@@ -25,7 +25,16 @@ import { getDefaultWidgetStickerMode, isStickerCapableWidget } from '../utils/wi
 import type { PhotoTargetSyncMeta, PlexPhotoSyncConfig } from '../utils/photoSyncPolicy';
 import type { PhotoItem } from '../services/photos';
 import { getSupabase, getCurrentUser, pushToCloud, syncKanbanRowEventToCloud, KANBAN_ENGINE_CLOUD_ROW_ID } from '../services/supabase';
-import { CANVAS_LOOK_FIELDS, keepLocalNoteFields, keepLocalTabFields, keepLocalWidgetFields } from '../services/syncMerge';
+import {
+  CANVAS_LOOK_FIELDS,
+  buildNoteFreeformPos,
+  keepLocalNoteFields,
+  keepLocalTabFields,
+  keepLocalWidgetFields,
+  nextMonotonicIso,
+  normalizeLoadedNote,
+  shouldApplyRealtimeRow,
+} from '../services/syncMerge';
 import { inferCuratedCategoryId } from '../data/curatedScenery';
 import { applySharedPhotoUpdateToWidgets, sanitizeRestoredPhotoWidget } from '../utils/photoSourceIsolation';
 import { applyPinLockTransition, normalizePinLockSettings } from '../utils/pinValidation';
@@ -186,6 +195,9 @@ interface DashboardState {
   activeTabId: string;
   widgets: DashboardWidget[];
   notes: StickyNoteItem[];
+  deletedNoteTimestamps: Record<string, string>;
+  deletedWidgetTimestamps: Record<string, string>;
+  deletedTabTimestamps: Record<string, string>;
 
   // Ephemeral Kiosk controls
   isCarouselPaused: boolean;
@@ -334,6 +346,16 @@ function getExistingBoxesForTab(
   ];
 }
 
+function resolveTombstoneIso(updatedAt?: string | null, deletedAt?: string | null): string {
+  const updatedMs = updatedAt ? Date.parse(updatedAt) : 0;
+  const deletedMs = deletedAt ? Date.parse(deletedAt) : 0;
+  const safeUpdated = Number.isFinite(updatedMs) ? updatedMs : 0;
+  const safeDeleted = Number.isFinite(deletedMs) ? deletedMs : 0;
+  if (safeUpdated >= safeDeleted && updatedAt) return updatedAt;
+  if (deletedAt) return deletedAt;
+  return updatedAt || new Date().toISOString();
+}
+
 export const useDashboardStore = create<DashboardState>((set, get) => ({
   isInitialized: false,
   settings: DEFAULT_SETTINGS,
@@ -341,6 +363,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   activeTabId: 'tab-corkboard',
   widgets: [],
   notes: [],
+  deletedNoteTimestamps: {},
+  deletedWidgetTimestamps: {},
+  deletedTabTimestamps: {},
 
   isCarouselPaused: false,
   carouselPauseTimer: null,
@@ -380,6 +405,12 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       await db.settings.put(loadedSettings).catch(() => {});
     }
     const allTabs = await db.tabs.toArray();
+    const deletedTabTimestamps: Record<string, string> = {};
+    for (const t of allTabs) {
+      if (t.deleted_at) {
+        deletedTabTimestamps[t.id] = resolveTombstoneIso(t.updated_at, t.deleted_at);
+      }
+    }
     const tabsToRepair: DashboardTab[] = [];
     const loadedTabs = allTabs
       .filter((t: DashboardTab) => !t.deleted_at)
@@ -397,7 +428,20 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     if (tabsToRepair.length > 0) {
       await db.tabs.bulkPut(tabsToRepair).catch(() => {});
     }
-    const rawLoadedWidgets = (await db.widgets.toArray()).filter(
+    const allWidgetsRaw = await db.widgets.toArray();
+    const deletedWidgetTimestamps: Record<string, string> = {};
+    for (const w of allWidgetsRaw) {
+      if (
+        w.deleted_at &&
+        w.id !== CHORE_ENGINE_CLOUD_ROW_ID &&
+        w.id !== HOUSEHOLD_PROFILES_CLOUD_ROW_ID &&
+        w.id !== MEAL_PLANNER_CLOUD_ROW_ID &&
+        w.id !== KANBAN_ENGINE_CLOUD_ROW_ID
+      ) {
+        deletedWidgetTimestamps[w.id] = resolveTombstoneIso(w.updated_at, w.deleted_at);
+      }
+    }
+    const rawLoadedWidgets = allWidgetsRaw.filter(
       (w) =>
         !w.deleted_at &&
         w.id !== CHORE_ENGINE_CLOUD_ROW_ID &&
@@ -414,13 +458,16 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     if (widgetsToRepair.length > 0) {
       await db.widgets.bulkPut(widgetsToRepair).catch(() => {});
     }
-    const loadedNotes = (await db.notes.toArray())
+    const allNotes = await db.notes.toArray();
+    const deletedNoteTimestamps: Record<string, string> = {};
+    for (const n of allNotes) {
+      if (n.deleted_at) {
+        deletedNoteTimestamps[n.id] = resolveTombstoneIso(n.updated_at, n.deleted_at);
+      }
+    }
+    const loadedNotes = allNotes
       .filter((n) => !n.deleted_at)
-      .map((n) =>
-        n.isShoppingList || n.freeformPos?.isShoppingList
-          ? { ...n, isShoppingList: true, isChecklist: true }
-          : n
-      );
+      .map((n) => normalizeLoadedNote(n));
 
     // Initialize Global Household Profile Store, Chore Engine Store, Meal Planner Store & Kanban Store
     await useProfileStore.getState().initProfileStore();
@@ -449,6 +496,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       activeTabId: resolvedActiveTabId,
       widgets: loadedWidgets,
       notes: loadedNotes,
+      deletedNoteTimestamps,
+      deletedWidgetTimestamps,
+      deletedTabTimestamps,
       isUnlocked: !loadedSettings.pinLockEnabled,
     });
   },
@@ -592,9 +642,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const updated = {
       ...tab,
       ...updates,
-      updated_at: new Date().toISOString(),
+      updated_at: nextMonotonicIso(tab.updated_at),
     };
-    await db.tabs.put(updated);
+    await db.tabs.put(updated).catch(() => {});
     set({
       tabs: get().tabs.map((t) => (t.id === tabId ? updated : t)),
     });
@@ -606,13 +656,12 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
 
   setHomeTab: async (tabId) => {
     const currentTabs = get().tabs;
-    const now = new Date().toISOString();
     const updatedTabs = currentTabs.map((t) => ({
       ...t,
       isHome: t.id === tabId,
-      updated_at: now,
+      updated_at: nextMonotonicIso(t.updated_at),
     }));
-    await db.tabs.bulkPut(updatedTabs);
+    await db.tabs.bulkPut(updatedTabs).catch(() => {});
     set({ tabs: updatedTabs });
     await markCanvasLooksChanged(get, set);
     get().saveLocalBackup();
@@ -623,9 +672,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const tab = get().tabs.find((t) => t.id === tabId);
     if (!tab) return;
 
-    const now = new Date().toISOString();
+    const now = nextMonotonicIso(tab.updated_at);
     const updated = { ...tab, deleted_at: now, updated_at: now };
-    await db.tabs.put(updated);
+    await db.tabs.put(updated).catch(() => {});
 
     const remainingTabs = get().tabs.filter((t) => t.id !== tabId);
     let nextActiveTabId = get().activeTabId;
@@ -636,14 +685,18 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     let updatedRemainingTabs = remainingTabs;
     if (tab.isHome && remainingTabs.length > 0) {
       updatedRemainingTabs = remainingTabs.map((t, idx) =>
-        idx === 0 ? { ...t, isHome: true, updated_at: new Date().toISOString() } : t
+        idx === 0 ? { ...t, isHome: true, updated_at: nextMonotonicIso(t.updated_at) } : t
       );
-      await db.tabs.bulkPut(updatedRemainingTabs);
+      await db.tabs.bulkPut(updatedRemainingTabs).catch(() => {});
     }
 
     set({
       tabs: updatedRemainingTabs,
       activeTabId: nextActiveTabId,
+      deletedTabTimestamps: {
+        ...get().deletedTabTimestamps,
+        [tabId]: now,
+      },
     });
     if (tab.isHome) {
       await markCanvasLooksChanged(get, set);
@@ -1075,12 +1128,12 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       mode
     );
 
-    const nowIso = new Date().toISOString();
+    const nowMs = Date.now();
     const updatedWidgets: DashboardWidget[] = [];
     const nextWidgets = state.widgets.map((w) => {
       const nextPos = widgetPositions[w.id];
       if (!nextPos) return w;
-      const updated = { ...w, freeformPos: nextPos, updated_at: nowIso };
+      const updated = { ...w, freeformPos: nextPos, updated_at: nextMonotonicIso(w.updated_at, nowMs) };
       updatedWidgets.push(updated);
       return updated;
     });
@@ -1089,13 +1142,17 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const nextNotes = state.notes.map((n) => {
       const nextPos = notePositions[n.id];
       if (!nextPos) return n;
-      const updated = { ...n, freeformPos: nextPos, updated_at: nowIso };
+      const updated = {
+        ...n,
+        freeformPos: buildNoteFreeformPos(n, nextPos),
+        updated_at: nextMonotonicIso(n.updated_at, nowMs),
+      };
       updatedNotes.push(updated);
       return updated;
     });
 
-    if (updatedWidgets.length > 0) await db.widgets.bulkPut(updatedWidgets);
-    if (updatedNotes.length > 0) await db.notes.bulkPut(updatedNotes);
+    if (updatedWidgets.length > 0) await db.widgets.bulkPut(updatedWidgets).catch(() => {});
+    if (updatedNotes.length > 0) await db.notes.bulkPut(updatedNotes).catch(() => {});
 
     set({
       widgets: nextWidgets,
@@ -1116,12 +1173,12 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const snapshot = get().lastLayoutSnapshot;
     if (!snapshot) return;
 
-    const nowIso = new Date().toISOString();
+    const nowMs = Date.now();
     const updatedWidgets: DashboardWidget[] = [];
     const nextWidgets = get().widgets.map((w) => {
       const prevPos = snapshot.widgetPositions[w.id];
       if (!prevPos) return w;
-      const updated = { ...w, freeformPos: prevPos, updated_at: nowIso };
+      const updated = { ...w, freeformPos: prevPos, updated_at: nextMonotonicIso(w.updated_at, nowMs) };
       updatedWidgets.push(updated);
       return updated;
     });
@@ -1130,13 +1187,17 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const nextNotes = get().notes.map((n) => {
       const prevPos = snapshot.notePositions[n.id];
       if (!prevPos) return n;
-      const updated = { ...n, freeformPos: prevPos, updated_at: nowIso };
+      const updated = {
+        ...n,
+        freeformPos: buildNoteFreeformPos(n, prevPos),
+        updated_at: nextMonotonicIso(n.updated_at, nowMs),
+      };
       updatedNotes.push(updated);
       return updated;
     });
 
-    if (updatedWidgets.length > 0) await db.widgets.bulkPut(updatedWidgets);
-    if (updatedNotes.length > 0) await db.notes.bulkPut(updatedNotes);
+    if (updatedWidgets.length > 0) await db.widgets.bulkPut(updatedWidgets).catch(() => {});
+    if (updatedNotes.length > 0) await db.notes.bulkPut(updatedNotes).catch(() => {});
 
     set({
       widgets: nextWidgets,
@@ -1157,14 +1218,21 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       Math.floor(Math.random() * 5) - 2
     );
 
+    const noteId = newNote.id || `note-${Date.now()}`;
     const isShoppingList = Boolean(newNote.isShoppingList || newNote.freeformPos?.isShoppingList);
-    const resolvedPos = {
-      ...(newNote.freeformPos || defaultPos),
-      ...(isShoppingList ? { isShoppingList: true } : {}),
-    };
+    const resolvedPos = buildNoteFreeformPos(
+      {
+        freeformPos: newNote.freeformPos || defaultPos,
+        isShoppingList,
+        isPinnedToCanvas: newNote.isPinnedToCanvas,
+        textColor: newNote.textColor,
+        deleted_at: newNote.deleted_at,
+      },
+      newNote.freeformPos || defaultPos
+    );
 
     const note: StickyNoteItem = {
-      id: newNote.id || `note-${Date.now()}`,
+      id: noteId,
       tabId: targetTabId,
       widgetId: newNote.widgetId,
       title: newNote.title,
@@ -1173,13 +1241,19 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       isShoppingList,
       checklistItems: newNote.checklistItems,
       bgColor: newNote.bgColor || '#fef08a',
+      ...(newNote.textColor ? { textColor: newNote.textColor } : {}),
       fontSize: newNote.fontSize || 'base',
       expiresAt: newNote.expiresAt,
+      ...(typeof newNote.isPinnedToCanvas === 'boolean'
+        ? { isPinnedToCanvas: newNote.isPinnedToCanvas }
+        : {}),
       freeformPos: resolvedPos,
-      updated_at: new Date().toISOString(),
+      updated_at: nextMonotonicIso(state.deletedNoteTimestamps[noteId]),
     };
-    await db.notes.put(note);
-    set({ notes: [note, ...get().notes] });
+    const nextDeletedNoteTimestamps = { ...get().deletedNoteTimestamps };
+    delete nextDeletedNoteTimestamps[noteId];
+    await db.notes.put(note).catch(() => {});
+    set({ notes: [note, ...get().notes], deletedNoteTimestamps: nextDeletedNoteTimestamps });
     get().saveLocalBackup();
   },
 
@@ -1190,12 +1264,22 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       updates.isShoppingList !== undefined
         ? Boolean(updates.isShoppingList)
         : Boolean(existing.isShoppingList || existing.freeformPos?.isShoppingList);
+    const resolvedPinned =
+      updates.isPinnedToCanvas !== undefined ? updates.isPinnedToCanvas : existing.isPinnedToCanvas;
+    const resolvedTextColor =
+      updates.textColor !== undefined ? updates.textColor : existing.textColor;
     const basePos = updates.freeformPos || existing.freeformPos;
     const updatedPos = basePos
-      ? {
-          ...basePos,
-          isShoppingList,
-        }
+      ? buildNoteFreeformPos(
+          {
+            freeformPos: basePos,
+            isShoppingList,
+            isPinnedToCanvas: resolvedPinned,
+            textColor: resolvedTextColor,
+            deleted_at: updates.deleted_at ?? existing.deleted_at,
+          },
+          basePos
+        )
       : undefined;
     const updated: StickyNoteItem = {
       ...existing,
@@ -1203,48 +1287,72 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       isShoppingList,
       ...(isShoppingList ? { isChecklist: true } : {}),
       ...(updatedPos ? { freeformPos: updatedPos } : {}),
-      updated_at: new Date().toISOString(),
+      updated_at: nextMonotonicIso(existing.updated_at),
     };
-    await db.notes.put(updated);
+    const nextDeletedNoteTimestamps = { ...get().deletedNoteTimestamps };
+    delete nextDeletedNoteTimestamps[noteId];
+    await db.notes.put(updated).catch(() => {});
     set({
       notes: get().notes.map((n) => (n.id === noteId ? updated : n)),
+      deletedNoteTimestamps: nextDeletedNoteTimestamps,
     });
     get().saveLocalBackup();
   },
 
   syncRemoteNoteChange: (incomingNote, eventType) => {
-    const existing = get().notes.find((n) => n.id === incomingNote.id);
+    const state = get();
+    const existing = state.notes.find((n) => n.id === incomingNote.id);
+    const tombstoneIso = state.deletedNoteTimestamps[incomingNote.id];
+    const hasLocalRow = Boolean(existing || tombstoneIso);
+    const localTime = existing
+      ? Date.parse(existing.updated_at || '') || 0
+      : Date.parse(tombstoneIso || '') || 0;
+    const localDeletedOrArchived = Boolean(
+      tombstoneIso || existing?.deleted_at || existing?.archivedAt
+    );
+
     const remoteNote = keepLocalNoteFields(incomingNote, existing);
-    if (existing) {
-      const localTime = new Date(existing.updated_at || 0).getTime();
-      const remoteTime = new Date(remoteNote.updated_at || 0).getTime();
-      if (remoteTime < localTime) {
-        return;
-      }
+    const remoteTime = Date.parse(remoteNote.updated_at || '') || 0;
+    const remoteDeletedOrArchived = Boolean(
+      eventType === 'DELETE' || remoteNote.deleted_at || remoteNote.archivedAt
+    );
+
+    if (
+      !shouldApplyRealtimeRow({
+        hasLocalRow,
+        localTime,
+        remoteTime,
+        localDeletedOrArchived,
+        remoteDeletedOrArchived,
+      })
+    ) {
+      return;
     }
 
     if (eventType === 'DELETE' || remoteNote.deleted_at) {
-      set({ notes: get().notes.filter((n) => n.id !== remoteNote.id) });
-      db.notes.delete(remoteNote.id).catch(() => {});
-    } else if (eventType === 'INSERT') {
-      const exists = get().notes.some((n) => n.id === remoteNote.id);
-      if (!exists) {
-        set({ notes: [remoteNote, ...get().notes] });
+      const recordedTombstone = resolveTombstoneIso(remoteNote.updated_at, remoteNote.deleted_at);
+      set({
+        notes: get().notes.filter((n) => n.id !== remoteNote.id),
+        deletedNoteTimestamps: {
+          ...get().deletedNoteTimestamps,
+          [remoteNote.id]: recordedTombstone,
+        },
+      });
+      if (remoteNote.deleted_at) {
+        db.notes.put(remoteNote).catch(() => {});
       } else {
-        set({
-          notes: get().notes.map((n) => (n.id === remoteNote.id ? remoteNote : n)),
-        });
+        db.notes.delete(remoteNote.id).catch(() => {});
       }
-      db.notes.put(remoteNote).catch(() => {});
-    } else if (eventType === 'UPDATE') {
+    } else if (eventType === 'INSERT' || eventType === 'UPDATE') {
+      const nextDeletedTimestamps = { ...get().deletedNoteTimestamps };
+      delete nextDeletedTimestamps[remoteNote.id];
       const exists = get().notes.some((n) => n.id === remoteNote.id);
-      if (exists) {
-        set({
-          notes: get().notes.map((n) => (n.id === remoteNote.id ? remoteNote : n)),
-        });
-      } else {
-        set({ notes: [remoteNote, ...get().notes] });
-      }
+      set({
+        notes: exists
+          ? get().notes.map((n) => (n.id === remoteNote.id ? remoteNote : n))
+          : [remoteNote, ...get().notes],
+        deletedNoteTimestamps: nextDeletedTimestamps,
+      });
       db.notes.put(remoteNote).catch(() => {});
     }
   },
@@ -1306,44 +1414,69 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       return;
     }
 
-    const existing = get().widgets.find((w) => w.id === incomingWidget.id);
+    const state = get();
+    const existing = state.widgets.find((w) => w.id === incomingWidget.id);
+    const tombstoneIso = state.deletedWidgetTimestamps[incomingWidget.id];
+    const hasLocalRow = Boolean(existing || tombstoneIso);
+    const localTime = existing
+      ? Date.parse(existing.updated_at || '') || 0
+      : Date.parse(tombstoneIso || '') || 0;
+    const localDeleted = Boolean(tombstoneIso || existing?.deleted_at);
+
     const remoteWidget = keepLocalWidgetFields(incomingWidget, existing);
-    if (existing) {
-      const localTime = new Date(existing.updated_at || 0).getTime();
-      const remoteTime = new Date(remoteWidget.updated_at || 0).getTime();
-      if (remoteTime < localTime) {
-        return;
-      }
+    const remoteTime = Date.parse(remoteWidget.updated_at || '') || 0;
+    const remoteDeleted = Boolean(eventType === 'DELETE' || remoteWidget.deleted_at);
+
+    if (
+      !shouldApplyRealtimeRow({
+        hasLocalRow,
+        localTime,
+        remoteTime,
+        localDeletedOrArchived: localDeleted,
+        remoteDeletedOrArchived: remoteDeleted,
+      })
+    ) {
+      return;
     }
 
     if (eventType === 'DELETE' || remoteWidget.deleted_at) {
-      set({ widgets: get().widgets.filter((w) => w.id !== remoteWidget.id) });
-      db.widgets.delete(remoteWidget.id).catch(() => {});
-    } else if (eventType === 'INSERT') {
-      const exists = get().widgets.some((w) => w.id === remoteWidget.id);
-      if (!exists) {
-        set({ widgets: [...get().widgets, remoteWidget] });
+      const recordedTombstone = resolveTombstoneIso(remoteWidget.updated_at, remoteWidget.deleted_at);
+      set({
+        widgets: get().widgets.filter((w) => w.id !== remoteWidget.id),
+        deletedWidgetTimestamps: {
+          ...get().deletedWidgetTimestamps,
+          [remoteWidget.id]: recordedTombstone,
+        },
+      });
+      if (remoteWidget.deleted_at) {
+        db.widgets.put(remoteWidget).catch(() => {});
       } else {
-        set({
-          widgets: get().widgets.map((w) => (w.id === remoteWidget.id ? remoteWidget : w)),
-        });
+        db.widgets.delete(remoteWidget.id).catch(() => {});
       }
-      db.widgets.put(remoteWidget).catch(() => {});
-    } else if (eventType === 'UPDATE') {
+    } else if (eventType === 'INSERT' || eventType === 'UPDATE') {
+      const nextDeletedTimestamps = { ...get().deletedWidgetTimestamps };
+      delete nextDeletedTimestamps[remoteWidget.id];
       const exists = get().widgets.some((w) => w.id === remoteWidget.id);
-      if (exists) {
-        set({
-          widgets: get().widgets.map((w) => (w.id === remoteWidget.id ? remoteWidget : w)),
-        });
-      } else {
-        set({ widgets: [...get().widgets, remoteWidget] });
-      }
+      set({
+        widgets: exists
+          ? get().widgets.map((w) => (w.id === remoteWidget.id ? remoteWidget : w))
+          : [...get().widgets, remoteWidget],
+        deletedWidgetTimestamps: nextDeletedTimestamps,
+      });
       db.widgets.put(remoteWidget).catch(() => {});
     }
   },
 
   syncRemoteTabChange: (incomingTab, eventType) => {
-    const existing = get().tabs.find((t) => t.id === incomingTab.id);
+    const state = get();
+    const existing = state.tabs.find((t) => t.id === incomingTab.id);
+    const tombstoneIso = state.deletedTabTimestamps[incomingTab.id];
+    const hasLocalRow = Boolean(existing || tombstoneIso);
+    const localTime = existing
+      ? Date.parse(existing.updated_at || '') || 0
+      : Date.parse(tombstoneIso || '') || 0;
+    const localDeleted = Boolean(tombstoneIso || existing?.deleted_at);
+
     const mergedTab = keepLocalTabFields(incomingTab, existing);
     const remoteTab: DashboardTab = {
       ...mergedTab,
@@ -1351,45 +1484,52 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         ? mergedTab.order
         : existing && Number.isFinite(existing.order)
           ? existing.order
-          : get().tabs.length,
+          : state.tabs.length,
       enabled:
         mergedTab.id === 'tab-overview' ? Boolean(mergedTab.enabled) : mergedTab.enabled !== false,
     };
-    if (existing) {
-      const localTime = new Date(existing.updated_at || 0).getTime();
-      const remoteTime = new Date(remoteTab.updated_at || 0).getTime();
-      if (remoteTime < localTime) {
-        return;
-      }
+    const remoteTime = Date.parse(remoteTab.updated_at || '') || 0;
+    const remoteDeleted = Boolean(eventType === 'DELETE' || remoteTab.deleted_at);
+
+    if (
+      !shouldApplyRealtimeRow({
+        hasLocalRow,
+        localTime,
+        remoteTime,
+        localDeletedOrArchived: localDeleted,
+        remoteDeletedOrArchived: remoteDeleted,
+      })
+    ) {
+      return;
     }
 
     if (eventType === 'DELETE' || remoteTab.deleted_at) {
+      const recordedTombstone = resolveTombstoneIso(remoteTab.updated_at, remoteTab.deleted_at);
       const remaining = get().tabs.filter((t) => t.id !== remoteTab.id);
       const nextActiveTabId =
         get().activeTabId === remoteTab.id ? remaining[0]?.id || 'tab-corkboard' : get().activeTabId;
-      set({ tabs: remaining, activeTabId: nextActiveTabId });
-      db.tabs.delete(remoteTab.id).catch(() => {});
-    } else if (eventType === 'INSERT') {
-      const exists = get().tabs.some((t) => t.id === remoteTab.id);
-      let nextTabs: DashboardTab[];
-      if (!exists) {
-        nextTabs = [...get().tabs, remoteTab];
+      set({
+        tabs: remaining,
+        activeTabId: nextActiveTabId,
+        deletedTabTimestamps: {
+          ...get().deletedTabTimestamps,
+          [remoteTab.id]: recordedTombstone,
+        },
+      });
+      if (remoteTab.deleted_at) {
+        db.tabs.put(remoteTab).catch(() => {});
       } else {
-        nextTabs = get().tabs.map((t) => (t.id === remoteTab.id ? remoteTab : t));
+        db.tabs.delete(remoteTab.id).catch(() => {});
       }
-      nextTabs.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-      set({ tabs: nextTabs });
-      db.tabs.put(remoteTab).catch(() => {});
-    } else if (eventType === 'UPDATE') {
+    } else if (eventType === 'INSERT' || eventType === 'UPDATE') {
+      const nextDeletedTimestamps = { ...get().deletedTabTimestamps };
+      delete nextDeletedTimestamps[remoteTab.id];
       const exists = get().tabs.some((t) => t.id === remoteTab.id);
-      let nextTabs: DashboardTab[];
-      if (exists) {
-        nextTabs = get().tabs.map((t) => (t.id === remoteTab.id ? remoteTab : t));
-      } else {
-        nextTabs = [...get().tabs, remoteTab];
-      }
+      const nextTabs = exists
+        ? get().tabs.map((t) => (t.id === remoteTab.id ? remoteTab : t))
+        : [...get().tabs, remoteTab];
       nextTabs.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-      set({ tabs: nextTabs });
+      set({ tabs: nextTabs, deletedTabTimestamps: nextDeletedTimestamps });
       db.tabs.put(remoteTab).catch(() => {});
     }
   },
@@ -1397,12 +1537,13 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   deleteNote: async (noteId) => {
     const existing = get().notes.find((n) => n.id === noteId);
     if (!existing) return;
+    const nowIso = nextMonotonicIso(existing.updated_at);
     const updated: StickyNoteItem = {
       ...existing,
-      archivedAt: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      archivedAt: nowIso,
+      updated_at: nowIso,
     };
-    await db.notes.put(updated);
+    await db.notes.put(updated).catch(() => {});
     set({
       notes: get().notes.map((n) => (n.id === noteId ? updated : n)),
     });
@@ -1412,14 +1553,19 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   permanentlyDeleteNote: async (noteId) => {
     const existing = get().notes.find((n) => n.id === noteId);
     if (!existing) return;
+    const nowIso = nextMonotonicIso(existing.updated_at);
     const updated: StickyNoteItem = {
       ...existing,
-      deleted_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      deleted_at: nowIso,
+      updated_at: nowIso,
     };
-    await db.notes.put(updated);
+    await db.notes.put(updated).catch(() => {});
     set({
       notes: get().notes.filter((n) => n.id !== noteId),
+      deletedNoteTimestamps: {
+        ...get().deletedNoteTimestamps,
+        [noteId]: nowIso,
+      },
     });
     get().saveLocalBackup();
   },
@@ -1427,10 +1573,13 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   permanentlyDeleteNotes: async (noteIds) => {
     if (!noteIds || noteIds.length === 0) return;
     const idSet = new Set(noteIds);
-    const nowIso = new Date().toISOString();
+    const baseNowMs = Date.now();
     const tombstones: StickyNoteItem[] = [];
+    const nextDeletedNoteTimestamps = { ...get().deletedNoteTimestamps };
     for (const n of get().notes) {
       if (idSet.has(n.id)) {
+        const nowIso = nextMonotonicIso(n.updated_at, baseNowMs);
+        nextDeletedNoteTimestamps[n.id] = nowIso;
         tombstones.push({
           ...n,
           deleted_at: nowIso,
@@ -1439,9 +1588,10 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       }
     }
     if (tombstones.length === 0) return;
-    await db.notes.bulkPut(tombstones);
+    await db.notes.bulkPut(tombstones).catch(() => {});
     set({
       notes: get().notes.filter((n) => !idSet.has(n.id)),
+      deletedNoteTimestamps: nextDeletedNoteTimestamps,
     });
     get().saveLocalBackup();
   },
@@ -1481,11 +1631,14 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           }
         : openPos,
       config: resolvedConfig,
-      updated_at: new Date().toISOString(),
+      updated_at: nextMonotonicIso(state.deletedWidgetTimestamps[id]),
     };
-    await db.widgets.put(newWidget);
+    const nextDeletedWidgetTimestamps = { ...get().deletedWidgetTimestamps };
+    delete nextDeletedWidgetTimestamps[id];
+    await db.widgets.put(newWidget).catch(() => {});
     set({
       widgets: [...get().widgets, newWidget],
+      deletedWidgetTimestamps: nextDeletedWidgetTimestamps,
     });
     get().saveLocalBackup();
   },
@@ -1493,14 +1646,19 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   removeWidget: async (widgetId) => {
     const existing = get().widgets.find((w) => w.id === widgetId);
     if (!existing) return;
+    const nowIso = nextMonotonicIso(existing.updated_at);
     const updated: DashboardWidget = {
       ...existing,
-      deleted_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      deleted_at: nowIso,
+      updated_at: nowIso,
     };
-    await db.widgets.put(updated);
+    await db.widgets.put(updated).catch(() => {});
     set({
       widgets: get().widgets.filter((w) => w.id !== widgetId),
+      deletedWidgetTimestamps: {
+        ...get().deletedWidgetTimestamps,
+        [widgetId]: nowIso,
+      },
     });
     get().saveLocalBackup();
   },
@@ -1512,9 +1670,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       ...existing,
       ...updates,
       config: updates.config ? { ...existing.config, ...updates.config } : existing.config,
-      updated_at: new Date().toISOString(),
+      updated_at: nextMonotonicIso(existing.updated_at),
     };
-    await db.widgets.put(updated);
+    await db.widgets.put(updated).catch(() => {});
     set({
       widgets: get().widgets.map((w) => (w.id === widgetId ? updated : w)),
     });
@@ -1527,9 +1685,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const updated: DashboardWidget = {
       ...existing,
       config: { ...existing.config, ...configUpdates },
-      updated_at: new Date().toISOString(),
+      updated_at: nextMonotonicIso(existing.updated_at),
     };
-    await db.widgets.put(updated);
+    await db.widgets.put(updated).catch(() => {});
     set({
       widgets: get().widgets.map((w) => (w.id === widgetId ? updated : w)),
     });
@@ -1543,9 +1701,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       ...widget,
       ...(gridPos ? { gridPos } : {}),
       ...(freeformPos ? { freeformPos } : {}),
-      updated_at: new Date().toISOString(),
+      updated_at: nextMonotonicIso(widget.updated_at),
     };
-    await db.widgets.put(updated);
+    await db.widgets.put(updated).catch(() => {});
     set({
       widgets: get().widgets.map((w) => (w.id === widgetId ? updated : w)),
     });
@@ -1560,14 +1718,11 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       ...note,
       isShoppingList,
       freeformPos: freeformPos
-        ? {
-            ...freeformPos,
-            ...(isShoppingList ? { isShoppingList: true } : {}),
-          }
+        ? buildNoteFreeformPos({ ...note, isShoppingList }, freeformPos)
         : freeformPos,
-      updated_at: new Date().toISOString(),
+      updated_at: nextMonotonicIso(note.updated_at),
     };
-    await db.notes.put(updated);
+    await db.notes.put(updated).catch(() => {});
     set({
       notes: get().notes.map((n) => (n.id === noteId ? updated : n)),
     });

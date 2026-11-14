@@ -155,10 +155,12 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
     getCurrentUser().then((u) => setUserEmail(u?.email || null));
   }, []);
 
+  const hasStickyNotesTile = widgets.some((w) => w.type === 'sticky_notes' && !w.deleted_at);
   const now = new Date();
   const activeNotes = notes.filter(
     (n) =>
       !n.archivedAt &&
+      (hasStickyNotesTile || n.isPinnedToCanvas !== false) &&
       (!n.expiresAt || new Date(n.expiresAt) > now) &&
       ((n.tabId || 'tab-corkboard') === activeTabId || n.tabId === 'all')
   );
