@@ -189,7 +189,7 @@ To enable real-time multi-device WebSocket sync across wall displays, tablets, a
 3. Provide your project credentials depending on how you host Ambiently:
    * **Docker / Raspberry Pi (Runtime — No Rebuild Needed):** Set `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `.env` or `compose.yaml` and run `docker compose up -d`.
    * **Cloudflare Pages / Static Hosting (Build-Time):** Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in **Settings -> Environment variables**.
-4. In Ambiently (**Settings -> Backup & System**), sign in with your email code/magic link and click **Back Up to Cloud**.
+4. In Ambiently (**Settings -> Backup & System**), sign in with your email code/magic link and click **Back Up to Cloud** (or use **Sync Now** to reconcile changes bidirectionally across paired devices).
 
 ---
 

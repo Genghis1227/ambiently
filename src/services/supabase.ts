@@ -3,12 +3,15 @@ import { db, DEFAULT_SETTINGS, DEFAULT_TABS, DEFAULT_WIDGETS, DEFAULT_NOTES, DEF
 import { stripPlexTokens } from './plexLinks';
 import { isBoardFullError, setSyncRefusal } from './syncRefusal';
 import {
+  buildNoteCloudFreeformPos,
+  hydrateNoteFromCloudRow,
   keepLocalNoteFields,
   keepLocalTabFields,
   keepLocalWidgetFields,
   mergeCloudSettingsForLocal,
   shouldAcceptCloudRow,
   shouldAcceptCloudSettings,
+  shouldPushLocalRowToCloud,
 } from './syncMerge';
 import { resolveCuratedPhotos } from '../data/curatedScenery';
 import {
@@ -403,32 +406,11 @@ export function subscribeToRealtimeBoard(
       (payload) => {
         if (!noteHandler) return;
         const eventType = payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE';
-        const raw = (payload.new || payload.old) as any;
-        if (!raw) return;
+        const raw = (eventType === 'DELETE' ? payload.old || payload.new : payload.new || payload.old) as any;
+        if (!raw || !raw.id) return;
         if (raw.dashboard_id && raw.dashboard_id !== boardId) return;
 
-        const isShoppingList = Boolean(
-          raw.is_shopping_list || raw.freeform_pos?.isShoppingList
-        );
-        const note: StickyNoteItem = {
-          id: raw.id,
-          tabId: raw.tab_id,
-          widgetId: raw.widget_id,
-          title: raw.title,
-          content: raw.content || '',
-          isChecklist: Boolean(raw.is_checklist || isShoppingList),
-          isShoppingList,
-          checklistItems: raw.checklist_items || [],
-          bgColor: raw.bg_color || '#fef08a',
-          fontSize: raw.font_size || 'base',
-          expiresAt: raw.expires_at,
-          archivedAt: raw.archived_at,
-          freeformPos: raw.freeform_pos || {},
-          updated_at: raw.updated_at || new Date().toISOString(),
-          deleted_at: raw.deleted_at,
-        };
-
-        noteHandler(note, eventType);
+        noteHandler(hydrateNoteFromCloudRow(raw), eventType);
       }
     )
     .on(
@@ -442,8 +424,8 @@ export function subscribeToRealtimeBoard(
       (payload) => {
         if (!widgetHandler) return;
         const eventType = payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE';
-        const raw = (payload.new || payload.old) as any;
-        if (!raw) return;
+        const raw = (eventType === 'DELETE' ? payload.old || payload.new : payload.new || payload.old) as any;
+        if (!raw || !raw.id) return;
         if (raw.dashboard_id && raw.dashboard_id !== boardId) return;
 
         const widget: DashboardWidget = {
@@ -472,8 +454,8 @@ export function subscribeToRealtimeBoard(
       (payload) => {
         if (!tabHandler) return;
         const eventType = payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE';
-        const raw = (payload.new || payload.old) as any;
-        if (!raw) return;
+        const raw = (eventType === 'DELETE' ? payload.old || payload.new : payload.new || payload.old) as any;
+        if (!raw || !raw.id) return;
         if (raw.dashboard_id && raw.dashboard_id !== boardId) return;
 
         const tab: DashboardTab = {
@@ -911,17 +893,28 @@ export async function pushToCloud(
     const widgetsToPush = dbWidgets.length > 0 ? dbWidgets : widgets;
     const notesToPush = dbNotes.length > 0 ? dbNotes : notes;
 
-    // 2. Query remote updated_at timestamps to avoid stomping newer remote edits and avoid re-upserting unchanged rows
+    // 2. Query remote timestamps and soft-delete/archive states to avoid stomping newer remote edits or deletions
     const [remoteDashRes, remoteTabsRes, remoteWidgetsRes, remoteNotesRes] = await Promise.all([
       sb.from('dashboards').select('id, updated_at').eq('id', dashboardId).maybeSingle(),
-      sb.from('tabs').select('id, updated_at').eq('dashboard_id', dashboardId),
-      sb.from('widgets').select('id, updated_at').eq('dashboard_id', dashboardId),
-      sb.from('notes').select('id, updated_at').eq('dashboard_id', dashboardId),
+      sb.from('tabs').select('id, updated_at, deleted_at').eq('dashboard_id', dashboardId),
+      sb.from('widgets').select('id, updated_at, deleted_at').eq('dashboard_id', dashboardId),
+      sb.from('notes').select('id, updated_at, deleted_at, archived_at').eq('dashboard_id', dashboardId),
     ]);
 
-    const remoteTabsMap = new Map((remoteTabsRes.data || []).map((t: any) => [t.id, new Date(t.updated_at || 0).getTime()]));
-    const remoteWidgetsMap = new Map((remoteWidgetsRes.data || []).map((w: any) => [w.id, new Date(w.updated_at || 0).getTime()]));
-    const remoteNotesMap = new Map((remoteNotesRes.data || []).map((n: any) => [n.id, new Date(n.updated_at || 0).getTime()]));
+    const toRemoteMetaMap = (rows: any[] | null | undefined, checkArchived = false) =>
+      new Map(
+        (rows || []).map((row: any) => [
+          row.id,
+          {
+            time: new Date(row.updated_at || 0).getTime(),
+            deletedOrArchived: Boolean(row.deleted_at || (checkArchived && row.archived_at)),
+          },
+        ])
+      );
+
+    const remoteTabsMap = toRemoteMetaMap(remoteTabsRes.data);
+    const remoteWidgetsMap = toRemoteMetaMap(remoteWidgetsRes.data);
+    const remoteNotesMap = toRemoteMetaMap(remoteNotesRes.data, true);
 
     const nowIso = new Date().toISOString();
     // Settings are sent when they changed on this device since it last synced them, unless another
@@ -964,10 +957,14 @@ export async function pushToCloud(
       }));
 
       tabsToUpsert = formattedTabs.filter((t) => {
-        if (options?.force) return true;
-        const remoteTime = remoteTabsMap.get(t.id);
-        if (remoteTime === undefined) return true;
-        return new Date(t.updated_at || 0).getTime() > remoteTime;
+        const remoteMeta = remoteTabsMap.get(t.id);
+        return shouldPushLocalRowToCloud({
+          force: options?.force,
+          localTime: new Date(t.updated_at || 0).getTime(),
+          remoteTime: remoteMeta?.time,
+          localDeletedOrArchived: Boolean(t.deleted_at),
+          remoteDeletedOrArchived: remoteMeta?.deletedOrArchived,
+        });
       });
     }
 
@@ -995,10 +992,14 @@ export async function pushToCloud(
       });
 
       widgetsToUpsert = formattedWidgets.filter((w) => {
-        if (options?.force) return true;
-        const remoteTime = remoteWidgetsMap.get(w.id);
-        if (remoteTime === undefined) return true;
-        return new Date(w.updated_at || 0).getTime() > remoteTime;
+        const remoteMeta = remoteWidgetsMap.get(w.id);
+        return shouldPushLocalRowToCloud({
+          force: options?.force,
+          localTime: new Date(w.updated_at || 0).getTime(),
+          remoteTime: remoteMeta?.time,
+          localDeletedOrArchived: Boolean(w.deleted_at),
+          remoteDeletedOrArchived: remoteMeta?.deletedOrArchived,
+        });
       });
     }
 
@@ -1006,7 +1007,7 @@ export async function pushToCloud(
     const activeChoreSnapshot = dbChoreSnapshot || useChoreStore.getState().snapshot;
     if (activeChoreSnapshot && activeChoreSnapshot.id === 'household_chores') {
       const localChoreTime = new Date(activeChoreSnapshot.updated_at || 0).getTime();
-      const remoteChoreTime = remoteWidgetsMap.get(CHORE_ENGINE_CLOUD_ROW_ID);
+      const remoteChoreTime = remoteWidgetsMap.get(CHORE_ENGINE_CLOUD_ROW_ID)?.time;
       const shouldPushChores =
         Boolean(options?.force) ||
         (remoteChoreTime === undefined
@@ -1037,7 +1038,7 @@ export async function pushToCloud(
         (max, p) => Math.max(max, new Date(p.updatedAt || 0).getTime()),
         0
       );
-      const remoteProfilesRowTime = remoteWidgetsMap.get(HOUSEHOLD_PROFILES_CLOUD_ROW_ID);
+      const remoteProfilesRowTime = remoteWidgetsMap.get(HOUSEHOLD_PROFILES_CLOUD_ROW_ID)?.time;
       const shouldPushProfilesRow =
         Boolean(options?.force) ||
         (remoteProfilesRowTime === undefined
@@ -1066,7 +1067,7 @@ export async function pushToCloud(
     const activeMealSnapshot = dbMealSnapshot || useMealStore.getState().snapshot;
     if (activeMealSnapshot && activeMealSnapshot.id === 'household_meals') {
       const localMealTime = new Date(activeMealSnapshot.updated_at || 0).getTime();
-      const remoteMealTime = remoteWidgetsMap.get(MEAL_PLANNER_CLOUD_ROW_ID);
+      const remoteMealTime = remoteWidgetsMap.get(MEAL_PLANNER_CLOUD_ROW_ID)?.time;
       const shouldPushMeals =
         Boolean(options?.force) ||
         (remoteMealTime === undefined
@@ -1095,7 +1096,7 @@ export async function pushToCloud(
     const kanbanSnapshotPushed = (() => {
       if (!activeKanbanSnapshot || activeKanbanSnapshot.id !== 'household_kanban') return false;
       const localKanbanTime = new Date(activeKanbanSnapshot.updated_at || 0).getTime();
-      const remoteKanbanTime = remoteWidgetsMap.get(KANBAN_ENGINE_CLOUD_ROW_ID);
+      const remoteKanbanTime = remoteWidgetsMap.get(KANBAN_ENGINE_CLOUD_ROW_ID)?.time;
       const shouldPushKanban =
         Boolean(options?.force) ||
         (remoteKanbanTime === undefined
@@ -1140,20 +1141,21 @@ export async function pushToCloud(
           font_size: n.fontSize || 'base',
           expires_at: n.expiresAt || null,
           archived_at: n.archivedAt || null,
-          freeform_pos: {
-            ...(n.freeformPos || {}),
-            ...(isShoppingList ? { isShoppingList: true } : {}),
-          },
+          freeform_pos: buildNoteCloudFreeformPos(n),
           updated_at: n.updated_at,
           deleted_at: n.deleted_at || null,
         };
       });
 
       notesToUpsert = formattedNotes.filter((n) => {
-        if (options?.force) return true;
-        const remoteTime = remoteNotesMap.get(n.id);
-        if (remoteTime === undefined) return true;
-        return new Date(n.updated_at || 0).getTime() > remoteTime;
+        const remoteMeta = remoteNotesMap.get(n.id);
+        return shouldPushLocalRowToCloud({
+          force: options?.force,
+          localTime: new Date(n.updated_at || 0).getTime(),
+          remoteTime: remoteMeta?.time,
+          localDeletedOrArchived: Boolean(n.deleted_at || n.archived_at),
+          remoteDeletedOrArchived: remoteMeta?.deletedOrArchived,
+        });
       });
     }
 
@@ -1328,7 +1330,12 @@ export async function pushToCloud(
   }
 }
 
-type PullResult = { success: boolean; hasChanges?: boolean; error?: string };
+type PullResult = {
+  success: boolean;
+  hasChanges?: boolean;
+  hasUnsyncedLocalChanges?: boolean;
+  error?: string;
+};
 
 // Startup, sign-in and screen wake can each ask for a pull at the same moment. They share one download.
 const pullsInFlight = new Map<'restore' | 'full' | 'check', Promise<PullResult>>();
@@ -1402,6 +1409,7 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
     }
 
     const joiningExistingCloudBoard = localBoard === null && Boolean(dashRes.data);
+    let hasUnsyncedLocalChanges = false;
 
     const cloudSettings = dashRes.data?.settings;
     if (cloudSettings && Object.keys(cloudSettings).length > 0) {
@@ -1489,15 +1497,32 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
         const local = localMap.get(t.id);
         const localTime = local ? new Date(local.updated_at || 0).getTime() : 0;
         const cloudTime = new Date(mapped.updated_at || 0).getTime();
-        if (shouldAcceptCloudRow({ overwriteLocal, hasLocalRow: Boolean(local), localTime, cloudTime })) {
+        const localDeletedOrArchived = Boolean(local?.deleted_at);
+        const cloudDeletedOrArchived = Boolean(mapped.deleted_at);
+        if (
+          shouldAcceptCloudRow({
+            overwriteLocal,
+            hasLocalRow: Boolean(local),
+            localTime,
+            cloudTime,
+            localDeletedOrArchived,
+            cloudDeletedOrArchived,
+          })
+        ) {
           tabsToPut.push(!local || overwriteLocal ? mapped : keepLocalTabFields(mapped, local));
+        } else if (!switchingBoards && !overwriteLocal && local) {
+          hasUnsyncedLocalChanges = true;
         }
       }
 
       // Clean up default placeholder tab (or removed local tabs during authoritative restore)
       for (const lt of localTabs) {
-        if (!cloudTabIds.has(lt.id) && (overwriteLocal || lt.id === 'tab-corkboard')) {
-          toDeleteTabIds.push(lt.id);
+        if (!cloudTabIds.has(lt.id)) {
+          if (overwriteLocal || lt.id === 'tab-corkboard') {
+            toDeleteTabIds.push(lt.id);
+          } else if (!switchingBoards && !joiningExistingCloudBoard) {
+            hasUnsyncedLocalChanges = true;
+          }
         }
       }
 
@@ -1611,16 +1636,33 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
 
         const localTime = local ? new Date(local.updated_at || 0).getTime() : 0;
         const cloudTime = new Date(mapped.updated_at || 0).getTime();
-        if (shouldAcceptCloudRow({ overwriteLocal, hasLocalRow: Boolean(local), localTime, cloudTime })) {
+        const localDeletedOrArchived = Boolean(local?.deleted_at);
+        const cloudDeletedOrArchived = Boolean(mapped.deleted_at);
+        if (
+          shouldAcceptCloudRow({
+            overwriteLocal,
+            hasLocalRow: Boolean(local),
+            localTime,
+            cloudTime,
+            localDeletedOrArchived,
+            cloudDeletedOrArchived,
+          })
+        ) {
           widgetsToPut.push(!local ? mapped : keepLocalWidgetFields(mapped, local));
+        } else if (!switchingBoards && !overwriteLocal && local) {
+          hasUnsyncedLocalChanges = true;
         }
       }
 
       // Clean up seeded default widgets (or removed local widgets during authoritative restore)
       const defaultWidgetIds = new Set(['widget-clock', 'widget-notes-tile', 'widget-photo-tile', 'widget-countdown-tile']);
       for (const lw of localWidgets) {
-        if (!cloudWidgetIds.has(lw.id) && (overwriteLocal || defaultWidgetIds.has(lw.id))) {
-          toDeleteWidgetIds.push(lw.id);
+        if (!cloudWidgetIds.has(lw.id)) {
+          if (overwriteLocal || defaultWidgetIds.has(lw.id)) {
+            toDeleteWidgetIds.push(lw.id);
+          } else if (!switchingBoards && !joiningExistingCloudBoard) {
+            hasUnsyncedLocalChanges = true;
+          }
         }
       }
 
@@ -1632,7 +1674,7 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
       }
     }
 
-    if (notesRes.data && notesRes.data.length > 0) {
+    if (notesRes.data) {
       const localNotes = await db.notes.toArray();
       const localMap = new Map(localNotes.map((n) => [n.id, n]));
       const cloudNoteIds = new Set(notesRes.data.map((n: any) => n.id));
@@ -1644,39 +1686,37 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
           toDeleteNoteIds.push(n.id);
           continue;
         }
-        const isShoppingList = Boolean(
-          n.is_shopping_list || n.freeform_pos?.isShoppingList
-        );
-        const mapped: StickyNoteItem = {
-          id: n.id,
-          tabId: n.tab_id,
-          widgetId: n.widget_id,
-          title: n.title,
-          content: n.content,
-          isChecklist: Boolean(n.is_checklist || isShoppingList),
-          isShoppingList,
-          checklistItems: n.checklist_items,
-          bgColor: n.bg_color,
-          fontSize: n.font_size,
-          expiresAt: n.expires_at,
-          archivedAt: n.archived_at,
-          freeformPos: n.freeform_pos,
-          updated_at: n.updated_at,
-          deleted_at: n.deleted_at,
-        };
+        const mapped = hydrateNoteFromCloudRow(n);
 
         const local = localMap.get(n.id);
         const localTime = local ? new Date(local.updated_at || 0).getTime() : 0;
         const cloudTime = new Date(mapped.updated_at || 0).getTime();
-        if (shouldAcceptCloudRow({ overwriteLocal, hasLocalRow: Boolean(local), localTime, cloudTime })) {
+        const localDeletedOrArchived = Boolean(local?.deleted_at || local?.archivedAt);
+        const cloudDeletedOrArchived = Boolean(mapped.deleted_at || mapped.archivedAt);
+        if (
+          shouldAcceptCloudRow({
+            overwriteLocal,
+            hasLocalRow: Boolean(local),
+            localTime,
+            cloudTime,
+            localDeletedOrArchived,
+            cloudDeletedOrArchived,
+          })
+        ) {
           notesToPut.push(!local || overwriteLocal ? mapped : keepLocalNoteFields(mapped, local));
+        } else if (!switchingBoards && !overwriteLocal && local) {
+          hasUnsyncedLocalChanges = true;
         }
       }
 
       const defaultNoteIds = new Set(['note-welcome', 'note-groceries']);
       for (const ln of localNotes) {
-        if (!cloudNoteIds.has(ln.id) && (overwriteLocal || defaultNoteIds.has(ln.id))) {
-          toDeleteNoteIds.push(ln.id);
+        if (!cloudNoteIds.has(ln.id)) {
+          if (overwriteLocal || defaultNoteIds.has(ln.id)) {
+            toDeleteNoteIds.push(ln.id);
+          } else if (!switchingBoards && !joiningExistingCloudBoard) {
+            hasUnsyncedLocalChanges = true;
+          }
         }
       }
 
@@ -1713,7 +1753,7 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
 
     lastKnownCloudUpdatedAt = dashRes.data?.updated_at || null;
     setLocalBoard(dashboardId);
-    return { success: true, hasChanges: true };
+    return { success: true, hasChanges: true, hasUnsyncedLocalChanges };
   } catch (err: any) {
     console.error('Cloud pull failed:', err);
     return { success: false, error: err.message || 'Cloud pull failed' };

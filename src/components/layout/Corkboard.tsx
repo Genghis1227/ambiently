@@ -1447,6 +1447,11 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     });
   };
 
+  const hasStickyNotesTile = useMemo(
+    () => widgets.some((w) => w.type === 'sticky_notes' && !w.deleted_at),
+    [widgets]
+  );
+
   const now = new Date();
   const activeNotes = notes.filter((n) => {
     if (n.archivedAt) return false;
@@ -2248,11 +2253,19 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                         data-no-drag="true"
                         onClick={(e) => {
                           e.stopPropagation();
-                          onUpdateNote(note.id, { isPinnedToCanvas: false });
+                          if (hasStickyNotesTile) {
+                            onUpdateNote(note.id, { isPinnedToCanvas: false });
+                          } else {
+                            onDeleteNote(note.id);
+                          }
                         }}
                         onPointerDown={(e) => e.stopPropagation()}
                         className="p-1 rounded-md text-gray-700 hover:text-red-900 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
-                        title="Close from canvas (remains saved in Notes Tile)"
+                        title={
+                          hasStickyNotesTile
+                            ? 'Close from canvas (remains saved in Notes Tile)'
+                            : 'Delete note (move to Archive)'
+                        }
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -2752,7 +2765,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                       <button
                         type="button"
                         onClick={() =>
-                          onUpdateNote(note.id, { archivedAt: null, expiresAt: null })
+                          onUpdateNote(note.id, { archivedAt: null, expiresAt: null, isPinnedToCanvas: true })
                         }
                         className="px-2.5 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 text-xs font-semibold cursor-pointer transition-all"
                       >
@@ -3378,21 +3391,48 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             );
           })()}
 
-          <button
-            type="button"
-            onClick={() => {
-              if (contextMenu.type === 'widget' && onRemoveWidget) {
-                onRemoveWidget(contextMenu.id);
-              } else if (contextMenu.type === 'note' && onUpdateNote) {
-                onUpdateNote(contextMenu.id, { isPinnedToCanvas: false });
-              }
-              setContextMenu(null);
-            }}
-            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-red-500/15 text-red-400 hover:text-red-300 transition-colors cursor-pointer text-left"
-          >
-            <Trash2 className="w-3.5 h-3.5 shrink-0" />
-            <span>Remove from Canvas</span>
-          </button>
+          {contextMenu.type === 'note' && hasStickyNotesTile ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  onUpdateNote(contextMenu.id, { isPinnedToCanvas: false });
+                  setContextMenu(null);
+                }}
+                className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-amber-500/15 text-amber-300 hover:text-amber-200 transition-colors cursor-pointer text-left"
+              >
+                <X className="w-3.5 h-3.5 shrink-0" />
+                <span>Close from Canvas</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onDeleteNote(contextMenu.id);
+                  setContextMenu(null);
+                }}
+                className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-red-500/15 text-red-400 hover:text-red-300 transition-colors cursor-pointer text-left"
+              >
+                <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                <span>Delete Note</span>
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                if (contextMenu.type === 'widget' && onRemoveWidget) {
+                  onRemoveWidget(contextMenu.id);
+                } else if (contextMenu.type === 'note') {
+                  onDeleteNote(contextMenu.id);
+                }
+                setContextMenu(null);
+              }}
+              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-red-500/15 text-red-400 hover:text-red-300 transition-colors cursor-pointer text-left"
+            >
+              <Trash2 className="w-3.5 h-3.5 shrink-0" />
+              <span>{contextMenu.type === 'note' ? 'Delete Note' : 'Remove from Canvas'}</span>
+            </button>
+          )}
         </div>
       );
     })()}

@@ -65,7 +65,7 @@
 * **Wide-Range Sizing & 4 Font Scales (`S / M / L / XL`):** Resize sticky notes from tiny `8%` label tags all the way up to `100%` posters, and choose from Small (`S`), Medium (`M`), Large (`L`), or Poster (`XL`) text scales.
 * **6-Color Pastel Palette:** Customize notes in Amber Yellow, Emerald Green, Sky Blue, Rose Pink, Lavender Purple, or Warm Peach.
 * **Close Floating Sticky Notes & Smart Canvas Placement (`Corkboard.tsx`, `App.tsx`):**
-  * **1-Click Close (`✕`)**: Every floating note on the corkboard features a close button in its header. Closing a note unpins it from the canvas (`isPinnedToCanvas: false`) without deleting it, keeping it active and safe in the Notes Tile.
+  * **Adaptive 1-Click Close / Archive (`✕`) & Context Menu**: Every floating note on the corkboard features an `✕` button in its header. When a Sticky Notes Tile is present on the canvas, clicking `✕` unpins the note (`isPinnedToCanvas: false`) while keeping it in the Notes Tile, and the context menu exposes both **Close from Canvas** and **Delete Note**. When no Sticky Notes Tile is present on the canvas, clicking `✕` archives the note directly to the **Trash / Archive Drawer** so closed notes are never orphaned invisibly; restoring from the drawer automatically re-pins the note (`isPinnedToCanvas: true`).
   * **Pin to Board with Collision Avoidance**: Click `[ 📌 Pin to Board ]` in the Notes Tile to pop notes back onto the corkboard. Ambiently automatically unhides notes, elevates `zIndex`, detects widget coverage, auto-positions into open space, and displays a 2.5s visual pop-out ring.
 * **Note Expiration, Smart Duplication & Auto-Cleanup Engine:**
   * Assign notes as **Permanent**, **Expire in 24 Hours**, **Expire in 3 Days**, or pick a **Custom Date/Time**.

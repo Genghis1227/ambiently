@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, lazy, Suspense } from 'react';
-import { useDashboardStore } from './store/dashboardStore';
+import { useDashboardStore, flushPendingCloudPush } from './store/dashboardStore';
 import { useChoreStore } from './store/choreStore';
 import { NavigationDock } from './components/dock/NavigationDock';
 import { Corkboard } from './components/layout/Corkboard';
@@ -12,6 +12,7 @@ import {
   clearLegacyJoinKeys,
   onAuthStateChange,
   pullFromCloud,
+  pushToCloud,
   getCurrentUser,
   isRealtimeConnected,
 } from './services/supabase';
@@ -155,9 +156,14 @@ export function App() {
         const target = await resolveActiveDashboardId();
         setRealtimeBoardId(target?.dashboardId || user.id);
         try {
+          await flushPendingCloudPush();
           const res = await pullFromCloud({ force: true });
           if (res.success && res.hasChanges) {
             await initStore();
+          }
+          if (res.success && res.hasUnsyncedLocalChanges) {
+            const st = useDashboardStore.getState();
+            void pushToCloud(st.settings, st.tabs, st.widgets, st.notes);
           }
         } catch (err) {
           console.warn('Initial cloud pull on auth change failed:', err);
@@ -190,9 +196,14 @@ export function App() {
       try {
         const user = await getCurrentUser();
         if (user && !isCancelled) {
+          await flushPendingCloudPush();
           const res = await pullFromCloud({ force });
           if (res.success && res.hasChanges && !isCancelled) {
             await initStore();
+          }
+          if (res.success && res.hasUnsyncedLocalChanges && !isCancelled) {
+            const st = useDashboardStore.getState();
+            void pushToCloud(st.settings, st.tabs, st.widgets, st.notes);
           }
         }
       } catch (err) {

@@ -87,6 +87,8 @@ export interface FreeformPosition {
   isFullScreen?: boolean;
   isBackground?: boolean;
   isShoppingList?: boolean;
+  isPinnedToCanvas?: boolean;
+  textColor?: string;
 }
 
 export interface DashboardTab {
