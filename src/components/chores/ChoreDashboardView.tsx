@@ -25,6 +25,7 @@ import type {
   ChoreTemplate,
   ChoreWidgetConfig,
   Profile,
+  WishlistReward,
 } from '../../types/chores';
 import {
   calculateEffectiveChorePoints,
@@ -83,6 +84,8 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
   const revertChoreSameDay = useChoreStore((s) => s.revertChoreSameDay);
   const dismissChoreInstance = useChoreStore((s) => s.dismissChoreInstance);
   const proposeWishlistReward = useChoreStore((s) => s.proposeWishlistReward);
+  const updateWishlistProposal = useChoreStore((s) => s.updateWishlistProposal);
+  const withdrawWishlistProposal = useChoreStore((s) => s.withdrawWishlistProposal);
   const claimUnlockedReward = useChoreStore((s) => s.claimUnlockedReward);
   const setParentDrawerOpen = useChoreStore((s) => s.setParentDrawerOpen);
 
@@ -94,6 +97,11 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
       setActiveScope(config?.scope || 'household');
     }
   }, [mode, config?.scope]);
+
+  const effectiveScope = useMemo(() => {
+    if (activeScope === 'household') return 'household';
+    return snapshot.profiles.some((p) => p.id === activeScope) ? activeScope : 'household';
+  }, [activeScope, snapshot.profiles]);
 
   const [expandedSections, setExpandedSections] = useState<Record<AccordionSectionId, boolean>>(() => {
     if (mode === 'canvas' && Array.isArray(config?.defaultExpandedSections)) {
@@ -118,7 +126,9 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
     defaultProfileId?: string;
   } | null>(null);
   const [isProposeModalOpen, setIsProposeModalOpen] = useState(false);
+  const [editingProposal, setEditingProposal] = useState<WishlistReward | null>(null);
   const [isProposalsTrayOpen, setIsProposalsTrayOpen] = useState(false);
+  const [proposalsTrayScope, setProposalsTrayScope] = useState<string>('household');
   const [isTrophyCaseOpen, setIsTrophyCaseOpen] = useState(false);
 
   useEffect(() => {
@@ -128,6 +138,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
         e.key === 'Escape' &&
         !splitTarget &&
         !isProposeModalOpen &&
+        !editingProposal &&
         !isProposalsTrayOpen &&
         !isTrophyCaseOpen &&
         !useChoreStore.getState().isParentDrawerOpen
@@ -137,7 +148,16 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, mode, onClose, splitTarget, isProposeModalOpen, isProposalsTrayOpen, isTrophyCaseOpen]);
+  }, [
+    isOpen,
+    mode,
+    onClose,
+    splitTarget,
+    isProposeModalOpen,
+    editingProposal,
+    isProposalsTrayOpen,
+    isTrophyCaseOpen,
+  ]);
 
   const todayKey = localDateKey(new Date());
   const templateMap = useMemo(
@@ -146,10 +166,10 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
   );
 
   const visibleProfiles = useMemo(() => {
-    if (activeScope === 'household') return snapshot.profiles;
-    const matched = snapshot.profiles.filter((p) => p.id === activeScope);
+    if (effectiveScope === 'household') return snapshot.profiles;
+    const matched = snapshot.profiles.filter((p) => p.id === effectiveScope);
     return matched.length > 0 ? matched : snapshot.profiles;
-  }, [snapshot.profiles, activeScope]);
+  }, [snapshot.profiles, effectiveScope]);
 
   const pendingCounts = useMemo(
     () => getPendingParentActionCounts(snapshot),
@@ -227,7 +247,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
 
       if (inst.status === 'pending') {
         if (isShared) {
-          if (activeScope === 'household') {
+          if (effectiveScope === 'household') {
             sharedPending.push({
               instance: inst,
               template: tpl,
@@ -236,8 +256,8 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
               canUndo: false,
             });
             tCount += 1;
-          } else if (tByChild.has(activeScope)) {
-            tByChild.get(activeScope)!.push({
+          } else if (tByChild.has(effectiveScope)) {
+            tByChild.get(effectiveScope)!.push({
               instance: inst,
               template: tpl,
               effectivePoints,
@@ -322,7 +342,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
     templateMap,
     visibleProfiles,
     todayKey,
-    activeScope,
+    effectiveScope,
   ]);
 
   if (!isOpen) return null;
@@ -603,7 +623,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
             (section !== 'today' ||
               (profile.role === 'parent' &&
                 !hasPersonalTemplates &&
-                activeScope !== profile.id))
+                effectiveScope !== profile.id))
           ) {
             return null;
           }
@@ -827,7 +847,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
             </h1>
             <p className={`text-xs truncate ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
               {formattedDate} •{' '}
-              {activeScope === 'household'
+              {effectiveScope === 'household'
                 ? 'Household View'
                 : `${visibleProfiles[0]?.name || 'Child'}'s View`}
             </p>
@@ -977,7 +997,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
                 type="button"
                 onClick={() => setActiveScope('household')}
                 className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                  activeScope === 'household'
+                  effectiveScope === 'household'
                     ? isLight
                       ? 'bg-emerald-50/80 border-emerald-400 ring-1 ring-emerald-400/25'
                       : 'bg-slate-800/90 border-emerald-500/50 ring-1 ring-emerald-500/25'
@@ -1020,7 +1040,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
 
               {/* Individual Child Profile Cards */}
               {snapshot.profiles.map((profile) => {
-                const isSelected = activeScope === profile.id;
+                const isSelected = effectiveScope === profile.id;
                 return (
                   <button
                     key={profile.id}
@@ -1138,7 +1158,10 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
 
             <button
               type="button"
-              onClick={() => setIsProposalsTrayOpen(true)}
+              onClick={() => {
+                setProposalsTrayScope('household');
+                setIsProposalsTrayOpen(true);
+              }}
               className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition-colors cursor-pointer ${
                 isLight
                   ? 'bg-slate-50 hover:bg-slate-100 border-slate-200'
@@ -1219,7 +1242,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
                 Single tap to complete • Same-day undo supported
               </p>
             </div>
-            {activeScope !== 'household' && (
+            {effectiveScope !== 'household' && (
               <button
                 type="button"
                 onClick={() => setActiveScope('household')}
@@ -1296,11 +1319,17 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
             profiles={snapshot.profiles}
             rewards={snapshot.rewards}
             trophies={snapshot.trophies}
-            activeScope={activeScope}
+            activeScope={effectiveScope}
             isLight={isLight}
             onClaimReward={claimUnlockedReward}
-            onOpenProposeModal={() => setIsProposeModalOpen(true)}
-            onOpenProposalsTray={() => setIsProposalsTrayOpen(true)}
+            onOpenProposeModal={() => {
+              setEditingProposal(null);
+              setIsProposeModalOpen(true);
+            }}
+            onOpenProposalsTray={() => {
+              setProposalsTrayScope(effectiveScope);
+              setIsProposalsTrayOpen(true);
+            }}
             onOpenTrophyCase={() => setIsTrophyCaseOpen(true)}
             onOpenParentFulfillment={() => setParentDrawerOpen(true, 'fulfillment')}
           />
@@ -1330,14 +1359,23 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
         />
       )}
 
-      {isProposeModalOpen && (
+      {(isProposeModalOpen || Boolean(editingProposal)) && (
         <ProposeRewardModal
-          isOpen={isProposeModalOpen}
+          key={editingProposal?.id || 'new-proposal'}
+          isOpen={isProposeModalOpen || Boolean(editingProposal)}
           profiles={snapshot.profiles}
-          defaultProfileId={activeScope}
-          onClose={() => setIsProposeModalOpen(false)}
+          defaultProfileId={effectiveScope}
+          editingProposal={editingProposal}
+          onClose={() => {
+            setIsProposeModalOpen(false);
+            setEditingProposal(null);
+          }}
           onSubmitProposal={async (proposal) => {
-            await proposeWishlistReward(proposal);
+            if (editingProposal) {
+              await updateWishlistProposal(editingProposal.id, proposal);
+            } else {
+              await proposeWishlistReward(proposal);
+            }
           }}
         />
       )}
@@ -1347,9 +1385,14 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
           isOpen={isProposalsTrayOpen}
           profiles={snapshot.profiles}
           rewards={snapshot.rewards}
-          activeScope={activeScope}
+          defaultScope={proposalsTrayScope}
           onClose={() => setIsProposalsTrayOpen(false)}
-          onOpenProposeModal={() => setIsProposeModalOpen(true)}
+          onOpenProposeModal={() => {
+            setEditingProposal(null);
+            setIsProposeModalOpen(true);
+          }}
+          onEditProposal={(reward) => setEditingProposal(reward)}
+          onWithdrawProposal={withdrawWishlistProposal}
           onOpenParentPricing={() => setParentDrawerOpen(true, 'pricing')}
         />
       )}
@@ -1359,7 +1402,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
           isOpen={isTrophyCaseOpen}
           profiles={snapshot.profiles}
           trophies={snapshot.trophies}
-          defaultScope={activeScope}
+          defaultScope={effectiveScope}
           onClose={() => setIsTrophyCaseOpen(false)}
         />
       )}

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.8] - 2026-11-13
+
+### Proposals Tray Pending Rewards Fix & Kid Proposal Editing
+* **Consistent Pending Proposals Count, Scope Normalization & Filter Pills (`src/components/chores/ProposalsTrayModal.tsx`, `src/components/chores/ChoreDashboardView.tsx`, `src/components/widgets/ChoreWidget.tsx`):**
+  * Fixed the discrepancy where the household-wide Proposals Tray badge showed pending items (`needs_pricing`) while `ProposalsTrayModal` opened filtered to an empty single-profile or stale scope.
+  * Added **All Pending** and per-profile filter pills inside `ProposalsTrayModal` with automatic `'household'` fallback when a filtered scope has no pending proposals, and normalized stale `ChoreDashboardView` scopes cleanly.
+* **Kid Self-Service Proposal Edit & Withdrawal (`src/stores/useChoreStore.ts`, `src/components/chores/ProposeRewardModal.tsx`, `src/components/chores/ParentChoreDrawer.tsx`, `src/types/chores.ts`, `src/utils/choreEngine.ts`, `tests/choreEngineAndStore.test.ts`):**
+  * Added `updateWishlistProposal` and `withdrawWishlistProposal` to `useChoreStore`, allowing kids to update proposal details (proposer, title, product link + metadata extraction, image URL, estimated price) or remove pending proposals with 2-tap confirmation—strictly restricted to `status === 'needs_pricing'` items prior to parent pricing.
+  * Preserved kid proposal edits via `WishlistReward.updatedAt` in `mergeChoreSnapshotsAuthoritative` while keeping parent pricing authoritative and recording withdrawn IDs in `deletedRewardIds`.
+
+---
+
 ## [0.6.7] - 2026-11-13
 
 ### Automatic Daily Photo Library Rescan & Anti-Spam Manual Cooldowns

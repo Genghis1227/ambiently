@@ -24,6 +24,7 @@ import type {
   ChoreTemplate,
   ChoreWidgetConfig,
   Profile,
+  WishlistReward,
 } from '../../types/chores';
 import { resolveProfileColorHex } from '../../types/profiles';
 import {
@@ -77,6 +78,8 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
   const revertChoreSameDay = useChoreStore((s) => s.revertChoreSameDay);
   const dismissChoreInstance = useChoreStore((s) => s.dismissChoreInstance);
   const proposeWishlistReward = useChoreStore((s) => s.proposeWishlistReward);
+  const updateWishlistProposal = useChoreStore((s) => s.updateWishlistProposal);
+  const withdrawWishlistProposal = useChoreStore((s) => s.withdrawWishlistProposal);
   const setParentDrawerOpen = useChoreStore((s) => s.setParentDrawerOpen);
 
   const householdProfiles = useProfileStore((s) => s.profiles);
@@ -110,6 +113,7 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
   }, [dashboardSettings, now]);
 
   const [isProposeModalOpen, setIsProposeModalOpen] = useState(false);
+  const [editingProposal, setEditingProposal] = useState<WishlistReward | null>(null);
   const [isProposalsTrayOpen, setIsProposalsTrayOpen] = useState(false);
   const [isTrophyCaseOpen, setIsTrophyCaseOpen] = useState(false);
 
@@ -228,6 +232,15 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
     }
     return kids;
   }, [includeParents, allProfiles, activeScope]);
+
+  const proposeModalProfiles = useMemo(() => {
+    if (!editingProposal) return scopeProfiles;
+    if (scopeProfiles.some((p) => p.id === editingProposal.profileId)) {
+      return scopeProfiles;
+    }
+    const proposalOwner = allProfiles.find((p) => p.id === editingProposal.profileId);
+    return proposalOwner ? [...scopeProfiles, proposalOwner] : scopeProfiles;
+  }, [scopeProfiles, allProfiles, editingProposal]);
 
   const todayKey = useMemo(() => localDateKey(now), [now]);
   const templateMap = useMemo(
@@ -1194,15 +1207,24 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
         />
       )}
 
-      {/* Kid Wishlist Proposal Modal */}
-      {isProposeModalOpen && (
+      {/* Kid Wishlist Proposal Modal (Create & Edit) */}
+      {(isProposeModalOpen || Boolean(editingProposal)) && (
         <ProposeRewardModal
-          isOpen={isProposeModalOpen}
-          profiles={scopeProfiles}
+          key={editingProposal?.id || 'new-proposal'}
+          isOpen={isProposeModalOpen || Boolean(editingProposal)}
+          profiles={proposeModalProfiles}
           defaultProfileId={activeScope}
-          onClose={() => setIsProposeModalOpen(false)}
+          editingProposal={editingProposal}
+          onClose={() => {
+            setIsProposeModalOpen(false);
+            setEditingProposal(null);
+          }}
           onSubmitProposal={async (proposal) => {
-            await proposeWishlistReward(proposal);
+            if (editingProposal) {
+              await updateWishlistProposal(editingProposal.id, proposal);
+            } else {
+              await proposeWishlistReward(proposal);
+            }
           }}
         />
       )}
@@ -1213,9 +1235,14 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
           isOpen={isProposalsTrayOpen}
           profiles={allProfiles}
           rewards={snapshot.rewards}
-          activeScope={activeScope}
+          defaultScope="household"
           onClose={() => setIsProposalsTrayOpen(false)}
-          onOpenProposeModal={() => setIsProposeModalOpen(true)}
+          onOpenProposeModal={() => {
+            setEditingProposal(null);
+            setIsProposeModalOpen(true);
+          }}
+          onEditProposal={(reward) => setEditingProposal(reward)}
+          onWithdrawProposal={withdrawWishlistProposal}
           onOpenParentPricing={() => setParentDrawerOpen(true, 'pricing')}
         />
       )}
