@@ -22,7 +22,7 @@
   * Customize each canvas independently during creation (`CreateCanvasModal.tsx`) or in Settings (`SettingsModal.tsx`) with **Midnight Slate Dots**, **Warm Tactile Cork**, **OLED Pitch Black**, **Nordic Aurora**, **Architect Blueprint Grid**, or **Custom Picture Wallpaper**.
   * **Upload Local Picture (Up to 4K Ultra HD `3840×2160`):** Upload any photo from your device (optimized in-browser with native 4K/5K screen resolution support for 100% offline IndexedDB & JSON backup persistence), pick from **4 Curated 4K Photo Presets**, or paste a direct image URL.
   * **Adjustable Background Dim Level (`0%` – `90%`):** Fine-tune the dark contrast veil over any custom background picture with a live preview slider.
-* **Custom Canvases & Icon Picker:** Create unlimited boards via the `+` button in the Navigation Dock or Settings, choosing from 16 curated Lucide icons and reorder tabs with 1-click `▲` / `▼` controls.
+* **Custom Canvases, Icon Picker & Starter Canvas Blueprints (`CreateCanvasModal.tsx`, `canvasBlueprints.ts`):** Create up to 10 dedicated boards via the `+` button in the Navigation Dock or Settings, choosing from 29 Lucide icons, reordering tabs with 1-click `▲` / `▼` controls, and launching either a **Blank Canvas** or a 1-tap starter blueprint (**Family Command**, **Kitchen & Meals**, or **Ambient Photo Gallery**—also available directly on empty canvases across desktop and Mobile Companion) that automatically inherits your household Weather location and Calendar `.ics` feeds.
 * **Blank-Canvas Context Menu:** Right-clicking open canvas space gives instant access to **Add Single Photo / GIF**, **New Sticky Note**, and **Add Widget Tile**.
 
 ### Multi-Tab Navigation Dock & Automated Carousel
@@ -98,11 +98,12 @@
 
 ---
 
-## 4. Essential Glanceable Widgets (Phase 4)
+## 4. Essential Glanceable Widgets & Organized Catalog (`AddWidgetModal.tsx`, `widgetCatalog.ts`)
 
-Every widget features a top-right **Tile Settings (`⚙️`)** button to customize its title and specific parameters:
+Browse and filter all widget tiles across 4 organized categories (**Household & Planning**, **Time & Weather**, **Media & Ambient**, and **Text & Feeds**) with live search, **`On board` / `N on board`** placement counts, automatic inheritance of your Weather city and Calendar `.ics` feeds, consolidated multi-variant cards (**Clock & Time** and **Text & Quotes**) with 1-click `+ Variant` buttons, and in-place mode switching inside **Tile Settings (`⚙️`)**:
 
-* **Clock & Weather Combo (`ClockWeatherWidget.tsx`), Standalone Clock (`ClockWidget.tsx`), World Timezone Clock (`WorldClockWidget.tsx`) & Weather (`WeatherWidget.tsx`):**
+* **Unified Clock & Time (`ClockWeatherWidget.tsx`, `ClockWidget.tsx`, `WorldClockWidget.tsx`) & Weather (`WeatherWidget.tsx`):**
+  * Switch any **Clock & Time** tile between **Clock + Weather**, **Clock Only**, and **World Cities** modes directly from the Add Widget catalog or in-place inside **Tile Settings (`⚙️`)** without losing or recreating the tile.
   * Live clock supporting **Digital**, **Minimalist**, and **Analog Dial** faces with a universal **Display Seconds (`showSeconds`)** toggle on all clock & time tiles.
   * **City-Lookup World Timezone Clock (`WorldClockWidget.tsx`):** Search any global city (e.g., *Tokyo*, *London*, *Ho Chi Minh City*, *New York*) to automatically resolve its IANA timezone, displaying either a **Single-City Hero Timezone Clock** or a **Multi-City World Timezone Board** with day/night icons (`Sun` / `Moon`), timezone abbreviations, and relative hour offsets (`+15h ahead`, `-2h behind`).
   * Powered by **Open-Meteo API** (zero API key required) with a 1-click **City Geocoding Lookup** in Tile Settings, Fahrenheit/Celsius toggle, current temperature, "feels like", high/lows, and daily forecast strip.
@@ -111,17 +112,15 @@ Every widget features a top-right **Tile Settings (`⚙️`)** button to customi
   * Add, toggle, color-tag, or remove multiple public/secret `.ics` and `webcal://` URLs (Google Calendar, Apple iCloud, Outlook) in Tile Settings, parsed via our Cloudflare Pages Edge proxy (`/api/ical`), and toggle the **Show Planned Family Meals** (`showMeals`) overlay to display scheduled *Breakfast*, *Lunch*, and *Dinner* entries directly inside every calendar view.
 * **Ambient Stream & Web Embed Tile (`MediaEmbedWidget.tsx`):**
   * Embed live video/audio streams or web dashboards directly on any canvas with 1-click presets (*Lofi Hip Hop Radio*, *4K Cozy Fireplace*, *NASA ISS Live Earth View*, *Live Weather Radar via Windy.com*) or any custom YouTube / web embed URL, complete with quick audio mute/unmute and reload controls.
-* **Daily Quotes & Custom Family Affirmations (`QuotesWidget.tsx`):**
-  * Add custom family affirmations, house rules, or personal mantras in Tile Settings, choose between **Curated Only**, **Custom Only**, or **Mix Both**.
-  * **Configurable Update Intervals:** Choose auto-rotation speed (`30s`, `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `Daily`, `Manual`) with smooth cross-fade opacity transitions and dynamic header badges (`Thought of the Day`, `Thought of the Hour`, `⏱ 1h`).
+* **Unified Text & Quotes (`TextBoxWidget.tsx`, `QuotesWidget.tsx`):**
+  * Add or switch in place inside **Tile Settings (`⚙️`)** between **Heading / Text** typography banners (`TextBoxWidget.tsx`, supporting **Sticker / No Outline** frameless styling) and **Rotating Quotes** (`QuotesWidget.tsx`) featuring custom family affirmations, **Curated Only** / **Custom Only** / **Mix Both** modes, and configurable rotation intervals (`30s` – `Daily` / `Manual`).
 * **RSS News Ticker, 26 Curated Feeds & In-App Reader Mode (`RssWidget.tsx`, `curatedFeeds.ts`, `InAppWebViewerModal.tsx`):**
   * Browse **26 live-verified curated feeds** across 6 categories (*Featured*, *News*, *Tech*, *Science*, *Lifestyle*, *Sports & Finance*) with category filter pills and instant search, or paste any custom RSS 2.0 / Atom XML URL.
   * Clicking any headline opens the **In-App Kiosk Article Reader (`/api/reader`)** powered by Mozilla Readability and Linkedom, with 1-click switching to **Web Preview (`/api/web-proxy`)** so users never get trapped in an uncloseable fullscreen browser window.
 * **Milestone Countdown (`CountdownWidget.tsx`):**
   * Live days/hours/minutes/seconds countdown timer to upcoming vacations, birthdays, or milestones.
-* **Animated GIF, Sticker & Picture Tile (`ImageWidget.tsx`) & Custom Text Banner (`TextBoxWidget.tsx`):**
+* **Animated GIF, Sticker & Picture Tile (`ImageWidget.tsx`):**
   * Pin frameless transparent stickers, GIPHY animated GIFs (via built-in media search, URL, or the blank-canvas right-click **Add Single Photo / GIF** menu), device-local image uploads (stored in `db.vault` under `vault://local-media:*` with automatic raster downscaling and JSON backup export), or framed images with full `360°` rotation and quick tilt presets (`-6°` to `+6°`). Opaque GIPHY GIFs automatically stream as hardware-accelerated muted looping MP4 videos (`mp4Url`) while transparent stickers and legacy GIPHY URLs upgrade to animated `.webp` to preserve full alpha transparency without per-frame drop-shadow compositor overhead, backed by a bounded offline media cache (`ambiently-media-cache-v1`).
-  * Customize typography banners (`TextBoxWidget.tsx`) supporting **Sticker / No Outline** frameless text styling alongside compatible ambient widgets.
 
 ---
 

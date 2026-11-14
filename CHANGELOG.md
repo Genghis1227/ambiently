@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.2] - 2026-11-14
+
+### Categorized Widget Catalog, In-Place Mode Switching & Starter Canvas Blueprints
+* **Categorized & Searchable Widget Picker (`src/utils/widgetCatalog.ts`, `src/components/widgets/AddWidgetModal.tsx`):**
+  * Reorganized `AddWidgetModal` into 4 curated category pills (`Household & Planning`, `Time & Weather`, `Media & Ambient`, `Text & Feeds`) plus `All Tiles`, added live search filtering and active-canvas `On board` / `N on board` badges, stabilized dialog height (`h-[min(700px,88vh)]`) with portal pointer-event isolation, and automatically inherited existing household Weather location/units and Calendar `.ics` feeds when adding new tiles.
+* **Consolidated Catalog Cards & In-Place Tile Mode Switching (`src/components/widgets/AddWidgetModal.tsx`, `src/components/widgets/WidgetSettingsModal.tsx`):**
+  * Consolidated the 16 widget types into 13 catalog entries (**Clock & Time** and **Text & Quotes**) with 1-click `+ Variant` buttons in `AddWidgetModal`, plus in-place **Clock Tile Mode** (`Clock + Weather`, `Clock Only`, `World Cities`) and **Text Tile Mode** (`Heading / Text`, `Rotating Quotes`) segmented selectors inside `WidgetSettingsModal` that preserve tile position, size, and custom titles.
+* **Starter Canvas Blueprints & 1-Tap Empty Canvas Quick-Start (`src/utils/canvasBlueprints.ts`, `src/store/dashboardStore.ts`, `src/components/dock/CreateCanvasModal.tsx`, `src/App.tsx`, `src/components/settings/SettingsModal.tsx`, `src/components/layout/Corkboard.tsx`, `src/components/mobile/MobileCompanion.tsx`, `tests/widgetCatalogAndBlueprints.test.ts`, `FEATURES.md`, `README.md`):**
+  * Added 4 starter canvas options (`Blank Canvas`, `Family Command`, `Kitchen & Meals` pre-linked via `listNoteId` to a `🛒 Shopping List` sticky note, and `Ambient Photo Gallery` with `oled_black` + `hideNotes: true`) inside `CreateCanvasModal` and as 1-tap Empty Canvas quick-start buttons on desktop and Mobile Companion, automatically inheriting existing household Weather and Calendar feeds.
+
+---
+
 ## [0.7.1] - 2026-11-14
 
 ### Adaptive 3-Column Kanban Tiles, Meal Entry Layout Fix & Family Calendar Meal Overlay

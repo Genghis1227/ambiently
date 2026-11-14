@@ -1,15 +1,13 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   X,
+  Search,
   CloudSun,
   Clock,
-  Globe,
-  LayoutGrid,
   Image as ImageIcon,
   Calendar,
   Rss,
   Timer,
-  Quote,
   StickyNote,
   Tv,
   Plus,
@@ -18,8 +16,20 @@ import {
   CheckSquare,
   Utensils,
   Kanban,
+  RotateCcw,
 } from 'lucide-react';
-import type { WidgetType, DashboardWidget } from '../../types/dashboard';
+import type { DashboardWidget } from '../../types/dashboard';
+import { useDashboardStore } from '../../store/dashboardStore';
+import {
+  WIDGET_CATEGORIES,
+  WIDGET_CATALOG_ENTRIES,
+  buildWidgetPayloadFromVariant,
+  countActiveTabWidgetsForEntry,
+  filterWidgetCatalog,
+  type WidgetCatalogIconKey,
+  type WidgetCategoryId,
+  type WidgetVariantSpec,
+} from '../../utils/widgetCatalog';
 
 interface AddWidgetModalProps {
   isOpen: boolean;
@@ -28,185 +38,21 @@ interface AddWidgetModalProps {
   onAddWidget: (widget: Partial<DashboardWidget>) => void;
 }
 
-interface WidgetTemplate {
-  type: WidgetType;
-  title: string;
-  description: string;
-  icon: React.ComponentType<{ className?: string }>;
-  defaultGridPos: { w: number; h: number };
-  defaultConfig?: Record<string, any>;
-  color: string;
-}
-
-const WIDGET_TEMPLATES: WidgetTemplate[] = [
-  {
-    type: 'weather',
-    title: 'Live Weather & Forecast',
-    description: 'Current temperature, condition icon, humidity, wind, and a 5-day daily forecast strip.',
-    icon: CloudSun,
-    defaultGridPos: { w: 4, h: 4 },
-    defaultConfig: { locationName: 'Austin, TX', latitude: 30.2672, longitude: -97.7431, unit: 'F' },
-    color: 'from-amber-500/20 to-orange-500/20 text-amber-400 border-amber-500/30',
-  },
-  {
-    type: 'clock',
-    title: 'Ambient Clock',
-    description: 'Minimalist live digital, typographic, or analog dial clock with optional seconds and city timezone.',
-    icon: Clock,
-    defaultGridPos: { w: 4, h: 4 },
-    defaultConfig: { clockFace: 'digital', showSeconds: true },
-    color: 'from-blue-500/20 to-indigo-500/20 text-blue-400 border-blue-500/30',
-  },
-  {
-    type: 'world_clock',
-    title: 'World Timezone Clock',
-    description: 'City-lookup timezone tile showing live time, day/night status, and hour offset for 1 or more global cities.',
-    icon: Globe,
-    defaultGridPos: { w: 4, h: 4 },
-    defaultConfig: {
-      clockFace: 'digital',
-      showSeconds: true,
-      cities: [
-        { id: 'wc-tokyo', cityName: 'Tokyo', country: 'Japan', timezone: 'Asia/Tokyo' },
-      ],
-    },
-    color: 'from-teal-500/20 to-cyan-500/20 text-teal-400 border-teal-500/30',
-  },
-  {
-    type: 'clock_weather',
-    title: 'Clock & Weather Combo',
-    description: 'Dual tile showing the current time, day, date, and local temperature combined.',
-    icon: LayoutGrid,
-    defaultGridPos: { w: 4, h: 4 },
-    defaultConfig: { locationName: 'Austin, TX', latitude: 30.2672, longitude: -97.7431, unit: 'F', showSeconds: true },
-    color: 'from-cyan-500/20 to-blue-500/20 text-cyan-400 border-cyan-500/30',
-  },
-  {
-    type: 'photo_frame',
-    title: 'Ambient Photo Frame',
-    description: 'Slideshow supporting Plex Media Server, Local NAS folders, and Google Drive links.',
-    icon: ImageIcon,
-    defaultGridPos: { w: 4, h: 8 },
-    defaultConfig: { displayStyle: 'ken_burns', rotationIntervalSec: 15 },
-    color: 'from-purple-500/20 to-pink-500/20 text-purple-400 border-purple-500/30',
-  },
-  {
-    type: 'embed',
-    title: 'Ambient Stream & Web Embed',
-    description: '1-click Lofi Beats radio, 4K Cozy Fireplace, NASA Live Earth, Weather Radar, or custom URLs.',
-    icon: Tv,
-    defaultGridPos: { w: 4, h: 4 },
-    defaultConfig: { preset: 'lofi', muted: true, customUrl: '' },
-    color: 'from-pink-500/20 to-rose-500/20 text-pink-400 border-pink-500/30',
-  },
-  {
-    type: 'chores',
-    title: 'Family Chores & Rewards',
-    description: 'Interactive kid chore checklist grouped by child, point banks, parent approvals, and full-screen reward hub.',
-    icon: CheckSquare,
-    defaultGridPos: { w: 4, h: 8 },
-    defaultConfig: { scope: 'household', defaultExpandedSections: ['today', 'review'] },
-    color: 'from-emerald-500/20 to-teal-500/20 text-emerald-400 border-emerald-500/30',
-  },
-  {
-    type: 'meals',
-    title: 'Family Meal Planner',
-    description: 'Calm 3-day, tomorrow, or full-week meal outlook with recipe links, counter cooking mode, and smart grocery lists.',
-    icon: Utensils,
-    defaultGridPos: { w: 4, h: 6 },
-    defaultConfig: {
-      scope: 'three_day',
-      visibleSlots: ['breakfast', 'lunch', 'dinner'],
-      showCookAvatar: true,
-    },
-    color: 'from-amber-500/15 to-emerald-500/15 text-amber-300 border-amber-500/30',
-  },
-  {
-    type: 'kanban',
-    title: 'Project Kanban',
-    description: 'Zero-friction multi-board workflow starting on To Do; resize wider for 3 columns or drag to edges on compact tiles.',
-    icon: Kanban,
-    defaultGridPos: { w: 4, h: 7 },
-    defaultConfig: {
-      activeColumnId: 'todo',
-      displayMode: 'tile',
-    },
-    color: 'from-slate-500/15 to-emerald-500/15 text-slate-200 border-slate-500/30',
-  },
-  {
-    type: 'calendar',
-    title: 'Family Calendar',
-    description: 'Live agenda schedule and monthly calendar grid synced via public iCal URLs.',
-    icon: Calendar,
-    defaultGridPos: { w: 4, h: 8 },
-    defaultConfig: { defaultView: 'agenda' },
-    color: 'from-emerald-500/20 to-teal-500/20 text-emerald-400 border-emerald-500/30',
-  },
-  {
-    type: 'rss',
-    title: 'Live News & RSS Feed',
-    description: 'Rotating news headlines and article summaries from your favorite RSS feeds.',
-    icon: Rss,
-    defaultGridPos: { w: 4, h: 4 },
-    defaultConfig: { feedUrl: 'https://tony.trinhism.com/index.xml' },
-    color: 'from-orange-500/20 to-red-500/20 text-orange-400 border-orange-500/30',
-  },
-  {
-    type: 'countdown',
-    title: 'Milestone Countdown',
-    description: 'Real-time countdown timer to upcoming family vacations, birthdays, or holidays.',
-    icon: Timer,
-    defaultGridPos: { w: 4, h: 4 },
-    defaultConfig: { eventName: 'Family Vacation', targetDate: '2026-12-25T00:00:00Z' },
-    color: 'from-indigo-500/20 to-violet-500/20 text-indigo-400 border-indigo-500/30',
-  },
-  {
-    type: 'quotes',
-    title: 'Daily Inspiration & Affirmations',
-    description: 'Rotating collection of timeless quotes, wisdom, and custom family affirmations.',
-    icon: Quote,
-    defaultGridPos: { w: 4, h: 4 },
-    defaultConfig: { quoteMode: 'both', customQuotes: [] },
-    color: 'from-yellow-500/20 to-amber-500/20 text-yellow-400 border-yellow-500/30',
-  },
-  {
-    type: 'textbox',
-    title: 'Text Box & Canvas Heading',
-    description: 'Formatted text, titles, announcements, or custom labels with transparent background & typography options.',
-    icon: Type,
-    defaultGridPos: { w: 4, h: 2 },
-    defaultConfig: {
-      content: 'Ambient Smart Display\nCommand Center',
-      fontSize: '2xl',
-      fontWeight: 'bold',
-      textAlign: 'center',
-      fontFamily: 'sans',
-      textColor: '#ffffff',
-      textShadow: true,
-      textTransform: 'none',
-      letterSpacing: 'normal',
-    },
-    color: 'from-blue-500/20 to-cyan-500/20 text-cyan-300 border-cyan-500/30',
-  },
-  {
-    type: 'sticky_notes',
-    title: 'Sticky Notes & Reminders',
-    description: 'Card tile for quick messages, reminders, color-coded notes, and task lists.',
-    icon: StickyNote,
-    defaultGridPos: { w: 4, h: 8 },
-    defaultConfig: {},
-    color: 'from-rose-500/20 to-pink-500/20 text-rose-400 border-rose-500/30',
-  },
-  {
-    type: 'image',
-    title: 'Single Image or GIF',
-    description: 'Display an animated GIF from GIPHY, a transparent canvas sticker, or any picture with search & URL support.',
-    icon: Sparkles,
-    defaultGridPos: { w: 4, h: 4 },
-    defaultConfig: { fit: 'contain' },
-    color: 'from-fuchsia-500/20 to-pink-500/20 text-fuchsia-400 border-fuchsia-500/30',
-  },
-];
+const CATALOG_ICONS: Record<WidgetCatalogIconKey, React.ComponentType<{ className?: string }>> = {
+  cloud_sun: CloudSun,
+  clock: Clock,
+  photo_frame: ImageIcon,
+  embed: Tv,
+  chores: CheckSquare,
+  meals: Utensils,
+  kanban: Kanban,
+  calendar: Calendar,
+  rss: Rss,
+  countdown: Timer,
+  textbox: Type,
+  sticky_notes: StickyNote,
+  image: Sparkles,
+};
 
 export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
   isOpen,
@@ -214,8 +60,14 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
   activeTabId,
   onAddWidget,
 }) => {
+  const existingWidgets = useDashboardStore((state) => state.widgets);
+  const [selectedCategory, setSelectedCategory] = useState<WidgetCategoryId>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+
   useEffect(() => {
     if (!isOpen) return;
+    setSelectedCategory('all');
+    setSearchQuery('');
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
@@ -223,77 +75,217 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
+  const categoryCounts = useMemo(() => {
+    const counts: Record<WidgetCategoryId, number> = {
+      all: WIDGET_CATALOG_ENTRIES.length,
+      household: 0,
+      time_weather: 0,
+      media_ambient: 0,
+      text_feeds: 0,
+    };
+    for (const entry of WIDGET_CATALOG_ENTRIES) {
+      counts[entry.category] += 1;
+    }
+    return counts;
+  }, []);
+
+  const filteredItems = useMemo(
+    () => filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, selectedCategory, searchQuery),
+    [selectedCategory, searchQuery]
+  );
+
   if (!isOpen) return null;
 
-  const handleSelectTemplate = (tpl: WidgetTemplate) => {
-    onAddWidget({
-      tabId: activeTabId,
-      type: tpl.type,
-      title: tpl.title,
-      gridPos: { x: 0, y: 0, w: tpl.defaultGridPos.w, h: tpl.defaultGridPos.h },
-      config: tpl.defaultConfig || {},
-    });
+  const handleAddVariant = (variant: WidgetVariantSpec) => {
+    onAddWidget(buildWidgetPayloadFromVariant(variant, activeTabId, existingWidgets));
     onClose();
   };
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
       className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 select-none cursor-pointer"
+      onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
+        onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl overflow-hidden flex flex-col max-h-[85vh] cursor-default"
+        className="w-full max-w-3xl h-[min(700px,88vh)] rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl overflow-hidden flex flex-col cursor-default"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-950/60">
+        <div className="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-950/60 shrink-0">
           <div>
             <h2 className="text-base font-bold text-white flex items-center gap-2">
               <Plus className="w-4 h-4 text-blue-400" />
               <span>Add Widget to Dashboard</span>
             </h2>
             <p className="text-xs text-gray-400 mt-0.5">
-              Select any tile below to pin it to your current dashboard view.
+              Browse by category, search, or pick a Clock / Text variant directly.
             </p>
           </div>
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close Add Widget modal"
             className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Grid of Available Widget Templates */}
-        <div className="p-4 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {WIDGET_TEMPLATES.map((tpl) => {
-            const Icon = tpl.icon;
-            return (
+        {/* Search & Category Filter Bar */}
+        <div className="px-4 py-3 border-b border-gray-800/80 bg-gray-950/40 space-y-2.5 shrink-0">
+          <div className="relative">
+            <Search className="w-4 h-4 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search widgets (e.g., calendar, world clock, quotes, meals, giphy)..."
+              className="w-full rounded-xl bg-gray-950 border border-gray-800 pl-9 pr-9 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+            />
+            {searchQuery && (
               <button
-                key={tpl.type}
-                onClick={() => handleSelectTemplate(tpl)}
-                className="flex items-start gap-3.5 p-3.5 rounded-xl bg-gray-800/40 hover:bg-gray-800/80 border border-gray-800 hover:border-gray-700 text-left transition-all cursor-pointer group"
+                type="button"
+                onClick={() => setSearchQuery('')}
+                aria-label="Clear widget search"
+                className="p-1 rounded-md text-gray-400 hover:text-white hover:bg-gray-800 absolute right-2 top-1/2 -translate-y-1/2 transition-colors cursor-pointer"
               >
-                <div
-                  className={`p-3 rounded-xl bg-gradient-to-br border ${tpl.color} shrink-0 group-hover:scale-105 transition-transform`}
-                >
-                  <Icon className="w-5 h-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-bold text-white group-hover:text-blue-400 transition-colors">
-                      {tpl.title}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-400 mt-1 leading-relaxed">
-                    {tpl.description}
-                  </p>
-                </div>
+                <X className="w-3.5 h-3.5" />
               </button>
-            );
-          })}
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+            {WIDGET_CATEGORIES.map((cat) => {
+              const isSelected = selectedCategory === cat.id;
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setSelectedCategory(cat.id)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap border transition-all cursor-pointer shrink-0 ${
+                    isSelected
+                      ? 'bg-blue-600/20 border-blue-500 text-blue-300 shadow-sm'
+                      : 'bg-gray-950/70 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'
+                  }`}
+                >
+                  <span>{cat.label}</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold ${
+                      isSelected ? 'bg-blue-500/25 text-blue-200' : 'bg-gray-800 text-gray-400'
+                    }`}
+                  >
+                    {categoryCounts[cat.id]}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Grid of Available Widget Entries */}
+        <div className="flex-1 min-h-0 p-4 overflow-y-auto">
+          {filteredItems.length === 0 ? (
+            <div className="h-full min-h-[220px] flex flex-col items-center justify-center text-center px-6 py-10 rounded-2xl bg-gray-950/40 border border-dashed border-gray-800 space-y-3">
+              <p className="text-sm font-bold text-white">No matching widgets</p>
+              <p className="text-xs text-gray-400 max-w-xs">
+                Try another search keyword or switch back to All Tiles to browse every widget type.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedCategory('all');
+                  setSearchQuery('');
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 text-xs font-semibold transition-colors cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset filters</span>
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {filteredItems.map(({ entry, matchedVariantType }) => {
+                const Icon = CATALOG_ICONS[entry.iconKey];
+                const boardCount = countActiveTabWidgetsForEntry(entry, existingWidgets, activeTabId);
+                const activeVariant =
+                  (matchedVariantType &&
+                    entry.variants.find((v) => v.type === matchedVariantType)) ||
+                  entry.variants[0];
+                const hasMultipleVariants = entry.variants.length > 1;
+
+                return (
+                  <div
+                    key={entry.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleAddVariant(activeVariant)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleAddVariant(activeVariant);
+                      }
+                    }}
+                    className="flex flex-col justify-between gap-2.5 p-3.5 rounded-xl bg-gray-800/40 hover:bg-gray-800/80 border border-gray-800 hover:border-gray-700 text-left transition-all cursor-pointer group focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                  >
+                    <div className="flex items-start gap-3.5">
+                      <div
+                        className={`p-3 rounded-xl bg-gradient-to-br border ${entry.color} shrink-0 group-hover:scale-105 transition-transform`}
+                      >
+                        <Icon className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm font-bold text-white group-hover:text-blue-400 transition-colors truncate">
+                            {entry.title}
+                          </span>
+                          {boardCount > 0 && (
+                            <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-semibold text-emerald-300 whitespace-nowrap shrink-0">
+                              {boardCount === 1 ? 'On board' : `${boardCount} on board`}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-400 mt-1 leading-relaxed">
+                          {entry.description}
+                        </p>
+                      </div>
+                    </div>
+
+                    {hasMultipleVariants && (
+                      <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-gray-800/70">
+                        {entry.variants.map((variant) => {
+                          const isHighlighted = variant.type === activeVariant.type;
+                          return (
+                            <button
+                              key={variant.type}
+                              type="button"
+                              onPointerDown={(e) => e.stopPropagation()}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAddVariant(variant);
+                              }}
+                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold border transition-colors cursor-pointer ${
+                                isHighlighted && matchedVariantType
+                                  ? 'bg-blue-600/25 border-blue-500/60 text-blue-200 hover:bg-blue-600/35'
+                                  : 'bg-gray-900/90 border-gray-700/80 text-gray-300 hover:text-white hover:border-blue-500/50 hover:bg-blue-600/15'
+                              }`}
+                            >
+                              <span>+ {variant.pillLabel}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>

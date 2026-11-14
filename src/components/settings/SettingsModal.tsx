@@ -2437,8 +2437,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         isOpen={isCreateCanvasOpen}
         onClose={() => setIsCreateCanvasOpen(false)}
         existingCanvasCount={tabs.length}
-        onCreateCanvas={(name, icon, theme, wallpaperUrl, dimLevel) => {
-          addTab(name, icon, theme, wallpaperUrl, dimLevel);
+        onCreateCanvas={(name, icon, theme, wallpaperUrl, dimLevel, blueprintId) => {
+          addTab(name, icon, theme, wallpaperUrl, dimLevel, blueprintId);
         }}
       />
 

@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.2",
+    date: "November 14, 2026",
+    title: "Categorized Widget Catalog, In-Place Mode Switching & Starter Canvas Blueprints",
+    highlights: [
+      "Categorized & Searchable Add Tile Picker: Organized tiles into Household & Planning, Time & Weather, Media & Ambient, and Text & Feeds with instant search, active-canvas On board badges, and automatic inheritance of your household's Weather city/units and Calendar .ics feeds.",
+      "Consolidated Catalog & In-Place Mode Switching: Grouped Clock variants into Clock & Time and Text variants into Text & Quotes (13 clean catalog cards) with both 1-click + Variant buttons when adding and in-place Clock Tile Mode / Text Tile Mode switchers inside Tile Settings.",
+      "Starter Canvas Blueprints & 1-Tap Quick-Start: Added Family Command, Kitchen & Meals (auto-linked to a Shopping List sticky note), and Ambient Photo Gallery alongside Blank Canvas in Create New Canvas and on empty desktop/mobile canvases.",
+    ],
+  },
+  {
     version: "v0.7.1",
     date: "November 14, 2026",
     title: "Adaptive 3-Column Kanban Tiles, Meal Entry Layout Fix & Calendar Meal Overlay",

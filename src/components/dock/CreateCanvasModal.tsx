@@ -1,11 +1,16 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { X, Plus, Palette, Upload, SunDim } from 'lucide-react';
+import { X, Plus, Palette, Upload, SunDim, Sparkles } from 'lucide-react';
 import { CANVAS_ICONS } from '../../data/canvasIcons';
 import { CANVAS_THEMES } from '../../data/canvasThemes';
 import {
   CURATED_WALLPAPER_PRESETS,
   processUploadedWallpaper,
 } from '../../utils/imageUpload';
+import {
+  CANVAS_BLUEPRINTS,
+  type CanvasBlueprintId,
+  type CanvasBlueprintSpec,
+} from '../../utils/canvasBlueprints';
 import type { CanvasBackgroundTheme } from '../../types/dashboard';
 import { MAX_CANVASES } from '../../types/dashboard';
 
@@ -17,7 +22,8 @@ interface CreateCanvasModalProps {
     icon: string,
     backgroundTheme?: CanvasBackgroundTheme,
     customWallpaperUrl?: string,
-    backgroundDimLevel?: number
+    backgroundDimLevel?: number,
+    blueprintId?: CanvasBlueprintId
   ) => void;
   existingCanvasCount?: number;
 }
@@ -29,9 +35,13 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
   existingCanvasCount = 0,
 }) => {
   const isLimitReached = existingCanvasCount >= MAX_CANVASES;
+  const [selectedBlueprint, setSelectedBlueprint] = useState<CanvasBlueprintId>('blank');
   const [name, setName] = useState('');
   const [selectedIcon, setSelectedIcon] = useState('Pin');
   const [selectedTheme, setSelectedTheme] = useState<CanvasBackgroundTheme>('midnight_dots');
+  const [nameTouched, setNameTouched] = useState(false);
+  const [iconTouched, setIconTouched] = useState(false);
+  const [themeTouched, setThemeTouched] = useState(false);
   const [customWallpaperUrl, setCustomWallpaperUrl] = useState('');
   const [backgroundDimLevel, setBackgroundDimLevel] = useState<number>(45);
   const [isUploading, setIsUploading] = useState(false);
@@ -39,6 +49,15 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
+    setSelectedBlueprint('blank');
+    setName('');
+    setSelectedIcon('Pin');
+    setSelectedTheme('midnight_dots');
+    setNameTouched(false);
+    setIconTouched(false);
+    setThemeTouched(false);
+    setCustomWallpaperUrl('');
+    setBackgroundDimLevel(45);
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
@@ -48,6 +67,19 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
 
   if (!isOpen) return null;
 
+  const handleSelectBlueprint = (bp: CanvasBlueprintSpec) => {
+    setSelectedBlueprint(bp.id);
+    if (!nameTouched) {
+      setName(bp.suggestedName);
+    }
+    if (!iconTouched) {
+      setSelectedIcon(bp.suggestedIcon);
+    }
+    if (!themeTouched) {
+      setSelectedTheme(bp.suggestedTheme);
+    }
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -55,6 +87,7 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
     try {
       const dataUrl = await processUploadedWallpaper(file);
       setCustomWallpaperUrl(dataUrl);
+      setThemeTouched(true);
       setSelectedTheme('custom');
     } catch (err) {
       console.error('Failed to process uploaded wallpaper:', err);
@@ -71,11 +104,16 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
       selectedIcon,
       selectedTheme,
       selectedTheme === 'custom' ? customWallpaperUrl.trim() : undefined,
-      backgroundDimLevel
+      backgroundDimLevel,
+      selectedBlueprint
     );
+    setSelectedBlueprint('blank');
     setName('');
     setSelectedIcon('Pin');
     setSelectedTheme('midnight_dots');
+    setNameTouched(false);
+    setIconTouched(false);
+    setThemeTouched(false);
     setCustomWallpaperUrl('');
     setBackgroundDimLevel(45);
     onClose();
@@ -83,14 +121,18 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
       className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 select-none cursor-pointer"
+      onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
+        onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl overflow-hidden flex flex-col max-h-[88vh] cursor-default"
+        className="w-full max-w-lg rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl overflow-hidden flex flex-col max-h-[88vh] cursor-default"
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-950/60">
@@ -99,6 +141,7 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
             <h2 className="text-base font-bold text-white">Create New Canvas</h2>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors cursor-pointer"
           >
@@ -119,6 +162,52 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
             </div>
           )}
 
+          {/* Starter Blueprint Picker */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Starter Blueprint</span>
+              </label>
+              <span className="text-[10px] text-gray-500">
+                Inherits Weather city &amp; Calendar feeds
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {CANVAS_BLUEPRINTS.map((bp) => {
+                const isSelected = selectedBlueprint === bp.id;
+                return (
+                  <button
+                    key={bp.id}
+                    type="button"
+                    onClick={() => handleSelectBlueprint(bp)}
+                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-emerald-600/20 border-emerald-500 text-emerald-100 shadow-sm'
+                        : 'bg-gray-950/70 border-gray-800 text-gray-300 hover:text-white hover:border-gray-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold truncate">{bp.title}</span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded-md text-[10px] font-semibold shrink-0 ${
+                          isSelected
+                            ? 'bg-emerald-500/25 text-emerald-200'
+                            : 'bg-gray-800 text-gray-400'
+                        }`}
+                      >
+                        {bp.badge}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-400 mt-1 leading-snug">
+                      {bp.summary}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div>
             <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
               Canvas / Board Name
@@ -127,7 +216,10 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
               type="text"
               autoFocus
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setNameTouched(true);
+                setName(e.target.value);
+              }}
               placeholder="e.g. Photos, Living Room, Kitchen Display, Office..."
               className="w-full rounded-xl bg-gray-950 border border-gray-800 p-2.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
             />
@@ -145,7 +237,10 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => setSelectedIcon(item.id)}
+                    onClick={() => {
+                      setIconTouched(true);
+                      setSelectedIcon(item.id);
+                    }}
                     className={`flex flex-col items-center justify-center p-2 rounded-lg border transition-all cursor-pointer ${
                       isSelected
                         ? 'bg-emerald-600/30 border-emerald-500 text-emerald-300 shadow'
@@ -173,7 +268,10 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
                   <button
                     key={theme.id}
                     type="button"
-                    onClick={() => setSelectedTheme(theme.id)}
+                    onClick={() => {
+                      setThemeTouched(true);
+                      setSelectedTheme(theme.id);
+                    }}
                     className={`flex items-center gap-2.5 p-2 rounded-xl border text-left transition-all cursor-pointer ${
                       isSelected
                         ? 'bg-emerald-600/20 border-emerald-500 text-emerald-200'
