@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.10] - 2026-11-13
+
+### Persistent Workspace Agent Rules (`AGENTS.md`) & Pre-PR Documentation Checklist
+* **Single-Source-of-Truth Workspace Rule (`AGENTS.md`, `DEVELOPER_WORKFLOW.md`):**
+  * Added root `AGENTS.md` with `@[DEVELOPER_WORKFLOW.md](./DEVELOPER_WORKFLOW.md)` inline rule expansion so the full developer workflow is automatically injected into agent instructions on every turn without maintaining duplicate rules across two files.
+  * Expanded Section 3 (`Documentation Review`) and Section 4 (`Versioning`) of `DEVELOPER_WORKFLOW.md` with an explicit pre-PR documentation checklist (`FEATURES.md`, `README.md`, `ARCHITECTURE.md`, and `RASPBERRY_PI.md`) and explicit `package.json` / `CHANGELOG.md` / `src/data/changelog.ts` release gate coverage.
+
+---
+
 ## [0.6.9] - 2026-11-13
 
 ### Same-Day Chore Skip (0 Pts + Same-Day Undo) & Documentation Sync
