@@ -20,6 +20,7 @@ import type {
 import { MAX_CANVASES } from '../types/dashboard';
 import { saveSnapshotToFile, hasActiveLocalFile } from '../services/fileSync';
 import { computeNonOverlappingLayout, findOpenCanvasSpot } from '../utils/autoLayout';
+import { materializeCanvasBlueprint, type CanvasBlueprintId } from '../utils/canvasBlueprints';
 import { getDefaultWidgetStickerMode, isStickerCapableWidget } from '../utils/widgetStickerMode';
 import type { PhotoTargetSyncMeta, PlexPhotoSyncConfig } from '../utils/photoSyncPolicy';
 import type { PhotoItem } from '../services/photos';
@@ -204,8 +205,10 @@ interface DashboardState {
     icon: string,
     backgroundTheme?: CanvasBackgroundTheme,
     customWallpaperUrl?: string,
-    backgroundDimLevel?: number
+    backgroundDimLevel?: number,
+    blueprintId?: CanvasBlueprintId
   ) => Promise<string | null>;
+  applyCanvasBlueprint: (tabId: string, blueprintId: CanvasBlueprintId) => Promise<void>;
   updateTab: (tabId: string, updates: Partial<DashboardTab>) => Promise<void>;
   setHomeTab: (tabId: string) => Promise<void>;
   deleteTab: (tabId: string) => Promise<void>;
@@ -465,18 +468,31 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     icon,
     backgroundTheme = 'midnight_dots',
     customWallpaperUrl,
-    backgroundDimLevel = 45
+    backgroundDimLevel = 45,
+    blueprintId
   ) => {
-    const activeTabs = get().tabs.filter((t) => !t.deleted_at);
+    const state = get();
+    const activeTabs = state.tabs.filter((t) => !t.deleted_at);
     if (activeTabs.length >= MAX_CANVASES) {
       console.warn(`Canvas limit of ${MAX_CANVASES} reached.`);
       return null;
     }
-    const newId = `tab-${Date.now()}`;
-    const maxOrder = get().tabs.reduce(
+    const nowMs = Date.now();
+    const newId = `tab-${nowMs}`;
+    const maxOrder = state.tabs.reduce(
       (max, t, idx) => Math.max(max, Number.isFinite(t.order) ? t.order : idx),
       -1
     );
+    const materialized =
+      blueprintId && blueprintId !== 'blank'
+        ? materializeCanvasBlueprint(blueprintId, {
+            tabId: newId,
+            existingWidgets: state.widgets,
+            defaultWidgetStyle: state.settings.defaultWidgetStyle || 'auto',
+            nowMs,
+          })
+        : null;
+
     const newTab: DashboardTab = {
       id: newId,
       name: name.trim() || 'New Canvas',
@@ -485,19 +501,89 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       backgroundTheme,
       customWallpaperUrl: customWallpaperUrl?.trim() || undefined,
       backgroundDimLevel,
-      hideNotes: false,
+      hideNotes: Boolean(materialized?.tabUpdates.hideNotes),
       autoRotateDurationSec: 30,
       enabled: true,
-      updated_at: new Date().toISOString(),
+      updated_at: new Date(nowMs).toISOString(),
     };
     await db.tabs.add(newTab);
+    if (materialized && materialized.widgets.length > 0) {
+      await db.widgets.bulkPut(materialized.widgets);
+    }
+    if (materialized && materialized.notes.length > 0) {
+      await db.notes.bulkPut(materialized.notes);
+    }
     set({
       tabs: [...get().tabs, newTab],
+      widgets:
+        materialized && materialized.widgets.length > 0
+          ? [...get().widgets, ...materialized.widgets]
+          : get().widgets,
+      notes:
+        materialized && materialized.notes.length > 0
+          ? [...materialized.notes, ...get().notes]
+          : get().notes,
       activeTabId: newId,
     });
     await markCanvasLooksChanged(get, set);
     get().saveLocalBackup();
     return newId;
+  },
+
+  applyCanvasBlueprint: async (tabId, blueprintId) => {
+    if (blueprintId === 'blank') return;
+    const state = get();
+    const targetTab = state.tabs.find((t) => t.id === tabId && !t.deleted_at);
+    if (!targetTab) return;
+
+    const nowMs = Date.now();
+    const nowIso = new Date(nowMs).toISOString();
+    const materialized = materializeCanvasBlueprint(blueprintId, {
+      tabId,
+      existingWidgets: state.widgets,
+      defaultWidgetStyle: state.settings.defaultWidgetStyle || 'auto',
+      nowMs,
+    });
+
+    const tabUpdates: Partial<DashboardTab> = {};
+    if (materialized.tabUpdates.hideNotes) {
+      tabUpdates.hideNotes = true;
+    }
+    if (
+      materialized.tabUpdates.backgroundTheme === 'oled_black' &&
+      targetTab.backgroundTheme !== 'custom'
+    ) {
+      tabUpdates.backgroundTheme = 'oled_black';
+    }
+    const hasTabChanges = Object.keys(tabUpdates).length > 0;
+    const updatedTab = hasTabChanges ? { ...targetTab, ...tabUpdates, updated_at: nowIso } : null;
+
+    if (updatedTab) {
+      await db.tabs.put(updatedTab);
+    }
+    if (materialized.widgets.length > 0) {
+      await db.widgets.bulkPut(materialized.widgets);
+    }
+    if (materialized.notes.length > 0) {
+      await db.notes.bulkPut(materialized.notes);
+    }
+
+    set({
+      ...(updatedTab
+        ? { tabs: get().tabs.map((t) => (t.id === tabId ? updatedTab : t)) }
+        : {}),
+      ...(materialized.widgets.length > 0
+        ? { widgets: [...get().widgets, ...materialized.widgets] }
+        : {}),
+      ...(materialized.notes.length > 0
+        ? { notes: [...materialized.notes, ...get().notes] }
+        : {}),
+    });
+
+    if (hasTabChanges) {
+      await markCanvasLooksChanged(get, set);
+    }
+    get().saveLocalBackup();
   },
 
   updateTab: async (tabId, updates) => {

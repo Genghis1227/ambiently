@@ -41,7 +41,16 @@ import {
   isTargetRescannable,
 } from '../../utils/photoSyncPolicy';
 import { isWidgetStickerMode } from '../../utils/widgetStickerMode';
-import type { DashboardWidget, ImageWidgetConfig, WidgetThemeMode } from '../../types/dashboard';
+import type { DashboardWidget, ImageWidgetConfig, WidgetThemeMode, WidgetType } from '../../types/dashboard';
+import {
+  CLOCK_MODE_OPTIONS,
+  TEXT_MODE_OPTIONS,
+  extractHouseholdInheritedDefaults,
+  getDefaultTitleForWidgetType,
+  isClockFamilyType,
+  isDefaultModeFamilyTitle,
+  isTextFamilyType,
+} from '../../utils/widgetCatalog';
 import { type CalendarSource, normalizeCalendarUrl, testCalendarFeed } from '../../services/feeds';
 import { CalendarUrlGuideModal } from '../calendar/CalendarUrlGuideModal';
 import type { QuoteItem } from '../../services/quotes';
@@ -74,6 +83,7 @@ interface WidgetSettingsModalProps {
     widgetId: string,
     updates: {
       title?: string;
+      type?: WidgetType;
       config: Record<string, any>;
       freeformPos?: DashboardWidget['freeformPos'];
     }
@@ -250,6 +260,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const [kanbanDisplayMode, setKanbanDisplayMode] = useState<'tile' | 'view'>('tile');
   const [rssCategoryFilter, setRssCategoryFilter] = useState<'All' | RssFeedCategory>('All');
   const [rssSearchQuery, setRssSearchQuery] = useState('');
+  const [selectedWidgetType, setSelectedWidgetType] = useState<WidgetType>('clock');
 
   // Prevents re-renders or background photo syncs from resetting active form edits while modal is open
   const lastOpenedWidgetIdRef = useRef<string | null>(null);
@@ -271,11 +282,14 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       widget,
       settings.defaultWidgetStyle || 'auto'
     );
+    setSelectedWidgetType(widget.type);
     setTitle(widget.title || '');
     setThemeMode((widget.config?.themeMode as WidgetThemeMode) || 'auto');
     setWidgetTransparentBg(resolvedStickerMode);
     setGeoStatus('');
     setGeoHits([]);
+
+    const inheritedWeather = extractHouseholdInheritedDefaults(useDashboardStore.getState().widgets).weather;
 
     if (widget.type === 'countdown') {
       const targetStr = widget.config?.targetDate || '2026-12-25T00:00:00Z';
@@ -310,23 +324,68 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setShowDateTaken(widget.config?.showDateTaken ?? false);
       setMosaicKenBurns(widget.config?.mosaicKenBurns ?? false);
     } else if (widget.type === 'weather' || widget.type === 'clock_weather') {
-      setLocationName(widget.config?.locationName || 'Austin, TX');
-      setTempUnit(widget.config?.unit || 'F');
-      setLatitude(widget.config?.latitude ?? 30.2672);
-      setLongitude(widget.config?.longitude ?? -97.7431);
-      setTimezone(widget.config?.timezone || '');
+      setLocationName(widget.config?.locationName || inheritedWeather.locationName);
+      setTempUnit(widget.config?.unit || inheritedWeather.unit || 'F');
+      setLatitude(
+        Number.isFinite(Number(widget.config?.latitude))
+          ? Number(widget.config.latitude)
+          : inheritedWeather.latitude
+      );
+      setLongitude(
+        Number.isFinite(Number(widget.config?.longitude))
+          ? Number(widget.config.longitude)
+          : inheritedWeather.longitude
+      );
+      setTimezone(widget.config?.timezone || inheritedWeather.timezone || '');
       setClockFace(widget.config?.clockFace || widget.config?.face || 'digital');
       setShowSeconds(widget.config?.showSeconds ?? true);
       setClockAlign(widget.config?.clockAlign || 'center');
+      setWorldCities(
+        Array.isArray(widget.config?.cities) && widget.config.cities.length > 0
+          ? widget.config.cities
+          : DEFAULT_WORLD_CITIES
+      );
+      setWorldCitySearch('');
     } else if (widget.type === 'clock') {
       setClockFace(widget.config?.clockFace || 'digital');
       setShowSeconds(widget.config?.showSeconds ?? true);
       setClockAlign(widget.config?.clockAlign || 'center');
       setTimezone(widget.config?.timezone || '');
       setLocationName(widget.config?.locationName || '');
+      setTempUnit(widget.config?.unit || inheritedWeather.unit || 'F');
+      setLatitude(
+        Number.isFinite(Number(widget.config?.latitude))
+          ? Number(widget.config.latitude)
+          : inheritedWeather.latitude
+      );
+      setLongitude(
+        Number.isFinite(Number(widget.config?.longitude))
+          ? Number(widget.config.longitude)
+          : inheritedWeather.longitude
+      );
+      setWorldCities(
+        Array.isArray(widget.config?.cities) && widget.config.cities.length > 0
+          ? widget.config.cities
+          : DEFAULT_WORLD_CITIES
+      );
+      setWorldCitySearch('');
     } else if (widget.type === 'world_clock') {
       setClockFace(widget.config?.clockFace || 'digital');
       setShowSeconds(widget.config?.showSeconds ?? true);
+      setClockAlign(widget.config?.clockAlign || 'center');
+      setLocationName(widget.config?.locationName || inheritedWeather.locationName);
+      setTempUnit(widget.config?.unit || inheritedWeather.unit || 'F');
+      setLatitude(
+        Number.isFinite(Number(widget.config?.latitude))
+          ? Number(widget.config.latitude)
+          : inheritedWeather.latitude
+      );
+      setLongitude(
+        Number.isFinite(Number(widget.config?.longitude))
+          ? Number(widget.config.longitude)
+          : inheritedWeather.longitude
+      );
+      setTimezone(widget.config?.timezone || inheritedWeather.timezone || '');
       setWorldCities(
         Array.isArray(widget.config?.cities) && widget.config.cities.length > 0
           ? widget.config.cities
@@ -352,12 +411,11 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setEmbedPreset(widget.config?.preset || 'lofi');
       setEmbedCustomUrl(widget.config?.customUrl || '');
       setEmbedMuted(widget.config?.muted ?? true);
-    } else if (widget.type === 'quotes') {
+    } else if (widget.type === 'quotes' || widget.type === 'textbox') {
       setQuoteMode(widget.config?.quoteMode || 'both');
       setCustomQuotes(Array.isArray(widget.config?.customQuotes) ? widget.config.customQuotes : []);
       setQuoteIntervalSec(widget.config?.rotationIntervalSec ?? widget.config?.quoteIntervalSec ?? 3600);
-    } else if (widget.type === 'textbox') {
-      setTextContent(widget.config?.content ?? 'Welcome to Ambiently\nSmart Display & Dashboard');
+      setTextContent(widget.config?.content ?? 'Ambient Smart Display\nCommand Center');
       setTextFontSize(widget.config?.fontSize || '2xl');
       setTextFontWeight(widget.config?.fontWeight || 'bold');
       setTextAlignment(widget.config?.textAlign || 'center');
@@ -440,6 +498,39 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
 
   if (!isOpen || !widget) return null;
 
+  const effectiveType: WidgetType = selectedWidgetType || widget.type;
+
+  const handleSwitchWidgetMode = (nextType: WidgetType) => {
+    if (nextType === effectiveType) return;
+    setSelectedWidgetType(nextType);
+    setGeoStatus('');
+    setGeoHits([]);
+
+    if (isClockFamilyType(nextType)) {
+      if (isDefaultModeFamilyTitle('clock', title)) {
+        setTitle(getDefaultTitleForWidgetType(nextType));
+      }
+      if (nextType === 'clock_weather' && (!locationName.trim() || !Number.isFinite(latitude))) {
+        const inherited = extractHouseholdInheritedDefaults(useDashboardStore.getState().widgets).weather;
+        setLocationName(inherited.locationName);
+        setLatitude(inherited.latitude);
+        setLongitude(inherited.longitude);
+        setTempUnit(inherited.unit);
+        if (inherited.timezone) setTimezone(inherited.timezone);
+      }
+    } else if (isTextFamilyType(nextType)) {
+      if (isDefaultModeFamilyTitle('text', title)) {
+        setTitle(getDefaultTitleForWidgetType(nextType));
+      }
+      if (nextType === 'quotes') {
+        setWidgetTransparentBg(textTransparentBg);
+      } else {
+        setTextTransparentBg(widgetTransparentBg);
+        setTextBgStyle(widgetTransparentBg ? 'transparent' : 'glass');
+      }
+    }
+  };
+
   const handleLookupCity = async (queryOverride?: string) => {
     const rawQuery = (queryOverride ?? locationName).trim();
     if (!rawQuery) return;
@@ -459,7 +550,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
         const formatted = hit.admin1
           ? `${hit.name}, ${hit.admin1}`
           : `${hit.name}, ${hit.country || ''}`;
-        if (widget.type !== 'world_clock') {
+        if (effectiveType !== 'world_clock') {
           setLocationName(formatted);
           setLatitude(Number(hit.latitude.toFixed(4)));
           setLongitude(Number(hit.longitude.toFixed(4)));
@@ -591,17 +682,17 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
         'countdown',
         'quotes',
         'photo_frame',
-      ].includes(widget.type)
+      ].includes(effectiveType)
     ) {
       configUpdates.transparentBg = widgetTransparentBg;
     }
 
-    if (widget.type === 'countdown') {
+    if (effectiveType === 'countdown') {
       const dtString = `${countdownDate || '2026-12-25'}T${countdownTime || '00:00'}:00`;
       const iso = new Date(dtString).toISOString();
       configUpdates.eventName = title.trim() || 'Upcoming Milestone';
       configUpdates.targetDate = iso;
-    } else if (widget.type === 'photo_frame') {
+    } else if (effectiveType === 'photo_frame') {
       if (useCommonSource) {
         configUpdates.useCommonSource = true;
         if (
@@ -625,46 +716,46 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.showCaptions = showCaptions;
       configUpdates.showDateTaken = showDateTaken;
       configUpdates.mosaicKenBurns = mosaicKenBurns;
-    } else if (widget.type === 'weather' || widget.type === 'clock_weather') {
+    } else if (effectiveType === 'weather' || effectiveType === 'clock_weather') {
       configUpdates.locationName = locationName.trim();
       configUpdates.unit = tempUnit;
       configUpdates.latitude = Number(latitude);
       configUpdates.longitude = Number(longitude);
       configUpdates.timezone = timezone || undefined;
-      if (widget.type === 'clock_weather') {
+      if (effectiveType === 'clock_weather') {
         configUpdates.face = clockFace;
         configUpdates.clockFace = clockFace;
         configUpdates.showSeconds = showSeconds;
         configUpdates.clockAlign = clockAlign;
       }
-    } else if (widget.type === 'clock') {
+    } else if (effectiveType === 'clock') {
       configUpdates.clockFace = clockFace;
       configUpdates.showSeconds = showSeconds;
       configUpdates.clockAlign = clockAlign;
       configUpdates.timezone = timezone || undefined;
       configUpdates.locationName = locationName.trim() || undefined;
-    } else if (widget.type === 'world_clock') {
+    } else if (effectiveType === 'world_clock') {
       configUpdates.clockFace = clockFace;
       configUpdates.showSeconds = showSeconds;
       configUpdates.cities = worldCities.length > 0 ? worldCities : DEFAULT_WORLD_CITIES;
-    } else if (widget.type === 'rss') {
+    } else if (effectiveType === 'rss') {
       configUpdates.feedUrl = rssFeedUrl.trim();
       configUpdates.textSize = rssTextSize;
-    } else if (widget.type === 'calendar') {
+    } else if (effectiveType === 'calendar') {
       configUpdates.defaultView = calendarDefaultView;
       configUpdates.multiDayLayout = multiDayLayout;
       configUpdates.showMeals = calendarShowMeals;
       configUpdates.sources = calendarSources;
-    } else if (widget.type === 'embed') {
+    } else if (effectiveType === 'embed') {
       configUpdates.preset = embedPreset;
       configUpdates.customUrl = embedCustomUrl.trim();
       configUpdates.muted = embedMuted;
-    } else if (widget.type === 'quotes') {
+    } else if (effectiveType === 'quotes') {
       configUpdates.quoteMode = quoteMode;
       configUpdates.customQuotes = customQuotes;
       configUpdates.rotationIntervalSec = quoteIntervalSec;
       configUpdates.quoteIntervalSec = quoteIntervalSec;
-    } else if (widget.type === 'textbox') {
+    } else if (effectiveType === 'textbox') {
       configUpdates.content = textContent;
       configUpdates.fontSize = textFontSize;
       configUpdates.fontWeight = textFontWeight;
@@ -676,7 +767,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.letterSpacing = letterSpacing;
       configUpdates.bgStyle = textTransparentBg ? 'transparent' : textBgStyle === 'transparent' ? 'glass' : textBgStyle;
       configUpdates.transparentBg = textTransparentBg;
-    } else if (widget.type === 'image') {
+    } else if (effectiveType === 'image') {
       configUpdates.url = imageUrl.trim();
       configUpdates.mp4Url = imageMp4Url;
       configUpdates.mediaSource = imageMediaSource;
@@ -688,7 +779,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
 
     let freeformPosUpdate: DashboardWidget['freeformPos'] | undefined;
 
-    if (widget.type === 'chores') {
+    if (effectiveType === 'chores') {
       configUpdates.displayMode = choreDisplayMode;
       configUpdates.scope = choreScope;
       configUpdates.includeParents = choreIncludeParents;
@@ -726,7 +817,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
           isFullScreen: false,
         };
       }
-    } else if (widget.type === 'meals') {
+    } else if (effectiveType === 'meals') {
       const orderedSlots: MealSlot[] = (['breakfast', 'lunch', 'dinner'] as const).filter((s) =>
         mealVisibleSlots.includes(s)
       );
@@ -737,7 +828,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.showCookAvatar = mealShowCookAvatar;
       configUpdates.listNoteId = mealListNoteId || undefined;
       void useMealStore.getState().setWeekStartsOn(mealWeekStartsOn);
-    } else if (widget.type === 'kanban') {
+    } else if (effectiveType === 'kanban') {
       const resolvedBoardId =
         kanbanBoardId || resolveWidgetActiveBoardId(widget.config, useKanbanStore.getState().boards);
       configUpdates.widgetInstanceId = widget.id;
@@ -781,6 +872,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
 
     onSave(widget.id, {
       title: title.trim() || widget.title,
+      ...(effectiveType !== widget.type ? { type: effectiveType } : {}),
       config: configUpdates,
       ...(freeformPosUpdate ? { freeformPos: freeformPosUpdate } : {}),
     });
@@ -843,6 +935,68 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
             />
           </div>
 
+          {/* Clock Family In-Place Mode Switcher */}
+          {isClockFamilyType(effectiveType) && (
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
+                Clock Tile Mode
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {CLOCK_MODE_OPTIONS.map((opt) => {
+                  const isActive = effectiveType === opt.type;
+                  return (
+                    <button
+                      key={opt.type}
+                      type="button"
+                      onClick={() => handleSwitchWidgetMode(opt.type)}
+                      className={`flex flex-col items-start justify-center p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                        isActive
+                          ? 'bg-blue-600/20 border-blue-500 text-blue-200 font-semibold shadow'
+                          : 'bg-gray-950/60 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'
+                      }`}
+                    >
+                      <span className="text-xs font-semibold">{opt.label}</span>
+                      <span className="text-[10px] text-gray-400 font-normal mt-0.5 leading-tight">
+                        {opt.subtitle}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Text & Quotes Family In-Place Mode Switcher */}
+          {isTextFamilyType(effectiveType) && (
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
+                Text Tile Mode
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {TEXT_MODE_OPTIONS.map((opt) => {
+                  const isActive = effectiveType === opt.type;
+                  return (
+                    <button
+                      key={opt.type}
+                      type="button"
+                      onClick={() => handleSwitchWidgetMode(opt.type)}
+                      className={`flex flex-col items-start justify-center p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                        isActive
+                          ? 'bg-cyan-600/20 border-cyan-500 text-cyan-200 font-semibold shadow'
+                          : 'bg-gray-950/60 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'
+                      }`}
+                    >
+                      <span className="text-xs font-semibold">{opt.label}</span>
+                      <span className="text-[10px] text-gray-400 font-normal mt-0.5 leading-tight">
+                        {opt.subtitle}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Tile Appearance & Color Theme */}
           <div>
             <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
@@ -903,14 +1057,14 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
               'countdown',
               'quotes',
               'photo_frame',
-            ].includes(widget.type) && (
+            ].includes(effectiveType) && (
               <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-800/60">
                 <div>
                   <span className="text-xs text-gray-300 block font-semibold">
                     Sticker / No Outline Mode
                   </span>
                   <span className="text-[10px] text-gray-500">
-                    {widget.type === 'photo_frame'
+                    {effectiveType === 'photo_frame'
                       ? 'Removes the outer card mat (and Polaroid backdrop) so photos float cleanly on canvas'
                       : 'Removes the card box and inner outlines so content floats directly on canvas'}
                   </span>
@@ -933,7 +1087,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
           </div>
 
           {/* Countdown Settings */}
-          {widget.type === 'countdown' && (
+          {effectiveType === 'countdown' && (
             <div className="space-y-4 pt-2 border-t border-gray-800">
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
@@ -968,7 +1122,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
           )}
 
           {/* Photo Frame Settings */}
-          {widget.type === 'photo_frame' && (() => {
+          {effectiveType === 'photo_frame' && (() => {
             const tilePreviewConfig =
               !useCommonSource && widget.config?.useCommonSource !== false
                 ? { ...widget.config, ...normalizeTileOnlyWidgetConfig(widget.config) }
@@ -1546,7 +1700,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
           })()}
 
           {/* Ambient Stream & Web Embed Settings */}
-          {widget.type === 'embed' && (
+          {effectiveType === 'embed' && (
             <div className="space-y-4 pt-2 border-t border-gray-800">
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1.5 mb-2">
@@ -1613,7 +1767,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
           )}
 
           {/* Custom Quotes & Family Affirmations Settings */}
-          {widget.type === 'quotes' && (
+          {effectiveType === 'quotes' && (
             <div className="space-y-4 pt-2 border-t border-gray-800">
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
@@ -1749,7 +1903,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
           )}
 
           {/* Weather Settings */}
-          {(widget.type === 'weather' || widget.type === 'clock_weather') && (
+          {(effectiveType === 'weather' || effectiveType === 'clock_weather') && (
             <div className="space-y-4 pt-2 border-t border-gray-800">
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
@@ -1840,9 +1994,9 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
           )}
 
           {/* Clock Settings (For Clock, Clock + Weather Combo, and World Timezone Clock) */}
-          {(widget.type === 'clock' ||
-            widget.type === 'clock_weather' ||
-            widget.type === 'world_clock') && (
+          {(effectiveType === 'clock' ||
+            effectiveType === 'clock_weather' ||
+            effectiveType === 'world_clock') && (
             <div className="space-y-4 pt-2 border-t border-gray-800">
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
@@ -1871,7 +2025,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
               </div>
 
               {/* Clock Alignment (Center vs Left) */}
-              {(widget.type === 'clock_weather' || widget.type === 'clock') && (
+              {(effectiveType === 'clock_weather' || effectiveType === 'clock') && (
                 <div>
                   <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
                     Clock Text Alignment
@@ -1919,7 +2073,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
               </div>
 
               {/* City Timezone Lookup for Standalone Ambient Clock */}
-              {widget.type === 'clock' && (
+              {effectiveType === 'clock' && (
                 <div className="p-3 rounded-xl bg-gray-950/70 border border-gray-800 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-blue-300 flex items-center gap-1.5">
@@ -1974,6 +2128,8 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                             const label = `${hit.name}${hit.country ? `, ${hit.country}` : ''}`;
                             setLocationName(label);
                             if (hit.timezone) setTimezone(hit.timezone);
+                            setLatitude(Number(hit.latitude.toFixed(4)));
+                            setLongitude(Number(hit.longitude.toFixed(4)));
                             setTitle(label);
                             setGeoHits([]);
                           }}
@@ -1993,7 +2149,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
               )}
 
               {/* World Timezone Clock Multi-City Manager */}
-              {widget.type === 'world_clock' && (
+              {effectiveType === 'world_clock' && (
                 <div className="space-y-3 pt-2 border-t border-gray-800">
                   <div className="p-3 rounded-xl bg-gray-950/70 border border-gray-800 space-y-2.5">
                     <span className="text-xs font-bold text-cyan-300 flex items-center gap-1.5">
@@ -2255,7 +2411,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
           )}
 
           {/* Calendar Settings & Multi-Source iCal Feed Manager */}
-          {widget.type === 'calendar' && (
+          {effectiveType === 'calendar' && (
             <div className="space-y-4 pt-2 border-t border-gray-800">
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
@@ -2536,7 +2692,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
           )}
 
           {/* RSS Settings */}
-          {widget.type === 'rss' && (
+          {effectiveType === 'rss' && (
             <div className="space-y-4 pt-2 border-t border-gray-800">
               {/* Curated Feeds Picker */}
               <div>
@@ -2680,7 +2836,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
           )}
 
           {/* Text Box & Canvas Heading Settings */}
-          {widget.type === 'textbox' && (
+          {effectiveType === 'textbox' && (
             <div className="space-y-4 pt-2 border-t border-gray-800">
               {/* Live Preview Box */}
               <div>
@@ -3037,7 +3193,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
           )}
 
           {/* Single Image or GIF Settings */}
-          {widget.type === 'image' && (
+          {effectiveType === 'image' && (
             <div className="space-y-4 pt-2 border-t border-gray-800">
               {/* Media Preview & Change Button */}
               <div>
@@ -3193,7 +3349,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
           )}
 
           {/* Chores & Rewards Settings */}
-          {widget.type === 'chores' && (
+          {effectiveType === 'chores' && (
             <div className="space-y-4">
               <div>
                 <label className="text-xs font-semibold text-gray-300 block mb-1.5">
@@ -3378,7 +3534,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
             )}
 
             {/* Family Meal Planner Settings */}
-            {widget.type === 'meals' && (
+            {effectiveType === 'meals' && (
               <div className="space-y-4 pt-2 border-t border-gray-800">
                 <div>
                   <label className="text-xs font-semibold text-gray-300 flex items-center gap-1.5 mb-1.5">
@@ -3557,7 +3713,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
             )}
 
             {/* KANBAN WIDGET SETTINGS */}
-            {widget.type === 'kanban' && (
+            {effectiveType === 'kanban' && (
               <div className="space-y-4 pt-2 border-t border-gray-800">
                 <div>
                   <label className="text-xs font-semibold text-gray-300 flex items-center gap-1.5 mb-1.5">

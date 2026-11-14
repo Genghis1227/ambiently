@@ -56,6 +56,7 @@ import { categorizeIngredient, parseIngredient } from '../../utils/ingredientAgg
 import { useDashboardStore } from '../../store/dashboardStore';
 import { CANVAS_THEMES, isCanvasThemeLight } from '../../data/canvasThemes';
 import { findOpenCanvasSpot } from '../../utils/autoLayout';
+import { CANVAS_BLUEPRINTS } from '../../utils/canvasBlueprints';
 import { isStickerCapableWidget, isWidgetStickerMode } from '../../utils/widgetStickerMode';
 import { inferCuratedCategoryId } from '../../services/photos';
 
@@ -1544,10 +1545,10 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       {/* Empty Canvas Onboarding Prompt (when a new canvas has 0 tiles and 0 notes) */}
       {widgets.length === 0 && activeNotes.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 p-6">
-          <div className="pointer-events-auto max-w-sm w-full rounded-2xl bg-gray-900/80 backdrop-blur-md border border-gray-800 p-6 text-center shadow-2xl space-y-4">
+          <div className="pointer-events-auto max-w-md w-full rounded-2xl bg-gray-900/85 backdrop-blur-md border border-gray-800 p-6 text-center shadow-2xl space-y-4">
             <p className="text-sm font-bold text-white">This Canvas is Empty</p>
             <p className="text-xs text-gray-400 leading-relaxed">
-              Add live widgets (Weather, Photos, Calendar, Lofi Stream) or pin sticky notes to customize this board.
+              Add individual widget tiles, pin a sticky note, or launch a starter blueprint tailored to this screen.
             </p>
             <div className="flex items-center justify-center gap-2.5 pt-1">
               {isCanvasLocked ? (
@@ -1581,6 +1582,42 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 </>
               )}
             </div>
+
+            {!isCanvasLocked && (
+              <div className="pt-3 border-t border-gray-800/80 text-left space-y-2">
+                <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                  <span className="flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-emerald-400" />
+                    Quick-Start Blueprints
+                  </span>
+                  <span className="text-gray-500 font-normal normal-case">1-tap layout</span>
+                </div>
+                <div className="space-y-1.5">
+                  {CANVAS_BLUEPRINTS.filter((bp) => bp.id !== 'blank').map((bp) => (
+                    <button
+                      key={bp.id}
+                      type="button"
+                      onClick={() =>
+                        void useDashboardStore.getState().applyCanvasBlueprint(activeTabId, bp.id)
+                      }
+                      className="w-full p-2.5 rounded-xl bg-gray-950/75 hover:bg-emerald-600/15 border border-gray-800 hover:border-emerald-500/40 text-left transition-all cursor-pointer group"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-gray-100 group-hover:text-emerald-300 transition-colors">
+                          {bp.title}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded-md bg-gray-800 text-[10px] font-semibold text-gray-400 group-hover:text-emerald-200 shrink-0">
+                          {bp.badge}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">
+                        {bp.summary}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
