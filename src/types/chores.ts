@@ -2,7 +2,12 @@ import type { HouseholdRole } from './profiles';
 
 export type CadenceType = 'daily' | 'weekdays' | 'weekends' | 'weekly' | 'interval' | 'bounty';
 export type OverduePolicy = 'zero' | 'half' | 'full' | 'custom';
-export type ActiveChoreStatus = 'pending' | 'awaiting_approval' | 'completed' | 'expired';
+export type ActiveChoreStatus =
+  | 'pending'
+  | 'awaiting_approval'
+  | 'completed'
+  | 'skipped'
+  | 'expired';
 export type WishlistRewardStatus =
   | 'needs_pricing'
   | 'active_goal'
@@ -57,6 +62,8 @@ export interface ActiveChoreInstance {
   status: ActiveChoreStatus;
   completedBy?: ChoreCompletionSplit[]; // Supports whole-number splits
   completedAt?: string;
+  skippedAt?: string; // ISO timestamp when skipped for the day (0 pts)
+  skippedByProfileId?: string; // Optional profile context when skipping a shared chore
   isOverdue: boolean;
 }
 

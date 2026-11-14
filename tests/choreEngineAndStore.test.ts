@@ -695,4 +695,184 @@ describe('Chore Engine & useChoreStore', () => {
       'Deluxe Lego Set'
     );
   });
+
+  it('skips same-day chores with 0 points, keeps skipped across rollovers, supports same-day undo, and syncs cleanly', async () => {
+    // 1. Skip a same-day chore (even when requiresApproval: true and rolloverUntilDone: true)
+    const morningNow = new Date(2026, 10, 10, 9, 0, 0); // 2026-11-10
+    const skipRes = await useChoreStore
+      .getState()
+      .skipChoreInstance('tpl_shared_approval_2026-11-10', 'kid_1', morningNow);
+    assert.deepEqual(skipRes, { success: true });
+
+    const skippedInst = useChoreStore
+      .getState()
+      .snapshot.instances.find((i) => i.instanceId === 'tpl_shared_approval_2026-11-10');
+    assert.equal(skippedInst?.status, 'skipped');
+    assert.ok(skippedInst?.skippedAt);
+    assert.equal(skippedInst?.skippedByProfileId, 'kid_1');
+    assert.equal(skippedInst?.isOverdue, false);
+    assert.equal(useChoreStore.getState().getProfileBalance('kid_1'), 0);
+    assert.equal(useChoreStore.getState().getProfileLifetimePoints('kid_1'), 0);
+    assert.equal(useChoreStore.getState().snapshot.ledger.length, 0);
+    assert.equal(useChoreStore.getState().pendingParentActionsCount, 0);
+
+    // 2. Same-day 15s rollover tick keeps 'skipped' intact
+    const afternoonRollover = evaluateChoreRollover(
+      useChoreStore.getState().snapshot,
+      new Date(2026, 10, 10, 14, 0, 0)
+    );
+    const sameDayAfterTick = afternoonRollover.snapshot.instances.find(
+      (i) => i.instanceId === 'tpl_shared_approval_2026-11-10'
+    );
+    assert.equal(sameDayAfterTick?.status, 'skipped');
+
+    // Same-day Undo restores 'skipped' back to 'pending' with 0 ledger entries and allows completion
+    const undoRes = await useChoreStore
+      .getState()
+      .revertChoreSameDay('tpl_shared_approval_2026-11-10', new Date(2026, 10, 10, 15, 0, 0));
+    assert.deepEqual(undoRes, { success: true });
+    assert.equal(useChoreStore.getState().snapshot.ledger.length, 0);
+    const restoredInst = useChoreStore
+      .getState()
+      .snapshot.instances.find((i) => i.instanceId === 'tpl_shared_approval_2026-11-10');
+    assert.equal(restoredInst?.status, 'pending');
+    assert.equal(restoredInst?.skippedAt, undefined);
+
+    // Re-skip before midnight to verify midnight rollover & next-day lock
+    await useChoreStore
+      .getState()
+      .skipChoreInstance('tpl_daily_auto_2026-11-10', 'kid_1', new Date(2026, 10, 10, 17, 0, 0));
+    await useChoreStore
+      .getState()
+      .skipChoreInstance('tpl_shared_approval_2026-11-10', 'kid_1', new Date(2026, 10, 10, 17, 5, 0));
+
+    const nextDayNow = new Date(2026, 10, 11, 8, 0, 0); // 2026-11-11
+    const { snapshot: rolledNextDay } = evaluateChoreRollover(
+      useChoreStore.getState().snapshot,
+      nextDayNow
+    );
+    // Yesterday's skipped rolloverUntilDone chore is NOT carried forward as overdue; tomorrow spawns fresh
+    const yesterdayShared = rolledNextDay.instances.find(
+      (i) => i.instanceId === 'tpl_shared_approval_2026-11-10'
+    );
+    const todayShared = rolledNextDay.instances.find(
+      (i) => i.instanceId === 'tpl_shared_approval_2026-11-11'
+    );
+    assert.equal(yesterdayShared?.status, 'skipped');
+    assert.equal(yesterdayShared?.isOverdue, false);
+    assert.equal(todayShared?.status, 'pending');
+    assert.equal(todayShared?.isOverdue, false);
+
+    // Yesterday's skipped chore cannot be undone past midnight
+    useChoreStore.setState({ snapshot: rolledNextDay });
+    const lockedUndo = await useChoreStore
+      .getState()
+      .revertChoreSameDay('tpl_daily_auto_2026-11-10', nextDayNow);
+    assert.equal(lockedUndo.success, false);
+
+    // 3. After same-day restore of a normal chore, completing it still awards full points
+    await useChoreStore
+      .getState()
+      .skipChoreInstance('tpl_daily_auto_2026-11-11', 'kid_1', nextDayNow);
+    await useChoreStore
+      .getState()
+      .revertChoreSameDay('tpl_daily_auto_2026-11-11', nextDayNow);
+    const completeAfterRestore = await useChoreStore
+      .getState()
+      .completeChore('tpl_daily_auto_2026-11-11', undefined, nextDayNow);
+    assert.equal(completeAfterRestore.success, true);
+    assert.equal(useChoreStore.getState().getProfileBalance('kid_1'), 10);
+
+    // 4. Skipping a weeklyAnyDay (1x/wk) chore excuses it for the rest of the week and respawns on weekStartsOn
+    const weeklyBase = createBaseSnapshot();
+    weeklyBase.templates = [
+      {
+        id: 'tpl_weekly_music',
+        title: 'Practice Piano',
+        points: 15,
+        assignedTo: 'kid_1',
+        cadence: 'weekly',
+        weeklyAnyDay: true,
+        requiresApproval: false,
+        rolloverUntilDone: true,
+        overduePolicy: 'full',
+      },
+    ];
+    weeklyBase.instances = [
+      {
+        instanceId: 'tpl_weekly_music_2026-11-11',
+        choreId: 'tpl_weekly_music',
+        dateScheduled: '2026-11-11',
+        status: 'pending',
+        isOverdue: false,
+      },
+    ];
+    weeklyBase.householdSettings.weekStartsOn = 'sunday';
+    useChoreStore.setState({ snapshot: weeklyBase });
+
+    await useChoreStore
+      .getState()
+      .skipChoreInstance('tpl_weekly_music_2026-11-11', 'kid_1', new Date(2026, 10, 11, 10, 0, 0));
+
+    // Thursday & Saturday still in same Sun-Sat week -> stays excused, no new pending instance
+    const { snapshot: friSnap } = evaluateChoreRollover(
+      useChoreStore.getState().snapshot,
+      new Date(2026, 10, 13, 8, 0, 0)
+    );
+    assert.equal(
+      friSnap.instances.filter((i) => i.choreId === 'tpl_weekly_music' && i.status === 'pending')
+        .length,
+      0
+    );
+
+    // Sunday 2026-11-15 starts new week -> spawns fresh pending instance
+    const { snapshot: sunSnap } = evaluateChoreRollover(
+      friSnap,
+      new Date(2026, 10, 15, 8, 0, 0)
+    );
+    const sunPending = sunSnap.instances.filter(
+      (i) => i.choreId === 'tpl_weekly_music' && i.status === 'pending'
+    );
+    assert.equal(sunPending.length, 1);
+    assert.equal(sunPending[0]?.dateScheduled, '2026-11-15');
+
+    // 5. Sync merge preserves newer local 'skipped' over stale remote 'pending' (even with older lastParentActionAt),
+    //    while allowing a newer remote 'Undo' ('pending') to override an older local 'skipped'
+    const baseSync = createBaseSnapshot();
+    const localSkipped: ChoreEngineSnapshot = {
+      ...baseSync,
+      instances: baseSync.instances.map((i) =>
+        i.instanceId === 'tpl_daily_auto_2026-11-10'
+          ? {
+              ...i,
+              status: 'skipped',
+              skippedAt: '2026-11-10T14:00:00.000Z',
+              skippedByProfileId: 'kid_1',
+            }
+          : i
+      ),
+      updated_at: '2026-11-10T14:00:00.000Z',
+    };
+    const staleRemoteParent: ChoreEngineSnapshot = {
+      ...baseSync,
+      lastParentActionAt: '2026-11-10T12:00:00.000Z',
+      updated_at: '2026-11-10T12:00:00.000Z',
+    };
+    const mergedPreservesSkip = mergeChoreSnapshotsAuthoritative(localSkipped, staleRemoteParent);
+    assert.equal(
+      mergedPreservesSkip.instances.find((i) => i.instanceId === 'tpl_daily_auto_2026-11-10')?.status,
+      'skipped'
+    );
+
+    const newerRemoteUndo: ChoreEngineSnapshot = {
+      ...baseSync,
+      lastParentActionAt: '2026-11-10T15:00:00.000Z',
+      updated_at: '2026-11-10T15:00:00.000Z',
+    };
+    const mergedAllowsNewerUndo = mergeChoreSnapshotsAuthoritative(localSkipped, newerRemoteUndo);
+    assert.equal(
+      mergedAllowsNewerUndo.instances.find((i) => i.instanceId === 'tpl_daily_auto_2026-11-10')?.status,
+      'pending'
+    );
+  });
 });

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.9] - 2026-11-13
+
+### Same-Day Chore Skip (0 Pts + Same-Day Undo) & Documentation Sync
+* **Same-Day Chore Skip & Undo (`src/types/chores.ts`, `src/stores/useChoreStore.ts`, `src/utils/choreEngine.ts`, `src/components/chores/ChoreDashboardView.tsx`, `src/components/widgets/ChoreWidget.tsx`, `tests/choreEngineAndStore.test.ts`):**
+  * Added `'skipped'` lifecycle status and `skipChoreInstance` so same-day pending chores (such as *Homework* on days none is assigned) can be excused in 1 tap from both the compact Chore tile and Full-Screen Chore Hub with **0 points awarded** and **0 ledger entries** (no manual deduction needed).
+  * Lists skipped chores transparently under **Completed Today** with a neutral **Skipped** badge, **0 pts** pill, and same-day tap-to-**Undo** (`revertChoreSameDay`) until midnight.
+  * Keeps skipped chores excused across 15-second rollover ticks, prevents `rolloverUntilDone` daily/weekday skipped tasks from carrying over as overdue tomorrow, keeps skipped `Weekly — Any Day (1× / wk)` chores hidden until `weekStartsOn` of next week, and preserves skip/undo states across multi-device sync merges (`mergeChoreSnapshotsAuthoritative`).
+* **Reference Documentation Sync (`FEATURES.md`, `README.md`, `ARCHITECTURE.md`):**
+  * Synchronized project capability, highlight, and architecture documentation across `v0.6.4`–`v0.6.9` (frameless Sticker / No Outline mode & global Default Widget Style, blank-canvas Add Single Photo / GIF, scheduled Google Photos / Drive / Plex library rescans & 15-minute cooldowns, Proposals Tray scope filtering & kid proposal editing/withdrawal, and Same-Day Chore Skip).
+
+---
+
 ## [0.6.8] - 2026-11-13
 
 ### Proposals Tray Pending Rewards Fix & Kid Proposal Editing

@@ -23,6 +23,7 @@
   * **Upload Local Picture (Up to 4K Ultra HD `3840×2160`):** Upload any photo from your device (optimized in-browser with native 4K/5K screen resolution support for 100% offline IndexedDB & JSON backup persistence), pick from **4 Curated 4K Photo Presets**, or paste a direct image URL.
   * **Adjustable Background Dim Level (`0%` – `90%`):** Fine-tune the dark contrast veil over any custom background picture with a live preview slider.
 * **Custom Canvases & Icon Picker:** Create unlimited boards via the `+` button in the Navigation Dock or Settings, choosing from 16 curated Lucide icons and reorder tabs with 1-click `▲` / `▼` controls.
+* **Blank-Canvas Context Menu:** Right-clicking open canvas space gives instant access to **Add Single Photo / GIF**, **New Sticky Note**, and **Add Widget Tile**.
 
 ### Multi-Tab Navigation Dock & Automated Carousel
 * **4-Edge Dock Placement & Compact Horizontal Pop-Out Panels (`NavigationDock.tsx`):**
@@ -45,6 +46,7 @@
   * SHA-256 hashed 4-digit PIN lock that disables widget dragging, note deletion, and settings modifications.
   * A forgotten PIN is removed with **a code emailed to the account the screen is signed in to** (Forgot PIN? on the PIN pad). Without cloud sign-in, only clearing the site's data removes it.
 * **Isolated Canvas Display Density Scaler:** Scale board cards (`75%`, `100%`, `125%`, `150%`) for 1080p, 1440p, or 4K screens while keeping the Navigation Dock and Settings modals pinned at 100% viewport scale.
+* **Sticker / No Outline Mode & Global Default Widget Style (`widgetStickerMode.ts`):** Toggle **Sticker / No Outline** per tile across 8 compatible ambient, media, and typography widgets (*Clock*, *World Clock*, *Clock & Weather*, *Weather*, *Countdown*, *Daily Quotes*, *Photo Frame*, and *Text Box*) so content floats cleanly over wallpapers with zero card chrome, or configure a global **Default Widget Style** (*Auto*, *Sticker / No Outline*, or *With Borders*) in **Settings -> Display & Kiosk**.
 
 ---
 
@@ -90,6 +92,7 @@
 * **Local PC & NAS Multi-Folder Stacking (5,000+ Photos):** Multi-folder selection using the browser File System Access API with recursive 8-level subdirectory scanning. Includes configurable scan capacity (`1k`, `2.5k`, `5k`, `10k`), live scan progress feedback, and an inline `[ + Add Another Folder ]` action bar.
 * **Plex Media Server (1-Scan QR Code PIN Flow):** Generates a 4-digit Plex PIN and scannable QR code (`https://app.plex.tv/auth#?clientID=...&code=...`), auto-discovers your Plex server, and streams photo libraries directly.
 * **Curated Photography Presets:** Instant 1-click categories (*Nature*, *Architecture*, *Space*, *Cozy*) cached in the browser `CacheStorage` API (`ambiently-photo-cache-v1`) for offline playback.
+* **Scheduled Automatic Library Rescan & Cooldown-Protected Manual Sync (`photoSyncService.ts`, `photoSyncPolicy.ts`):** Automatically rescans linked **Google Photos** albums, **Google Drive** folders, and **Plex** libraries on a configurable background schedule (**Daily 24h** default, **Weekly 7d**, or **Manual Only**) in **Settings -> Display & Kiosk** and **Photo Sources** so newly added photos appear without manual intervention. Manual **Rescan Now** actions bypass edge caches (`?rescan=1` / `Cache-Control: no-store`) while enforcing a **15-minute anti-spam cooldown** after successful scans (and a 30-second retry backoff on transient errors).
 
 ---
 
@@ -114,12 +117,12 @@ Every widget features a top-right **Tile Settings (`⚙️`)** button to customi
   * Clicking any headline opens the **In-App Kiosk Article Reader (`/api/reader`)** powered by Mozilla Readability and Linkedom, with 1-click switching to **Web Preview (`/api/web-proxy`)** so users never get trapped in an uncloseable fullscreen browser window.
 * **Milestone Countdown (`CountdownWidget.tsx`):**
   * Live days/hours/minutes/seconds countdown timer to upcoming vacations, birthdays, or milestones.
-* **Animated GIF, Sticker & Picture Tile (`ImageWidget.tsx`) & Custom Text Banner (`TextboxWidget.tsx`):**
-  * Pin frameless transparent stickers, GIPHY animated GIFs (via built-in media search or URL), or framed images with full `360°` rotation and quick tilt presets (`-6°` to `+6°`), plus customizable typography banners (`TextboxWidget.tsx`) for family headings and labels.
+* **Animated GIF, Sticker & Picture Tile (`ImageWidget.tsx`) & Custom Text Banner (`TextBoxWidget.tsx`):**
+  * Pin frameless transparent stickers, GIPHY animated GIFs (via built-in media search, URL, or the blank-canvas right-click **Add Single Photo / GIF** menu), or framed images with full `360°` rotation and quick tilt presets (`-6°` to `+6°`), plus customizable typography banners (`TextBoxWidget.tsx`) supporting **Sticker / No Outline** frameless text styling alongside compatible ambient widgets.
 
 ---
 
-## 5. Ambiently Family Chore & Reward Engine (`v0.4.6` – `v0.5.8`)
+## 5. Ambiently Family Chore & Reward Engine
 
 * **Global Household Profile & Avatar Engine (`useProfileStore.ts`, `HouseholdProfileManager.tsx`, `AvatarCropModal.tsx`, `avatarCompressor.ts`):**
   * Shared family profiles (`Parent` and `Kid` roles) with a calming low-arousal color palette, 24 preset icons, or custom keyboard emoji entry.
@@ -131,10 +134,10 @@ Every widget features a top-right **Tile Settings (`⚙️`)** button to customi
   * **Cadences:** *Daily*, *Weekdays (Mon–Fri)*, *Weekends (Sat–Sun)*, *Weekly — Any Day (1× / Week)*, *Weekly (Specific Days)*, *Interval (Every N Days)*, and *One-Off Bounty*.
   * **Multi-Member Assignment, Parent Auto-Completion & Duplication:** Assign tasks to any mix of kids and parents in one click, or duplicate any existing chore via the `Copy` button. Tasks completed solely by `Parent` profiles auto-approve immediately without entering the *Awaiting Parent Review* queue.
   * **Shared Chores & Interactive Point Splitting (`PointSplitModal.tsx`):** Shared chores can be claimed by a single family member or split across multiple participants using whole-number point sliders.
-  * **24-Hour Overdue Grace Window & Vacation Mode:** Unfinished tasks roll over for 24 hours with configurable point policies (*Full 100%*, *Half 50%*, *Zero 0%*, or *Custom %*), include a manual **Dismiss** button, and automatically expire after 24 hours so stale tasks never pile up. Enabling **Vacation Mode** freezes midnight rollovers and penalties while away.
-* **Append-Only Audit Ledger, Wishlist Store & Trophy Case (`choreStore.ts`, `ProposeRewardModal.tsx`, `TrophyCaseModal.tsx`):**
+  * **Same-Day Chore Skip, 24-Hour Overdue Grace Window & Vacation Mode:** Pending same-day chores expose a touch-friendly **Skip** button for days a recurring chore (like *Homework*) does not apply—moving the item into *Completed Today* with a **Skipped** badge and **0 pts** (`0` ledger entries, no manual deduction needed) and supporting same-day **Undo** until midnight. `Weekly — Any Day (1× / Week)` chores remain hidden for the rest of the calendar week once completed or skipped before respawning on `weekStartsOn`. Unfinished tasks roll over for 24 hours with configurable point policies (*Full 100%*, *Half 50%*, *Zero 0%*, or *Custom %*), include a manual **Dismiss** button, and automatically expire after 24 hours so stale tasks never pile up. Enabling **Vacation Mode** freezes midnight rollovers and penalties while away.
+* **Append-Only Audit Ledger, Wishlist Store & Trophy Case (`choreStore.ts`, `ProposeRewardModal.tsx`, `ProposalsTrayModal.tsx`, `TrophyCaseModal.tsx`):**
   * **Immutable Audit Ledger:** Spendable `balance` and `lifetimePoints` are strictly computed from an append-only transaction log (`chore_completion`, `reward_redemption`, `manual_adjustment`, `reversion`).
-  * **Wishlist URL Scraper (`/api/metadata`) & Parent Pricing Calculator:** Kids can propose rewards or paste a product link to auto-extract title, image, and price. Parents price proposals using the `Points per $1.00` ratio, manage or remove active store goals, and fulfill redeemed rewards into each child's permanent **Trophy Case** (with automatic prior-year image pruning on New Year's rollover).
+  * **Wishlist URL Scraper (`/api/metadata`), Proposals Tray & Parent Pricing Calculator:** Kids can propose rewards or paste a product link to auto-extract title, image, and price, filter pending requests in the **Proposals Tray** (*All Pending* or per-profile), and edit or remove unpriced (`needs_pricing`) proposals prior to parent approval. Parents price proposals using the `Points per $1.00` ratio, manage or remove active store goals, and fulfill redeemed rewards into each child's permanent **Trophy Case** (with automatic prior-year image pruning on New Year's rollover).
 
 ---
 

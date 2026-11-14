@@ -235,6 +235,11 @@ export interface ChoreStoreState {
     instanceId: string,
     now?: Date
   ) => Promise<{ success: boolean; error?: string }>;
+  skipChoreInstance: (
+    instanceId: string,
+    profileId?: string,
+    now?: Date
+  ) => Promise<{ success: boolean; error?: string }>;
   proposeWishlistReward: (proposal: {
     profileId: string;
     title: string;
@@ -514,6 +519,8 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => {
                 status: 'awaiting_approval' as const,
                 completedBy: normalizedSplits,
                 completedAt: nowIso,
+                skippedAt: undefined,
+                skippedByProfileId: undefined,
               }
             : inst
         );
@@ -555,6 +562,8 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => {
               status: 'completed' as const,
               completedBy: normalizedSplits,
               completedAt: nowIso,
+              skippedAt: undefined,
+              skippedByProfileId: undefined,
             }
           : inst
       );
@@ -594,7 +603,7 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => {
       const nowIso = now.toISOString();
       const template = current.templates.find((t) => t.id === instance.choreId);
 
-      if (instance.status === 'awaiting_approval') {
+      if (instance.status === 'awaiting_approval' || instance.status === 'skipped') {
         const nextInstances = current.instances.map((inst) =>
           inst.instanceId === instanceId
             ? {
@@ -602,6 +611,8 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => {
                 status: 'pending' as const,
                 completedBy: undefined,
                 completedAt: undefined,
+                skippedAt: undefined,
+                skippedByProfileId: undefined,
               }
             : inst
         );
@@ -649,6 +660,8 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => {
               status: 'pending' as const,
               completedBy: undefined,
               completedAt: undefined,
+              skippedAt: undefined,
+              skippedByProfileId: undefined,
             }
           : inst
       );
@@ -1019,6 +1032,8 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => {
               status: 'pending' as const,
               completedBy: undefined,
               completedAt: undefined,
+              skippedAt: undefined,
+              skippedByProfileId: undefined,
             }
           : inst
       );
@@ -1032,6 +1047,48 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => {
 
       commitSnapshotState(nextSnapshot);
       await persistSnapshot(nextSnapshot);
+    },
+
+    skipChoreInstance: async (instanceId, profileId, now = new Date()) => {
+      const current = get().snapshot;
+      const instance = current.instances.find((i) => i.instanceId === instanceId);
+      if (!instance) {
+        return { success: false, error: 'Chore instance not found' };
+      }
+      if (instance.status !== 'pending') {
+        return { success: false, error: 'Only pending chores can be skipped' };
+      }
+
+      const todayKey = localDateKey(now);
+      if (instance.isOverdue || instance.dateScheduled !== todayKey) {
+        await get().dismissChoreInstance(instanceId);
+        return { success: true };
+      }
+
+      const nowIso = now.toISOString();
+      const nextInstances = current.instances.map((inst) =>
+        inst.instanceId === instanceId
+          ? {
+              ...inst,
+              status: 'skipped' as const,
+              completedBy: undefined,
+              completedAt: undefined,
+              skippedAt: nowIso,
+              skippedByProfileId: profileId?.trim() || undefined,
+              isOverdue: false,
+            }
+          : inst
+      );
+
+      const nextSnapshot: ChoreEngineSnapshot = {
+        ...current,
+        instances: nextInstances,
+        updated_at: nowIso,
+      };
+
+      commitSnapshotState(nextSnapshot);
+      await persistSnapshot(nextSnapshot);
+      return { success: true };
     },
 
     dismissChoreInstance: async (instanceId) => {
