@@ -16,6 +16,7 @@ import {
   isSameWidgetPhotoSource,
   sanitizeRestoredPhotoWidget,
 } from '../utils/photoSourceIsolation';
+import { sanitizeWidgetConfigForCloud } from '../utils/mediaOptimization';
 import type { DashboardTab, DashboardWidget, StickyNoteItem, AppSettings } from '../types/dashboard';
 import type { ChoreEngineSnapshot } from '../types/chores';
 import type { HouseholdProfile } from '../types/profiles';
@@ -787,12 +788,8 @@ export async function pushToCloud(
     let widgetsToUpsert: any[] = [];
     if (widgetsToPush.length > 0) {
       const formattedWidgets = widgetsToPush.map((w) => {
-        let configToPush = { ...(w.config || {}) };
-        // Strip customPhotos array from cloud sync payload to keep database pure config (< 5 KB)
-        if ('customPhotos' in configToPush) {
-          const { customPhotos: _, ...restConfig } = configToPush;
-          configToPush = restConfig;
-        }
+        // Strip customPhotos and oversized inline Data URLs from cloud sync payloads
+        const configToPush = sanitizeWidgetConfigForCloud(w.config || {});
         return {
           id: w.id,
           dashboard_id: dashboardId,

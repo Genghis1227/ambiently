@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useTimePrefs } from '../../utils/timePrefs';
+import { useSharedClock } from '../../utils/sharedClock';
 import { Globe, Sun, Moon, GripVertical } from 'lucide-react';
 
 export interface WorldClockCity {
@@ -199,26 +200,9 @@ export const WorldClockWidget: React.FC<WorldClockWidgetProps> = ({
   onUpdateConfig,
 }) => {
   const { hour12 } = useTimePrefs();
-  const [now, setNow] = useState(new Date());
+  const now = useSharedClock(showSeconds ? 'second' : '10s');
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-
-  useEffect(() => {
-    const intervalMs = showSeconds ? 1000 : 10000;
-    const tick = () => {
-      if (document.visibilityState === 'hidden') return;
-      setNow(new Date());
-    };
-    const timer = setInterval(tick, intervalMs);
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') setNow(new Date());
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => {
-      clearInterval(timer);
-      document.removeEventListener('visibilitychange', onVisibility);
-    };
-  }, [showSeconds]);
 
   const activeCities =
     Array.isArray(cities) && cities.length > 0 ? cities : DEFAULT_WORLD_CITIES;

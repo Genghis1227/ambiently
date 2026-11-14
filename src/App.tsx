@@ -917,6 +917,9 @@ export function App() {
       }[settings.dockPosition];
 
   const isCanvasLight = isCanvasThemeLight(activeTab?.backgroundTheme);
+  const isOledNightClock = Boolean(
+    settings.nightModeEnabled && settings.nightModeStyle === 'oled_clock'
+  );
 
   return (
     <div
@@ -937,8 +940,8 @@ export function App() {
         </p>
       </header>
 
-      {/* Full native 1:1 Canvas */}
-      <div className="w-full h-full">
+      {/* Full native 1:1 Canvas (visibility hidden under opaque OLED Night Clock to suspend background GIF/video decoding) */}
+      <div className={isOledNightClock ? 'w-full h-full invisible pointer-events-none' : 'w-full h-full'}>
         <Corkboard
           notes={activeCanvasNotes}
           widgets={tabWidgets}

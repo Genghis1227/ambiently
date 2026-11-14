@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.12] - 2026-11-14
+
+### GIF MP4/WebP Caching, Search Bounce Fix & Canvas Performance Engine
+* **GIF Search Modal & Canvas Bounce Fix (`src/components/widgets/MediaSearchModal.tsx`, `src/services/mediaSearch.ts`, `src/components/layout/Corkboard.tsx`):**
+  * Stabilized `MediaSearchModal` at a fixed `h-[min(680px,85vh)]` dialog height, kept previous search results mounted at reduced opacity with an inline header spinner while debounced queries resolve, and added `AbortController` request cancellation across keystrokes and tab switches to prevent vertical height oscillation and stale responses.
+  * Isolated React portal synthetic pointer/click/context events inside `MediaSearchModal` (`e.stopPropagation()`) and added an `isPortalEvent` DOM containment guard on `Corkboard` widget and sticky note cards so modal interactions never trigger underlying canvas press/tap animations.
+* **GPU-Accelerated GIF Playback, Compositor Optimization & Device-Local Vault Uploads (`src/utils/mediaOptimization.ts`, `src/utils/localMediaVault.ts`, `src/components/widgets/ImageWidget.tsx`, `src/components/widgets/WidgetSettingsModal.tsx`, `src/services/fileSync.ts`, `src/services/supabase.ts`, `src/types/dashboard.ts`, `tests/mediaPerf.test.ts`):**
+  * Upgrades opaque GIPHY GIFs (`mediaSource: 'giphy_gif'`) to hardware-decoded `<video autoPlay loop muted playsInline>` MP4 streams with automatic `.webp` → `.gif` fallback, while preserving full alpha transparency via animated `.webp` for GIPHY Stickers (`mediaSource: 'giphy_sticker'`) and legacy unspecified GIPHY URLs.
+  * Removed expensive per-frame `drop-shadow-xl` CSS blur filters on animated `ImageWidget` elements and added `loading="lazy"` + `decoding="async"`.
+  * Stores uploaded image/GIF files as binary `Blob` entries in IndexedDB (`db.vault` via `vault://local-media:*`, downscaling static JPEG/PNG > `1600px` to WebP `0.85` while keeping animated GIF/WebP/SVG intact), exports/restores `localMedia` in JSON backups, and strips inline `data:` URLs > 4 KB and `customPhotos` from Cloud Sync payloads (`sanitizeWidgetConfigForCloud`).
+* **Bounded External Media Cache (`vite.config.ts`, `src/utils/mediaOptimization.ts`):**
+  * Added a dedicated Workbox `CacheFirst` runtime cache (`ambiently-media-cache-v1`, 120 max entries, 14-day expiration) for GIPHY (`*.giphy.com`) and Wikimedia (`upload.wikimedia.org`) static media alongside background CORS `CacheStorage` Blob warming (`resolveOrWarmCachedMedia`, FIFO-capped at 100 entries) for `<video>` MP4 streams.
+* **Night Mode / Hidden-Tab Suspension, Shared Wall-Clock Ticker & Memoized Canvas Subtrees (`src/utils/displayActivity.ts`, `src/utils/sharedClock.ts`, `src/components/layout/Corkboard.tsx`, `src/components/widgets/PhotoFrameWidget.tsx`, `src/components/widgets/ClockWidget.tsx`, `src/components/widgets/ClockWeatherWidget.tsx`, `src/components/widgets/WorldClockWidget.tsx`, `src/components/widgets/CountdownWidget.tsx`, `src/App.tsx`, `FEATURES.md`, `README.md`, `ARCHITECTURE.md`):**
+  * Pauses `<video>` playback and all 4 `PhotoFrameWidget` rotation intervals (`polaroid`, `mosaic`, `ken_burns`, `filmstrip`) when the browser tab is hidden or Night Mode uses `oled_clock` / `blackout`, and hides the `<Corkboard>` subtree (`invisible pointer-events-none`) behind the `oled_clock` overlay.
+  * Consolidated per-widget `ClockWidget`, `ClockWeatherWidget`, `WorldClockWidget`, and `CountdownWidget` timers onto a single wall-clock-aligned `useSharedClock` ticker, wrapped `Corkboard` widget subtrees in `MemoizedCanvasWidgetBody` (`React.memo`) with stable ref-backed callbacks, and scoped `willChange` GPU layer promotion to active drag/resize/rotate gestures.
+
+---
+
 ## [0.6.11] - 2026-11-14
 
 ### Per-Tile Photo Source Isolation, Confirmed PIN Setup, Settings Lock Enforcement & Sticker Cloud Restore

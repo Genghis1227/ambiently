@@ -88,6 +88,29 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//, /^\/functions\//, /^\/config\.js$/],
         runtimeCaching: [
           {
+            // Bounded CacheFirst store for static external GIF/MP4/WebP/image CDN assets (GIPHY, Wikimedia).
+            // Never caches Plex tokens or dynamic API calls.
+            urlPattern: ({ request, url }) =>
+              url.protocol === 'https:' &&
+              (/(^|\.)giphy\.com$/i.test(url.hostname) || url.hostname === 'upload.wikimedia.org') &&
+              !url.hostname.toLowerCase().startsWith('api.') &&
+              (request.destination === 'image' ||
+                request.destination === 'video' ||
+                /\.(gif|webp|mp4|webm|png|jpe?g)(\?|$)/i.test(url.pathname)),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'ambiently-media-cache-v1',
+              expiration: {
+                maxEntries: 120,
+                maxAgeSeconds: 14 * 24 * 60 * 60,
+                purgeOnQuotaError: true,
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
+          {
             // Photos from external HTTPS hosts load from the network as usual. Only when that fails
             // (the screen is offline) is the copy saved in ambiently-photo-cache-v1 returned.
             urlPattern: ({ request, url }) =>

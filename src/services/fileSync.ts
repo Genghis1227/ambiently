@@ -11,6 +11,7 @@ import { useMealStore } from '../stores/useMealStore';
 import { inferCuratedCategoryId } from '../data/curatedScenery';
 import { sanitizeRestoredPhotoWidget } from '../utils/photoSourceIsolation';
 import { normalizePinLockSettings } from '../utils/pinValidation';
+import { collectVaultMediaMap, restoreVaultMediaMap } from '../utils/localMediaVault';
 
 export interface LocalExportPayload {
   version: 1;
@@ -19,6 +20,7 @@ export interface LocalExportPayload {
   tabs: DashboardTab[];
   widgets: DashboardWidget[];
   notes: StickyNoteItem[];
+  localMedia?: Record<string, string>;
   profiles?: HouseholdProfile[];
   chores?: ChoreEngineSnapshot;
   meals?: MealPlannerSnapshot;
@@ -136,12 +138,13 @@ export function useFileSync(): FileSyncState {
 }
 
 // 1. Universal One-Click Download Backup (.json) - Works on ALL browsers and mobile devices
-export function downloadBackupFile(
+export async function downloadBackupFile(
   settings: AppSettings,
   tabs: DashboardTab[],
   widgets: DashboardWidget[],
   notes: StickyNoteItem[]
-): void {
+): Promise<void> {
+  const localMedia = await collectVaultMediaMap(widgets).catch(() => ({}));
   const payload: LocalExportPayload = {
     version: 1,
     exportedAt: new Date().toISOString(),
@@ -149,6 +152,7 @@ export function downloadBackupFile(
     tabs,
     widgets,
     notes,
+    ...(Object.keys(localMedia).length > 0 ? { localMedia } : {}),
     profiles: useProfileStore.getState().profiles,
     chores: useChoreStore.getState().snapshot,
     meals: useMealStore.getState().snapshot,
@@ -232,6 +236,9 @@ export async function restoreBackupToDatabase(
       const sanitizedWidgets = payload.widgets.map((w) => sanitizeRestoredPhotoWidget(w).widget);
       await db.widgets.bulkAdd(sanitizedWidgets);
     }
+
+    // 3b. Restore any bundled uploaded media into local device vault
+    await restoreVaultMediaMap(payload.localMedia);
 
     // 4. Replace Notes
     await db.notes.clear();

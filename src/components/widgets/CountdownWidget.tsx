@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import { Calendar, Sparkles } from 'lucide-react';
+import { useSharedClock } from '../../utils/sharedClock';
 
 interface CountdownWidgetProps {
   eventName?: string;
@@ -14,48 +15,24 @@ export const CountdownWidget: React.FC<CountdownWidgetProps> = ({
   isLight = false,
   transparentBg = false,
 }) => {
-  const [timeLeft, setTimeLeft] = useState<{
-    days: number;
-    hours: number;
-    minutes: number;
-    seconds: number;
-    isPast: boolean;
-  }>({ days: 0, hours: 0, minutes: 0, seconds: 0, isPast: false });
+  const nowDate = useSharedClock('second');
+  const nowMs = nowDate.getTime();
 
-  useEffect(() => {
-    const calculate = () => {
-      const target = new Date(targetDate).getTime();
-      const now = Date.now();
-      const diff = target - now;
+  const timeLeft = useMemo(() => {
+    const target = new Date(targetDate).getTime();
+    const diff = target - nowMs;
 
-      if (diff <= 0) {
-        setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0, isPast: true });
-        return;
-      }
+    if (diff <= 0) {
+      return { days: 0, hours: 0, minutes: 0, seconds: 0, isPast: true };
+    }
 
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
 
-      setTimeLeft({ days, hours, minutes, seconds, isPast: false });
-    };
-
-    calculate();
-    const tick = () => {
-      if (document.visibilityState === 'hidden') return;
-      calculate();
-    };
-    const timer = setInterval(tick, 1000);
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') calculate();
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => {
-      clearInterval(timer);
-      document.removeEventListener('visibilitychange', onVisibility);
-    };
-  }, [targetDate]);
+    return { days, hours, minutes, seconds, isPast: false };
+  }, [targetDate, nowMs]);
 
   const targetDateFormatted = new Date(targetDate).toLocaleDateString([], {
     month: 'short',

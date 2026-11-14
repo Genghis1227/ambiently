@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Image as ImageIcon,
   Sparkles,
@@ -7,7 +7,13 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import type { ImageWidgetConfig } from '../../types/dashboard';
-import { MediaSearchModal } from './MediaSearchModal';
+import { MediaSearchModal, type MediaSelectionMeta } from './MediaSearchModal';
+import {
+  resolveOptimizedImageMedia,
+  resolveOrWarmCachedMedia,
+} from '../../utils/mediaOptimization';
+import { useVaultMediaUrl } from '../../utils/localMediaVault';
+import { useDisplayActivity } from '../../utils/displayActivity';
 
 interface ImageWidgetProps {
   id: string;
@@ -15,23 +21,118 @@ interface ImageWidgetProps {
   onUpdateConfig?: (config: Partial<ImageWidgetConfig>) => void;
 }
 
-export const ImageWidget: React.FC<ImageWidgetProps> = ({
+interface MediaErrorState {
+  key: string;
+  hasError: boolean;
+  videoFailed: boolean;
+  fallbackToRawImg: boolean;
+}
+
+interface CachedVideoEntry {
+  forUrl: string;
+  objectUrl: string;
+}
+
+const ImageWidgetInner: React.FC<ImageWidgetProps> = ({
   config,
   onUpdateConfig,
 }) => {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [hasError, setHasError] = useState(false);
   const [isCustomUrlOpen, setIsCustomUrlOpen] = useState(false);
   const [inputUrl, setInputUrl] = useState('');
+  const [cachedVideoEntry, setCachedVideoEntry] = useState<CachedVideoEntry | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  const url = config.url?.trim() || '';
+  const rawUrl = config.url?.trim() || '';
   const fit = config.fit || 'contain';
   const transparentBg = config.transparentBg !== false;
+  const mediaKey = `${config.url || ''}|${config.mp4Url || ''}|${config.mediaSource || ''}`;
 
-  const handleSelectMedia = (selectedUrl: string, selectedTitle?: string) => {
-    setHasError(false);
+  const [errorState, setErrorState] = useState<MediaErrorState>(() => ({
+    key: mediaKey,
+    hasError: false,
+    videoFailed: false,
+    fallbackToRawImg: false,
+  }));
+
+  const currentErrors =
+    errorState.key === mediaKey
+      ? errorState
+      : { key: mediaKey, hasError: false, videoFailed: false, fallbackToRawImg: false };
+
+  const {
+    resolvedUrl,
+    isLoading: isVaultLoading,
+    isMissing: isVaultMissing,
+  } = useVaultMediaUrl(rawUrl);
+  const { shouldPauseAnimations } = useDisplayActivity();
+
+  const media = resolveOptimizedImageMedia({
+    url: resolvedUrl,
+    mp4Url: config.mp4Url,
+    mediaSource: config.mediaSource,
+  });
+
+  const activeVideoUrl = !currentErrors.videoFailed ? media.videoUrl : null;
+
+  useEffect(() => {
+    if (!activeVideoUrl) {
+      return;
+    }
+
+    let cancelled = false;
+    let createdObjectUrl: string | null = null;
+
+    void resolveOrWarmCachedMedia(activeVideoUrl).then((objectUrl) => {
+      if (!objectUrl) return;
+      if (cancelled) {
+        URL.revokeObjectURL(objectUrl);
+        return;
+      }
+      createdObjectUrl = objectUrl;
+      setCachedVideoEntry({ forUrl: activeVideoUrl, objectUrl });
+    });
+
+    return () => {
+      cancelled = true;
+      if (createdObjectUrl) {
+        URL.revokeObjectURL(createdObjectUrl);
+      }
+    };
+  }, [activeVideoUrl]);
+
+  const cachedVideoObjectUrl =
+    activeVideoUrl && cachedVideoEntry?.forUrl === activeVideoUrl
+      ? cachedVideoEntry.objectUrl
+      : null;
+  const videoSrc = cachedVideoObjectUrl || activeVideoUrl;
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el || !videoSrc) return;
+    if (shouldPauseAnimations) {
+      el.pause();
+    } else {
+      el.play().catch(() => {});
+    }
+  }, [shouldPauseAnimations, videoSrc]);
+
+  const handleSelectMedia = (
+    selectedUrl: string,
+    selectedTitle?: string,
+    meta?: MediaSelectionMeta
+  ) => {
+    const nextKey = `${selectedUrl}|${meta?.mp4Url || ''}|${meta?.mediaSource || ''}`;
+    setErrorState({
+      key: nextKey,
+      hasError: false,
+      videoFailed: false,
+      fallbackToRawImg: false,
+    });
     onUpdateConfig?.({
       url: selectedUrl,
+      mp4Url: meta?.mp4Url,
+      mediaSource: meta?.mediaSource,
       title: config.title || selectedTitle || 'Image',
     });
   };
@@ -39,13 +140,16 @@ export const ImageWidget: React.FC<ImageWidgetProps> = ({
   const handleUrlSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (inputUrl.trim()) {
-      handleSelectMedia(inputUrl.trim());
+      handleSelectMedia(inputUrl.trim(), undefined, {
+        mp4Url: undefined,
+        mediaSource: 'custom',
+      });
       setIsCustomUrlOpen(false);
     }
   };
 
   // 1. Empty State (No image configured yet)
-  if (!url) {
+  if (!rawUrl) {
     return (
       <div className="w-full h-full p-4 flex flex-col items-center justify-center text-center bg-gray-950/70 border border-gray-800/80 rounded-2xl select-none backdrop-blur-xs">
         <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center mb-3 text-blue-400 shadow-sm">
@@ -109,19 +213,46 @@ export const ImageWidget: React.FC<ImageWidgetProps> = ({
           isOpen={isSearchOpen}
           onClose={() => setIsSearchOpen(false)}
           onSelect={handleSelectMedia}
-          initialUrl={url}
+          initialUrl={rawUrl}
         />
       </div>
     );
   }
 
-  // 2. Error Fallback State
-  if (hasError) {
+  // 2. Device-local upload missing (e.g. opened from cloud sync on another device)
+  if (isVaultMissing) {
+    return (
+      <div className="w-full h-full p-4 flex flex-col items-center justify-center text-center bg-gray-950/80 border border-amber-500/30 rounded-2xl select-none">
+        <ImageIcon className="w-8 h-8 text-amber-400 mb-2" />
+        <p className="text-xs font-bold text-white mb-0.5">Local Upload Unavailable</p>
+        <p className="text-[10px] text-gray-400 mb-3 max-w-[220px]">
+          Local uploads stay on the device where they were added — click to choose a new image or GIF.
+        </p>
+        <button
+          type="button"
+          onClick={() => setIsSearchOpen(true)}
+          className="px-3 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs text-blue-300 font-semibold transition-colors cursor-pointer"
+        >
+          Choose Image / GIF
+        </button>
+
+        <MediaSearchModal
+          isOpen={isSearchOpen}
+          onClose={() => setIsSearchOpen(false)}
+          onSelect={handleSelectMedia}
+          initialUrl=""
+        />
+      </div>
+    );
+  }
+
+  // 3. Error Fallback State
+  if (currentErrors.hasError) {
     return (
       <div className="w-full h-full p-4 flex flex-col items-center justify-center text-center bg-gray-950/80 border border-red-500/30 rounded-2xl select-none">
         <AlertCircle className="w-8 h-8 text-red-400 mb-2" />
         <p className="text-xs font-bold text-white mb-0.5">Image Failed to Load</p>
-        <p className="text-[10px] text-gray-400 mb-3 max-w-[200px] truncate">{url}</p>
+        <p className="text-[10px] text-gray-400 mb-3 max-w-[200px] truncate">{rawUrl}</p>
         <button
           type="button"
           onClick={() => setIsSearchOpen(true)}
@@ -134,13 +265,17 @@ export const ImageWidget: React.FC<ImageWidgetProps> = ({
           isOpen={isSearchOpen}
           onClose={() => setIsSearchOpen(false)}
           onSelect={handleSelectMedia}
-          initialUrl={url}
+          initialUrl={rawUrl}
         />
       </div>
     );
   }
 
-  // 3. Rendered Image / GIF View
+  const imgSrc = currentErrors.fallbackToRawImg
+    ? media.fallbackImgUrl
+    : media.optimizedImgUrl || media.fallbackImgUrl;
+
+  // 4. Rendered Video / Animated WebP / Image View
   const content = (
     <div
       className={`relative w-full h-full overflow-hidden select-none group flex items-center justify-center ${
@@ -149,17 +284,50 @@ export const ImageWidget: React.FC<ImageWidgetProps> = ({
           : 'bg-gray-950/60 border border-gray-800/80 rounded-2xl shadow-lg backdrop-blur-xs'
       }`}
     >
-      <img
-        src={url}
-        alt={config.title || 'Image'}
-        onError={() => setHasError(true)}
-        className={`w-full h-full pointer-events-none ${
-          transparentBg ? 'drop-shadow-xl' : ''
-        }`}
-        style={{
-          objectFit: fit,
-        }}
-      />
+      {isVaultLoading ? null : videoSrc ? (
+        <video
+          ref={videoRef}
+          src={videoSrc}
+          autoPlay={!shouldPauseAnimations}
+          loop
+          muted
+          playsInline
+          disablePictureInPicture
+          onError={() => {
+            if (media.optimizedImgUrl || media.fallbackImgUrl) {
+              setErrorState({ ...currentErrors, videoFailed: true });
+            } else {
+              setErrorState({ ...currentErrors, hasError: true });
+            }
+          }}
+          className="w-full h-full pointer-events-none"
+          style={{
+            objectFit: fit,
+          }}
+        />
+      ) : imgSrc ? (
+        <img
+          src={imgSrc}
+          alt={config.title || 'Image'}
+          loading="lazy"
+          decoding="async"
+          onError={() => {
+            if (
+              !currentErrors.fallbackToRawImg &&
+              media.fallbackImgUrl &&
+              media.fallbackImgUrl !== imgSrc
+            ) {
+              setErrorState({ ...currentErrors, fallbackToRawImg: true });
+            } else {
+              setErrorState({ ...currentErrors, hasError: true });
+            }
+          }}
+          className="w-full h-full pointer-events-none"
+          style={{
+            objectFit: fit,
+          }}
+        />
+      ) : null}
 
       {/* Optional Caption */}
       {config.caption && (
@@ -198,8 +366,10 @@ export const ImageWidget: React.FC<ImageWidgetProps> = ({
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}
         onSelect={handleSelectMedia}
-        initialUrl={url}
+        initialUrl={rawUrl}
       />
     </>
   );
 };
+
+export const ImageWidget = React.memo(ImageWidgetInner);

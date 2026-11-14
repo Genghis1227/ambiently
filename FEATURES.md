@@ -120,7 +120,8 @@ Every widget features a top-right **Tile Settings (`⚙️`)** button to customi
 * **Milestone Countdown (`CountdownWidget.tsx`):**
   * Live days/hours/minutes/seconds countdown timer to upcoming vacations, birthdays, or milestones.
 * **Animated GIF, Sticker & Picture Tile (`ImageWidget.tsx`) & Custom Text Banner (`TextBoxWidget.tsx`):**
-  * Pin frameless transparent stickers, GIPHY animated GIFs (via built-in media search, URL, or the blank-canvas right-click **Add Single Photo / GIF** menu), or framed images with full `360°` rotation and quick tilt presets (`-6°` to `+6°`), plus customizable typography banners (`TextBoxWidget.tsx`) supporting **Sticker / No Outline** frameless text styling alongside compatible ambient widgets.
+  * Pin frameless transparent stickers, GIPHY animated GIFs (via built-in media search, URL, or the blank-canvas right-click **Add Single Photo / GIF** menu), device-local image uploads (stored in `db.vault` under `vault://local-media:*` with automatic raster downscaling and JSON backup export), or framed images with full `360°` rotation and quick tilt presets (`-6°` to `+6°`). Opaque GIPHY GIFs automatically stream as hardware-accelerated muted looping MP4 videos (`mp4Url`) while transparent stickers and legacy GIPHY URLs upgrade to animated `.webp` to preserve full alpha transparency without per-frame drop-shadow compositor overhead, backed by a bounded offline media cache (`ambiently-media-cache-v1`).
+  * Customize typography banners (`TextBoxWidget.tsx`) supporting **Sticker / No Outline** frameless text styling alongside compatible ambient widgets.
 
 ---
 
