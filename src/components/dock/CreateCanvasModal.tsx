@@ -13,6 +13,7 @@ import {
 } from '../../utils/canvasBlueprints';
 import type { CanvasBackgroundTheme } from '../../types/dashboard';
 import { MAX_CANVASES } from '../../types/dashboard';
+import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 
 interface CreateCanvasModalProps {
   isOpen: boolean;
@@ -137,10 +138,7 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
       role="dialog"
       aria-modal="true"
       className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 select-none cursor-pointer"
-      onPointerDown={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+      {...createBackdropDismissHandlers(onClose)}
     >
       <div
         onPointerDown={(e) => e.stopPropagation()}

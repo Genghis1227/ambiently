@@ -31,6 +31,7 @@ import {
   type WidgetCategoryId,
   type WidgetVariantSpec,
 } from '../../utils/widgetCatalog';
+import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 
 interface AddWidgetModalProps {
   isOpen: boolean;
@@ -121,10 +122,7 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
       role="dialog"
       aria-modal="true"
       className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 select-none cursor-pointer"
-      onPointerDown={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+      {...createBackdropDismissHandlers(onClose)}
     >
       <div
         onPointerDown={(e) => e.stopPropagation()}

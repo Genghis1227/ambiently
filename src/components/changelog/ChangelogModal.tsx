@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ExternalLink, Calendar } from 'lucide-react';
 import { RELEASES, APP_VERSION } from '../../data/changelog';
+import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 
 interface ChangelogModalProps {
   isOpen: boolean;
@@ -25,9 +26,7 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({ isOpen, onClose 
       role="dialog"
       aria-modal="true"
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+      {...createBackdropDismissHandlers(onClose)}
     >
       <div
         className="w-full max-w-lg rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden text-left"

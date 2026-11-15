@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Clock, Kanban, Trash2, X } from 'lucide-react';
 import { useKanbanStore } from '../../stores/useKanbanStore';
 import { KANBAN_AUTO_ARCHIVE_OPTIONS } from '../../types/kanban';
+import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 import { KanbanConfirmDialog } from './KanbanConfirmDialog';
 
 export interface KanbanBoardModalProps {
@@ -98,18 +99,7 @@ export const KanbanBoardModal: React.FC<KanbanBoardModalProps> = ({
         role="dialog"
         aria-modal="true"
         data-no-drag="true"
-        onPointerDown={(e) => e.stopPropagation()}
-        onMouseDown={(e) => {
-          (e.currentTarget as any).__backdropMouseDown =
-            e.target === e.currentTarget &&
-            !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName || '');
-        }}
-        onClick={(e) => {
-          if (e.target === e.currentTarget && (e.currentTarget as any).__backdropMouseDown) {
-            onClose();
-          }
-          (e.currentTarget as any).__backdropMouseDown = false;
-        }}
+        {...createBackdropDismissHandlers(onClose)}
         className="fixed inset-0 z-[95] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
       >
         <form

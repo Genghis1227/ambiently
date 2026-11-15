@@ -12,6 +12,7 @@ import {
   Pencil,
 } from 'lucide-react';
 import type { Profile, WishlistReward } from '../../types/chores';
+import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 import { HouseholdAvatar } from '../common/HouseholdAvatar';
 
 interface ProposeRewardModalProps {
@@ -182,20 +183,7 @@ const ProposeRewardModalContent: React.FC<Omit<ProposeRewardModalProps, 'isOpen'
       aria-modal="true"
       data-no-drag="true"
       className="fixed inset-0 z-[950] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4"
-      onPointerDown={(e) => e.stopPropagation()}
-      onMouseDown={(e) => {
-        e.stopPropagation();
-        (e.currentTarget as any).__backdropMouseDown =
-          e.target === e.currentTarget &&
-          !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName || '');
-      }}
-      onClick={(e) => {
-        e.stopPropagation();
-        if (e.target === e.currentTarget && (e.currentTarget as any).__backdropMouseDown) {
-          onClose();
-        }
-        (e.currentTarget as any).__backdropMouseDown = false;
-      }}
+      {...createBackdropDismissHandlers(onClose)}
     >
       <div
         className="w-full max-w-lg rounded-2xl border border-slate-700/60 bg-slate-900/95 text-slate-100 shadow-2xl overflow-hidden"

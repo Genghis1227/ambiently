@@ -172,12 +172,30 @@ export const TextBoxWidget: React.FC<TextBoxWidgetProps> = ({
 
   const isStickerMode = transparentBg !== false && (!bgStyle || bgStyle === 'transparent');
 
+  const preserveInlineEditorFocus = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isInlineEditing) return;
+    e.stopPropagation();
+    if (
+      e.target !== textareaRef.current &&
+      !(e.target instanceof Element && e.target.closest('button'))
+    ) {
+      e.preventDefault();
+      textareaRef.current?.focus();
+    }
+  };
+
   return (
     <div
       onDoubleClick={(e) => {
         e.stopPropagation();
         setIsInlineEditing(true);
       }}
+      onPointerDown={(e) => {
+        if (isInlineEditing) {
+          e.stopPropagation();
+        }
+      }}
+      onMouseDown={preserveInlineEditorFocus}
       className={`w-full h-full flex flex-col justify-center ${alignClass} select-none transition-all p-2 ${
         isStickerMode
           ? 'bg-transparent border-0 shadow-none'
@@ -204,7 +222,7 @@ export const TextBoxWidget: React.FC<TextBoxWidgetProps> = ({
             onChange={(e) => setEditingText(e.target.value)}
             onBlur={handleSaveInline}
             onKeyDown={handleKeyDown}
-            className={`w-full h-full resize-none rounded-xl p-3 border focus:outline-none focus:ring-2 focus:ring-blue-500 font-sans ${sizeClass} ${
+            className={`w-full h-full resize-none rounded-xl p-3 border focus:outline-none focus:ring-2 focus:ring-blue-500 font-sans select-text ${sizeClass} ${
               isLight
                 ? 'bg-white text-slate-900 border-blue-400'
                 : 'bg-black/60 text-white border-blue-500/80'
@@ -214,6 +232,7 @@ export const TextBoxWidget: React.FC<TextBoxWidgetProps> = ({
           <div className="flex items-center justify-between mt-1 px-1 text-[10px] text-gray-400">
             <span>Esc to cancel • Ctrl+Enter to save</span>
             <button
+              type="button"
               onClick={handleSaveInline}
               className="px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-500 text-white font-semibold cursor-pointer"
             >

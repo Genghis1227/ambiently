@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ShieldAlert, Mail, X } from 'lucide-react';
 import { getCurrentUser, sendPinResetCode, verifyOtpCode } from '../../services/supabase';
 import { useDashboardStore } from '../../store/dashboardStore';
+import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 
 interface PinOverlayProps {
   onUnlock: (pin: string) => boolean | Promise<boolean>;
@@ -180,11 +181,7 @@ export const PinOverlay: React.FC<PinOverlayProps> = ({
       role="dialog"
       aria-modal="true"
       tabIndex={-1}
-      onClick={(e) => {
-        if (e.target === e.currentTarget && onCancel) {
-          onCancel();
-        }
-      }}
+      {...createBackdropDismissHandlers(onCancel)}
       className="fixed inset-0 z-[9500] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 select-none focus:outline-none"
     >
       <div

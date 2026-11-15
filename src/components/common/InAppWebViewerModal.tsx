@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { X, RotateCw, Globe, BookOpen, Loader2, Calendar, User, Clock, AlertCircle } from 'lucide-react';
+import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 
 export interface InAppWebViewerModalProps {
   isOpen: boolean;
@@ -156,13 +157,15 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
 
   return (
     <div
-      onClick={onClose}
+      {...createBackdropDismissHandlers(onClose)}
       className="fixed inset-0 z-[9980] bg-black/85 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 md:p-6 animate-in fade-in duration-200 select-none"
     >
       <style>{`
         .ambiently-reader-body {
           position: relative;
           overflow-x: hidden;
+          user-select: text;
+          -webkit-user-select: text;
         }
         .ambiently-reader-body p {
           margin-bottom: 1.25rem;

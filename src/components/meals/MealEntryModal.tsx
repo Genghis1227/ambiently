@@ -41,6 +41,7 @@ import {
   pluralizeItemName,
 } from '../../utils/ingredientAggregator';
 import { localDateKey, parseDateKey } from '../../utils/dateKey';
+import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 import { ProfileAvatar } from '../common/ProfileAvatar';
 
 function parseIngredientLine(
@@ -1050,7 +1051,8 @@ const MealEntryModalContent: React.FC<MealEntryContentProps> = ({
   return (
     <div
       className="fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-3 md:p-5"
-      onClick={onClose}
+      data-no-drag="true"
+      {...createBackdropDismissHandlers(onClose)}
       role="dialog"
       aria-modal="true"
       aria-label={effectiveEditingMeal ? 'Edit Planned Meal' : 'Plan a Meal'}

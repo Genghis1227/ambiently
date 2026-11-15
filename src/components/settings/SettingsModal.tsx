@@ -46,6 +46,7 @@ import {
 } from 'lucide-react';
 import { useUpdateChecker } from '../../services/updateChecker';
 import { db } from '../../services/db';
+import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 import {
   cancelPendingCloudPush,
   flushPendingCloudPush,
@@ -468,17 +469,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     <>
       <div
         className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
-        onMouseDown={(e) => {
-          (e.currentTarget as any).__backdropMouseDown =
-            e.target === e.currentTarget &&
-            !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName || '');
-        }}
-        onClick={(e) => {
-          if (e.target === e.currentTarget && (e.currentTarget as any).__backdropMouseDown) {
-            onClose();
-          }
-          (e.currentTarget as any).__backdropMouseDown = false;
-        }}
+        {...createBackdropDismissHandlers(onClose)}
       >
         <div
           onClick={(e) => e.stopPropagation()}

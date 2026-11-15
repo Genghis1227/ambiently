@@ -30,6 +30,7 @@ import {
   pushToCloud,
 } from '../../services/supabase';
 import { useDashboardStore } from '../../store/dashboardStore';
+import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 
 interface ShareBoardModalProps {
   isOpen: boolean;
@@ -186,9 +187,7 @@ export const ShareBoardModal: React.FC<ShareBoardModalProps> = ({ isOpen, onClos
   return createPortal(
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-150"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+      {...createBackdropDismissHandlers(onClose)}
     >
       <div
         className="w-full max-w-lg rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl flex flex-col overflow-hidden text-left"

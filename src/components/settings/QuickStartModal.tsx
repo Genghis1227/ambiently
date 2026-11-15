@@ -22,6 +22,7 @@ import {
   Utensils,
   ShoppingCart,
 } from 'lucide-react';
+import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 
 export const QUICKSTART_STORAGE_KEY = 'ambiently_quickstart_dismissed_v1';
 
@@ -377,15 +378,7 @@ export const QuickStartModal: React.FC<QuickStartModalProps> = ({
   return (
     <div
       className="fixed inset-0 z-[95] flex items-center justify-center bg-black/80 backdrop-blur-md p-3 sm:p-4 animate-in fade-in duration-150"
-      onMouseDown={(e) => {
-        (e.currentTarget as any).__backdropMouseDown = e.target === e.currentTarget;
-      }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget && (e.currentTarget as any).__backdropMouseDown) {
-          handleClose();
-        }
-        (e.currentTarget as any).__backdropMouseDown = false;
-      }}
+      {...createBackdropDismissHandlers(handleClose)}
     >
       <div
         onClick={(e) => e.stopPropagation()}
