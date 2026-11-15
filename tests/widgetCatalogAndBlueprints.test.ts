@@ -134,6 +134,26 @@ describe('widgetCatalog', () => {
     assert.equal(financePayload.title, 'Markets & Watchlist');
     assert.ok(Array.isArray(financePayload.config?.watchlist));
     assert.ok((financePayload.config?.watchlist?.length || 0) >= 5);
+
+    assert.equal(getDefaultTitleForWidgetType('kanban'), 'Project Board (Kanban)');
+    const projectBoardSearch = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'all', 'project board');
+    assert.equal(projectBoardSearch.length, 1);
+    assert.equal(projectBoardSearch[0].entry.id, 'kanban');
+
+    const taskBoardSearch = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'all', 'task board');
+    assert.equal(taskBoardSearch.length, 1);
+    assert.equal(taskBoardSearch[0].entry.id, 'kanban');
+
+    const kanbanSearch = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'all', 'kanban');
+    assert.equal(kanbanSearch.length, 1);
+    assert.equal(kanbanSearch[0].entry.id, 'kanban');
+
+    const kanbanPayload = buildWidgetPayloadFromVariant(
+      kanbanSearch[0].entry.variants[0],
+      'tab-home',
+      []
+    );
+    assert.equal(kanbanPayload.title, 'Project Board (Kanban)');
   });
 
   it('prevents AddWidgetModal and CreateCanvasModal from resetting state via onClose effect dependencies', () => {

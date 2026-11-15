@@ -349,7 +349,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
       case 'meals':
         return 'Meal Planner';
       case 'kanban':
-        return 'Project Kanban';
+        return 'Project Board (Kanban)';
       case 'finance':
         return 'Markets & Watchlist';
       default:

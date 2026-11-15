@@ -3790,10 +3790,10 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                 <div>
                   <label className="text-xs font-semibold text-gray-300 flex items-center gap-1.5 mb-1.5">
                     <Kanban className="w-3.5 h-3.5 text-slate-300" />
-                    <span>Pinned Kanban Board (This Widget Only)</span>
+                    <span>Pinned Project Board (This Widget Only)</span>
                   </label>
                   <p className="text-[11px] text-gray-400 mb-2">
-                    Each Project Kanban tile selects its own active board independently across your Bento tabs.
+                    Each Project Board (Kanban) tile selects its own active board independently across your Bento tabs.
                   </p>
                   <select
                     value={kanbanBoardId}

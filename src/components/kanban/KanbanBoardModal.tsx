@@ -111,7 +111,7 @@ export const KanbanBoardModal: React.FC<KanbanBoardModalProps> = ({
             <div className="flex items-center gap-2">
               <Kanban className="w-4 h-4 text-[#648296]" />
               <h3 className="text-sm font-semibold">
-                {mode === 'create' ? 'New Kanban Board' : 'Board Settings'}
+                {mode === 'create' ? 'New Project Board (Kanban)' : 'Board Settings'}
               </h3>
             </div>
             <button
