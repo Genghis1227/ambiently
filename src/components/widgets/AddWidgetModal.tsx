@@ -18,6 +18,9 @@ import {
   Kanban,
   RotateCcw,
   TrendingUp,
+  AlarmClock,
+  Wind,
+  SunMoon,
 } from 'lucide-react';
 import type { DashboardWidget } from '../../types/dashboard';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -55,6 +58,9 @@ const CATALOG_ICONS: Record<WidgetCatalogIconKey, React.ComponentType<{ classNam
   sticky_notes: StickyNote,
   image: Sparkles,
   finance: TrendingUp,
+  timer: AlarmClock,
+  air_quality: Wind,
+  sun_moon: SunMoon,
 };
 
 export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({

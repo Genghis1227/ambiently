@@ -62,7 +62,21 @@ import { CURATED_RSS_FEEDS, RSS_FEED_CATEGORIES, type RssFeedCategory } from '..
 import { MediaSearchModal, type MediaSelectionMeta } from './MediaSearchModal';
 import { resolveOptimizedImageMedia } from '../../utils/mediaOptimization';
 import { useVaultMediaUrl } from '../../utils/localMediaVault';
-import { Sparkles, Utensils, Kanban, TrendingUp } from 'lucide-react';
+import {
+  Sparkles,
+  Utensils,
+  Kanban,
+  TrendingUp,
+  AlarmClock,
+  Wind,
+  SunMoon,
+  Volume2,
+} from 'lucide-react';
+import {
+  playTimerChime,
+  resetTimerItem,
+  resolveWidgetTimers,
+} from '../../utils/timerEngine';
 import { useChoreStore } from '../../store/choreStore';
 import { useMealStore } from '../../stores/useMealStore';
 import { useKanbanStore } from '../../stores/useKanbanStore';
@@ -285,6 +299,21 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const [financeQuery, setFinanceQuery] = useState<string>('');
   const [financeSearchResults, setFinanceSearchResults] = useState<FinanceSearchResult[]>([]);
   const [financeSearchLoading, setFinanceSearchLoading] = useState<boolean>(false);
+
+  // Kitchen Timer & Pomodoro widget states
+  const [timerChimeEnabled, setTimerChimeEnabled] = useState<boolean>(true);
+  const [timerDefaultFocusMin, setTimerDefaultFocusMin] = useState<number>(25);
+  const [timerDefaultBreakMin, setTimerDefaultBreakMin] = useState<number>(5);
+  const [timerResetAction, setTimerResetAction] = useState<'none' | 'clear_done' | 'reset_all'>('none');
+
+  // Air Quality, Pollen & UV widget states
+  const [aqShowPollen, setAqShowPollen] = useState<boolean>(true);
+  const [aqShowUvStrip, setAqShowUvStrip] = useState<boolean>(true);
+  const [aqRefreshMin, setAqRefreshMin] = useState<15 | 30 | 60>(30);
+
+  // Sun Arc & Moon Phase widget states
+  const [sunShowGoldenHour, setSunShowGoldenHour] = useState<boolean>(true);
+  const [sunShowMoonDetails, setSunShowMoonDetails] = useState<boolean>(true);
 
   const [rssCategoryFilter, setRssCategoryFilter] = useState<'All' | RssFeedCategory>('All');
   const [rssSearchQuery, setRssSearchQuery] = useState('');
@@ -518,6 +547,47 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setFinanceQuery('');
       setFinanceSearchResults([]);
       setFinanceSearchLoading(false);
+    } else if (widget.type === 'timer') {
+      setTimerChimeEnabled(widget.config?.chimeEnabled !== false);
+      setTimerDefaultFocusMin(
+        Math.max(1, Math.min(180, Number(widget.config?.defaultFocusMin) || 25))
+      );
+      setTimerDefaultBreakMin(
+        Math.max(1, Math.min(60, Number(widget.config?.defaultBreakMin) || 5))
+      );
+      setTimerResetAction('none');
+    } else if (widget.type === 'air_quality') {
+      setLocationName(widget.config?.locationName || inheritedWeather.locationName);
+      setLatitude(
+        Number.isFinite(Number(widget.config?.latitude))
+          ? Number(widget.config.latitude)
+          : inheritedWeather.latitude
+      );
+      setLongitude(
+        Number.isFinite(Number(widget.config?.longitude))
+          ? Number(widget.config.longitude)
+          : inheritedWeather.longitude
+      );
+      setTimezone(widget.config?.timezone || inheritedWeather.timezone || '');
+      setAqShowPollen(widget.config?.showPollen !== false);
+      setAqShowUvStrip(widget.config?.showUvStrip !== false);
+      const cfgAqRefresh = widget.config?.refreshIntervalMin;
+      setAqRefreshMin(cfgAqRefresh === 15 || cfgAqRefresh === 60 ? cfgAqRefresh : 30);
+    } else if (widget.type === 'sun_moon') {
+      setLocationName(widget.config?.locationName || inheritedWeather.locationName);
+      setLatitude(
+        Number.isFinite(Number(widget.config?.latitude))
+          ? Number(widget.config.latitude)
+          : inheritedWeather.latitude
+      );
+      setLongitude(
+        Number.isFinite(Number(widget.config?.longitude))
+          ? Number(widget.config.longitude)
+          : inheritedWeather.longitude
+      );
+      setTimezone(widget.config?.timezone || inheritedWeather.timezone || '');
+      setSunShowGoldenHour(widget.config?.showGoldenHour !== false);
+      setSunShowMoonDetails(widget.config?.showMoonDetails !== false);
     }
   }, [widget, isOpen, settings.commonPhotos, settings.defaultWidgetStyle]);
 
@@ -756,6 +826,9 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
         'quotes',
         'photo_frame',
         'finance',
+        'timer',
+        'air_quality',
+        'sun_moon',
       ].includes(effectiveType)
     ) {
       configUpdates.transparentBg = widgetTransparentBg;
@@ -949,6 +1022,38 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.showSparkline = financeShowSparkline;
       configUpdates.showAbsoluteChange = financeShowAbsoluteChange;
       configUpdates.refreshIntervalMin = financeRefreshMin;
+    } else if (effectiveType === 'timer') {
+      configUpdates.chimeEnabled = timerChimeEnabled;
+      configUpdates.defaultFocusMin = Math.max(
+        1,
+        Math.min(180, Math.round(timerDefaultFocusMin) || 25)
+      );
+      configUpdates.defaultBreakMin = Math.max(
+        1,
+        Math.min(60, Math.round(timerDefaultBreakMin) || 5)
+      );
+      if (timerResetAction === 'clear_done') {
+        configUpdates.timers = resolveWidgetTimers(widget.config?.timers).filter(
+          (t) => t.status !== 'completed'
+        );
+      } else if (timerResetAction === 'reset_all') {
+        configUpdates.timers = resolveWidgetTimers(widget.config?.timers).map(resetTimerItem);
+      }
+    } else if (effectiveType === 'air_quality') {
+      configUpdates.locationName = locationName.trim() || 'Austin, TX';
+      configUpdates.latitude = Number(latitude);
+      configUpdates.longitude = Number(longitude);
+      configUpdates.timezone = timezone || undefined;
+      configUpdates.showPollen = aqShowPollen;
+      configUpdates.showUvStrip = aqShowUvStrip;
+      configUpdates.refreshIntervalMin = aqRefreshMin;
+    } else if (effectiveType === 'sun_moon') {
+      configUpdates.locationName = locationName.trim() || 'Austin, TX';
+      configUpdates.latitude = Number(latitude);
+      configUpdates.longitude = Number(longitude);
+      configUpdates.timezone = timezone || undefined;
+      configUpdates.showGoldenHour = sunShowGoldenHour;
+      configUpdates.showMoonDetails = sunShowMoonDetails;
     }
 
     onSave(widget.id, {
@@ -1129,6 +1234,9 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
               'quotes',
               'photo_frame',
               'finance',
+              'timer',
+              'air_quality',
+              'sun_moon',
             ].includes(effectiveType) && (
               <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-800/60">
                 <div>
@@ -1974,8 +2082,11 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
             </div>
           )}
 
-          {/* Weather Settings */}
-          {(effectiveType === 'weather' || effectiveType === 'clock_weather') && (
+          {/* Weather, Air Quality & Sun/Moon Location Settings */}
+          {(effectiveType === 'weather' ||
+            effectiveType === 'clock_weather' ||
+            effectiveType === 'air_quality' ||
+            effectiveType === 'sun_moon') && (
             <div className="space-y-4 pt-2 border-t border-gray-800">
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
@@ -2006,35 +2117,37 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                 )}
               </div>
 
-              <div>
-                <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
-                  Temperature Unit
-                </label>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setTempUnit('F')}
-                    className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      tempUnit === 'F'
-                        ? 'bg-amber-600/30 border border-amber-500 text-amber-300'
-                        : 'bg-gray-950 border border-gray-800 text-gray-400'
-                    }`}
-                  >
-                    Fahrenheit (°F)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTempUnit('C')}
-                    className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      tempUnit === 'C'
-                        ? 'bg-amber-600/30 border border-amber-500 text-amber-300'
-                        : 'bg-gray-950 border border-gray-800 text-gray-400'
-                    }`}
-                  >
-                    Celsius (°C)
-                  </button>
+              {(effectiveType === 'weather' || effectiveType === 'clock_weather') && (
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 block mb-1.5">
+                    Temperature Unit
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setTempUnit('F')}
+                      className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        tempUnit === 'F'
+                          ? 'bg-amber-600/30 border border-amber-500 text-amber-300'
+                          : 'bg-gray-950 border border-gray-800 text-gray-400'
+                      }`}
+                    >
+                      Fahrenheit (°F)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTempUnit('C')}
+                      className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        tempUnit === 'C'
+                          ? 'bg-amber-600/30 border border-amber-500 text-amber-300'
+                          : 'bg-gray-950 border border-gray-800 text-gray-400'
+                      }`}
+                    >
+                      Celsius (°C)
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
@@ -4167,6 +4280,230 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                       <div
                         className={`bg-white w-4 h-4 rounded-full shadow transition-transform ${
                           financeShowAbsoluteChange ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* KITCHEN TIMER & POMODORO SETTINGS */}
+            {effectiveType === 'timer' && (
+              <div className="space-y-4 pt-2 border-t border-gray-800">
+                <div className="flex items-center gap-2 text-xs font-semibold text-amber-300">
+                  <AlarmClock className="w-4 h-4" />
+                  <span>Timer & Pomodoro Options</span>
+                </div>
+
+                <div className="flex items-center justify-between p-3 rounded-xl bg-gray-950 border border-gray-800">
+                  <div>
+                    <span className="text-xs font-semibold text-gray-200 block">
+                      Completion Audio Chime
+                    </span>
+                    <span className="text-[10px] text-gray-500">
+                      Plays a soft chime when timers finish (muted automatically during Night Mode)
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 ml-3">
+                    <button
+                      type="button"
+                      onClick={() => playTimerChime()}
+                      className="px-2.5 py-1 rounded-lg bg-gray-900 hover:bg-gray-800 border border-gray-700 text-[11px] font-semibold text-gray-300 inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      <Volume2 className="w-3 h-3 text-amber-400" />
+                      <span>Test</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTimerChimeEnabled(!timerChimeEnabled)}
+                      className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                        timerChimeEnabled ? 'bg-emerald-500' : 'bg-gray-700'
+                      }`}
+                    >
+                      <div
+                        className={`bg-white w-4 h-4 rounded-full shadow transition-transform ${
+                          timerChimeEnabled ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-300 block mb-1.5">
+                      Pomodoro Focus (min)
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={180}
+                      value={timerDefaultFocusMin}
+                      onChange={(e) => setTimerDefaultFocusMin(parseInt(e.target.value, 10) || 25)}
+                      className="w-full rounded-xl bg-gray-950 border border-gray-800 p-2 text-xs font-mono text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-300 block mb-1.5">
+                      Pomodoro Break (min)
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={60}
+                      value={timerDefaultBreakMin}
+                      onChange={(e) => setTimerDefaultBreakMin(parseInt(e.target.value, 10) || 5)}
+                      className="w-full rounded-xl bg-gray-950 border border-gray-800 p-2 text-xs font-mono text-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setTimerResetAction((prev) => (prev === 'clear_done' ? 'none' : 'clear_done'))
+                    }
+                    className={`px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
+                      timerResetAction === 'clear_done'
+                        ? 'bg-amber-600/25 border-amber-500 text-amber-200'
+                        : 'bg-gray-950 border-gray-800 text-gray-300 hover:text-white'
+                    }`}
+                  >
+                    Clear Completed on Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setTimerResetAction((prev) => (prev === 'reset_all' ? 'none' : 'reset_all'))
+                    }
+                    className={`px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
+                      timerResetAction === 'reset_all'
+                        ? 'bg-rose-600/25 border-rose-500 text-rose-200'
+                        : 'bg-gray-950 border-gray-800 text-gray-300 hover:text-white'
+                    }`}
+                  >
+                    Reset All Timers on Save
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* AIR QUALITY, POLLEN & UV SETTINGS */}
+            {effectiveType === 'air_quality' && (
+              <div className="space-y-3 pt-2 border-t border-gray-800">
+                <div className="flex items-center gap-2 text-xs font-semibold text-emerald-300">
+                  <Wind className="w-4 h-4" />
+                  <span>Air Quality, Pollen & UV Options</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-gray-950 border border-gray-800">
+                    <span className="text-xs text-gray-300 font-medium">
+                      Show Allergy Pollen / Breakdown
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setAqShowPollen(!aqShowPollen)}
+                      className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                        aqShowPollen ? 'bg-emerald-500' : 'bg-gray-700'
+                      }`}
+                    >
+                      <div
+                        className={`bg-white w-4 h-4 rounded-full shadow transition-transform ${
+                          aqShowPollen ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-gray-950 border border-gray-800">
+                    <span className="text-xs text-gray-300 font-medium">
+                      Show Daytime UV Strip
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setAqShowUvStrip(!aqShowUvStrip)}
+                      className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                        aqShowUvStrip ? 'bg-emerald-500' : 'bg-gray-700'
+                      }`}
+                    >
+                      <div
+                        className={`bg-white w-4 h-4 rounded-full shadow transition-transform ${
+                          aqShowUvStrip ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-gray-300 block mb-1.5">
+                    Refresh Interval
+                  </label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {([15, 30, 60] as const).map((min) => (
+                      <button
+                        key={min}
+                        type="button"
+                        onClick={() => setAqRefreshMin(min)}
+                        className={`p-2 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                          aqRefreshMin === min
+                            ? 'bg-emerald-600/20 border-emerald-500/60 text-emerald-200 font-semibold'
+                            : 'bg-gray-950 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'
+                        }`}
+                      >
+                        {min} min
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* SUN ARC & MOON PHASE SETTINGS */}
+            {effectiveType === 'sun_moon' && (
+              <div className="space-y-3 pt-2 border-t border-gray-800">
+                <div className="flex items-center gap-2 text-xs font-semibold text-amber-300">
+                  <SunMoon className="w-4 h-4" />
+                  <span>Sun & Moon Display Options</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-gray-950 border border-gray-800">
+                    <span className="text-xs text-gray-300 font-medium">
+                      Show Golden Hour Windows
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSunShowGoldenHour(!sunShowGoldenHour)}
+                      className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                        sunShowGoldenHour ? 'bg-amber-500' : 'bg-gray-700'
+                      }`}
+                    >
+                      <div
+                        className={`bg-white w-4 h-4 rounded-full shadow transition-transform ${
+                          sunShowGoldenHour ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-gray-950 border border-gray-800">
+                    <span className="text-xs text-gray-300 font-medium">
+                      Show Moon Phase Card
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSunShowMoonDetails(!sunShowMoonDetails)}
+                      className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                        sunShowMoonDetails ? 'bg-amber-500' : 'bg-gray-700'
+                      }`}
+                    >
+                      <div
+                        className={`bg-white w-4 h-4 rounded-full shadow transition-transform ${
+                          sunShowMoonDetails ? 'translate-x-5' : 'translate-x-0'
                         }`}
                       />
                     </button>

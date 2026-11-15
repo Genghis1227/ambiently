@@ -22,7 +22,10 @@ export type WidgetCatalogIconKey =
   | 'textbox'
   | 'sticky_notes'
   | 'image'
-  | 'finance';
+  | 'finance'
+  | 'timer'
+  | 'air_quality'
+  | 'sun_moon';
 
 export interface WidgetCategoryMeta {
   id: WidgetCategoryId;
@@ -210,6 +213,53 @@ export const WIDGET_CATALOG_ENTRIES: WidgetCatalogEntry[] = [
     ],
   },
   {
+    id: 'timer',
+    category: 'household',
+    title: 'Kitchen Timer & Pomodoro',
+    description:
+      'Concurrent named cooking and focus timers with audio chimes, +1m quick-extend, and Pomodoro focus/break cycles.',
+    iconKey: 'timer',
+    color: 'from-amber-500/20 to-rose-500/20 text-amber-300 border-amber-500/30',
+    keywords: [
+      'timer',
+      'timers',
+      'kitchen timer',
+      'cooking timer',
+      'pomodoro',
+      'focus',
+      'alarm',
+      'pasta',
+      'oven',
+      'bake',
+    ],
+    variants: [
+      {
+        type: 'timer',
+        pillLabel: 'Timer & Pomodoro',
+        title: 'Kitchen Timer & Pomodoro',
+        description:
+          'Concurrent named cooking and focus timers with audio chimes, +1m quick-extend, and Pomodoro cycles.',
+        defaultGridPos: { w: 4, h: 5 },
+        defaultConfig: {
+          chimeEnabled: true,
+          defaultFocusMin: 25,
+          defaultBreakMin: 5,
+          timers: [
+            {
+              id: 'timer-default-1',
+              label: 'Kitchen Timer',
+              durationSec: 600,
+              status: 'idle',
+              remainingSec: 600,
+              mode: 'countdown',
+            },
+          ],
+        },
+        keywords: ['timer', 'kitchen timer', 'pomodoro', 'focus', 'alarm'],
+      },
+    ],
+  },
+  {
     id: 'clock_group',
     category: 'time_weather',
     title: 'Clock & Time',
@@ -286,6 +336,85 @@ export const WIDGET_CATALOG_ENTRIES: WidgetCatalogEntry[] = [
           unit: 'F',
         },
         keywords: ['weather', 'forecast', 'temperature'],
+      },
+    ],
+  },
+  {
+    id: 'air_quality',
+    category: 'time_weather',
+    title: 'Air Quality, Pollen & UV',
+    description:
+      'Live US AQI index, regional Tree/Grass/Weed pollen outlook, particulate air metrics, and daytime UV safety strip.',
+    iconKey: 'air_quality',
+    color: 'from-emerald-500/20 to-teal-500/20 text-emerald-300 border-emerald-500/30',
+    keywords: [
+      'aqi',
+      'air quality',
+      'pollen',
+      'allergy',
+      'allergies',
+      'uv',
+      'uv index',
+      'smoke',
+      'pm2.5',
+      'ozone',
+    ],
+    variants: [
+      {
+        type: 'air_quality',
+        pillLabel: 'AQI, Pollen & UV',
+        title: 'Air Quality, Pollen & UV',
+        description:
+          'Live US AQI, Tree/Grass/Weed pollen outlook, and daytime UV safety strip (zero API key).',
+        defaultGridPos: { w: 4, h: 5 },
+        defaultConfig: {
+          locationName: 'Austin, TX',
+          latitude: 30.2672,
+          longitude: -97.7431,
+          showPollen: true,
+          showUvStrip: true,
+          refreshIntervalMin: 30,
+        },
+        keywords: ['aqi', 'air quality', 'pollen', 'uv', 'allergy'],
+      },
+    ],
+  },
+  {
+    id: 'sun_moon',
+    category: 'time_weather',
+    title: 'Sun Arc & Moon Phase',
+    description:
+      '100% offline solar horizon arc with sunrise, sunset, golden hour, daily daylight delta, and lunar illumination phase.',
+    iconKey: 'sun_moon',
+    color: 'from-amber-500/20 to-indigo-500/20 text-amber-300 border-amber-500/30',
+    keywords: [
+      'sun',
+      'moon',
+      'sunrise',
+      'sunset',
+      'golden hour',
+      'lunar',
+      'moon phase',
+      'daylight',
+      'astronomy',
+      'solstice',
+    ],
+    variants: [
+      {
+        type: 'sun_moon',
+        pillLabel: 'Sun & Moon',
+        title: 'Sun Arc & Moon Phase',
+        description:
+          'Offline sunrise/sunset arc, golden hour windows, daylight change, and illuminated lunar phase.',
+        defaultGridPos: { w: 4, h: 5 },
+        defaultConfig: {
+          locationName: 'Austin, TX',
+          latitude: 30.2672,
+          longitude: -97.7431,
+          showGoldenHour: true,
+          showMoonDetails: true,
+        },
+        keywords: ['sun', 'moon', 'sunrise', 'sunset', 'golden hour', 'moon phase'],
       },
     ],
   },
@@ -590,9 +719,26 @@ export function extractHouseholdInheritedDefaults(
 
   let weather: WeatherDefaults = { ...DEFAULT_WEATHER_DEFAULTS };
   let hasCustomWeather = false;
+  let preferredUnit: 'F' | 'C' | null = null;
 
   for (const w of sortedActive) {
     if (w.type !== 'weather' && w.type !== 'clock_weather') continue;
+    const unit = w.config?.unit;
+    if (unit === 'F' || unit === 'C') {
+      preferredUnit = unit;
+      break;
+    }
+  }
+
+  for (const w of sortedActive) {
+    if (
+      w.type !== 'weather' &&
+      w.type !== 'clock_weather' &&
+      w.type !== 'air_quality' &&
+      w.type !== 'sun_moon'
+    ) {
+      continue;
+    }
     const cfg = w.config || {};
     const lat = Number(cfg.latitude);
     const lon = Number(cfg.longitude);
@@ -606,7 +752,7 @@ export function extractHouseholdInheritedDefaults(
         locationName: cfg.locationName.trim(),
         latitude: lat,
         longitude: lon,
-        unit: cfg.unit === 'C' ? 'C' : 'F',
+        unit: preferredUnit ?? (cfg.unit === 'C' ? 'C' : 'F'),
         ...(typeof cfg.timezone === 'string' && cfg.timezone.trim()
           ? { timezone: cfg.timezone.trim() }
           : {}),
@@ -646,6 +792,13 @@ export function buildWidgetPayloadFromVariant(
     nextConfig.latitude = inherited.weather.latitude;
     nextConfig.longitude = inherited.weather.longitude;
     nextConfig.unit = inherited.weather.unit;
+    if (inherited.weather.timezone) {
+      nextConfig.timezone = inherited.weather.timezone;
+    }
+  } else if (variant.type === 'air_quality' || variant.type === 'sun_moon') {
+    nextConfig.locationName = inherited.weather.locationName;
+    nextConfig.latitude = inherited.weather.latitude;
+    nextConfig.longitude = inherited.weather.longitude;
     if (inherited.weather.timezone) {
       nextConfig.timezone = inherited.weather.timezone;
     }

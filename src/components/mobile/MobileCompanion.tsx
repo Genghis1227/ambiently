@@ -30,6 +30,9 @@ import {
   Lock,
   Kanban,
   TrendingUp,
+  AlarmClock,
+  Wind,
+  SunMoon,
 } from 'lucide-react';
 import type { DashboardTab, DashboardWidget, StickyNoteItem, WidgetThemeMode } from '../../types/dashboard';
 import { ShoppingListNoteBody } from '../common/ShoppingListNoteBody';
@@ -73,6 +76,9 @@ import { ChoreWidget } from '../widgets/ChoreWidget';
 import { MealPlannerWidget } from '../widgets/MealPlannerWidget';
 import { KanbanWidget } from '../widgets/KanbanWidget';
 import { FinanceWidget } from '../widgets/FinanceWidget';
+import { TimerWidget } from '../widgets/TimerWidget';
+import { AirQualityWidget } from '../widgets/AirQualityWidget';
+import { SunMoonWidget } from '../widgets/SunMoonWidget';
 
 interface MobileCompanionProps {
   tabs: DashboardTab[];
@@ -313,6 +319,12 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return Kanban;
       case 'finance':
         return TrendingUp;
+      case 'timer':
+        return AlarmClock;
+      case 'air_quality':
+        return Wind;
+      case 'sun_moon':
+        return SunMoon;
       default:
         return LayoutGrid;
     }
@@ -352,6 +364,12 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return 'Project Board (Kanban)';
       case 'finance':
         return 'Markets & Watchlist';
+      case 'timer':
+        return 'Kitchen Timer & Pomodoro';
+      case 'air_quality':
+        return 'Air Quality, Pollen & UV';
+      case 'sun_moon':
+        return 'Sun Arc & Moon Phase';
       default:
         return 'Widget';
     }
@@ -567,6 +585,45 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
               }
             />
           </div>
+        );
+      case 'timer':
+        return (
+          <div className="max-h-96 overflow-y-auto">
+            <TimerWidget
+              config={widget.config}
+              isLight={isLight}
+              transparentBg={false}
+              onUpdateConfig={(updates) =>
+                onUpdateWidget?.(widget.id, { config: { ...widget.config, ...updates } })
+              }
+            />
+          </div>
+        );
+      case 'air_quality':
+        return (
+          <AirQualityWidget
+            locationName={widget.config?.locationName}
+            latitude={widget.config?.latitude}
+            longitude={widget.config?.longitude}
+            showPollen={widget.config?.showPollen}
+            showUvStrip={widget.config?.showUvStrip}
+            refreshIntervalMin={widget.config?.refreshIntervalMin}
+            isLight={isLight}
+            transparentBg={false}
+          />
+        );
+      case 'sun_moon':
+        return (
+          <SunMoonWidget
+            locationName={widget.config?.locationName}
+            latitude={widget.config?.latitude}
+            longitude={widget.config?.longitude}
+            timezone={widget.config?.timezone}
+            showGoldenHour={widget.config?.showGoldenHour}
+            showMoonDetails={widget.config?.showMoonDetails}
+            isLight={isLight}
+            transparentBg={false}
+          />
         );
       default:
         return (

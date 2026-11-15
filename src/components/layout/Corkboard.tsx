@@ -52,6 +52,9 @@ import { ChoreWidget } from '../widgets/ChoreWidget';
 import { MealPlannerWidget } from '../widgets/MealPlannerWidget';
 import { KanbanWidget } from '../widgets/KanbanWidget';
 import { FinanceWidget } from '../widgets/FinanceWidget';
+import { TimerWidget } from '../widgets/TimerWidget';
+import { AirQualityWidget } from '../widgets/AirQualityWidget';
+import { SunMoonWidget } from '../widgets/SunMoonWidget';
 import { ShoppingListNoteBody } from '../common/ShoppingListNoteBody';
 import { categorizeIngredient, parseIngredient } from '../../utils/ingredientAggregator';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -386,6 +389,35 @@ const MemoizedCanvasWidgetBody: React.FC<CanvasWidgetBodyProps> = React.memo(({
           isLight={isWidgetLight}
           transparentBg={isFramelessWidget}
           onUpdateConfig={handleConfigUpdate}
+        />
+      ) : widget.type === 'timer' ? (
+        <TimerWidget
+          config={widget.config}
+          isLight={isWidgetLight}
+          transparentBg={isFramelessWidget}
+          onUpdateConfig={handleConfigUpdate}
+        />
+      ) : widget.type === 'air_quality' ? (
+        <AirQualityWidget
+          locationName={widget.config?.locationName}
+          latitude={widget.config?.latitude}
+          longitude={widget.config?.longitude}
+          showPollen={widget.config?.showPollen}
+          showUvStrip={widget.config?.showUvStrip}
+          refreshIntervalMin={widget.config?.refreshIntervalMin}
+          isLight={isWidgetLight}
+          transparentBg={isFramelessWidget}
+        />
+      ) : widget.type === 'sun_moon' ? (
+        <SunMoonWidget
+          locationName={widget.config?.locationName}
+          latitude={widget.config?.latitude}
+          longitude={widget.config?.longitude}
+          timezone={widget.config?.timezone}
+          showGoldenHour={widget.config?.showGoldenHour}
+          showMoonDetails={widget.config?.showMoonDetails}
+          isLight={isWidgetLight}
+          transparentBg={isFramelessWidget}
         />
       ) : null}
     </TileErrorBoundary>

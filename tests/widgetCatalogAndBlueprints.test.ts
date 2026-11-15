@@ -35,6 +35,9 @@ const ALL_WIDGET_TYPES: WidgetType[] = [
   'meals',
   'kanban',
   'finance',
+  'timer',
+  'air_quality',
+  'sun_moon',
 ];
 
 function makeWidget(
@@ -63,8 +66,8 @@ function boxesOverlap(a: FreeformPosition, b: FreeformPosition): boolean {
 }
 
 describe('widgetCatalog', () => {
-  it('covers all 17 WidgetTypes cleanly across 14 entries and 4 categories', () => {
-    assert.equal(WIDGET_CATALOG_ENTRIES.length, 14);
+  it('covers all 20 WidgetTypes cleanly across 17 entries and 4 categories', () => {
+    assert.equal(WIDGET_CATALOG_ENTRIES.length, 17);
     assert.deepEqual(
       WIDGET_CATEGORIES.map((c) => c.id),
       ['all', 'household', 'time_weather', 'media_ambient', 'text_feeds']
@@ -88,7 +91,24 @@ describe('widgetCatalog', () => {
     const householdItems = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'household', '');
     assert.deepEqual(
       householdItems.map((i) => i.entry.id),
-      ['calendar', 'meals', 'chores', 'kanban', 'sticky_notes']
+      ['calendar', 'meals', 'chores', 'kanban', 'sticky_notes', 'timer']
+    );
+
+    const timeWeatherItems = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'time_weather', '');
+    assert.equal(timeWeatherItems.some((i) => i.entry.id === 'air_quality'), true);
+    assert.equal(timeWeatherItems.some((i) => i.entry.id === 'sun_moon'), true);
+
+    assert.equal(
+      filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'all', 'pomodoro')[0]?.entry.id,
+      'timer'
+    );
+    assert.equal(
+      filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'all', 'pollen')[0]?.entry.id,
+      'air_quality'
+    );
+    assert.equal(
+      filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'all', 'golden hour')[0]?.entry.id,
+      'sun_moon'
     );
 
     const worldSearch = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'all', 'world');
@@ -261,6 +281,37 @@ describe('widgetCatalog', () => {
     assert.equal(fallback.hasCustomWeather, false);
     assert.equal(fallback.weather.locationName, 'Austin, TX');
     assert.equal(fallback.calendarSources, undefined);
+
+    const seattleWeather = [
+      {
+        id: 'w-seattle',
+        tabId: 'tab-1',
+        type: 'weather' as const,
+        title: 'Weather',
+        gridPos: { x: 0, y: 0, w: 3, h: 3 },
+        config: {
+          locationName: 'Seattle, WA',
+          latitude: 47.6062,
+          longitude: -122.3321,
+          timezone: 'America/Los_Angeles',
+        },
+      },
+    ];
+    const aqiEntry = WIDGET_CATALOG_ENTRIES.find((e) => e.id === 'air_quality')!;
+    const sunMoonEntry = WIDGET_CATALOG_ENTRIES.find((e) => e.id === 'sun_moon')!;
+    const aqiPayload = buildWidgetPayloadFromVariant(aqiEntry.variants[0], 'tab-2', seattleWeather);
+    const sunMoonPayload = buildWidgetPayloadFromVariant(
+      sunMoonEntry.variants[0],
+      'tab-2',
+      seattleWeather
+    );
+    assert.equal(aqiPayload.config?.locationName, 'Seattle, WA');
+    assert.equal(aqiPayload.config?.latitude, 47.6062);
+    assert.equal(aqiPayload.config?.longitude, -122.3321);
+    assert.equal(sunMoonPayload.config?.locationName, 'Seattle, WA');
+    assert.equal(sunMoonPayload.config?.latitude, 47.6062);
+    assert.equal(sunMoonPayload.config?.longitude, -122.3321);
+    assert.equal(sunMoonPayload.config?.timezone, 'America/Los_Angeles');
   });
 
   it('identifies Clock and Text mode families and default titles accurately', () => {
