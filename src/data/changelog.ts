@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.5",
+    date: "November 14, 2026",
+    title: "Add Widget & Create Canvas Modal Filter Stability Fix",
+    highlights: [
+      "Prevented Filter Reset When Adding Searched Tiles: Fixed a click-timing issue in Add Widget where pointer activity re-renders wiped active search queries and snapped back to All Tiles mid-click before a filtered widget (like Markets & Watchlist) could be added.",
+      "Stabilized Create Canvas Modal & Close Handlers: Applied the same open-transition reset and ref-backed Escape listener to Create New Canvas and memoized modal close callbacks across Desktop and Mobile Companion.",
+      "Improved Markets & Watchlist Search Coverage: Added explicit multi-word 'watch list' catalog keywords and updated the Add Widget search placeholder hint.",
+    ],
+  },
+  {
     version: "v0.7.4",
     date: "November 14, 2026",
     title: "Live Markets & Watchlist Widget, Adaptive Ticker Layouts & Sticker Mode",
