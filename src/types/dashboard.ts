@@ -14,6 +14,15 @@ export type {
   FinanceRange,
   FinanceDisplayMode,
 } from './finance';
+export type {
+  TimerMode,
+  TimerStatus,
+  TimerItem,
+  TimerPreset,
+  TimerWidgetConfig,
+  AirQualityWidgetConfig,
+  SunMoonWidgetConfig,
+} from './phase1Widgets';
 export type { PhotoAutoSyncInterval, PlexPhotoSyncConfig, PhotoTargetSyncMeta };
 
 export type DockPosition = 'left' | 'top' | 'right' | 'bottom';
@@ -52,7 +61,10 @@ export type WidgetType =
   | 'chores'
   | 'meals'
   | 'kanban'
-  | 'finance';
+  | 'finance'
+  | 'timer'
+  | 'air_quality'
+  | 'sun_moon';
 
 export interface RssWidgetConfig {
   feedUrl?: string;

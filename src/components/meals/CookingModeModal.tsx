@@ -14,16 +14,33 @@ import {
   ShoppingBag,
   ChevronLeft,
   ChevronRight,
+  AlarmClock,
+  Play,
+  Pause,
 } from 'lucide-react';
 import type { Recipe, ScheduledMeal } from '../../types/meals';
+import type { TimerItem, TimerWidgetConfig } from '../../types/phase1Widgets';
+import { MAX_TIMERS_PER_WIDGET } from '../../types/phase1Widgets';
 import { useMealStore } from '../../stores/useMealStore';
 import { useProfileStore } from '../../stores/useProfileStore';
+import { useDashboardStore } from '../../store/dashboardStore';
 import {
   parseIngredient,
   formatQuantity,
   formatUnitForQuantity,
   pluralizeItemName,
 } from '../../utils/ingredientAggregator';
+import {
+  extractStepDurations,
+  formatTimerDuration,
+  getTimerLiveState,
+  pauseTimerItem,
+  resetTimerItem,
+  resolveWidgetTimers,
+  startTimerItem,
+} from '../../utils/timerEngine';
+import { useSharedClock } from '../../utils/sharedClock';
+import { WIDGET_CATALOG_ENTRIES, buildWidgetPayloadFromVariant } from '../../utils/widgetCatalog';
 import { ProfileAvatar } from '../common/ProfileAvatar';
 
 export interface CookingModeModalProps {
@@ -116,12 +133,157 @@ const CookingModeContent: React.FC<CookingModeContentProps> = ({
   const importRecipeIngredients = useMealStore((s) => s.importRecipeIngredients);
   const profiles = useProfileStore((s) => s.profiles);
   const isProfileStoreInitialized = useProfileStore((s) => s.isInitialized);
+  const activeTabId = useDashboardStore((s) => s.activeTabId);
+  const widgets = useDashboardStore((s) => s.widgets);
+  const addWidget = useDashboardStore((s) => s.addWidget);
+  const updateWidgetConfig = useDashboardStore((s) => s.updateWidgetConfig);
+
+  const [recentlyStartedChipKey, setRecentlyStartedChipKey] = useState<string | null>(null);
+  const chipFeedbackTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!isProfileStoreInitialized) {
       void useProfileStore.getState().initProfileStore();
     }
   }, [isProfileStoreInitialized]);
+
+  useEffect(() => {
+    return () => {
+      if (chipFeedbackTimerRef.current !== null) {
+        window.clearTimeout(chipFeedbackTimerRef.current);
+      }
+    };
+  }, []);
+
+  const tabTimerWidgets = useMemo(() => {
+    if (activeTabId) {
+      return widgets.filter((w) => w.type === 'timer' && w.tabId === activeTabId);
+    }
+    return widgets.filter((w) => w.type === 'timer');
+  }, [widgets, activeTabId]);
+
+  const allTabTimers = useMemo(() => {
+    return tabTimerWidgets.flatMap((widget) =>
+      resolveWidgetTimers((widget.config as TimerWidgetConfig | undefined)?.timers).map(
+        (timer) => ({ widget, timer })
+      )
+    );
+  }, [tabTimerWidgets]);
+
+  const hasRunningTabTimer = allTabTimers.some(({ timer }) => timer.status === 'running');
+  const nowDate = useSharedClock(hasRunningTabTimer ? 'second' : '10s');
+  const nowMs = nowDate.getTime() > 0 ? nowDate.getTime() : Date.now();
+
+  const activeTimerPills = useMemo(() => {
+    return allTabTimers
+      .map(({ widget, timer }) => ({
+        widget,
+        timer,
+        live: getTimerLiveState(timer, nowMs),
+      }))
+      .filter(
+        ({ live }) => live.effectiveStatus === 'running' || live.effectiveStatus === 'completed'
+      );
+  }, [allTabTimers, nowMs]);
+
+  const handleStartStepTimer = async (stepIndex: number, durationSec: number) => {
+    const now = Date.now();
+    const shortTitle = recipe.title.trim().slice(0, 18).trim() || 'Recipe';
+    const label = `${shortTitle} • Step ${stepIndex + 1}`;
+    const chipKey = `${stepIndex}-${durationSec}`;
+
+    setRecentlyStartedChipKey(chipKey);
+    if (chipFeedbackTimerRef.current !== null) {
+      window.clearTimeout(chipFeedbackTimerRef.current);
+    }
+    chipFeedbackTimerRef.current = window.setTimeout(() => {
+      setRecentlyStartedChipKey((prev) => (prev === chipKey ? null : prev));
+    }, 1800);
+
+    const newTimer: TimerItem = startTimerItem(
+      {
+        id:
+          typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `step-timer-${now}-${Math.random().toString(36).slice(2, 7)}`,
+        label,
+        durationSec,
+        status: 'idle',
+        mode: 'countdown',
+      },
+      now
+    );
+
+    const primaryWidget = tabTimerWidgets[0];
+    if (primaryWidget) {
+      const existing = resolveWidgetTimers(
+        (primaryWidget.config as TimerWidgetConfig | undefined)?.timers
+      );
+      let nextTimers: TimerItem[];
+      if (existing.length < MAX_TIMERS_PER_WIDGET) {
+        nextTimers = [...existing, newTimer];
+      } else {
+        const replaceIdx = existing.findIndex((item) => {
+          const live = getTimerLiveState(item, now);
+          return live.effectiveStatus === 'completed' || item.status === 'idle';
+        });
+        const targetIdx = replaceIdx >= 0 ? replaceIdx : 0;
+        nextTimers = existing.map((item, idx) => (idx === targetIdx ? newTimer : item));
+      }
+      await updateWidgetConfig(primaryWidget.id, { timers: nextTimers });
+      return;
+    }
+
+    const targetTabId = activeTabId || widgets[0]?.tabId || 'default';
+    const timerEntry = WIDGET_CATALOG_ENTRIES.find((entry) => entry.id === 'timer');
+    const timerVariant = timerEntry?.variants.find((variant) => variant.type === 'timer');
+    if (timerVariant) {
+      const payload = buildWidgetPayloadFromVariant(timerVariant, targetTabId, widgets);
+      await addWidget({
+        ...payload,
+        config: {
+          ...(payload.config || {}),
+          timers: [newTimer],
+        },
+      });
+      return;
+    }
+
+    await addWidget({
+      tabId: targetTabId,
+      type: 'timer',
+      title: 'Kitchen Timer',
+      gridPos: { x: 0, y: 0, w: 4, h: 4 },
+      config: {
+        timers: [newTimer],
+        chimeEnabled: true,
+        defaultFocusMin: 25,
+        defaultBreakMin: 5,
+        transparentBg: false,
+      },
+    });
+  };
+
+  const handleToggleActivePill = async (
+    widgetId: string,
+    rawTimers: TimerItem[] | undefined,
+    timerId: string,
+    effectiveStatus: string
+  ) => {
+    const now = Date.now();
+    const resolved = resolveWidgetTimers(rawTimers);
+    const nextTimers = resolved.map((item) => {
+      if (item.id !== timerId) return item;
+      if (effectiveStatus === 'running') {
+        return pauseTimerItem(item, now);
+      }
+      if (effectiveStatus === 'completed') {
+        return resetTimerItem(item);
+      }
+      return startTimerItem(item, now);
+    });
+    await updateWidgetConfig(widgetId, { timers: nextTimers });
+  };
 
   const [scaleFactor, setScaleFactor] = useState<number>(() => {
     const initial = scheduledMeal?.scaleFactor;
@@ -509,8 +671,65 @@ const CookingModeContent: React.FC<CookingModeContentProps> = ({
           </div>
         </div>
 
-        {/* Right: Scale Switcher, Wake Lock Badge, Edit Slot & Close */}
+        {/* Right: Active Kitchen Timers, Scale Switcher, Wake Lock Badge, Edit Slot & Close */}
         <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          {activeTimerPills.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {activeTimerPills.slice(0, 3).map(({ widget, timer, live }) => {
+                const isCompleted = live.effectiveStatus === 'completed';
+                const rawTimers = (widget.config as TimerWidgetConfig | undefined)?.timers;
+                return (
+                  <button
+                    key={`${widget.id}-${timer.id}`}
+                    type="button"
+                    onClick={() =>
+                      void handleToggleActivePill(
+                        widget.id,
+                        rawTimers,
+                        timer.id,
+                        live.effectiveStatus
+                      )
+                    }
+                    title={
+                      isCompleted
+                        ? `Silence & reset ${timer.label}`
+                        : `Pause ${timer.label}`
+                    }
+                    className={`px-2.5 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                      isCompleted
+                        ? isLight
+                          ? 'bg-amber-100 border-amber-400 text-amber-900 animate-pulse'
+                          : 'bg-amber-500/20 border-amber-400/70 text-amber-200 animate-pulse'
+                        : isLight
+                          ? 'bg-emerald-50 border-emerald-300 text-emerald-900 hover:bg-emerald-100'
+                          : 'bg-emerald-950/60 border-emerald-600/50 text-emerald-200 hover:bg-emerald-900/60'
+                    }`}
+                  >
+                    <AlarmClock className="w-3.5 h-3.5 shrink-0" />
+                    <span className="max-w-[96px] truncate">{timer.label}</span>
+                    <span className="font-mono tabular-nums font-bold">
+                      {isCompleted ? 'Done' : formatTimerDuration(live.remainingSec)}
+                    </span>
+                    {isCompleted ? (
+                      <RotateCcw className="w-3 h-3 shrink-0 opacity-80" />
+                    ) : (
+                      <Pause className="w-3 h-3 shrink-0 opacity-80" />
+                    )}
+                  </button>
+                );
+              })}
+              {activeTimerPills.length > 3 && (
+                <span
+                  className={`px-2 py-1 rounded-lg text-[11px] font-semibold ${
+                    isLight ? 'bg-stone-200 text-slate-700' : 'bg-slate-800 text-slate-300'
+                  }`}
+                >
+                  +{activeTimerPills.length - 3}
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Scale 0.5x / 1x / 2x Switcher */}
           <div
             className={`inline-flex items-center p-1 rounded-xl border ${
@@ -832,13 +1051,12 @@ const CookingModeContent: React.FC<CookingModeContentProps> = ({
               {recipe.instructions.map((stepText, idx) => {
                 const isActive = activeStepIdx === idx;
                 const isDone = completedSteps.has(idx);
+                const stepChips = extractStepDurations(stepText);
 
                 return (
                   <li key={`${idx}-${stepText.slice(0, 24)}`}>
-                    <button
-                      type="button"
-                      onClick={() => handleStepTap(idx)}
-                      className={`w-full text-left p-4 md:p-5 rounded-2xl border transition-all cursor-pointer flex items-start gap-4 ${
+                    <div
+                      className={`w-full rounded-2xl border transition-all ${
                         isActive
                           ? isLight
                             ? 'bg-white border-emerald-500/70 ring-1 ring-emerald-500/30 text-slate-900'
@@ -852,30 +1070,72 @@ const CookingModeContent: React.FC<CookingModeContentProps> = ({
                               : 'bg-slate-900/50 border-slate-800/80 hover:border-slate-700 text-slate-200'
                       }`}
                     >
-                      <span
-                        className={`w-9 h-9 md:w-10 md:h-10 rounded-xl shrink-0 flex items-center justify-center text-sm md:text-base font-bold tabular-nums border ${
-                          isDone
-                            ? 'bg-emerald-600/85 border-emerald-500 text-white'
-                            : isActive
-                              ? isLight
-                                ? 'bg-emerald-100 border-emerald-400 text-emerald-900'
-                                : 'bg-emerald-900/70 border-emerald-600 text-emerald-100'
-                              : isLight
-                                ? 'bg-stone-100 border-stone-300 text-slate-600'
-                                : 'bg-slate-800 border-slate-700 text-slate-400'
-                        }`}
+                      <button
+                        type="button"
+                        onClick={() => handleStepTap(idx)}
+                        className="w-full text-left p-4 md:p-5 cursor-pointer flex items-start gap-4"
                       >
-                        {isDone ? <Check className="w-5 h-5" /> : idx + 1}
-                      </span>
+                        <span
+                          className={`w-9 h-9 md:w-10 md:h-10 rounded-xl shrink-0 flex items-center justify-center text-sm md:text-base font-bold tabular-nums border ${
+                            isDone
+                              ? 'bg-emerald-600/85 border-emerald-500 text-white'
+                              : isActive
+                                ? isLight
+                                  ? 'bg-emerald-100 border-emerald-400 text-emerald-900'
+                                  : 'bg-emerald-900/70 border-emerald-600 text-emerald-100'
+                                : isLight
+                                  ? 'bg-stone-100 border-stone-300 text-slate-600'
+                                  : 'bg-slate-800 border-slate-700 text-slate-400'
+                          }`}
+                        >
+                          {isDone ? <Check className="w-5 h-5" /> : idx + 1}
+                        </span>
 
-                      <p
-                        className={`flex-1 text-lg md:text-xl lg:text-[22px] leading-relaxed ${
-                          isActive ? 'font-medium' : ''
-                        } ${isDone && !isActive ? 'line-through opacity-75' : ''}`}
-                      >
-                        {stepText}
-                      </p>
-                    </button>
+                        <p
+                          className={`flex-1 text-lg md:text-xl lg:text-[22px] leading-relaxed ${
+                            isActive ? 'font-medium' : ''
+                          } ${isDone && !isActive ? 'line-through opacity-75' : ''}`}
+                        >
+                          {stepText}
+                        </p>
+                      </button>
+
+                      {stepChips.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-2 px-4 md:px-5 pb-4 pl-[4.25rem] md:pl-[4.75rem]">
+                          {stepChips.map((chip) => {
+                            const chipKey = `${idx}-${chip.durationSec}`;
+                            const wasJustStarted = recentlyStartedChipKey === chipKey;
+                            return (
+                              <button
+                                key={chipKey}
+                                type="button"
+                                onClick={() => void handleStartStepTimer(idx, chip.durationSec)}
+                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs md:text-sm font-semibold transition-colors cursor-pointer ${
+                                  wasJustStarted
+                                    ? 'bg-emerald-600 border-emerald-500 text-white'
+                                    : isLight
+                                      ? 'bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100'
+                                      : 'bg-amber-500/15 border-amber-500/35 text-amber-200 hover:bg-amber-500/25'
+                                }`}
+                              >
+                                {wasJustStarted ? (
+                                  <>
+                                    <Check className="w-3.5 h-3.5 shrink-0" />
+                                    <span>Started {chip.label} Timer</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <AlarmClock className="w-3.5 h-3.5 shrink-0" />
+                                    <span>Start {chip.label} Timer</span>
+                                    <Play className="w-3 h-3 shrink-0 fill-current opacity-75" />
+                                  </>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </li>
                 );
               })}
