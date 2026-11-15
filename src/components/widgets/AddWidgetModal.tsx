@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   X,
   Search,
@@ -63,19 +63,32 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
   onAddWidget,
 }) => {
   const existingWidgets = useDashboardStore((state) => state.widgets);
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
   const [selectedCategory, setSelectedCategory] = useState<WidgetCategoryId>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const onCloseRef = useRef(onClose);
+
+  // Only reset filters on closed->open transitions so parent re-renders cannot wipe active search mid-click
+  if (isOpen !== prevIsOpen) {
+    setPrevIsOpen(isOpen);
+    if (isOpen) {
+      setSelectedCategory('all');
+      setSearchQuery('');
+    }
+  }
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!isOpen) return;
-    setSelectedCategory('all');
-    setSearchQuery('');
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   const categoryCounts = useMemo(() => {
     const counts: Record<WidgetCategoryId, number> = {
@@ -147,7 +160,7 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search widgets (e.g., calendar, world clock, quotes, meals, giphy)..."
+              placeholder="Search widgets (e.g., markets, calendar, world clock, quotes, meals)..."
               className="w-full rounded-xl bg-gray-950 border border-gray-800 pl-9 pr-9 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
             />
             {searchQuery && (

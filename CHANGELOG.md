@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.5] - 2026-11-14
+
+### Add Widget & Create Canvas Modal Filter Stability Fix
+* **Transition-Only Modal Filter & Form Resets (`src/components/widgets/AddWidgetModal.tsx`, `src/components/dock/CreateCanvasModal.tsx`, `src/App.tsx`, `src/components/mobile/MobileCompanion.tsx`):**
+  * Fixed a mid-click reset bug in `AddWidgetModal` (and the identical pattern in `CreateCanvasModal`) where parent activity re-renders passed a new `onClose` closure between `pointerdown` and `click`, causing `useEffect(..., [isOpen, onClose])` to reset category/search filters back to **All Tiles** before a searched tile click (such as **Markets & Watchlist**) could add the widget. Replaced the effect reset with `prevIsOpen` open-transition tracking, moved `Escape` dismissal onto an `onCloseRef` with `[isOpen]`, and memoized close callbacks in `App` and `MobileCompanion`.
+* **Widget Catalog Search Keywords & Regression Tests (`src/utils/widgetCatalog.ts`, `tests/widgetCatalogAndBlueprints.test.ts`):**
+  * Added `'watch list'` keyword coverage for **Markets & Watchlist**, updated the search placeholder hint in `AddWidgetModal`, and added regression tests verifying `'watch list'` / `'markets and watch list'` filtering, `buildWidgetPayloadFromVariant`, and effect stability across both modals.
+
+---
+
 ## [0.7.4] - 2026-11-14
 
 ### Live Markets & Watchlist Widget, Adaptive Ticker Layouts & Sticker Mode
