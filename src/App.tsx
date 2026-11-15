@@ -587,6 +587,9 @@ export function App() {
     }
   }, [settings.nightModeEnabled, updateSettings]);
 
+  const handleCloseAddWidget = useCallback(() => setIsAddWidgetOpen(false), []);
+  const handleCloseCreateCanvas = useCallback(() => setIsCreateCanvasOpen(false), []);
+
   // Extend snooze on user touch/keyboard/pointer activity if currently in a night-wake snooze
   useEffect(() => {
     if (!nightWakeSnoozeUntil || wakeTimeoutMin === 0) return;
@@ -1143,7 +1146,7 @@ export function App() {
         {isAddWidgetOpen && (
           <AddWidgetModal
             isOpen={isAddWidgetOpen}
-            onClose={() => setIsAddWidgetOpen(false)}
+            onClose={handleCloseAddWidget}
             activeTabId={activeTabIdResolved}
             onAddWidget={addWidget}
           />
@@ -1152,7 +1155,7 @@ export function App() {
         {isCreateCanvasOpen && (
           <CreateCanvasModal
             isOpen={isCreateCanvasOpen}
-            onClose={() => setIsCreateCanvasOpen(false)}
+            onClose={handleCloseCreateCanvas}
             existingCanvasCount={tabs.length}
             onCreateCanvas={(name, icon, theme, wallpaperUrl, dimLevel, blueprintId) => {
               addTab(name, icon, theme, wallpaperUrl, dimLevel, blueprintId);

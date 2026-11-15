@@ -1,5 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import type { DashboardWidget, FreeformPosition, WidgetType } from '../src/types/dashboard';
 import {
   WIDGET_CATEGORIES,
@@ -112,6 +114,63 @@ describe('widgetCatalog', () => {
 
     const stocksSearch = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'all', 'stocks');
     assert.equal(stocksSearch[0].entry.id, 'finance');
+
+    const watchListSearch = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'all', 'watch list');
+    assert.equal(watchListSearch.length, 1);
+    assert.equal(watchListSearch[0].entry.id, 'finance');
+
+    const marketsWatchListSearch = filterWidgetCatalog(
+      WIDGET_CATALOG_ENTRIES,
+      'all',
+      'markets and watch list'
+    );
+    assert.equal(marketsWatchListSearch.length, 1);
+    assert.equal(marketsWatchListSearch[0].entry.id, 'finance');
+
+    const financeEntry = marketsWatchListSearch[0].entry;
+    const financePayload = buildWidgetPayloadFromVariant(financeEntry.variants[0], 'tab-home', []);
+    assert.equal(financePayload.tabId, 'tab-home');
+    assert.equal(financePayload.type, 'finance');
+    assert.equal(financePayload.title, 'Markets & Watchlist');
+    assert.ok(Array.isArray(financePayload.config?.watchlist));
+    assert.ok((financePayload.config?.watchlist?.length || 0) >= 5);
+  });
+
+  it('prevents AddWidgetModal and CreateCanvasModal from resetting state via onClose effect dependencies', () => {
+    const repoRoot = process.cwd();
+    const modalPaths = [
+      path.join(repoRoot, 'src/components/widgets/AddWidgetModal.tsx'),
+      path.join(repoRoot, 'src/components/dock/CreateCanvasModal.tsx'),
+    ];
+
+    for (const filePath of modalPaths) {
+      const source = fs.readFileSync(filePath, 'utf8');
+      const effects = source.match(/useEffect\(\(\)\s*=>\s*\{[\s\S]*?\n\s*\},\s*\[[^\]]*\]\);/g) || [];
+      assert.ok(effects.length > 0, `${path.basename(filePath)} should have useEffect hooks`);
+
+      for (const block of effects) {
+        const depsMatch = block.match(/\}\s*,\s*\[([^\]]*)\]\);$/);
+        const deps = depsMatch ? depsMatch[1] : '';
+        if (/\bonClose\b/.test(deps)) {
+          assert.equal(
+            /set(SelectedCategory|SearchQuery|SelectedBlueprint|Name|SelectedIcon|SelectedTheme)/.test(block),
+            false,
+            `${path.basename(filePath)} must not reset modal state inside a useEffect depending on onClose`
+          );
+          assert.equal(
+            /keydown/.test(block),
+            false,
+            `${path.basename(filePath)} Escape listener must not depend on onClose`
+          );
+        }
+      }
+
+      assert.equal(
+        /if\s*\(\s*isOpen\s*!==\s*prevIsOpen\s*\)/.test(source),
+        true,
+        `${path.basename(filePath)} should reset modal state only on closed->open isOpen transitions`
+      );
+    }
   });
 
   it('counts active-tab widgets per catalog entry excluding other tabs and tombstones', () => {

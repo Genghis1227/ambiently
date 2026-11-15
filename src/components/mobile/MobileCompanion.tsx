@@ -147,6 +147,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
     isCommon: boolean;
   } | null>(null);
   const [isAddWidgetOpen, setIsAddWidgetOpen] = useState(false);
+  const handleCloseAddWidget = React.useCallback(() => setIsAddWidgetOpen(false), []);
 
   // Authenticated status
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -1245,11 +1246,11 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         {onAddWidget && isAddWidgetOpen && (
           <AddWidgetModal
             isOpen={isAddWidgetOpen}
-            onClose={() => setIsAddWidgetOpen(false)}
+            onClose={handleCloseAddWidget}
             activeTabId={activeTabId}
             onAddWidget={(newWidget) => {
               onAddWidget(newWidget);
-              setIsAddWidgetOpen(false);
+              handleCloseAddWidget();
             }}
           />
         )}

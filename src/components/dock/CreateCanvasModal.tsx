@@ -35,6 +35,7 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
   existingCanvasCount = 0,
 }) => {
   const isLimitReached = existingCanvasCount >= MAX_CANVASES;
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
   const [selectedBlueprint, setSelectedBlueprint] = useState<CanvasBlueprintId>('blank');
   const [name, setName] = useState('');
   const [selectedIcon, setSelectedIcon] = useState('Pin');
@@ -46,24 +47,36 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
   const [backgroundDimLevel, setBackgroundDimLevel] = useState<number>(45);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const onCloseRef = useRef(onClose);
+
+  // Only reset form state on closed->open transitions so parent re-renders cannot wipe user input mid-click
+  if (isOpen !== prevIsOpen) {
+    setPrevIsOpen(isOpen);
+    if (isOpen) {
+      setSelectedBlueprint('blank');
+      setName('');
+      setSelectedIcon('Pin');
+      setSelectedTheme('midnight_dots');
+      setNameTouched(false);
+      setIconTouched(false);
+      setThemeTouched(false);
+      setCustomWallpaperUrl('');
+      setBackgroundDimLevel(45);
+    }
+  }
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!isOpen) return;
-    setSelectedBlueprint('blank');
-    setName('');
-    setSelectedIcon('Pin');
-    setSelectedTheme('midnight_dots');
-    setNameTouched(false);
-    setIconTouched(false);
-    setThemeTouched(false);
-    setCustomWallpaperUrl('');
-    setBackgroundDimLevel(45);
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
