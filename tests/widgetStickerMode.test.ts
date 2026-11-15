@@ -74,6 +74,7 @@ describe('widgetStickerMode defaults and overrides', () => {
     assert.equal(isStickerCapableWidget('countdown'), true);
     assert.equal(isStickerCapableWidget('quotes'), true);
     assert.equal(isStickerCapableWidget('photo_frame'), true);
+    assert.equal(isStickerCapableWidget('finance'), true);
 
     assert.equal(isStickerCapableWidget('chores'), false);
     assert.equal(isStickerCapableWidget('meals'), false);

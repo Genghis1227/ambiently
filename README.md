@@ -24,7 +24,7 @@
 ## 🌟 Highlights
 
 * **⚡ 0ms Offline-First Boot:** Runs entirely out of client-side browser storage (IndexedDB via Dexie.js). Never shows a blank screen if home Wi-Fi drops.
-* **🐳 1-Command Docker & 🍓 Raspberry Pi Edition:** Self-host the entire PWA and all 7 feed/scraper APIs in a ~55 MB multi-arch (`amd64` + `arm64`) container (`docker compose up -d`), or turn a Raspberry Pi 4/5 into an auto-booting wall display via [`scripts/pi-kiosk-setup.sh`](scripts/pi-kiosk-setup.sh).
+* **🐳 1-Command Docker & 🍓 Raspberry Pi Edition:** Self-host the entire PWA and all 8 feed/scraper/market APIs in a ~55 MB multi-arch (`amd64` + `arm64`) container (`docker compose up -d`), or turn a Raspberry Pi 4/5 into an auto-booting wall display via [`scripts/pi-kiosk-setup.sh`](scripts/pi-kiosk-setup.sh).
 * **💾 Local File Auto-Sync & JSON Snapshots:** Direct integration with the browser File System Access API to auto-save and mirror state directly to a local `ambiently-data.json` file, plus 1-click JSON export/restore.
 * **📌 Pure Freeform Corkboard Multi-Canvas Engine:**
   * **Custom Canvases, Starter Blueprints & Default Home Board:** Create up to 10 dedicated boards using **Blank Canvas** or 1-tap starter blueprints (**Family Command**, **Kitchen & Meals**, **Ambient Photo Gallery**) that automatically inherit your household Weather location and Calendar `.ics` feeds, with 29 Lucide icons, 1-click tab reordering (`▲`/`▼`), and selectable default Home Board indicator.
@@ -49,8 +49,10 @@
   * **Done Auto-Archive & Reusable Archive Drawer:** Configurable per-board `autoArchiveDays` sweeps, **Archive All Done**, confirmation-gated **Clear Done**, and a searchable per-board **Archive Drawer** that restores cards with checklists intact.
 * **📰 In-App Kiosk Reader Mode, Web Preview & 26 Curated RSS Feeds:**
   * **Distraction-Free Article Reader (`/api/reader`):** Powered by Mozilla Readability and Linkedom to extract clean article text, hero images, and tables without leaving kiosk mode, paired with an edge **Web Preview (`/api/web-proxy`)** fallback and a 26-feed curated directory across 6 categories.
+* **📈 Live Markets & Watchlist (`/api/finance`):**
+  * Track stocks, ETFs, market indices, and crypto with zero API keys required—featuring `1D` / `5D` / `1M` SVG sparklines, adaptive row/grid/ticker-strip layouts, preset bundles, live symbol search, offline quote caching, and Sticker Mode support.
 * **📱 Mobile Companion Remote & Vertical Tile Stream:**
-  * **Full Canvas Live Stream:** Seamless single-column vertical feed rendering live preview cards for all widgets (Clock, Weather, Countdown, Photos, RSS, Quotes, Media, Notes, Chores, Meal Planner, Project Kanban) with independent mobile reordering (`▲` / `▼`) and `100dvh` momentum touch scrolling.
+  * **Full Canvas Live Stream:** Seamless single-column vertical feed rendering live preview cards for all widgets (Clock, Weather, Countdown, Photos, RSS, Markets & Watchlist, Quotes, Media, Notes, Chores, Meal Planner, Project Kanban) with independent mobile reordering (`▲` / `▼`) and `100dvh` momentum touch scrolling.
 * **🖼️ Multi-Source Ambient Photo Frame, Hardware-Accelerated GIFs & Power Saving:**
   * Stream slideshows in *Ken Burns*, *Mosaic Collage*, *Scattered Polaroids*, or *Filmstrip* styles from **Google Photos Shared Albums** (tested with 7,500+ photos), **Google Drive Shared Folders**, **Local / NAS Folders**, **Plex Media Server** (QR PIN auth), or **Curated Scenic Presets**, either linked to the **Shared Board Library** or isolated per tile (**This Tile Only**) across restores and Plex pairing, with automatic background library rescans (*Daily 24h* default, *Weekly 7d*, or *Manual Only*) and 15-minute cooldown-protected **Rescan Now**.
   * Pin dense boards of GIPHY GIFs and transparent stickers smoothly: opaque GIFs play as GPU-decoded MP4 loops, transparent stickers use animated WebP with zero per-frame shadow thrashing, CDN assets are locally cached up to bounded quotas, and animations/photo timers automatically suspend during Night Mode or hidden browser tabs.
@@ -67,7 +69,7 @@
 * **Styling & Animation:** [Tailwind CSS v4](https://tailwindcss.com/), [Framer Motion](https://www.framer.com/motion/), [Lucide React](https://lucide.dev/)
 * **Local-First State:** [Dexie.js](https://dexie.org/) (IndexedDB) + [Zustand](https://github.com/pmndrs/zustand)
 * **Media & Document Processing:** `libheif-js` (client-side iOS HEIC/HEIF decoding), `@mozilla/readability` + `linkedom` (article extraction), `ical.js` (RFC 5545 calendar recurrence & timezone parsing)
-* **Serverless & Self-Hosted API Runtime:** Cloudflare Pages Functions (`/api/ical`, `/api/rss`, `/api/reader`, `/api/web-proxy`, `/api/metadata`, `/api/gphotos`, `/api/gdrive`) + standalone Node 22 HTTP server (`server/index.ts`) packaged as a multi-arch (`linux/amd64`, `linux/arm64`) Alpine Docker image.
+* **Serverless & Self-Hosted API Runtime:** Cloudflare Pages Functions (`/api/ical`, `/api/rss`, `/api/finance`, `/api/reader`, `/api/web-proxy`, `/api/metadata`, `/api/gphotos`, `/api/gdrive`) + standalone Node 22 HTTP server (`server/index.ts`) packaged as a multi-arch (`linux/amd64`, `linux/arm64`) Alpine Docker image.
 * **Cloud Sync (Optional):** Supabase Auth & Realtime Postgres.
 
 ---
@@ -83,7 +85,7 @@ Open **[https://dashboard.trinhism.com](https://dashboard.trinhism.com)** on any
 
 ### Option 2: Docker & Docker Compose Self-Hosting (`amd64` & `arm64`)
 
-Run the complete PWA and all 7 `/api/*` feed/scraper proxies locally on **Synology NAS, Unraid, TrueNAS, Portainer, Proxmox, Raspberry Pi, Linux, macOS, or Windows** using the pre-built multi-arch image (`ghcr.io/genghis1227/ambiently:latest`) or building from source:
+Run the complete PWA and all 8 `/api/*` feed/scraper/market proxies locally on **Synology NAS, Unraid, TrueNAS, Portainer, Proxmox, Raspberry Pi, Linux, macOS, or Windows** using the pre-built multi-arch image (`ghcr.io/genghis1227/ambiently:latest`) or building from source:
 
 ```bash
 # Quick 1-liner (pre-built linux/amd64 & linux/arm64 image from GHCR — no git clone needed)

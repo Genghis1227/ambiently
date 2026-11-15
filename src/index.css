@@ -68,3 +68,19 @@ html.idle-cursor-hidden body,
   cursor: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=") 0 0, none !important;
 }
 
+@keyframes ambiently-ticker-scroll {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.ambiently-ticker-track {
+  display: flex;
+  width: max-content;
+  animation: ambiently-ticker-scroll var(--ticker-duration, 28s) linear infinite;
+  will-change: transform;
+}
+

@@ -10,6 +10,7 @@ export const STICKER_CAPABLE_WIDGET_TYPES = new Set<DashboardWidget['type']>([
   'countdown',
   'quotes',
   'photo_frame',
+  'finance',
 ]);
 
 export function isStickerCapableWidget(type?: DashboardWidget['type']): boolean {

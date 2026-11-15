@@ -61,7 +61,7 @@ import { CURATED_RSS_FEEDS, RSS_FEED_CATEGORIES, type RssFeedCategory } from '..
 import { MediaSearchModal, type MediaSelectionMeta } from './MediaSearchModal';
 import { resolveOptimizedImageMedia } from '../../utils/mediaOptimization';
 import { useVaultMediaUrl } from '../../utils/localMediaVault';
-import { Sparkles, Utensils, Kanban } from 'lucide-react';
+import { Sparkles, Utensils, Kanban, TrendingUp } from 'lucide-react';
 import { useChoreStore } from '../../store/choreStore';
 import { useMealStore } from '../../stores/useMealStore';
 import { useKanbanStore } from '../../stores/useKanbanStore';
@@ -73,6 +73,20 @@ import {
   resolveWidgetActiveColumnId,
   type KanbanColumnId,
 } from '../../types/kanban';
+import {
+  DEFAULT_FINANCE_WATCHLIST,
+  FINANCE_PRESET_BUNDLES,
+  MAX_FINANCE_SYMBOLS,
+  type FinanceDisplayMode,
+  type FinanceRange,
+  type FinanceSearchResult,
+  type FinanceWatchlistItem,
+} from '../../types/finance';
+import {
+  normalizeTickerSymbol,
+  resolveWatchlistItems,
+  searchFinanceSymbols,
+} from '../../services/finance';
 import { HouseholdAvatar } from '../common/HouseholdAvatar';
 
 interface WidgetSettingsModalProps {
@@ -258,6 +272,19 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const [kanbanBoardId, setKanbanBoardId] = useState<string>('');
   const [kanbanColumnId, setKanbanColumnId] = useState<KanbanColumnId>(DEFAULT_KANBAN_ACTIVE_COLUMN);
   const [kanbanDisplayMode, setKanbanDisplayMode] = useState<'tile' | 'view'>('tile');
+
+  // Markets & Watchlist widget states
+  const [financeWatchlist, setFinanceWatchlist] =
+    useState<FinanceWatchlistItem[]>(DEFAULT_FINANCE_WATCHLIST);
+  const [financeRange, setFinanceRange] = useState<FinanceRange>('1d');
+  const [financeDisplayMode, setFinanceDisplayMode] = useState<FinanceDisplayMode>('auto');
+  const [financeShowSparkline, setFinanceShowSparkline] = useState<boolean>(true);
+  const [financeShowAbsoluteChange, setFinanceShowAbsoluteChange] = useState<boolean>(true);
+  const [financeRefreshMin, setFinanceRefreshMin] = useState<1 | 5 | 15>(5);
+  const [financeQuery, setFinanceQuery] = useState<string>('');
+  const [financeSearchResults, setFinanceSearchResults] = useState<FinanceSearchResult[]>([]);
+  const [financeSearchLoading, setFinanceSearchLoading] = useState<boolean>(false);
+
   const [rssCategoryFilter, setRssCategoryFilter] = useState<'All' | RssFeedCategory>('All');
   const [rssSearchQuery, setRssSearchQuery] = useState('');
   const [selectedWidgetType, setSelectedWidgetType] = useState<WidgetType>('clock');
@@ -475,8 +502,53 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setKanbanBoardId(resolveWidgetActiveBoardId(widget.config, allBoards));
       setKanbanColumnId(resolveWidgetActiveColumnId(widget.config));
       setKanbanDisplayMode(widget.config?.displayMode === 'view' ? 'view' : 'tile');
+    } else if (widget.type === 'finance') {
+      setFinanceWatchlist(resolveWatchlistItems(widget.config?.watchlist));
+      const cfgRange = widget.config?.range;
+      setFinanceRange(cfgRange === '5d' || cfgRange === '1mo' ? cfgRange : '1d');
+      const cfgMode = widget.config?.displayMode;
+      setFinanceDisplayMode(
+        cfgMode === 'list' || cfgMode === 'grid' || cfgMode === 'ticker' ? cfgMode : 'auto'
+      );
+      setFinanceShowSparkline(widget.config?.showSparkline !== false);
+      setFinanceShowAbsoluteChange(widget.config?.showAbsoluteChange !== false);
+      const cfgRefresh = widget.config?.refreshIntervalMin;
+      setFinanceRefreshMin(cfgRefresh === 1 || cfgRefresh === 15 ? cfgRefresh : 5);
+      setFinanceQuery('');
+      setFinanceSearchResults([]);
+      setFinanceSearchLoading(false);
     }
   }, [widget, isOpen, settings.commonPhotos, settings.defaultWidgetStyle]);
+
+  useEffect(() => {
+    if (!isOpen || selectedWidgetType !== 'finance') return;
+    const trimmed = financeQuery.trim();
+    if (!trimmed) return;
+
+    let active = true;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      searchFinanceSymbols(trimmed, controller.signal)
+        .then((results) => {
+          if (active) {
+            setFinanceSearchResults(results);
+            setFinanceSearchLoading(false);
+          }
+        })
+        .catch(() => {
+          if (active) {
+            setFinanceSearchResults([]);
+            setFinanceSearchLoading(false);
+          }
+        });
+    }, 250);
+
+    return () => {
+      active = false;
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [isOpen, selectedWidgetType, financeQuery]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -682,6 +754,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
         'countdown',
         'quotes',
         'photo_frame',
+        'finance',
       ].includes(effectiveType)
     ) {
       configUpdates.transparentBg = widgetTransparentBg;
@@ -868,6 +941,13 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
           isFullScreen: false,
         };
       }
+    } else if (effectiveType === 'finance') {
+      configUpdates.watchlist = resolveWatchlistItems(financeWatchlist);
+      configUpdates.range = financeRange;
+      configUpdates.displayMode = financeDisplayMode;
+      configUpdates.showSparkline = financeShowSparkline;
+      configUpdates.showAbsoluteChange = financeShowAbsoluteChange;
+      configUpdates.refreshIntervalMin = financeRefreshMin;
     }
 
     onSave(widget.id, {
@@ -1057,6 +1137,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
               'countdown',
               'quotes',
               'photo_frame',
+              'finance',
             ].includes(effectiveType) && (
               <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-800/60">
                 <div>
@@ -3780,6 +3861,324 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                         {opt.label}
                       </button>
                     ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* MARKETS & WATCHLIST WIDGET SETTINGS */}
+            {effectiveType === 'finance' && (
+              <div className="space-y-4 pt-2 border-t border-gray-800">
+                <div>
+                  <label className="text-xs font-semibold text-gray-300 flex items-center justify-between mb-1.5">
+                    <span className="flex items-center gap-1.5">
+                      <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>
+                        Watchlist Tickers ({financeWatchlist.length}/{MAX_FINANCE_SYMBOLS})
+                      </span>
+                    </span>
+                    <span className="text-[10px] text-gray-500">Zero API key required</span>
+                  </label>
+
+                  {/* Search / Add Ticker */}
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="relative flex-1">
+                      <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={financeQuery}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFinanceQuery(val);
+                          if (!val.trim()) {
+                            setFinanceSearchResults([]);
+                            setFinanceSearchLoading(false);
+                          } else {
+                            setFinanceSearchLoading(true);
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && financeQuery.trim()) {
+                            e.preventDefault();
+                            const clean = normalizeTickerSymbol(financeQuery);
+                            if (
+                              clean &&
+                              financeWatchlist.length < MAX_FINANCE_SYMBOLS &&
+                              !financeWatchlist.some((w) => w.symbol === clean)
+                            ) {
+                              setFinanceWatchlist([...financeWatchlist, { symbol: clean }]);
+                              setFinanceQuery('');
+                              setFinanceSearchResults([]);
+                              setFinanceSearchLoading(false);
+                            }
+                          }
+                        }}
+                        placeholder="Search stock, ETF, index (^GSPC), or crypto (BTC-USD)..."
+                        className="w-full pl-9 pr-3 py-2 rounded-xl bg-gray-950 border border-gray-800 text-xs text-white focus:outline-none focus:border-emerald-500/60"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      disabled={
+                        !financeQuery.trim() || financeWatchlist.length >= MAX_FINANCE_SYMBOLS
+                      }
+                      onClick={() => {
+                        const clean = normalizeTickerSymbol(financeQuery);
+                        if (clean && !financeWatchlist.some((w) => w.symbol === clean)) {
+                          setFinanceWatchlist([...financeWatchlist, { symbol: clean }]);
+                        }
+                        setFinanceQuery('');
+                        setFinanceSearchResults([]);
+                        setFinanceSearchLoading(false);
+                      }}
+                      className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-xs font-semibold text-white cursor-pointer shrink-0"
+                    >
+                      + Add
+                    </button>
+                  </div>
+
+                  {financeSearchLoading && financeQuery.trim() && (
+                    <div className="flex items-center gap-1.5 text-[11px] text-gray-400 mb-2 px-1">
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      <span>Searching market tickers...</span>
+                    </div>
+                  )}
+
+                  {financeSearchResults.length > 0 && (
+                    <div className="mb-2.5 rounded-xl bg-gray-950 border border-gray-800 divide-y divide-gray-800/70 max-h-40 overflow-y-auto">
+                      {financeSearchResults.map((hit) => {
+                        const added = financeWatchlist.some((w) => w.symbol === hit.symbol);
+                        return (
+                          <button
+                            key={hit.symbol}
+                            type="button"
+                            disabled={added || financeWatchlist.length >= MAX_FINANCE_SYMBOLS}
+                            onClick={() => {
+                              setFinanceWatchlist([
+                                ...financeWatchlist,
+                                { symbol: hit.symbol, label: hit.name },
+                              ]);
+                              setFinanceQuery('');
+                              setFinanceSearchResults([]);
+                              setFinanceSearchLoading(false);
+                            }}
+                            className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-gray-900 disabled:opacity-45 cursor-pointer"
+                          >
+                            <div className="min-w-0 flex items-center gap-2">
+                              <span className="text-xs font-bold text-white shrink-0">
+                                {hit.symbol}
+                              </span>
+                              <span className="text-[11px] text-gray-400 truncate">{hit.name}</span>
+                            </div>
+                            <span className="text-[10px] text-gray-500 shrink-0">
+                              {added ? 'Added' : hit.exchange || hit.instrumentType || 'Add'}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Quick Presets */}
+                  <div className="flex flex-wrap gap-1.5 mb-2.5">
+                    {FINANCE_PRESET_BUNDLES.map((bundle) => (
+                      <button
+                        key={bundle.id}
+                        type="button"
+                        onClick={() => setFinanceWatchlist(bundle.items)}
+                        className="px-2.5 py-1 rounded-lg bg-gray-950 hover:bg-gray-800 border border-gray-800 text-[11px] font-medium text-gray-300 hover:text-white transition-colors cursor-pointer"
+                      >
+                        {bundle.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Active Watchlist Items */}
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                    {financeWatchlist.map((item, idx) => (
+                      <div
+                        key={item.symbol}
+                        className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-gray-950 border border-gray-800"
+                      >
+                        <span className="text-xs font-bold text-emerald-300 w-20 shrink-0 truncate">
+                          {item.symbol}
+                        </span>
+                        <input
+                          type="text"
+                          value={item.label || ''}
+                          onChange={(e) => {
+                            const next = [...financeWatchlist];
+                            next[idx] = { ...item, label: e.target.value };
+                            setFinanceWatchlist(next);
+                          }}
+                          placeholder="Display label (optional)"
+                          className="flex-1 min-w-0 bg-transparent text-xs text-gray-200 placeholder:text-gray-600 focus:outline-none"
+                        />
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <button
+                            type="button"
+                            disabled={idx === 0}
+                            onClick={() => {
+                              const next = [...financeWatchlist];
+                              [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                              setFinanceWatchlist(next);
+                            }}
+                            className="p-1 text-gray-400 hover:text-white disabled:opacity-25 cursor-pointer"
+                            title="Move up"
+                          >
+                            <ChevronUp className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={idx === financeWatchlist.length - 1}
+                            onClick={() => {
+                              const next = [...financeWatchlist];
+                              [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+                              setFinanceWatchlist(next);
+                            }}
+                            className="p-1 text-gray-400 hover:text-white disabled:opacity-25 cursor-pointer"
+                            title="Move down"
+                          >
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={financeWatchlist.length <= 1}
+                            onClick={() =>
+                              setFinanceWatchlist(
+                                financeWatchlist.filter((w) => w.symbol !== item.symbol)
+                              )
+                            }
+                            className="p-1 text-gray-400 hover:text-rose-400 disabled:opacity-25 cursor-pointer"
+                            title="Remove ticker"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Layout Mode */}
+                <div>
+                  <label className="text-xs font-semibold text-gray-300 block mb-1.5">
+                    Layout Mode
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      { id: 'auto' as const, label: 'Adaptive (Auto)' },
+                      { id: 'list' as const, label: 'Watchlist Rows' },
+                      { id: 'grid' as const, label: 'Market Grid' },
+                      { id: 'ticker' as const, label: 'Ticker Strip' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setFinanceDisplayMode(opt.id)}
+                        className={`p-2 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                          financeDisplayMode === opt.id
+                            ? 'bg-emerald-600/20 border-emerald-500/60 text-emerald-200 font-semibold'
+                            : 'bg-gray-950 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Range & Refresh Interval */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-300 block mb-1.5">
+                      Default Timeframe
+                    </label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {(
+                        [
+                          { id: '1d', label: '1D' },
+                          { id: '5d', label: '5D' },
+                          { id: '1mo', label: '1M' },
+                        ] as const
+                      ).map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setFinanceRange(opt.id)}
+                          className={`p-2 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                            financeRange === opt.id
+                              ? 'bg-emerald-600/20 border-emerald-500/60 text-emerald-200 font-semibold'
+                              : 'bg-gray-950 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-gray-300 block mb-1.5">
+                      Refresh Interval
+                    </label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {([1, 5, 15] as const).map((min) => (
+                        <button
+                          key={min}
+                          type="button"
+                          onClick={() => setFinanceRefreshMin(min)}
+                          className={`p-2 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                            financeRefreshMin === min
+                              ? 'bg-emerald-600/20 border-emerald-500/60 text-emerald-200 font-semibold'
+                              : 'bg-gray-950 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'
+                          }`}
+                        >
+                          {min} min
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Visual Toggles */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-gray-950 border border-gray-800">
+                    <span className="text-xs text-gray-300 font-medium">
+                      Show Sparkline Charts
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setFinanceShowSparkline(!financeShowSparkline)}
+                      className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                        financeShowSparkline ? 'bg-emerald-500' : 'bg-gray-700'
+                      }`}
+                    >
+                      <div
+                        className={`bg-white w-4 h-4 rounded-full shadow transition-transform ${
+                          financeShowSparkline ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-gray-950 border border-gray-800">
+                    <span className="text-xs text-gray-300 font-medium">
+                      Show Dollar / Point Change
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setFinanceShowAbsoluteChange(!financeShowAbsoluteChange)}
+                      className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                        financeShowAbsoluteChange ? 'bg-emerald-500' : 'bg-gray-700'
+                      }`}
+                    >
+                      <div
+                        className={`bg-white w-4 h-4 rounded-full shadow transition-transform ${
+                          financeShowAbsoluteChange ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
                   </div>
                 </div>
               </div>
