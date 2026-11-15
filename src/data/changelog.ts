@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.4",
+    date: "November 14, 2026",
+    title: "Live Markets & Watchlist Widget, Adaptive Ticker Layouts & Sticker Mode",
+    highlights: [
+      "Zero-API-Key /api/finance Proxy & Offline Cache: Fetches live prices, session states, and sparkline series for up to 15 stocks, ETFs, US indices, and crypto across 1D / 5D / 1M ranges with a 60s edge cache and localStorage offline fallback.",
+      "Adaptive Markets & Watchlist Widget: Automatically adapts by tile dimensions across a detailed Watchlist, 2/3-column Market Grid, and scrolling horizontal Ticker Strip, with inline + quick-add search and Sticker / No Outline Mode.",
+      "Watchlist Settings & Preset Bundles: Customize tickers, display labels, sort order, 1/5/15-minute refresh cadence, sparkline visibility, or load curated bundles (Default Mix, US Indices, Big Tech, Popular ETFs, Crypto) in Tile Settings.",
+    ],
+  },
+  {
     version: "v0.7.3",
     date: "November 14, 2026",
     title: "Sticky Note Deletion Sync, Tombstone Precedence & Adaptive Close Controls",
