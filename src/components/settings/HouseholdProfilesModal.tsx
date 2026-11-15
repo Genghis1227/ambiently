@@ -29,6 +29,7 @@ import {
   decodeImageFileForPreview,
   getProfileInitials,
 } from '../../utils/avatarCompressor';
+import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 import { ProfileAvatar } from '../common/ProfileAvatar';
 import { AvatarCropModal } from '../common/AvatarCropModal';
 
@@ -109,7 +110,6 @@ export const HouseholdProfilesModal: React.FC<HouseholdProfilesModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const avatarTargetIdRef = useRef<string | null>(null);
-  const backdropPointerDownRef = useRef(false);
   const statusTimerRef = useRef<number | null>(null);
   const activeRevokeRef = useRef<(() => void) | undefined>(undefined);
   const isCropModalOpenRef = useRef(false);
@@ -416,15 +416,7 @@ export const HouseholdProfilesModal: React.FC<HouseholdProfilesModalProps> = ({
       aria-modal="true"
       aria-labelledby="household-profiles-modal-title"
       className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-3 sm:p-5"
-      onMouseDown={(e) => {
-        backdropPointerDownRef.current = e.target === e.currentTarget;
-      }}
-      onClick={(e) => {
-        if (backdropPointerDownRef.current && e.target === e.currentTarget) {
-          onClose();
-        }
-        backdropPointerDownRef.current = false;
-      }}
+      {...createBackdropDismissHandlers(onClose)}
     >
       {/* Hidden File Inputs for Library / Camera 256x256 WebP Upload */}
       <input

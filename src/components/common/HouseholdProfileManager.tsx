@@ -131,7 +131,7 @@ export const HouseholdProfileManager: React.FC = () => {
             <span>Household Members & Avatars ({householdProfiles.length})</span>
           </div>
           <span className="text-[11px] text-gray-400 block mt-0.5">
-            Global family profiles shared across Chores, Meal Planner, Calendar & Kanban boards. Photos auto-compress to 256×256 WebP.
+            Global family profiles shared across Chores, Meal Planner, Calendar & Project Boards (Kanban). Photos auto-compress to 256×256 WebP.
           </span>
         </div>
 

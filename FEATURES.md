@@ -164,15 +164,15 @@ Browse and filter all widget tiles across 4 organized categories (**Household & 
 
 ---
 
-## Multi-Board Project Kanban Engine (`KanbanWidget.tsx`, `KanbanBoardView.tsx`, `useKanbanStore.ts`)
+## Multi-Board Project Board (Kanban) Engine (`KanbanWidget.tsx`, `KanbanBoardView.tsx`, `useKanbanStore.ts`)
 
 * **Zero-Friction, Non-Point Family Task Boards:** Strictly decoupled from the Chore & Reward point ledger and free of PIN gates so any household member can organize home maintenance, 3D print queues, or packing lists immediately.
-* **Multi-Board Pool with Independent Per-Widget Selection (`KanbanWidgetConfig`):** Multiple **Project Kanban** Bento tiles across different tabs share the global pool of boards and cards via `useKanbanStore`, while each widget instance independently persists its own `activeBoardId`, `activeColumnId`, and presentation mode (`tile` vs. full 3-column `view`).
+* **Multi-Board Pool with Independent Per-Widget Selection (`KanbanWidgetConfig`):** Multiple **Project Board (Kanban)** Bento tiles across different tabs share the global pool of boards and cards via `useKanbanStore`, while each widget instance independently persists its own `activeBoardId`, `activeColumnId`, and presentation mode (`tile` vs. full 3-column `view`).
 * **Classic 3-Column Flow & Inline Quick-Add (`KanbanInlineAdd.tsx`):** Every board uses `To Do`, `In Progress`, and `Done` columns with inline `+ Add card` inputs (`Enter` to create without opening a modal), desaturated Calm Science tag pills (`Sage`, `Slate`, `Dusty Rose`, `Soft Amber`, `Lavender-Gray`), `<ProfileAvatar size="xs"/>` multi-assignee badges, and conditional checklist progress badges (`☑ X/Y`).
 * **Polymorphic Compact Tile, Adaptive 3-Column Resizing & Drag-to-Edge (`KanbanWidget.tsx`, `useKanbanPointerDnD.ts`):**
   * Compact tiles default to **`To Do`** on mount with header column-stepper controls (`← To Do (N)` / `In Progress (N) →`).
   * Supports **dual cross-column card movement**: single-tap `←`/`→` card chevrons for quick wall-kiosk triage plus unified mouse/touch drag-and-drop with ~350ms **Drag-to-Edge** hover highlights that flip the active column mid-drag so cards drop at the exact vertical index.
-  * **Responsive Width Adaptation:** Resizing a **Project Kanban** tile wider automatically switches it into a side-by-side **3-column swimlane layout** right on the canvas (with per-column quick-add and horizontal/vertical drag-and-drop), while clicking **Maximize** or switching to **Full 3-Column Board** expands all 3 lanes across the full screen (`KanbanBoardView.tsx`).
+  * **Responsive Width Adaptation:** Resizing a **Project Board (Kanban)** tile wider automatically switches it into a side-by-side **3-column swimlane layout** right on the canvas (with per-column quick-add and horizontal/vertical drag-and-drop), while clicking **Maximize** or switching to **Full 3-Column Board** expands all 3 lanes across the full screen (`KanbanBoardView.tsx`).
 * **Done Lifecycle, Auto-Archive & Per-Board Archive Drawer (`KanbanArchiveDrawer.tsx`):**
   * Entering `Done` stamps `completedAt` (and moving a card back to `To Do` or `In Progress` clears it).
   * Configurable per-board `autoArchiveDays` (`Off`, `1`, `3`, `7`, `14`, `30` days) evaluated at startup and on hourly/midnight/visibility ticks, plus one-tap **Archive All Done** and confirmation-gated permanent **Clear Done**.
@@ -184,7 +184,7 @@ Browse and filter all widget tiles across 4 organized categories (**Household & 
 
 * **Vertical Tile Stream (`MobileCompanion.tsx`):**
   * Automatically serves a structured single-column vertical feed of the active canvas when opened on a smartphone (`< 768px`).
-  * **Live Preview Cards:** Every canvas widget (Clock & Weather, Countdown, Photos, RSS, Markets & Watchlist, Quotes, Media, Notes, Chores, Meal Planner, Project Kanban) renders a live mobile-responsive preview card.
+  * **Live Preview Cards:** Every canvas widget (Clock & Weather, Countdown, Photos, RSS, Markets & Watchlist, Quotes, Media, Notes, Chores, Meal Planner, Project Board (Kanban)) renders a live mobile-responsive preview card.
   * **Persistent View Option Filter:** 3-way segmented filter pills (`All Tiles` | `Widgets` | `Notes & Tasks`) automatically persisted in `localStorage`.
   * **Independent Mobile Reordering (`▲` / `▼`):** Move buttons on each widget card modify an isolated `mobileOrder` property with zero impact on the desktop/kiosk layout.
   * **Mobile Tile Settings & Creation:** 1-tap `⚙️` button opens the full tile customizer on mobile, plus a `+ Add Tile` button to add new widgets from your phone.

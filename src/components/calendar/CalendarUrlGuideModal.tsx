@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Calendar, ExternalLink, Check, Copy, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 
 interface CalendarUrlGuideModalProps {
   isOpen: boolean;
@@ -37,9 +38,7 @@ export const CalendarUrlGuideModal: React.FC<CalendarUrlGuideModalProps> = ({ is
       role="dialog"
       aria-modal="true"
       className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 cursor-pointer"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+      {...createBackdropDismissHandlers(onClose)}
     >
       <div
         onClick={(e) => e.stopPropagation()}

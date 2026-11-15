@@ -399,8 +399,8 @@ export const KanbanWidget: React.FC<KanbanWidgetProps> = ({
                 setIsFullViewOpen(true);
               }
             }}
-            title="Expand Full 3-Column Kanban View"
-            aria-label="Expand Full Kanban View"
+            title="Expand Full 3-Column Board View"
+            aria-label="Expand Full 3-Column Board View"
             className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
               isLight
                 ? 'bg-slate-100 hover:bg-slate-200/80 border-slate-200/90 text-slate-600'
@@ -417,7 +417,7 @@ export const KanbanWidget: React.FC<KanbanWidgetProps> = ({
       {isThreeColumnLayout ? (
         !activeBoard ? (
           <div className={`flex-1 flex items-center justify-center p-6 text-xs ${mutedTextClass}`}>
-            Create a Kanban board to get started.
+            Create a project board to get started.
           </div>
         ) : (
           <div
@@ -668,7 +668,7 @@ export const KanbanWidget: React.FC<KanbanWidgetProps> = ({
             <div className="flex-1 min-h-0 overflow-y-auto px-2.5 py-2 space-y-2">
               {!activeBoard ? (
                 <div className={`py-8 text-center text-xs ${mutedTextClass}`}>
-                  Create a Kanban board to get started.
+                  Create a project board to get started.
                 </div>
               ) : (
                 renderColumnCardList(

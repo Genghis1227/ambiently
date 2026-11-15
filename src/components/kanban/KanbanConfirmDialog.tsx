@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, X } from 'lucide-react';
+import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 
 export interface KanbanConfirmDialogProps {
   isOpen: boolean;
@@ -43,10 +44,7 @@ export const KanbanConfirmDialog: React.FC<KanbanConfirmDialogProps> = ({
       role="dialog"
       aria-modal="true"
       data-no-drag="true"
-      onPointerDown={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onCancel();
-      }}
+      {...createBackdropDismissHandlers(onCancel)}
       className="fixed inset-0 z-[115] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
     >
       <div

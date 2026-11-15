@@ -15,6 +15,7 @@ import {
   type KanbanCard,
 } from '../../types/kanban';
 import { ProfileAvatar } from '../common/ProfileAvatar';
+import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 import { KanbanConfirmDialog } from './KanbanConfirmDialog';
 
 export interface KanbanArchiveDrawerProps {
@@ -103,10 +104,7 @@ export const KanbanArchiveDrawer: React.FC<KanbanArchiveDrawerProps> = ({
         role="dialog"
         aria-modal="true"
         data-no-drag="true"
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          if (e.target === e.currentTarget) onClose();
-        }}
+        {...createBackdropDismissHandlers(onClose)}
         className="fixed inset-0 z-[95] flex justify-end bg-black/65 backdrop-blur-sm"
       >
         <div

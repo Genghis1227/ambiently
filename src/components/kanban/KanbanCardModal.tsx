@@ -20,6 +20,7 @@ import {
   type KanbanChecklistItem,
 } from '../../types/kanban';
 import { ProfileAvatar } from '../common/ProfileAvatar';
+import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 import { KanbanConfirmDialog } from './KanbanConfirmDialog';
 
 export interface KanbanCardModalProps {
@@ -122,20 +123,11 @@ export const KanbanCardModal: React.FC<KanbanCardModalProps> = ({
         role="dialog"
         aria-modal="true"
         data-no-drag="true"
-        onPointerDown={(e) => e.stopPropagation()}
-        onMouseDown={(e) => {
-          (e.currentTarget as any).__backdropMouseDown =
-            e.target === e.currentTarget &&
-            !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName || '');
-        }}
-        onClick={(e) => {
-          if (e.target === e.currentTarget && (e.currentTarget as any).__backdropMouseDown) {
-            commitTitleIfChanged();
-            commitTagLabelIfChanged();
-            onClose();
-          }
-          (e.currentTarget as any).__backdropMouseDown = false;
-        }}
+        {...createBackdropDismissHandlers(() => {
+          commitTitleIfChanged();
+          commitTagLabelIfChanged();
+          onClose();
+        })}
         className="fixed inset-0 z-[95] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
       >
         <div

@@ -22,6 +22,7 @@ import type { DockPosition } from '../../types/dashboard';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { getCurrentUser, onAuthStateChange } from '../../services/supabase';
 import { APP_VERSION } from '../../data/version';
+import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 
 const ChangelogModal = React.lazy(() =>
   import('../changelog/ChangelogModal').then((m) => ({ default: m.ChangelogModal }))
@@ -121,7 +122,7 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
       {createPortal(
         <div
           className="fixed inset-0 z-40"
-          onClick={onClose}
+          {...createBackdropDismissHandlers(onClose)}
         />,
         document.body
       )}

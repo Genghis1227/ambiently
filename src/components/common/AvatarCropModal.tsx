@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Check, Move, RotateCcw, RotateCw, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { renderCroppedAvatarToWebP, type AvatarCropTransform } from '../../utils/avatarCompressor';
+import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 
 export interface AvatarCropModalProps {
   isOpen: boolean;
@@ -23,7 +24,6 @@ export const AvatarCropModal: React.FC<AvatarCropModalProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const loadedImgRef = useRef<HTMLImageElement | null>(null);
-  const backdropMouseDownRef = useRef(false);
 
   const [zoom, setZoom] = useState(1);
   const [offsetX, setOffsetX] = useState(0);
@@ -220,15 +220,7 @@ export const AvatarCropModal: React.FC<AvatarCropModalProps> = ({
   return (
     <div
       className="fixed inset-0 z-[9950] flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
-      onMouseDown={(e) => {
-        backdropMouseDownRef.current = e.target === e.currentTarget;
-      }}
-      onClick={(e) => {
-        if (backdropMouseDownRef.current && e.target === e.currentTarget) {
-          onCancel();
-        }
-        backdropMouseDownRef.current = false;
-      }}
+      {...createBackdropDismissHandlers(onCancel)}
     >
       <div
         onClick={(e) => e.stopPropagation()}

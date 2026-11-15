@@ -311,7 +311,7 @@ export const KanbanBoardView: React.FC<KanbanBoardViewProps> = ({
       {!activeBoard ? (
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-3">
           <p className="text-sm font-medium text-slate-400">
-            No Kanban board available.
+            No project board available.
           </p>
           <button
             type="button"

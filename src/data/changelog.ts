@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.6",
+    date: "November 15, 2026",
+    title: "Modal Text-Selection Dismiss Guard & Project Board (Kanban) Rename",
+    highlights: [
+      "Prevented Accidental Modal & Editor Dismissal While Highlighting Text: Added shared backdrop press-origin and active-editor focus guards across Meal Planner (Edit Planned Meal, Schedule Family Meal, inline Recipe Book editor) and all 25 modal/drawer overlays so dragging a text selection onto the backdrop or clicking outside an active input no longer closes the dialog.",
+      "Hardened Inline Text & Sticky Note Editors: Protected inline text-box editing, Reader View article selection, and Corkboard sticky-note modal backdrops from stray pointer propagation.",
+      "Renamed Project Kanban to Project Board (Kanban): Updated tile catalog titles, Mobile Companion labels, Tile Settings headers, empty states, and documentation for clearer everyday discovery while preserving 'kanban' search keywords.",
+    ],
+  },
+  {
     version: "v0.7.5",
     date: "November 14, 2026",
     title: "Add Widget & Create Canvas Modal Filter Stability Fix",

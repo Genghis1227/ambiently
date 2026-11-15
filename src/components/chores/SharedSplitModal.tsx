@@ -9,6 +9,7 @@ import type {
 } from '../../types/chores';
 import { resolveProfileColorHex } from '../../types/profiles';
 import { calculateEffectiveChorePoints, validateChoreSplits } from '../../utils/choreEngine';
+import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 import { ProfileAvatar } from '../common/ProfileAvatar';
 
 export interface SharedSplitModalProps {
@@ -192,8 +193,7 @@ export const SharedSplitModal: React.FC<SharedSplitModalProps> = ({
       data-no-drag="true"
       aria-label={`Complete shared chore: ${template.title}`}
       className="fixed inset-0 z-[920] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4 select-none"
-      onPointerDown={(e) => e.stopPropagation()}
-      onClick={onClose}
+      {...createBackdropDismissHandlers(onClose)}
     >
       <div
         className={`w-full max-w-md rounded-2xl border shadow-2xl overflow-hidden ${

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, Users, UserCheck, Sparkles, Minus, Plus, Equal } from 'lucide-react';
 import type { ActiveChoreInstance, ChoreTemplate, Profile } from '../../types/chores';
 import { calculateEffectiveChorePoints } from '../../utils/choreEngine';
+import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 import { HouseholdAvatar } from '../common/HouseholdAvatar';
 
 interface PointSplitModalProps {
@@ -159,8 +160,7 @@ export const PointSplitModal: React.FC<PointSplitModalProps> = ({
       aria-modal="true"
       data-no-drag="true"
       className="fixed inset-0 z-[920] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4"
-      onPointerDown={(e) => e.stopPropagation()}
-      onClick={onClose}
+      {...createBackdropDismissHandlers(onClose)}
     >
       <div
         className="w-full max-w-md rounded-2xl border border-slate-700/60 bg-slate-900/95 text-slate-100 shadow-2xl overflow-hidden"

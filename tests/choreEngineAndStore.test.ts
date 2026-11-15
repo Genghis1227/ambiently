@@ -585,10 +585,11 @@ describe('Chore Engine & useChoreStore', () => {
     assert.ok(useChoreStore.getState().snapshot.deletedRewardIds?.includes(second.id));
 
     // Sync merge against an older snapshot that still contained `second` must NOT resurrect it
+    const baseCreatedMs = Date.parse(first.createdAt || '') || Date.now();
     const staleRemote = {
       ...createBaseSnapshot(),
       rewards: [...createBaseSnapshot().rewards, second],
-      updated_at: '2026-11-12T00:00:00.000Z',
+      updated_at: new Date(baseCreatedMs - 120_000).toISOString(),
     };
     const mergedAfterWithdraw = mergeChoreSnapshotsAuthoritative(
       useChoreStore.getState().snapshot,
@@ -601,17 +602,23 @@ describe('Chore Engine & useChoreStore', () => {
 
     // 4. Sync merge preserves a newer kid edit on a `needs_pricing` proposal even if another snapshot
     //    had a newer parent action on an unrelated chore
+    const staleIso = new Date(baseCreatedMs - 60_000).toISOString();
+    const newerKidEditIso = new Date(baseCreatedMs + 60_000).toISOString();
+    const parentPricedIso = new Date(baseCreatedMs + 120_000).toISOString();
+    const laterUnpricedEditIso = new Date(baseCreatedMs + 180_000).toISOString();
+    const farFutureParentIso = new Date(baseCreatedMs + 3_600_000).toISOString();
+
     const staleUneditedCopy = {
       ...useChoreStore.getState().snapshot,
       rewards: useChoreStore
         .getState()
         .snapshot.rewards.map((r) =>
           r.id === first.id
-            ? { ...r, title: 'Mini Drone', updatedAt: '2026-11-10T10:00:00.000Z' }
+            ? { ...r, title: 'Mini Drone', createdAt: staleIso, updatedAt: staleIso }
             : r
         ),
-      lastParentActionAt: '2099-01-01T00:00:00.000Z',
-      updated_at: '2099-01-01T00:00:00.000Z',
+      lastParentActionAt: farFutureParentIso,
+      updated_at: farFutureParentIso,
     };
     const newerKidEditSnap = {
       ...useChoreStore.getState().snapshot,
@@ -619,7 +626,7 @@ describe('Chore Engine & useChoreStore', () => {
         .getState()
         .snapshot.rewards.map((r) =>
           r.id === first.id
-            ? { ...r, title: 'Updated Rocket Ship', updatedAt: '2026-11-15T12:00:00.000Z' }
+            ? { ...r, title: 'Updated Rocket Ship', createdAt: staleIso, updatedAt: newerKidEditIso }
             : r
         ),
     };
@@ -642,18 +649,18 @@ describe('Chore Engine & useChoreStore', () => {
               ...r,
               status: 'active_goal' as const,
               pointsCost: 250,
-              pricedAt: '2026-11-16T00:00:00.000Z',
+              pricedAt: parentPricedIso,
             }
           : r
       ),
-      lastParentActionAt: '2026-11-16T00:00:00.000Z',
-      updated_at: '2026-11-16T00:00:00.000Z',
+      lastParentActionAt: parentPricedIso,
+      updated_at: parentPricedIso,
     };
     const localNewerUnpricedEdit = {
       ...newerKidEditSnap,
       rewards: newerKidEditSnap.rewards.map((r) =>
         r.id === first.id
-          ? { ...r, updatedAt: '2026-11-17T00:00:00.000Z' }
+          ? { ...r, updatedAt: laterUnpricedEditIso }
           : r
       ),
     };

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import type { Profile, TrophyItem } from '../../types/chores';
 import { HouseholdAvatar } from '../common/HouseholdAvatar';
+import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 import { openInAppWebViewer } from '../../utils/webViewer';
 
 interface TrophyCaseModalProps {
@@ -67,8 +68,7 @@ export const TrophyCaseModal: React.FC<TrophyCaseModalProps> = ({
       aria-modal="true"
       data-no-drag="true"
       className="fixed inset-0 z-[940] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4"
-      onPointerDown={(e) => e.stopPropagation()}
-      onClick={onClose}
+      {...createBackdropDismissHandlers(onClose)}
     >
       <div
         className="w-full max-w-2xl rounded-2xl border border-slate-700/60 bg-slate-900/95 text-slate-100 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"

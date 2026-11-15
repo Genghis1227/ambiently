@@ -17,6 +17,7 @@ import {
 } from '../../services/mediaSearch';
 import type { ImageWidgetConfig } from '../../types/dashboard';
 import { storeUploadedMediaInVault } from '../../utils/localMediaVault';
+import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 
 export interface MediaSelectionMeta {
   mp4Url?: string;
@@ -135,16 +136,12 @@ export const MediaSearchModal: React.FC<MediaSearchModalProps> = ({
     <div
       role="dialog"
       aria-modal="true"
-      onPointerDown={(e) => e.stopPropagation()}
+      {...createBackdropDismissHandlers(onClose)}
       onPointerMove={(e) => e.stopPropagation()}
       onPointerUp={(e) => e.stopPropagation()}
       onPointerEnter={(e) => e.stopPropagation()}
       onPointerLeave={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        e.stopPropagation();
-        if (e.target === e.currentTarget) onClose();
-      }}
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 select-none animate-in fade-in duration-150"
     >
       <div

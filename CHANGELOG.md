@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.6] - 2026-11-15
+
+### Modal Text-Selection Dismiss Guard & Project Board (Kanban) Rename
+* **Modal Backdrop Press-Origin & Active-Editor Focus Guard (`src/utils/modalBackdropGuard.ts`, `src/components/meals/MealEntryModal.tsx`, 24 additional overlays across `src/components/`, `tests/modalBackdropGuard.test.ts`):**
+  * Prevented dismissible modals, drawers, and quick menus from closing when a user starts selecting/highlighting text inside the dialog and drags out onto the backdrop, or clicks outside while an interior `<input>`, `<textarea>`, `<select>`, or `contentEditable` field is focused (requiring an explicit blur/click-off or `Cancel`/`✕` action).
+* **Inline Text Box, Reader View & Corkboard Backdrop Hardening (`src/components/widgets/TextBoxWidget.tsx`, `src/components/common/InAppWebViewerModal.tsx`, `src/components/layout/Corkboard.tsx`, `tests/choreEngineAndStore.test.ts`):**
+  * Preserved inline editor focus during drag-selection in `TextBoxWidget`, enforced `user-select: text` in Reader View, isolated Corkboard sticky-note creator/trash modal backdrops, and replaced wall-clock UTC fixture timestamps in `choreEngineAndStore.test.ts` with deterministic relative offsets.
+* **Widget Rename to `Project Board (Kanban)` (`src/utils/widgetCatalog.ts`, `src/components/mobile/MobileCompanion.tsx`, `src/components/widgets/WidgetSettingsModal.tsx`, `src/components/kanban/*`, `src/components/widgets/KanbanWidget.tsx`, `src/components/common/HouseholdProfileManager.tsx`, `README.md`, `FEATURES.md`, `tests/widgetCatalogAndBlueprints.test.ts`):**
+  * Renamed **Project Kanban** to **Project Board (Kanban)** across the widget catalog, Mobile Companion, Tile Settings, Kanban modals/empty states, Household Profile Manager, and documentation while retaining full `'kanban'` search keyword support.
+
+---
+
 ## [0.7.5] - 2026-11-14
 
 ### Add Widget & Create Canvas Modal Filter Stability Fix

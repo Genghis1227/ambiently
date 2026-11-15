@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Clock, Kanban, Trash2, X } from 'lucide-react';
 import { useKanbanStore } from '../../stores/useKanbanStore';
 import { KANBAN_AUTO_ARCHIVE_OPTIONS } from '../../types/kanban';
+import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 import { KanbanConfirmDialog } from './KanbanConfirmDialog';
 
 export interface KanbanBoardModalProps {
@@ -98,18 +99,7 @@ export const KanbanBoardModal: React.FC<KanbanBoardModalProps> = ({
         role="dialog"
         aria-modal="true"
         data-no-drag="true"
-        onPointerDown={(e) => e.stopPropagation()}
-        onMouseDown={(e) => {
-          (e.currentTarget as any).__backdropMouseDown =
-            e.target === e.currentTarget &&
-            !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName || '');
-        }}
-        onClick={(e) => {
-          if (e.target === e.currentTarget && (e.currentTarget as any).__backdropMouseDown) {
-            onClose();
-          }
-          (e.currentTarget as any).__backdropMouseDown = false;
-        }}
+        {...createBackdropDismissHandlers(onClose)}
         className="fixed inset-0 z-[95] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
       >
         <form
@@ -121,7 +111,7 @@ export const KanbanBoardModal: React.FC<KanbanBoardModalProps> = ({
             <div className="flex items-center gap-2">
               <Kanban className="w-4 h-4 text-[#648296]" />
               <h3 className="text-sm font-semibold">
-                {mode === 'create' ? 'New Kanban Board' : 'Board Settings'}
+                {mode === 'create' ? 'New Project Board (Kanban)' : 'Board Settings'}
               </h3>
             </div>
             <button

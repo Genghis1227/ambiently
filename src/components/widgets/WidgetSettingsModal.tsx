@@ -52,6 +52,7 @@ import {
   isTextFamilyType,
 } from '../../utils/widgetCatalog';
 import { type CalendarSource, normalizeCalendarUrl, testCalendarFeed } from '../../services/feeds';
+import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 import { CalendarUrlGuideModal } from '../calendar/CalendarUrlGuideModal';
 import type { QuoteItem } from '../../services/quotes';
 import { EMBED_PRESETS, type EmbedPresetId } from './MediaEmbedWidget';
@@ -964,17 +965,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       role="dialog"
       aria-modal="true"
       className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
-      onMouseDown={(e) => {
-        (e.currentTarget as any).__backdropMouseDown =
-          e.target === e.currentTarget &&
-          !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName || '');
-      }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget && (e.currentTarget as any).__backdropMouseDown) {
-          onClose();
-        }
-        (e.currentTarget as any).__backdropMouseDown = false;
-      }}
+      {...createBackdropDismissHandlers(onClose)}
     >
       <div
         onClick={(e) => e.stopPropagation()}
@@ -3799,10 +3790,10 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                 <div>
                   <label className="text-xs font-semibold text-gray-300 flex items-center gap-1.5 mb-1.5">
                     <Kanban className="w-3.5 h-3.5 text-slate-300" />
-                    <span>Pinned Kanban Board (This Widget Only)</span>
+                    <span>Pinned Project Board (This Widget Only)</span>
                   </label>
                   <p className="text-[11px] text-gray-400 mb-2">
-                    Each Project Kanban tile selects its own active board independently across your Bento tabs.
+                    Each Project Board (Kanban) tile selects its own active board independently across your Bento tabs.
                   </p>
                   <select
                     value={kanbanBoardId}
