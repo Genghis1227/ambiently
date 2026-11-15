@@ -11,6 +11,17 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.7",
+    date: "November 15, 2026",
+    title: "Kitchen Multi-Timer, Air Quality/Pollen/UV & Offline Sun/Moon Widgets",
+    highlights: [
+      "Kitchen Multi-Timer, Focus Pomodoro & Cooking Mode Step Timers: Run up to 6 concurrent wall-clock-accurate kitchen countdowns and Pomodoro focus/break loops with quick presets, +1m / Reset controls, and Web Audio chimes—plus 1-tap Start <duration> Timer chips and live header timer pills directly inside Cooking Mode.",
+      "Zero-API-Key Air Quality, Pollen & UV Widget: Tracks US EPA AQI, Tree/Grass/Weed pollen (gracefully falling back to PM2.5, PM10, and O3 particulates when regional pollen feeds are unavailable), and daytime UV forecast strips via Open-Meteo with offline caching and Night Mode polling suspension.",
+      "100% Offline Sun Arc, Golden Hour & Moon Phase: Computes seasonal sunrise, solar noon, sunset, morning/evening golden hours, daily daylight deltas, polar day/night handling, and dynamically masked SVG lunar phases completely offline using NOAA ephemeris math.",
+      "Catalog Inheritance, Sticker Mode & Mobile Companion Cards: Automatically inherits household Weather coordinates into new Air Quality and Sun & Moon widgets, supports frameless Sticker / No Outline Mode, and renders live preview cards in Mobile Companion.",
+    ],
+  },
+  {
     version: "v0.7.6",
     date: "November 15, 2026",
     title: "Modal Text-Selection Dismiss Guard & Project Board (Kanban) Rename",

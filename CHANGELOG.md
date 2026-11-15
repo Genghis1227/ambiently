@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.7] - 2026-11-15
+
+### Kitchen Multi-Timer, Air Quality/Pollen/UV & Offline Sun/Moon Widgets (Phase 1)
+* **Kitchen Multi-Timer, Focus Pomodoro & Cooking Mode Step Timers (`src/types/phase1Widgets.ts`, `src/utils/timerEngine.ts`, `src/components/widgets/TimerWidget.tsx`, `src/components/meals/CookingModeModal.tsx`):**
+  * Added a wall-clock-accurate multi-timer widget supporting up to 6 concurrent named timers (`endsAt` ISO timestamps synced via `useSharedClock`), quick presets (*Pasta*, *Soft Eggs*, *Oven Bake*, *Steep Tea*, *Focus Pomodoro*, *Short Break*), custom durations, `+1m` / `Pause` / `Reset` controls, Pomodoro focus/break phase cycling, and synthesized Web Audio completion chimes.
+  * Integrated auto-detected `Start <duration> Timer` step chips (`extractStepDurations`) and live header active timer pills (with pause & silence/reset controls) directly inside `CookingModeModal.tsx`, syncing cleanly with the active canvas `TimerWidget`.
+* **Air Quality (AQI), Pollen & UV Index Widget (`src/services/airQuality.ts`, `src/components/widgets/AirQualityWidget.tsx`):**
+  * Built a zero-API-key Open-Meteo Air Quality widget showing US EPA AQI bands, Tree / Grass / Weed pollen counts (with automatic `PM2.5`, `PM10`, and `O₃` particulate fallback where regional pollen feeds are unavailable), and daytime `9a` / `12p` / `3p` / `6p` + peak UV indicators with `localStorage` offline caching (`ambiently_aqi_cache_*`) and Night Mode / hidden-tab polling suspension.
+* **Offline Sun Arc, Golden Hour & Moon Phase Widget (`src/utils/astronomy.ts`, `src/components/widgets/SunMoonWidget.tsx`):**
+  * Implemented 100% offline NOAA solar and lunar ephemeris calculations rendering a live SVG solar horizon arc, *Sunrise*, *Solar Noon*, *Sunset*, morning/evening *Golden Hour* windows, daily daylight delta (`+/-m s`), high-latitude polar day/night handling, and a dynamically masked SVG lunar phase disc with illumination % and lunar age.
+* **Widget Catalog, Sticker Mode, Mobile Companion, Tile Settings & Tests (`src/types/dashboard.ts`, `src/utils/widgetCatalog.ts`, `src/utils/widgetStickerMode.ts`, `src/utils/autoLayout.ts`, `src/components/widgets/AddWidgetModal.tsx`, `src/components/layout/Corkboard.tsx`, `src/components/mobile/MobileCompanion.tsx`, `src/components/widgets/WidgetSettingsModal.tsx`, `tests/phase1Widgets.test.ts`, `tests/widgetCatalogAndBlueprints.test.ts`, `tests/widgetStickerMode.test.ts`, `FEATURES.md`, `README.md`, `ARCHITECTURE.md`):**
+  * Registered `'timer'`, `'air_quality'`, and `'sun_moon'` across the categorized widget picker (with household location inheritance for `'air_quality'` and `'sun_moon'`), Sticker / No Outline Mode, Mobile Companion live preview cards, Tile Settings (chime & Pomodoro defaults, AQI/pollen/UV toggles, Golden Hour/moon toggles, and city geocoding), documentation, and unit tests.
+
+---
+
 ## [0.7.6] - 2026-11-15
 
 ### Modal Text-Selection Dismiss Guard & Project Board (Kanban) Rename
