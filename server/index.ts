@@ -11,6 +11,7 @@ import { onRequestGet as handleGdrive } from '../functions/api/gdrive';
 import { onRequestGet as handleReader } from '../functions/api/reader';
 import { onRequestGet as handleWebProxy } from '../functions/api/web-proxy';
 import { onRequestGet as handleMetadata } from '../functions/api/metadata';
+import { onRequestGet as handleFinance } from '../functions/api/finance';
 
 type ApiHandler = (ctx: { request: Request }) => Promise<Response>;
 
@@ -22,6 +23,7 @@ const API_ROUTES: Record<string, ApiHandler> = {
   reader: handleReader,
   'web-proxy': handleWebProxy,
   metadata: handleMetadata,
+  finance: handleFinance,
 };
 
 const MIME_TYPES: Record<string, string> = {

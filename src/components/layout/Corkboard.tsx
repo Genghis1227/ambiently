@@ -51,6 +51,7 @@ import { ImageWidget } from '../widgets/ImageWidget';
 import { ChoreWidget } from '../widgets/ChoreWidget';
 import { MealPlannerWidget } from '../widgets/MealPlannerWidget';
 import { KanbanWidget } from '../widgets/KanbanWidget';
+import { FinanceWidget } from '../widgets/FinanceWidget';
 import { ShoppingListNoteBody } from '../common/ShoppingListNoteBody';
 import { categorizeIngredient, parseIngredient } from '../../utils/ingredientAggregator';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -378,6 +379,14 @@ const MemoizedCanvasWidgetBody: React.FC<CanvasWidgetBodyProps> = React.memo(({
             onUpdateConfig={handleConfigUpdate}
           />
         )
+      ) : widget.type === 'finance' ? (
+        <FinanceWidget
+          title={widget.title}
+          config={widget.config}
+          isLight={isWidgetLight}
+          transparentBg={isFramelessWidget}
+          onUpdateConfig={handleConfigUpdate}
+        />
       ) : null}
     </TileErrorBoundary>
   );

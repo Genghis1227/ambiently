@@ -117,6 +117,9 @@ Browse and filter all widget tiles across 4 organized categories (**Household & 
 * **RSS News Ticker, 26 Curated Feeds & In-App Reader Mode (`RssWidget.tsx`, `curatedFeeds.ts`, `InAppWebViewerModal.tsx`):**
   * Browse **26 live-verified curated feeds** across 6 categories (*Featured*, *News*, *Tech*, *Science*, *Lifestyle*, *Sports & Finance*) with category filter pills and instant search, or paste any custom RSS 2.0 / Atom XML URL.
   * Clicking any headline opens the **In-App Kiosk Article Reader (`/api/reader`)** powered by Mozilla Readability and Linkedom, with 1-click switching to **Web Preview (`/api/web-proxy`)** so users never get trapped in an uncloseable fullscreen browser window.
+* **Markets & Watchlist Widget (`FinanceWidget.tsx`, `/api/finance`):**
+  * Zero-API-key live watchlist covering stocks, ETFs, market indices (`^GSPC`, `^DJI`, `^IXIC`), and cryptocurrencies (`BTC-USD`, `ETH-USD`, `SOL-USD`) with SVG area sparklines, market session status badges (*Market Open*, *Pre-Market*, *After Hours*, *Closed*, *Cached*), `1D` / `5D` / `1M` timeframes, configurable `1` / `5` / `15` minute polling, and automatic offline localStorage quote caching.
+  * **Adaptive Resizing & Sticker Mode:** Automatically morphs between **Watchlist Rows**, multi-column **Market Grid**, and a compact horizontal **Ticker Strip** marquee depending on tile dimensions (or explicit mode override), with Calm Science desaturated sage/rose gain/loss badges, Night Mode polling/animation suspension, **Sticker / No Outline Mode** support, 1-click preset bundles, and live symbol autocomplete in Tile Settings or inline `+` quick-add.
 * **Milestone Countdown (`CountdownWidget.tsx`):**
   * Live days/hours/minutes/seconds countdown timer to upcoming vacations, birthdays, or milestones.
 * **Animated GIF, Sticker & Picture Tile (`ImageWidget.tsx`):**
@@ -181,7 +184,7 @@ Browse and filter all widget tiles across 4 organized categories (**Household & 
 
 * **Vertical Tile Stream (`MobileCompanion.tsx`):**
   * Automatically serves a structured single-column vertical feed of the active canvas when opened on a smartphone (`< 768px`).
-  * **Live Preview Cards:** Every canvas widget (Clock & Weather, Countdown, Photos, RSS, Quotes, Media, Notes, Chores, Meal Planner, Project Kanban) renders a live mobile-responsive preview card.
+  * **Live Preview Cards:** Every canvas widget (Clock & Weather, Countdown, Photos, RSS, Markets & Watchlist, Quotes, Media, Notes, Chores, Meal Planner, Project Kanban) renders a live mobile-responsive preview card.
   * **Persistent View Option Filter:** 3-way segmented filter pills (`All Tiles` | `Widgets` | `Notes & Tasks`) automatically persisted in `localStorage`.
   * **Independent Mobile Reordering (`▲` / `▼`):** Move buttons on each widget card modify an isolated `mobileOrder` property with zero impact on the desktop/kiosk layout.
   * **Mobile Tile Settings & Creation:** 1-tap `⚙️` button opens the full tile customizer on mobile, plus a `+ Add Tile` button to add new widgets from your phone.
@@ -205,7 +208,7 @@ Browse and filter all widget tiles across 4 organized categories (**Household & 
 ## 8. Docker Self-Hosting & Raspberry Pi Kiosk Edition (Phase 6)
 
 * **Multi-Architecture Docker & Compose Stack (`Dockerfile`, `compose.yaml`, `server/index.ts`, `vite.server.config.ts`):**
-  * Bundles `server/index.ts` and all 7 `/api/*` handlers into a single zero-dependency Node ESM bundle (`dist-server/index.mjs`) alongside the built PWA (`dist/`) inside a lightweight non-root `node:22-alpine` container (`linux/amd64` for PCs, Synology, Unraid, and Proxmox + `linux/arm64` for Raspberry Pi 4/5, Apple Silicon, and ARM SBCs).
+  * Bundles `server/index.ts` and all 8 `/api/*` handlers into a single zero-dependency Node ESM bundle (`dist-server/index.mjs`) alongside the built PWA (`dist/`) inside a lightweight non-root `node:22-alpine` container (`linux/amd64` for PCs, Synology, Unraid, and Proxmox + `linux/arm64` for Raspberry Pi 4/5, Apple Silicon, and ARM SBCs).
   * Includes immutable `/assets/*` caching (`max-age=31536000, immutable`), an in-memory `gzip` static asset cache, strict `no-cache` headers for `sw.js`/`version.json`/`index.html`, SPA history fallback, and a built-in `/api/health` container readiness endpoint.
 * **Zero-Rebuild Runtime Cloud Sync Injection (`/config.js`):**
   * Pass `SUPABASE_URL` and `SUPABASE_ANON_KEY` at container runtime via `.env` or `compose.yaml` without rebuilding the Docker image—preserving Workbox Service Worker precache integrity while caching credentials in `localStorage` for instant offline cold boots.

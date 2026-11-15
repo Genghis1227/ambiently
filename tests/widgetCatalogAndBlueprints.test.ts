@@ -32,6 +32,7 @@ const ALL_WIDGET_TYPES: WidgetType[] = [
   'chores',
   'meals',
   'kanban',
+  'finance',
 ];
 
 function makeWidget(
@@ -60,8 +61,8 @@ function boxesOverlap(a: FreeformPosition, b: FreeformPosition): boolean {
 }
 
 describe('widgetCatalog', () => {
-  it('covers all 16 WidgetTypes cleanly across 13 entries and 4 categories', () => {
-    assert.equal(WIDGET_CATALOG_ENTRIES.length, 13);
+  it('covers all 17 WidgetTypes cleanly across 14 entries and 4 categories', () => {
+    assert.equal(WIDGET_CATALOG_ENTRIES.length, 14);
     assert.deepEqual(
       WIDGET_CATEGORIES.map((c) => c.id),
       ['all', 'household', 'time_weather', 'media_ambient', 'text_feeds']
@@ -104,6 +105,13 @@ describe('widgetCatalog', () => {
 
     const noMatch = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'media_ambient', 'kanban');
     assert.equal(noMatch.length, 0);
+
+    const financeSearch = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'text_feeds', 'bitcoin');
+    assert.equal(financeSearch.length, 1);
+    assert.equal(financeSearch[0].entry.id, 'finance');
+
+    const stocksSearch = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'all', 'stocks');
+    assert.equal(stocksSearch[0].entry.id, 'finance');
   });
 
   it('counts active-tab widgets per catalog entry excluding other tabs and tombstones', () => {

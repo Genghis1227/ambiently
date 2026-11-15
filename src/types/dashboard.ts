@@ -8,6 +8,12 @@ import type {
 export type { ChoreWidgetConfig } from './chores';
 export type { MealWidgetConfig } from './meals';
 export type { KanbanWidgetConfig } from './kanban';
+export type {
+  FinanceWidgetConfig,
+  FinanceWatchlistItem,
+  FinanceRange,
+  FinanceDisplayMode,
+} from './finance';
 export type { PhotoAutoSyncInterval, PlexPhotoSyncConfig, PhotoTargetSyncMeta };
 
 export type DockPosition = 'left' | 'top' | 'right' | 'bottom';
@@ -45,7 +51,8 @@ export type WidgetType =
   | 'image'
   | 'chores'
   | 'meals'
-  | 'kanban';
+  | 'kanban'
+  | 'finance';
 
 export interface RssWidgetConfig {
   feedUrl?: string;

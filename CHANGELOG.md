@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.4] - 2026-11-14
+
+### Live Markets & Watchlist Widget, Adaptive Ticker Layouts & Sticker Mode
+* **Zero-API-Key `/api/finance` Edge/Server Proxy & Offline Quote Cache (`src/types/finance.ts`, `functions/api/finance.ts`, `server/index.ts`, `vite.config.ts`, `src/services/finance.ts`, `tests/financeWidget.test.ts`):**
+  * Added a batched quote and sparkline proxy (`/api/finance?symbols=...&range=1d|5d|1mo`, up to 15 symbols across stocks, ETFs, US indices, and crypto) with a 60s server TTL cache, `query1`/`query2` fallback, `fetchExternal` + `refuseOtherSites` protection, symbol autocomplete (`?q=...`), and client `localStorage` offline quote fallback (`ambiently_finance_quote_cache_v1`).
+* **Adaptive `FinanceWidget`, Watchlist Settings & Sticker Mode (`src/components/widgets/FinanceWidget.tsx`, `src/index.css`, `src/components/widgets/WidgetSettingsModal.tsx`, `src/utils/widgetCatalog.ts`, `src/utils/widgetStickerMode.ts`, `src/components/widgets/AddWidgetModal.tsx`, `src/components/layout/Corkboard.tsx`, `src/components/mobile/MobileCompanion.tsx`, `FEATURES.md`, `README.md`, `ARCHITECTURE.md`):**
+  * Built a `ResizeObserver`-driven Markets & Watchlist widget that adapts automatically across Watchlist (`list`), 2/3-column Market Grid (`grid`), and horizontal Ticker Strip (`ticker` with continuous CSS marquee on overflow), featuring Calm Science sage/rose gain/loss pills, `1D` / `5D` / `1M` range switcher, market session badges, inline `+` quick-add/search, full Watchlist Settings (live search, 5 preset bundles, custom labels, reordering, polling cadence), Night Mode / hidden-tab polling suspension, and `transparentBg` Sticker / No Outline Mode.
+
+---
+
 ## [0.7.3] - 2026-11-14
 
 ### Sticky Note Deletion Sync, Tombstone Precedence & Adaptive Close Controls

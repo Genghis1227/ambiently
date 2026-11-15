@@ -29,6 +29,7 @@ import {
   Utensils,
   Lock,
   Kanban,
+  TrendingUp,
 } from 'lucide-react';
 import type { DashboardTab, DashboardWidget, StickyNoteItem, WidgetThemeMode } from '../../types/dashboard';
 import { ShoppingListNoteBody } from '../common/ShoppingListNoteBody';
@@ -71,6 +72,7 @@ import { ImageWidget } from '../widgets/ImageWidget';
 import { ChoreWidget } from '../widgets/ChoreWidget';
 import { MealPlannerWidget } from '../widgets/MealPlannerWidget';
 import { KanbanWidget } from '../widgets/KanbanWidget';
+import { FinanceWidget } from '../widgets/FinanceWidget';
 
 interface MobileCompanionProps {
   tabs: DashboardTab[];
@@ -308,6 +310,8 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return Utensils;
       case 'kanban':
         return Kanban;
+      case 'finance':
+        return TrendingUp;
       default:
         return LayoutGrid;
     }
@@ -345,6 +349,8 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return 'Meal Planner';
       case 'kanban':
         return 'Project Kanban';
+      case 'finance':
+        return 'Markets & Watchlist';
       default:
         return 'Widget';
     }
@@ -541,6 +547,20 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
               title={widget.title}
               config={widget.config}
               isLight={isLight}
+              onUpdateConfig={(updates) =>
+                onUpdateWidget?.(widget.id, { config: { ...widget.config, ...updates } })
+              }
+            />
+          </div>
+        );
+      case 'finance':
+        return (
+          <div className="max-h-96 overflow-y-auto">
+            <FinanceWidget
+              title={widget.title}
+              config={widget.config}
+              isLight={isLight}
+              transparentBg={false}
               onUpdateConfig={(updates) =>
                 onUpdateWidget?.(widget.id, { config: { ...widget.config, ...updates } })
               }

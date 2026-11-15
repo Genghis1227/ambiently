@@ -17,6 +17,7 @@ import {
   Utensils,
   Kanban,
   RotateCcw,
+  TrendingUp,
 } from 'lucide-react';
 import type { DashboardWidget } from '../../types/dashboard';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -52,6 +53,7 @@ const CATALOG_ICONS: Record<WidgetCatalogIconKey, React.ComponentType<{ classNam
   textbox: Type,
   sticky_notes: StickyNote,
   image: Sparkles,
+  finance: TrendingUp,
 };
 
 export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({

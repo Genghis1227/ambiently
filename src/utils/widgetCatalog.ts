@@ -1,4 +1,5 @@
 import type { DashboardWidget, WidgetType } from '../types/dashboard';
+import { DEFAULT_FINANCE_WATCHLIST } from '../types/finance';
 
 export type WidgetCategoryId =
   | 'all'
@@ -20,7 +21,8 @@ export type WidgetCatalogIconKey =
   | 'countdown'
   | 'textbox'
   | 'sticky_notes'
-  | 'image';
+  | 'image'
+  | 'finance';
 
 export interface WidgetCategoryMeta {
   id: WidgetCategoryId;
@@ -419,6 +421,58 @@ export const WIDGET_CATALOG_ENTRIES: WidgetCatalogEntry[] = [
         defaultGridPos: { w: 4, h: 4 },
         defaultConfig: { feedUrl: 'https://tony.trinhism.com/index.xml' },
         keywords: ['rss', 'news', 'headlines', 'feed'],
+      },
+    ],
+  },
+  {
+    id: 'finance',
+    category: 'text_feeds',
+    title: 'Markets & Watchlist',
+    description:
+      'Live stocks, ETFs, market indices, and crypto watchlist with sparklines and adaptive card/ticker layouts.',
+    iconKey: 'finance',
+    color: 'from-emerald-500/20 to-cyan-500/20 text-emerald-400 border-emerald-500/30',
+    keywords: [
+      'finance',
+      'stocks',
+      'stock',
+      'market',
+      'markets',
+      'ticker',
+      'crypto',
+      'bitcoin',
+      'etf',
+      'indices',
+      'watchlist',
+      'sp500',
+      'portfolio',
+    ],
+    variants: [
+      {
+        type: 'finance',
+        pillLabel: 'Markets & Watchlist',
+        title: 'Markets & Watchlist',
+        description:
+          'Live stocks, ETFs, indices, and crypto prices with 1D/5D/1M sparklines (zero API key required).',
+        defaultGridPos: { w: 4, h: 5 },
+        defaultConfig: {
+          watchlist: DEFAULT_FINANCE_WATCHLIST,
+          range: '1d',
+          displayMode: 'auto',
+          showSparkline: true,
+          showAbsoluteChange: true,
+          refreshIntervalMin: 5,
+        },
+        keywords: [
+          'finance',
+          'stocks',
+          'market',
+          'ticker',
+          'crypto',
+          'bitcoin',
+          'etf',
+          'watchlist',
+        ],
       },
     ],
   },
