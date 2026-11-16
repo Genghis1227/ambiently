@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import {
   Utensils,
   Plus,
@@ -44,8 +44,13 @@ import {
   pickDefaultScheduleSlot,
 } from '../../utils/mealCalendarEvents';
 import { ProfileAvatar } from '../common/ProfileAvatar';
-import { MealEntryModal } from '../meals/MealEntryModal';
-import { CookingModeModal } from '../meals/CookingModeModal';
+
+const MealEntryModal = lazy(() =>
+  import('../meals/MealEntryModal').then((m) => ({ default: m.MealEntryModal }))
+);
+const CookingModeModal = lazy(() =>
+  import('../meals/CookingModeModal').then((m) => ({ default: m.CookingModeModal }))
+);
 
 export interface MealPlannerWidgetProps {
   title?: string;
@@ -2119,58 +2124,66 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
         )}
 
       {/* Dual-Mode Meal Entry Modal */}
-      <MealEntryModal
-        isOpen={entryModalState.isOpen}
-        date={entryModalState.date}
-        initialSlot={entryModalState.slot}
-        editingMeal={entryModalState.editingMeal}
-        initialMode={entryModalState.initialMode}
-        defaultCookProfileId={
-          selectedCookFilter !== 'all' ? selectedCookFilter : undefined
-        }
-        isLight={isLight}
-        onClose={() =>
-          setEntryModalState((prev) => ({
-            ...prev,
-            isOpen: false,
-            editingMeal: null,
-          }))
-        }
-      />
+      {entryModalState.isOpen && (
+        <Suspense fallback={null}>
+          <MealEntryModal
+            isOpen={entryModalState.isOpen}
+            date={entryModalState.date}
+            initialSlot={entryModalState.slot}
+            editingMeal={entryModalState.editingMeal}
+            initialMode={entryModalState.initialMode}
+            defaultCookProfileId={
+              selectedCookFilter !== 'all' ? selectedCookFilter : undefined
+            }
+            isLight={isLight}
+            onClose={() =>
+              setEntryModalState((prev) => ({
+                ...prev,
+                isOpen: false,
+                editingMeal: null,
+              }))
+            }
+          />
+        </Suspense>
+      )}
 
       {/* Counter-Readable Cooking Mode Modal */}
-      <CookingModeModal
-        isOpen={cookingModalState.isOpen}
-        recipe={cookingModalState.recipe}
-        scheduledMeal={
-          cookingModalState.scheduledMeal
-            ? scheduledMeals.find(
-                (m) => m.id === cookingModalState.scheduledMeal?.id
-              ) || cookingModalState.scheduledMeal
-            : null
-        }
-        isLight={isLight}
-        onClose={() =>
-          setCookingModalState({
-            isOpen: false,
-            recipe: null,
-            scheduledMeal: null,
-          })
-        }
-        onEditSlot={(mealToEdit) => {
-          setCookingModalState({
-            isOpen: false,
-            recipe: null,
-            scheduledMeal: null,
-          });
-          setEntryModalState({
-            isOpen: true,
-            date: mealToEdit.date,
-            slot: mealToEdit.slot,
-            editingMeal: mealToEdit,
-          });
-        }}
-      />
+      {cookingModalState.isOpen && (
+        <Suspense fallback={null}>
+          <CookingModeModal
+            isOpen={cookingModalState.isOpen}
+            recipe={cookingModalState.recipe}
+            scheduledMeal={
+              cookingModalState.scheduledMeal
+                ? scheduledMeals.find(
+                    (m) => m.id === cookingModalState.scheduledMeal?.id
+                  ) || cookingModalState.scheduledMeal
+                : null
+            }
+            isLight={isLight}
+            onClose={() =>
+              setCookingModalState({
+                isOpen: false,
+                recipe: null,
+                scheduledMeal: null,
+              })
+            }
+            onEditSlot={(mealToEdit) => {
+              setCookingModalState({
+                isOpen: false,
+                recipe: null,
+                scheduledMeal: null,
+              });
+              setEntryModalState({
+                isOpen: true,
+                date: mealToEdit.date,
+                slot: mealToEdit.slot,
+                editingMeal: mealToEdit,
+              });
+            }}
+          />
+        </Suspense>
+      )}
     </div>
   );
 };

@@ -27,7 +27,10 @@ import {
   MEAL_SLOT_ORDER,
   scheduledMealsToCalendarEvents,
 } from '../../utils/mealCalendarEvents';
-import { CalendarUrlGuideModal } from '../calendar/CalendarUrlGuideModal';
+
+const CalendarUrlGuideModal = React.lazy(() =>
+  import('../calendar/CalendarUrlGuideModal').then((m) => ({ default: m.CalendarUrlGuideModal }))
+);
 
 export type CalendarViewMode = 'agenda' | '3day' | 'week' | 'month';
 export type MultiDayLayout = 'cards' | 'timeline';
@@ -1455,10 +1458,14 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
       )}
 
       {/* Google / Apple / Outlook Calendar URL Guide Modal */}
-      <CalendarUrlGuideModal
-        isOpen={isGuideOpen}
-        onClose={() => setIsGuideOpen(false)}
-      />
+      {isGuideOpen && (
+        <React.Suspense fallback={null}>
+          <CalendarUrlGuideModal
+            isOpen={isGuideOpen}
+            onClose={() => setIsGuideOpen(false)}
+          />
+        </React.Suspense>
+      )}
     </div>
   );
 };

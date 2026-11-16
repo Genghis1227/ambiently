@@ -246,7 +246,7 @@ describe('createSharedClockTicker', () => {
     assert.equal(scheduledTimers.size, 1);
     assert.equal(Array.from(scheduledTimers.values())[0].delay, 750);
 
-    // Fire at 11_000 (within same 10s bucket): only 'second' subscribers fire
+    // Fire at 11_000 (within same 10s bucket): only 'second' subscribers fire and 10s snapshot stays isolated
     fakeNow = 11_000;
     const [firstTimer] = Array.from(scheduledTimers.values());
     scheduledTimers.clear();
@@ -254,9 +254,11 @@ describe('createSharedClockTicker', () => {
     assert.equal(secTicksA, 1);
     assert.equal(secTicksB, 1);
     assert.equal(tenSecTicks, 0);
+    assert.equal(ticker.getSnapshot('second'), 11_000);
+    assert.equal(ticker.getSnapshot('10s'), 10_250);
     assert.equal(scheduledTimers.size, 1);
 
-    // Fire at 20_000 (new 10s bucket): all subscribers fire
+    // Fire at 20_000 (new 10s bucket): all subscribers fire and 10s snapshot advances
     fakeNow = 20_000;
     const [secondTimer] = Array.from(scheduledTimers.values());
     scheduledTimers.clear();
@@ -264,6 +266,7 @@ describe('createSharedClockTicker', () => {
     assert.equal(secTicksA, 2);
     assert.equal(secTicksB, 2);
     assert.equal(tenSecTicks, 1);
+    assert.equal(ticker.getSnapshot('10s'), 20_000);
 
     // 3. Unsubscribing all 'second' listeners downgrades active timer back to 10s
     unsubSecA();

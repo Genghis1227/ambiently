@@ -12,6 +12,7 @@ import {
   pointOnSolarArc,
 } from '../../utils/astronomy';
 import { useSharedClock } from '../../utils/sharedClock';
+import { useDisplayActivity } from '../../utils/displayActivity';
 import { useDashboardStore } from '../../store/dashboardStore';
 
 interface SunMoonWidgetProps {
@@ -90,15 +91,26 @@ export const SunMoonWidget: React.FC<SunMoonWidgetProps> = ({
   transparentBg = false,
 }) => {
   const svgBaseId = useId().replace(/:/g, '');
-  const sharedDate = useSharedClock('10s');
-  const now = sharedDate.getTime() > 0 ? sharedDate : new Date();
+  const { isOledNightClock } = useDisplayActivity();
+  const sharedDate = useSharedClock('10s', !isOledNightClock);
+  const rawMs = sharedDate.getTime();
+  const minuteBucketMs = rawMs > 0 ? Math.floor(rawMs / 60_000) * 60_000 : 0;
   const timeFormat = useDashboardStore((s) => s.settings.timeFormat);
 
   const solar = useMemo(
-    () => computeSolarSummary(now, latitude, longitude, timezone || undefined),
-    [now, latitude, longitude, timezone]
+    () =>
+      computeSolarSummary(
+        new Date(minuteBucketMs > 0 ? minuteBucketMs : Date.now()),
+        latitude,
+        longitude,
+        timezone || undefined
+      ),
+    [minuteBucketMs, latitude, longitude, timezone]
   );
-  const lunar = useMemo(() => computeLunarSummary(now), [now]);
+  const lunar = useMemo(
+    () => computeLunarSummary(new Date(minuteBucketMs > 0 ? minuteBucketMs : Date.now())),
+    [minuteBucketMs]
+  );
 
   const fullArcPath = useMemo(() => buildArcPolylinePath(1), []);
   const elapsedArcPath = useMemo(

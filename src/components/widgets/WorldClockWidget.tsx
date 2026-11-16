@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useTimePrefs } from '../../utils/timePrefs';
 import { useSharedClock } from '../../utils/sharedClock';
+import { useDisplayActivity } from '../../utils/displayActivity';
 import { Globe, Sun, Moon, GripVertical } from 'lucide-react';
 
 export interface WorldClockCity {
@@ -200,7 +201,8 @@ export const WorldClockWidget: React.FC<WorldClockWidgetProps> = ({
   onUpdateConfig,
 }) => {
   const { hour12 } = useTimePrefs();
-  const now = useSharedClock(showSeconds ? 'second' : '10s');
+  const { isOledNightClock } = useDisplayActivity();
+  const now = useSharedClock(showSeconds ? 'second' : '10s', !isOledNightClock);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 

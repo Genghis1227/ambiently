@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTimePrefs } from '../../utils/timePrefs';
 import { useSharedClock } from '../../utils/sharedClock';
+import { useDisplayActivity } from '../../utils/displayActivity';
 import { getFormattedTimeForZone } from './WorldClockWidget';
 
 interface ClockWidgetProps {
@@ -23,7 +24,8 @@ export const ClockWidget: React.FC<ClockWidgetProps> = ({
   transparentBg = false,
 }) => {
   const { hour12 } = useTimePrefs();
-  const time = useSharedClock(showSeconds ? 'second' : '10s');
+  const { isOledNightClock } = useDisplayActivity();
+  const time = useSharedClock(showSeconds ? 'second' : '10s', !isOledNightClock);
 
   const zt = getFormattedTimeForZone(time, timezone, hour12);
 

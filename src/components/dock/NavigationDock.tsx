@@ -123,7 +123,7 @@ const iconMap: Record<string, React.ReactNode> = {
   Bell: <Bell className="w-5 h-5" />,
 };
 
-export const NavigationDock: React.FC<NavigationDockProps> = ({
+export const NavigationDock: React.FC<NavigationDockProps> = React.memo(({
   tabs,
   activeTabId,
   dockPosition,
@@ -822,4 +822,4 @@ export const NavigationDock: React.FC<NavigationDockProps> = ({
       </nav>
     </>
   );
-};
+});

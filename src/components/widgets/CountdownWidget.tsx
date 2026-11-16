@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Calendar, Sparkles } from 'lucide-react';
 import { useSharedClock } from '../../utils/sharedClock';
+import { useDisplayActivity } from '../../utils/displayActivity';
 
 interface CountdownWidgetProps {
   eventName?: string;
@@ -15,7 +16,8 @@ export const CountdownWidget: React.FC<CountdownWidgetProps> = ({
   isLight = false,
   transparentBg = false,
 }) => {
-  const nowDate = useSharedClock('second');
+  const { isOledNightClock } = useDisplayActivity();
+  const nowDate = useSharedClock('second', !isOledNightClock);
   const nowMs = nowDate.getTime();
 
   const timeLeft = useMemo(() => {
@@ -34,11 +36,15 @@ export const CountdownWidget: React.FC<CountdownWidgetProps> = ({
     return { days, hours, minutes, seconds, isPast: false };
   }, [targetDate, nowMs]);
 
-  const targetDateFormatted = new Date(targetDate).toLocaleDateString([], {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+  const targetDateFormatted = useMemo(
+    () =>
+      new Date(targetDate).toLocaleDateString([], {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      }),
+    [targetDate]
+  );
 
   const stickerShadow = transparentBg && !isLight ? 'drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]' : '';
   const unitBoxClass = transparentBg

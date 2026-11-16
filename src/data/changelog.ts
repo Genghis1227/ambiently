@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.10",
+    date: "November 15, 2026",
+    title: "Widget/Modal Code-Splitting & Clock, Pointer, and Render Performance Optimizations",
+    highlights: [
+      "57% Smaller Initial Client Bundle: Code-split 10 heavy dashboard widgets and 12 interactive modals/views with React.lazy + Suspense across desktop and mobile canvases, cutting the main entry chunk from 688.22 kB to 289.84 kB (73.58 kB gzipped).",
+      "Lower Idle CPU & Night Mode Power Draw: Isolated 10-second shared clock snapshots, paused visual clock subscriptions under OLED Night Clock mode, cached Intl.DateTimeFormat formatters in astronomy calculations, and bucketed Sun/Moon ephemeris math to 60s.",
+      "Smoother Drag/Hover & Fewer Root Re-Renders: Eliminated idle getBoundingClientRect() pointer overhead, coalesced drag/resize updates in requestAnimationFrame with paused card backdrop blur, moved hover elevation to CSS, and scoped App.tsx store selectors with a memoized NavigationDock.",
+    ],
+  },
+  {
     version: "v0.7.9",
     date: "November 15, 2026",
     title: "Repeating Kitchen Timer Alarm, Cross-Tab Auto-Switch & Global Dismiss Overlay",

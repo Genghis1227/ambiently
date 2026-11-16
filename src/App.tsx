@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback, lazy, Suspense } from 'react';
 import { useDashboardStore, flushPendingCloudPush } from './store/dashboardStore';
+import type { AutoOrganizeMode } from './types/dashboard';
 import { useChoreStore } from './store/choreStore';
 import { NavigationDock } from './components/dock/NavigationDock';
 import { Corkboard } from './components/layout/Corkboard';
@@ -62,38 +63,36 @@ const QuickStartModal = lazy(() =>
 );
 
 export function App() {
-  const {
-    isInitialized,
-    initStore,
-    settings,
-    tabs,
-    activeTabId,
-    widgets,
-    notes,
-    setActiveTabId,
-    rotateToTab,
-    unlockKiosk,
-    lockKiosk,
-    isCarouselPaused,
-    pauseCarouselTemporarily,
-    updateSettings,
-    updateNotePosition,
-    updateWidgetPosition,
-    addWidget,
-    removeWidget,
-    updateWidget,
-    addNote,
-    updateNote,
-    deleteNote,
-    permanentlyDeleteNote,
-    permanentlyDeleteNotes,
-    addTab,
-    updateTab,
-    autoOrganizeCanvas,
-    undoAutoOrganize,
-    lastLayoutSnapshot,
-    toggleDockHidden,
-  } = useDashboardStore();
+  const isInitialized = useDashboardStore((s) => s.isInitialized);
+  const initStore = useDashboardStore((s) => s.initStore);
+  const settings = useDashboardStore((s) => s.settings);
+  const tabs = useDashboardStore((s) => s.tabs);
+  const activeTabId = useDashboardStore((s) => s.activeTabId);
+  const widgets = useDashboardStore((s) => s.widgets);
+  const notes = useDashboardStore((s) => s.notes);
+  const setActiveTabId = useDashboardStore((s) => s.setActiveTabId);
+  const rotateToTab = useDashboardStore((s) => s.rotateToTab);
+  const unlockKiosk = useDashboardStore((s) => s.unlockKiosk);
+  const lockKiosk = useDashboardStore((s) => s.lockKiosk);
+  const isCarouselPaused = useDashboardStore((s) => s.isCarouselPaused);
+  const pauseCarouselTemporarily = useDashboardStore((s) => s.pauseCarouselTemporarily);
+  const updateSettings = useDashboardStore((s) => s.updateSettings);
+  const updateNotePosition = useDashboardStore((s) => s.updateNotePosition);
+  const updateWidgetPosition = useDashboardStore((s) => s.updateWidgetPosition);
+  const addWidget = useDashboardStore((s) => s.addWidget);
+  const removeWidget = useDashboardStore((s) => s.removeWidget);
+  const updateWidget = useDashboardStore((s) => s.updateWidget);
+  const addNote = useDashboardStore((s) => s.addNote);
+  const updateNote = useDashboardStore((s) => s.updateNote);
+  const deleteNote = useDashboardStore((s) => s.deleteNote);
+  const permanentlyDeleteNote = useDashboardStore((s) => s.permanentlyDeleteNote);
+  const permanentlyDeleteNotes = useDashboardStore((s) => s.permanentlyDeleteNotes);
+  const addTab = useDashboardStore((s) => s.addTab);
+  const updateTab = useDashboardStore((s) => s.updateTab);
+  const autoOrganizeCanvas = useDashboardStore((s) => s.autoOrganizeCanvas);
+  const undoAutoOrganize = useDashboardStore((s) => s.undoAutoOrganize);
+  const lastLayoutSnapshot = useDashboardStore((s) => s.lastLayoutSnapshot);
+  const toggleDockHidden = useDashboardStore((s) => s.toggleDockHidden);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -753,6 +752,20 @@ export function App() {
   const activeTab = visibleTabs.find((t) => t.id === activeTabId) || homeTab;
   const activeTabIdResolved = activeTab?.id || 'tab-corkboard';
 
+  const handleOpenCreator = useCallback(() => setIsNoteCreatorOpen(true), []);
+  const handleCloseCreator = useCallback(() => setIsNoteCreatorOpen(false), []);
+  const handleOpenTrash = useCallback(() => setIsTrashOpen(true), []);
+  const handleCloseTrash = useCallback(() => setIsTrashOpen(false), []);
+  const handleOpenAddWidget = useCallback(() => setIsAddWidgetOpen(true), []);
+  const handleOpenAddCanvas = useCallback(() => setIsCreateCanvasOpen(true), []);
+  const handleOpenQuickStart = useCallback(() => setIsQuickStartOpen(true), []);
+  const handleOpenBackupModal = useCallback(() => setIsBackupModalOpen(true), []);
+  const handleEnterMobileCompanion = useCallback(() => setForceDesktopMode(false), []);
+  const handleAutoOrganizeActiveTab = useCallback(
+    (mode: AutoOrganizeMode) => autoOrganizeCanvas(activeTabIdResolved, mode),
+    [autoOrganizeCanvas, activeTabIdResolved]
+  );
+
   // `visibleTabs` is a new array on every render, and a background cloud refresh renders every 60
   // seconds. Depending on the ids instead keeps that from restarting the countdown.
   const visibleTabIds = visibleTabs.map((t) => t.id).join('\n');
@@ -974,10 +987,10 @@ export function App() {
           backgroundDimLevel={activeTab?.backgroundDimLevel ?? 45}
           hideNotes={Boolean(activeTab?.hideNotes)}
           isCreatorOpen={isNoteCreatorOpen}
-          onOpenCreator={() => setIsNoteCreatorOpen(true)}
-          onCloseCreator={() => setIsNoteCreatorOpen(false)}
+          onOpenCreator={handleOpenCreator}
+          onCloseCreator={handleCloseCreator}
           isTrashOpen={isTrashOpen}
-          onCloseTrash={() => setIsTrashOpen(false)}
+          onCloseTrash={handleCloseTrash}
           onUpdateNotePos={updateNotePosition}
           onUpdateWidgetPos={updateWidgetPosition}
           onAddNote={addNote}
@@ -987,7 +1000,7 @@ export function App() {
           onPermanentlyDeleteNotes={permanentlyDeleteNotes}
           onAddWidget={addWidget}
           onRemoveWidget={removeWidget}
-          onOpenAddWidget={() => setIsAddWidgetOpen(true)}
+          onOpenAddWidget={handleOpenAddWidget}
           onUpdateWidget={updateWidget}
           onUpdateTab={updateTab}
           snapToGrid={settings.snapToGrid}
@@ -1008,18 +1021,18 @@ export function App() {
         onToggleNightMode={handleToggleNightMode}
         onToggleFullscreen={handleToggleFullscreen}
         isFullscreen={isFullscreen}
-        onConnectFile={() => setIsBackupModalOpen(true)}
+        onConnectFile={handleOpenBackupModal}
         hasFileBound={hasFileBound}
-        onOpenAddWidget={() => setIsAddWidgetOpen(true)}
-        onOpenAddCanvas={() => setIsCreateCanvasOpen(true)}
-        onOpenCreateNote={() => setIsNoteCreatorOpen(true)}
-        onOpenQuickStart={() => setIsQuickStartOpen(true)}
-        onOpenTrash={() => setIsTrashOpen(true)}
+        onOpenAddWidget={handleOpenAddWidget}
+        onOpenAddCanvas={handleOpenAddCanvas}
+        onOpenCreateNote={handleOpenCreator}
+        onOpenQuickStart={handleOpenQuickStart}
+        onOpenTrash={handleOpenTrash}
         trashCount={trashCount}
-        onAutoOrganize={(mode) => autoOrganizeCanvas(activeTabIdResolved, mode)}
+        onAutoOrganize={handleAutoOrganizeActiveTab}
         onUndoOrganize={undoAutoOrganize}
         canUndoOrganize={lastLayoutSnapshot?.tabId === activeTabIdResolved}
-        onToggleMobileCompanion={isMobileViewport ? () => setForceDesktopMode(false) : undefined}
+        onToggleMobileCompanion={isMobileViewport ? handleEnterMobileCompanion : undefined}
         isDockHidden={settings.isDockHidden}
         onToggleDockHidden={toggleDockHidden}
         isNightMode={settings.nightModeEnabled}

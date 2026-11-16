@@ -12,7 +12,7 @@ export interface SharedClockTickerOptions {
 
 export interface SharedClockTicker {
   subscribe: (granularity: ClockGranularity, listener: () => void) => () => void;
-  getSnapshot: () => number;
+  getSnapshot: (granularity?: ClockGranularity) => number;
   getSubscriberCounts: () => { second: number; tenSec: number };
   hasActiveTimer: () => boolean;
 }
@@ -48,6 +48,7 @@ export function createSharedClockTicker(
   const secondListeners = new Set<() => void>();
   const tenSecListeners = new Set<() => void>();
   let currentNow = nowFn();
+  let currentTenSecNow = currentNow;
   let lastTenSecBucket = Math.floor(currentNow / 10000);
   let activeTimer: ReturnType<typeof setTimeout> | null = null;
   let unsubscribeVisibility: (() => void) | null = null;
@@ -71,6 +72,7 @@ export function createSharedClockTicker(
     const shouldNotifyTenSec = forceTenSec || bucket !== lastTenSecBucket;
     if (shouldNotifyTenSec) {
       lastTenSecBucket = bucket;
+      currentTenSecNow = currentNow;
     }
 
     secondListeners.forEach((cb) => cb());
@@ -107,6 +109,7 @@ export function createSharedClockTicker(
 
     if (wasEmpty) {
       currentNow = nowFn();
+      currentTenSecNow = currentNow;
       lastTenSecBucket = Math.floor(currentNow / 10000);
       unsubscribeVisibility = onVisibilitySubscribe(() => {
         if (totalSubscribers() > 0) {
@@ -142,7 +145,8 @@ export function createSharedClockTicker(
 
   return {
     subscribe,
-    getSnapshot: () => currentNow,
+    getSnapshot: (granularity: ClockGranularity = 'second') =>
+      granularity === '10s' ? currentTenSecNow : currentNow,
     getSubscriberCounts: () => ({
       second: secondListeners.size,
       tenSec: tenSecListeners.size,
@@ -155,16 +159,27 @@ const defaultClockTicker = createSharedClockTicker();
 
 const subscribeSecond = (listener: () => void) => defaultClockTicker.subscribe('second', listener);
 const subscribeTenSec = (listener: () => void) => defaultClockTicker.subscribe('10s', listener);
-const getClockTimestampSnapshot = () => defaultClockTicker.getSnapshot();
+const noopSubscribe = () => () => {};
+const getClockTimestampSnapshot = () => defaultClockTicker.getSnapshot('second');
+const getTenSecTimestampSnapshot = () => defaultClockTicker.getSnapshot('10s');
 const getServerClockSnapshot = () => 0;
 
 /**
  * React hook subscribing to the shared wall-clock ticker at either 1-second or 10-second cadence.
+ * Pass `enabled = false` to pause visual clock re-renders (e.g. under opaque OLED Night Clock).
  */
-export function useSharedClock(granularity: ClockGranularity = 'second'): Date {
+export function useSharedClock(
+  granularity: ClockGranularity = 'second',
+  enabled: boolean = true
+): Date {
+  const subscribe = !enabled
+    ? noopSubscribe
+    : granularity === '10s'
+      ? subscribeTenSec
+      : subscribeSecond;
   const timestamp = useSyncExternalStore(
-    granularity === '10s' ? subscribeTenSec : subscribeSecond,
-    getClockTimestampSnapshot,
+    subscribe,
+    granularity === '10s' ? getTenSecTimestampSnapshot : getClockTimestampSnapshot,
     getServerClockSnapshot
   );
   return useMemo(() => new Date(timestamp), [timestamp]);
