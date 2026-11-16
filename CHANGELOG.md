@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.10] - 2026-11-15
+
+### Widget/Modal Code-Splitting & Clock, Pointer, and Render Performance Optimizations
+* **Widget & Heavy Modal Code-Splitting (`src/components/layout/Corkboard.tsx`, `src/components/mobile/MobileCompanion.tsx`, `src/components/widgets/KanbanWidget.tsx`, `src/components/widgets/MealPlannerWidget.tsx`, `src/components/widgets/ChoreWidget.tsx`, `src/components/widgets/CalendarWidget.tsx`):**
+  * Converted 10 heavy widgets (`CalendarWidget`, `RssWidget`, `PhotoFrameWidget`, `ChoreWidget`, `MealPlannerWidget`, `KanbanWidget`, `FinanceWidget`, `TimerWidget`, `AirQualityWidget`, `SunMoonWidget`) and interactive modals (`KanbanBoardView`, `KanbanCardModal`, `KanbanBoardModal`, `KanbanArchiveDrawer`, `KanbanConfirmDialog`, `MealEntryModal`, `CookingModeModal`, `SharedSplitModal`, `ProposeRewardModal`, `ProposalsTrayModal`, `TrophyCaseModal`, `CalendarUrlGuideModal`) to `React.lazy` with `Suspense`.
+  * Eliminated the `KanbanBoardView.tsx` ineffective dynamic import warning and reduced the main client entry bundle from `688.22 kB` (`159.37 kB` gzip) to `289.84 kB` (`73.58 kB` gzip).
+* **Shared Clock Isolation, OLED Night Clock Suspension & Astronomy Caching (`src/utils/sharedClock.ts`, `src/utils/astronomy.ts`, `ClockWidget.tsx`, `ClockWeatherWidget.tsx`, `WorldClockWidget.tsx`, `CountdownWidget.tsx`, `SunMoonWidget.tsx`, `tests/mediaPerf.test.ts`):**
+  * Isolated `'10s'` clock snapshots from 1s ticks in `createSharedClockTicker`, added an `enabled` parameter to `useSharedClock` (`noopSubscribe` when disabled), and suspended shared clock subscriptions on visual clock widgets under `isOledNightClock`.
+  * Cached `Intl.DateTimeFormat` formatters by timezone in `getCalendarDateInTimeZone`, bucketed `SunMoonWidget` ephemeris calculations to 60-second intervals, and memoized `targetDateFormatted` in `CountdownWidget`.
+* **Canvas Pointer Pipeline, CSS Hover Elevation & Selector Memoization (`Corkboard.tsx`, `NavigationDock.tsx`, `App.tsx`, `ARCHITECTURE.md`):**
+  * Eliminated idle `getBoundingClientRect()` calls in `Corkboard` `handlePointerMove`, cached the canvas `DOMRect` on `pointerdown`, coalesced drag/resize/rotate state updates with `requestAnimationFrame`, suspended `backdrop-blur-md` during active card manipulation, and replaced `hoveredCardId` React state with CSS `--card-z` + `hover:z-[55]`.
+  * Replaced bare `useDashboardStore()` destructuring in `src/App.tsx` with individual selectors and `useCallback` handlers, and wrapped `NavigationDock` in `React.memo`.
+
+---
+
 ## [0.7.9] - 2026-11-15
 
 ### Repeating Kitchen Timer Alarm, Cross-Tab Auto-Switch & Global Dismiss Overlay

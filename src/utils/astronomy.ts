@@ -56,18 +56,24 @@ function normalizeDeg(deg: number): number {
   return ((deg % 360) + 360) % 360;
 }
 
+const calendarDateFormatterCache = new Map<string, Intl.DateTimeFormat>();
+
 function getCalendarDateInTimeZone(
   date: Date,
   timeZone?: string
 ): { year: number; month: number; day: number } {
   if (timeZone) {
     try {
-      const formatter = new Intl.DateTimeFormat('en-CA', {
-        timeZone,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      });
+      let formatter = calendarDateFormatterCache.get(timeZone);
+      if (!formatter) {
+        formatter = new Intl.DateTimeFormat('en-CA', {
+          timeZone,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        });
+        calendarDateFormatterCache.set(timeZone, formatter);
+      }
       const parts = formatter.formatToParts(date);
       const year = Number(parts.find((p) => p.type === 'year')?.value);
       const month = Number(parts.find((p) => p.type === 'month')?.value);

@@ -42,10 +42,19 @@ import { localDateKey } from '../../utils/timePrefs';
 import { isAmbientlyInNightMode } from '../../utils/confetti';
 import { ProfileAvatar } from '../common/ProfileAvatar';
 import { fireConfettiCelebration } from '../common/ConfettiCelebration';
-import { SharedSplitModal } from '../chores/SharedSplitModal';
-import { ProposeRewardModal } from '../chores/ProposeRewardModal';
-import { ProposalsTrayModal } from '../chores/ProposalsTrayModal';
-import { TrophyCaseModal } from '../chores/TrophyCaseModal';
+
+const SharedSplitModal = React.lazy(() =>
+  import('../chores/SharedSplitModal').then((m) => ({ default: m.SharedSplitModal }))
+);
+const ProposeRewardModal = React.lazy(() =>
+  import('../chores/ProposeRewardModal').then((m) => ({ default: m.ProposeRewardModal }))
+);
+const ProposalsTrayModal = React.lazy(() =>
+  import('../chores/ProposalsTrayModal').then((m) => ({ default: m.ProposalsTrayModal }))
+);
+const TrophyCaseModal = React.lazy(() =>
+  import('../chores/TrophyCaseModal').then((m) => ({ default: m.TrophyCaseModal }))
+);
 
 export interface ChoreWidgetProps {
   title?: string;
@@ -1266,77 +1275,79 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
       </div>
 
       {/* Interactive Shared Chore Split Modal */}
-      {splitTarget && (
-        <SharedSplitModal
-          key={splitTarget.instance.instanceId}
-          isOpen={Boolean(splitTarget)}
-          instance={splitTarget.instance}
-          template={splitTarget.template}
-          profiles={splitModalProfiles}
-          defaultSelectedProfileId={splitTarget.defaultProfileId}
-          isLight={isLight}
-          onClose={() => setSplitTarget(null)}
-          onConfirmSplit={async (splits) => {
-            const targetInstance = splitTarget.instance;
-            const res = await completeChore(targetInstance.instanceId, splits);
-            if (res.success && !res.requiresApproval) {
-              const firstProfile = allProfiles.find((p) => p.id === splits[0]?.profileId);
-              maybeCelebrateCompletion(firstProfile?.color);
-            }
-          }}
-        />
-      )}
+      <React.Suspense fallback={null}>
+        {splitTarget && (
+          <SharedSplitModal
+            key={splitTarget.instance.instanceId}
+            isOpen={Boolean(splitTarget)}
+            instance={splitTarget.instance}
+            template={splitTarget.template}
+            profiles={splitModalProfiles}
+            defaultSelectedProfileId={splitTarget.defaultProfileId}
+            isLight={isLight}
+            onClose={() => setSplitTarget(null)}
+            onConfirmSplit={async (splits) => {
+              const targetInstance = splitTarget.instance;
+              const res = await completeChore(targetInstance.instanceId, splits);
+              if (res.success && !res.requiresApproval) {
+                const firstProfile = allProfiles.find((p) => p.id === splits[0]?.profileId);
+                maybeCelebrateCompletion(firstProfile?.color);
+              }
+            }}
+          />
+        )}
 
-      {/* Kid Wishlist Proposal Modal (Create & Edit) */}
-      {(isProposeModalOpen || Boolean(editingProposal)) && (
-        <ProposeRewardModal
-          key={editingProposal?.id || 'new-proposal'}
-          isOpen={isProposeModalOpen || Boolean(editingProposal)}
-          profiles={proposeModalProfiles}
-          defaultProfileId={activeScope}
-          editingProposal={editingProposal}
-          onClose={() => {
-            setIsProposeModalOpen(false);
-            setEditingProposal(null);
-          }}
-          onSubmitProposal={async (proposal) => {
-            if (editingProposal) {
-              await updateWishlistProposal(editingProposal.id, proposal);
-            } else {
-              await proposeWishlistReward(proposal);
-            }
-          }}
-        />
-      )}
+        {/* Kid Wishlist Proposal Modal (Create & Edit) */}
+        {(isProposeModalOpen || Boolean(editingProposal)) && (
+          <ProposeRewardModal
+            key={editingProposal?.id || 'new-proposal'}
+            isOpen={isProposeModalOpen || Boolean(editingProposal)}
+            profiles={proposeModalProfiles}
+            defaultProfileId={activeScope}
+            editingProposal={editingProposal}
+            onClose={() => {
+              setIsProposeModalOpen(false);
+              setEditingProposal(null);
+            }}
+            onSubmitProposal={async (proposal) => {
+              if (editingProposal) {
+                await updateWishlistProposal(editingProposal.id, proposal);
+              } else {
+                await proposeWishlistReward(proposal);
+              }
+            }}
+          />
+        )}
 
-      {/* Proposals Tray Modal */}
-      {isProposalsTrayOpen && (
-        <ProposalsTrayModal
-          isOpen={isProposalsTrayOpen}
-          profiles={allProfiles}
-          rewards={snapshot.rewards}
-          defaultScope="household"
-          onClose={() => setIsProposalsTrayOpen(false)}
-          onOpenProposeModal={() => {
-            setEditingProposal(null);
-            setIsProposeModalOpen(true);
-          }}
-          onEditProposal={(reward) => setEditingProposal(reward)}
-          onWithdrawProposal={withdrawWishlistProposal}
-          onOpenParentPricing={() => setParentDrawerOpen(true, 'pricing')}
-        />
-      )}
+        {/* Proposals Tray Modal */}
+        {isProposalsTrayOpen && (
+          <ProposalsTrayModal
+            isOpen={isProposalsTrayOpen}
+            profiles={allProfiles}
+            rewards={snapshot.rewards}
+            defaultScope="household"
+            onClose={() => setIsProposalsTrayOpen(false)}
+            onOpenProposeModal={() => {
+              setEditingProposal(null);
+              setIsProposeModalOpen(true);
+            }}
+            onEditProposal={(reward) => setEditingProposal(reward)}
+            onWithdrawProposal={withdrawWishlistProposal}
+            onOpenParentPricing={() => setParentDrawerOpen(true, 'pricing')}
+          />
+        )}
 
-      {/* Trophy Case Modal */}
-      {isTrophyCaseOpen && (
-        <TrophyCaseModal
-          isOpen={isTrophyCaseOpen}
-          profiles={allProfiles}
-          trophies={snapshot.trophies}
-          defaultScope={activeScope}
-          onClose={() => setIsTrophyCaseOpen(false)}
-        />
-      )}
+        {/* Trophy Case Modal */}
+        {isTrophyCaseOpen && (
+          <TrophyCaseModal
+            isOpen={isTrophyCaseOpen}
+            profiles={allProfiles}
+            trophies={snapshot.trophies}
+            defaultScope={activeScope}
+            onClose={() => setIsTrophyCaseOpen(false)}
+          />
+        )}
+      </React.Suspense>
     </div>
   );
 };

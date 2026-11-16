@@ -22,12 +22,23 @@ import { isAmbientlyInNightMode } from '../../utils/confetti';
 import { KanbanBoardSelectorPill } from '../kanban/KanbanBoardSelectorPill';
 import { KanbanCardItem } from '../kanban/KanbanCardItem';
 import { KanbanInlineAdd } from '../kanban/KanbanInlineAdd';
-import { KanbanCardModal } from '../kanban/KanbanCardModal';
-import { KanbanBoardModal } from '../kanban/KanbanBoardModal';
-import { KanbanArchiveDrawer } from '../kanban/KanbanArchiveDrawer';
-import { KanbanConfirmDialog } from '../kanban/KanbanConfirmDialog';
-import { KanbanBoardView } from '../kanban/KanbanBoardView';
 import { useKanbanPointerDnD } from '../kanban/useKanbanPointerDnD';
+
+const KanbanCardModal = React.lazy(() =>
+  import('../kanban/KanbanCardModal').then((m) => ({ default: m.KanbanCardModal }))
+);
+const KanbanBoardModal = React.lazy(() =>
+  import('../kanban/KanbanBoardModal').then((m) => ({ default: m.KanbanBoardModal }))
+);
+const KanbanArchiveDrawer = React.lazy(() =>
+  import('../kanban/KanbanArchiveDrawer').then((m) => ({ default: m.KanbanArchiveDrawer }))
+);
+const KanbanConfirmDialog = React.lazy(() =>
+  import('../kanban/KanbanConfirmDialog').then((m) => ({ default: m.KanbanConfirmDialog }))
+);
+const KanbanBoardView = React.lazy(() =>
+  import('../kanban/KanbanBoardView').then((m) => ({ default: m.KanbanBoardView }))
+);
 
 export interface KanbanWidgetProps {
   widgetId: string;
@@ -719,70 +730,78 @@ export const KanbanWidget: React.FC<KanbanWidgetProps> = ({
       )}
 
       {/* Sub-Modals, Drawers & Full-Screen Overlay View */}
-      <KanbanCardModal
-        cardId={editingCardId}
-        onClose={() => setEditingCardId(null)}
-      />
+      <React.Suspense fallback={null}>
+        {Boolean(editingCardId) && (
+          <KanbanCardModal
+            cardId={editingCardId}
+            onClose={() => setEditingCardId(null)}
+          />
+        )}
 
-      <KanbanBoardModal
-        isOpen={boardModalState.open}
-        mode={boardModalState.mode}
-        boardId={boardModalState.boardId}
-        onClose={() => setBoardModalState({ open: false, mode: 'create' })}
-        onBoardCreated={(newBoardId) => handleSelectBoard(newBoardId)}
-        onBoardDeleted={(deletedId) => {
-          if (effectiveBoardId === deletedId) {
-            const remaining = boards.filter((b) => b.id !== deletedId);
-            if (remaining[0]) {
-              handleSelectBoard(remaining[0].id);
-            }
-          }
-        }}
-      />
+        {boardModalState.open && (
+          <KanbanBoardModal
+            isOpen={boardModalState.open}
+            mode={boardModalState.mode}
+            boardId={boardModalState.boardId}
+            onClose={() => setBoardModalState({ open: false, mode: 'create' })}
+            onBoardCreated={(newBoardId) => handleSelectBoard(newBoardId)}
+            onBoardDeleted={(deletedId) => {
+              if (effectiveBoardId === deletedId) {
+                const remaining = boards.filter((b) => b.id !== deletedId);
+                if (remaining[0]) {
+                  handleSelectBoard(remaining[0].id);
+                }
+              }
+            }}
+          />
+        )}
 
-      {activeBoard && (
-        <KanbanArchiveDrawer
-          isOpen={isArchiveOpen}
-          boardId={activeBoard.id}
-          boardName={activeBoard.name}
-          onClose={() => setIsArchiveOpen(false)}
-        />
-      )}
+        {activeBoard && isArchiveOpen && (
+          <KanbanArchiveDrawer
+            isOpen={isArchiveOpen}
+            boardId={activeBoard.id}
+            boardName={activeBoard.name}
+            onClose={() => setIsArchiveOpen(false)}
+          />
+        )}
 
-      {activeBoard && (
-        <KanbanConfirmDialog
-          isOpen={confirmClearDoneOpen}
-          title="Clear Done Column"
-          message={`Permanently delete ${doneCount} completed card${
-            doneCount === 1 ? '' : 's'
-          } from Done? This cannot be undone.`}
-          confirmLabel="Clear Done"
-          onCancel={() => setConfirmClearDoneOpen(false)}
-          onConfirm={async () => {
-            setConfirmClearDoneOpen(false);
-            await clearDoneCards(activeBoard.id);
-          }}
-        />
-      )}
+        {activeBoard && confirmClearDoneOpen && (
+          <KanbanConfirmDialog
+            isOpen={confirmClearDoneOpen}
+            title="Clear Done Column"
+            message={`Permanently delete ${doneCount} completed card${
+              doneCount === 1 ? '' : 's'
+            } from Done? This cannot be undone.`}
+            confirmLabel="Clear Done"
+            onCancel={() => setConfirmClearDoneOpen(false)}
+            onConfirm={async () => {
+              setConfirmClearDoneOpen(false);
+              await clearDoneCards(activeBoard.id);
+            }}
+          />
+        )}
 
-      <KanbanBoardView
-        isOpen={isFullViewOpen}
-        onClose={() => setIsFullViewOpen(false)}
-        mode="overlay"
-        widgetId={widgetId}
-        config={{
-          widgetInstanceId: widgetId,
-          activeBoardId: effectiveBoardId,
-          activeColumnId: localColumnId,
-        }}
-        isLight={isLight}
-        onUpdateConfig={(updates) => {
-          if (updates.activeBoardId) {
-            setLocalBoardId(updates.activeBoardId);
-          }
-          onUpdateConfig?.(updates);
-        }}
-      />
+        {isFullViewOpen && (
+          <KanbanBoardView
+            isOpen={isFullViewOpen}
+            onClose={() => setIsFullViewOpen(false)}
+            mode="overlay"
+            widgetId={widgetId}
+            config={{
+              widgetInstanceId: widgetId,
+              activeBoardId: effectiveBoardId,
+              activeColumnId: localColumnId,
+            }}
+            isLight={isLight}
+            onUpdateConfig={(updates) => {
+              if (updates.activeBoardId) {
+                setLocalBoardId(updates.activeBoardId);
+              }
+              onUpdateConfig?.(updates);
+            }}
+          />
+        )}
+      </React.Suspense>
 
       {DragGhostPortal}
     </div>

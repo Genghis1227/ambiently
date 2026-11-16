@@ -41,21 +41,42 @@ import { WeatherWidget } from '../widgets/WeatherWidget';
 import { CountdownWidget } from '../widgets/CountdownWidget';
 import { QuotesWidget } from '../widgets/QuotesWidget';
 import { TextBoxWidget } from '../widgets/TextBoxWidget';
-import { CalendarWidget } from '../widgets/CalendarWidget';
 import { TileErrorBoundary } from '../common/TileErrorBoundary';
-import { RssWidget } from '../widgets/RssWidget';
-import { PhotoFrameWidget } from '../widgets/PhotoFrameWidget';
 import { StickyNotesWidget } from '../widgets/StickyNotesWidget';
 import { MediaEmbedWidget } from '../widgets/MediaEmbedWidget';
 import { ImageWidget } from '../widgets/ImageWidget';
-import { ChoreWidget } from '../widgets/ChoreWidget';
-import { MealPlannerWidget } from '../widgets/MealPlannerWidget';
-import { KanbanWidget } from '../widgets/KanbanWidget';
-import { FinanceWidget } from '../widgets/FinanceWidget';
-import { TimerWidget } from '../widgets/TimerWidget';
-import { AirQualityWidget } from '../widgets/AirQualityWidget';
-import { SunMoonWidget } from '../widgets/SunMoonWidget';
 import { ShoppingListNoteBody } from '../common/ShoppingListNoteBody';
+
+const CalendarWidget = React.lazy(() =>
+  import('../widgets/CalendarWidget').then((m) => ({ default: m.CalendarWidget }))
+);
+const RssWidget = React.lazy(() =>
+  import('../widgets/RssWidget').then((m) => ({ default: m.RssWidget }))
+);
+const PhotoFrameWidget = React.lazy(() =>
+  import('../widgets/PhotoFrameWidget').then((m) => ({ default: m.PhotoFrameWidget }))
+);
+const ChoreWidget = React.lazy(() =>
+  import('../widgets/ChoreWidget').then((m) => ({ default: m.ChoreWidget }))
+);
+const MealPlannerWidget = React.lazy(() =>
+  import('../widgets/MealPlannerWidget').then((m) => ({ default: m.MealPlannerWidget }))
+);
+const KanbanWidget = React.lazy(() =>
+  import('../widgets/KanbanWidget').then((m) => ({ default: m.KanbanWidget }))
+);
+const FinanceWidget = React.lazy(() =>
+  import('../widgets/FinanceWidget').then((m) => ({ default: m.FinanceWidget }))
+);
+const TimerWidget = React.lazy(() =>
+  import('../widgets/TimerWidget').then((m) => ({ default: m.TimerWidget }))
+);
+const AirQualityWidget = React.lazy(() =>
+  import('../widgets/AirQualityWidget').then((m) => ({ default: m.AirQualityWidget }))
+);
+const SunMoonWidget = React.lazy(() =>
+  import('../widgets/SunMoonWidget').then((m) => ({ default: m.SunMoonWidget }))
+);
 import { categorizeIngredient, parseIngredient } from '../../utils/ingredientAggregator';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { CANVAS_THEMES, isCanvasThemeLight } from '../../data/canvasThemes';
@@ -192,7 +213,8 @@ const MemoizedCanvasWidgetBody: React.FC<CanvasWidgetBodyProps> = React.memo(({
 
   return (
     <TileErrorBoundary label={widget.title} resetKey={widget.updated_at}>
-      {widget.type === 'weather' ? (
+      <React.Suspense fallback={null}>
+        {widget.type === 'weather' ? (
         <WeatherWidget
           locationName={widget.config?.locationName}
           latitude={widget.config?.latitude}
@@ -420,6 +442,7 @@ const MemoizedCanvasWidgetBody: React.FC<CanvasWidgetBodyProps> = React.memo(({
           transparentBg={isFramelessWidget}
         />
       ) : null}
+      </React.Suspense>
     </TileErrorBoundary>
   );
 });
@@ -521,8 +544,9 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     startH: 0,
   });
 
-  // Grab-and-Rotate state
-  const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
+  // Grab-and-Rotate state & active gesture refs
+  const activeContainerRectRef = useRef<DOMRect | null>(null);
+  const gestureRafRef = useRef<number | null>(null);
   const [rotatingId, setRotatingId] = useState<string | null>(null);
   const [rotatingType, setRotatingType] = useState<'note' | 'widget'>('note');
   const [rotateAngle, setRotateAngle] = useState<number | null>(null);
@@ -984,6 +1008,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
     const cardEl = (e.currentTarget as HTMLElement).closest('[data-canvas-card="true"]');
     const containerRect = containerRef.current.getBoundingClientRect();
+    activeContainerRectRef.current = containerRect;
     const cardRect = cardEl?.getBoundingClientRect();
 
     const fallbackWRatio = cardRect ? cardRect.width / containerRect.width : 0.26;
@@ -1059,6 +1084,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
+    activeContainerRectRef.current = rect;
     const containerX = e.clientX - rect.left;
     const containerY = e.clientY - rect.top;
 
@@ -1085,9 +1111,24 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     } catch {}
   };
 
+  const scheduleGestureRender = () => {
+    if (gestureRafRef.current !== null || typeof window === 'undefined') return;
+    gestureRafRef.current = window.requestAnimationFrame(() => {
+      gestureRafRef.current = null;
+      if (rotateAngleRef.current !== null) {
+        setRotateAngle(rotateAngleRef.current);
+      } else if (resizeRatioRef.current) {
+        setResizeRatio(resizeRatioRef.current);
+      } else if (dragPosRef.current) {
+        setDragPos(dragPosRef.current);
+      }
+    });
+  };
+
   const handlePointerMove = (e: React.PointerEvent | PointerEvent) => {
-    if (!containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
+    if (!rotatingId && !resizingId && !draggingId) return;
+    const rect = activeContainerRectRef.current ?? containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
 
     // 1. Grab-and-Rotate in progress
     if (rotatingId) {
@@ -1106,7 +1147,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       nextRotation = Math.max(-60, Math.min(60, nextRotation));
 
       rotateAngleRef.current = nextRotation;
-      setRotateAngle(nextRotation);
+      scheduleGestureRender();
       return;
     }
 
@@ -1133,7 +1174,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       }
 
       resizeRatioRef.current = { wRatio: newW, hRatio: newH };
-      setResizeRatio({ wRatio: newW, hRatio: newH });
+      scheduleGestureRender();
       return;
     }
 
@@ -1165,12 +1206,18 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       }
 
       dragPosRef.current = { xRatio: nextXRatio, yRatio: nextYRatio };
-      setDragPos({ xRatio: nextXRatio, yRatio: nextYRatio });
+      scheduleGestureRender();
       return;
     }
   };
 
   const handlePointerUp = (e?: React.PointerEvent | PointerEvent) => {
+    if (gestureRafRef.current !== null && typeof window !== 'undefined') {
+      window.cancelAnimationFrame(gestureRafRef.current);
+      gestureRafRef.current = null;
+    }
+    activeContainerRectRef.current = null;
+
     if (e && 'currentTarget' in e && (e as any).currentTarget && (e as any).pointerId !== undefined) {
       try {
         ((e as any).currentTarget as HTMLElement).releasePointerCapture((e as any).pointerId);
@@ -1295,6 +1342,11 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     window.addEventListener('pointercancel', handleWindowPointerUp);
 
     return () => {
+      if (gestureRafRef.current !== null) {
+        cancelAnimationFrame(gestureRafRef.current);
+        gestureRafRef.current = null;
+      }
+      activeContainerRectRef.current = null;
       window.removeEventListener('pointermove', handleWindowPointerMove);
       window.removeEventListener('pointerup', handleWindowPointerUp);
       window.removeEventListener('pointercancel', handleWindowPointerUp);
@@ -1691,7 +1743,6 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         const isRotating = rotatingId === widget.id;
         const isResizing = resizingId === widget.id;
         const isActiveManipulating = isDragging || isResizing || isRotating;
-        const isHovered = hoveredCardId === widget.id;
         const isFramelessWidget = isWidgetStickerMode(widget, defaultWidgetStyle);
 
         const displayPos = {
@@ -1709,12 +1760,6 @@ export const Corkboard: React.FC<CorkboardProps> = ({
           <div
             key={widget.id}
             data-canvas-card="true"
-            onPointerEnter={(e) => {
-              if (!isPortalEvent(e)) setHoveredCardId(widget.id);
-            }}
-            onPointerLeave={(e) => {
-              if (!isPortalEvent(e)) setHoveredCardId((prev) => (prev === widget.id ? null : prev));
-            }}
             onPointerDown={(e) => {
               if (isPortalEvent(e)) return;
               if (!isFullScreen && !isCanvasLocked) handlePointerDown(e, widget.id, 'widget', pos);
@@ -1757,7 +1802,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                     userSelect: 'none',
                     WebkitUserSelect: 'none',
                   }
-                : {
+                : ({
                     position: 'absolute',
                     left: `${displayPos.xRatio * 100}%`,
                     top: `${displayPos.yRatio * 100}%`,
@@ -1768,7 +1813,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                     maxWidth: '100%',
                     maxHeight: '100%',
                     transform: `rotate(${displayPos.rotation}deg) ${isDragging ? 'scale(1.02)' : 'scale(1)'}`,
-                    zIndex: isActiveManipulating ? 58 : isHovered && !isCanvasLocked ? 55 : pos.zIndex,
+                    '--card-z': isActiveManipulating ? 58 : pos.zIndex,
                     touchAction: 'none',
                     WebkitTouchCallout: 'none',
                     userSelect: 'none',
@@ -1777,7 +1822,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                     transition: isActiveManipulating
                       ? 'none'
                       : 'left 0.3s cubic-bezier(0.22, 1, 0.36, 1), top 0.3s cubic-bezier(0.22, 1, 0.36, 1), width 0.3s cubic-bezier(0.22, 1, 0.36, 1), height 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.25s ease-out, box-shadow 0.2s',
-                  }
+                  } as React.CSSProperties)
             }
             className={`group ${
               isFullScreen
@@ -1795,9 +1840,9 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               isFramelessWidget
                 ? isWidgetLight ? 'bg-transparent text-slate-800' : 'bg-transparent text-white'
                 : isWidgetLight
-                ? 'bg-white/95 backdrop-blur-md shadow-xl text-slate-800'
-                : 'bg-gray-900/80 backdrop-blur-md shadow-2xl text-white'
-            } ${
+                ? `bg-white/95 ${isActiveManipulating ? '' : 'backdrop-blur-md '}shadow-xl text-slate-800`
+                : `bg-gray-900/80 ${isActiveManipulating ? '' : 'backdrop-blur-md '}shadow-2xl text-white`
+            } ${isFullScreen ? '' : `z-[var(--card-z)] ${!isCanvasLocked && !isActiveManipulating ? 'hover:z-[55] ' : ''}`}${
               isCanvasLocked || isFullScreen ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
             } ${isFullScreen ? '' : 'touch-none'} select-none transition-shadow ${
               isDragging || isRotating
@@ -2079,7 +2124,6 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         const isRotating = rotatingId === note.id;
         const isResizing = resizingId === note.id;
         const isActiveManipulating = isDragging || isResizing || isRotating;
-        const isHovered = hoveredCardId === note.id;
         const isExpiringSoon =
           note.expiresAt &&
           new Date(note.expiresAt).getTime() - now.getTime() < 12 * 60 * 60 * 1000;
@@ -2098,12 +2142,6 @@ export const Corkboard: React.FC<CorkboardProps> = ({
           <div
             key={note.id}
             data-canvas-card="true"
-            onPointerEnter={(e) => {
-              if (!isPortalEvent(e)) setHoveredCardId(note.id);
-            }}
-            onPointerLeave={(e) => {
-              if (!isPortalEvent(e)) setHoveredCardId((prev) => (prev === note.id ? null : prev));
-            }}
             onPointerDown={(e) => {
               if (isPortalEvent(e)) return;
               if (!isCanvasLocked) handlePointerDown(e, note.id, 'note', pos);
@@ -2160,7 +2198,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               maxHeight: '100%',
               transform: `rotate(${displayPos.rotation}deg) ${isDragging ? 'scale(1.03)' : 'scale(1)'}`,
               backgroundColor: note.bgColor || '#fef08a',
-              zIndex: isActiveManipulating ? 58 : isHovered && !isCanvasLocked ? 55 : pos.zIndex,
+              '--card-z': isActiveManipulating ? 58 : pos.zIndex,
               touchAction: 'none',
               WebkitTouchCallout: 'none',
               userSelect: 'none',
@@ -2169,8 +2207,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               transition: isActiveManipulating
                 ? 'none'
                 : 'left 0.3s cubic-bezier(0.22, 1, 0.36, 1), top 0.3s cubic-bezier(0.22, 1, 0.36, 1), width 0.3s cubic-bezier(0.22, 1, 0.36, 1), height 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.25s ease-out, box-shadow 0.2s',
-            }}
-            className={`group rounded-2xl p-3.5 shadow-2xl text-gray-900 ${
+            } as React.CSSProperties}
+            className={`group rounded-2xl p-3.5 shadow-2xl text-gray-900 z-[var(--card-z)] ${!isCanvasLocked && !isActiveManipulating ? 'hover:z-[55] ' : ''}${
               isCanvasLocked ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
             } border border-black/10 touch-none select-none transition-all ${
               isDragging || isRotating

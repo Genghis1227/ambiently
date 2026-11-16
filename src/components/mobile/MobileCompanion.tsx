@@ -46,18 +46,15 @@ import { useSyncRefusal } from '../../hooks/useSyncRefusal';
 const ChangelogModal = React.lazy(() =>
   import('../changelog/ChangelogModal').then((m) => ({ default: m.ChangelogModal }))
 );
-import { CalendarWidget } from '../widgets/CalendarWidget';
 import { ClockWeatherWidget } from '../widgets/ClockWeatherWidget';
 import { ClockWidget } from '../widgets/ClockWidget';
 import { WorldClockWidget } from '../widgets/WorldClockWidget';
 import { WeatherWidget } from '../widgets/WeatherWidget';
 import { CountdownWidget } from '../widgets/CountdownWidget';
-import { PhotoFrameWidget } from '../widgets/PhotoFrameWidget';
 import { inferCuratedCategoryId } from '../../services/photos';
 import { CANVAS_BLUEPRINTS } from '../../utils/canvasBlueprints';
 import { isWidgetStickerMode } from '../../utils/widgetStickerMode';
 import { isSettingsPinRequired } from '../../utils/pinValidation';
-import { RssWidget } from '../widgets/RssWidget';
 import { QuotesWidget } from '../widgets/QuotesWidget';
 import { MediaEmbedWidget } from '../widgets/MediaEmbedWidget';
 
@@ -72,13 +69,37 @@ const AddWidgetModal = React.lazy(() =>
 );
 import { TextBoxWidget } from '../widgets/TextBoxWidget';
 import { ImageWidget } from '../widgets/ImageWidget';
-import { ChoreWidget } from '../widgets/ChoreWidget';
-import { MealPlannerWidget } from '../widgets/MealPlannerWidget';
-import { KanbanWidget } from '../widgets/KanbanWidget';
-import { FinanceWidget } from '../widgets/FinanceWidget';
-import { TimerWidget } from '../widgets/TimerWidget';
-import { AirQualityWidget } from '../widgets/AirQualityWidget';
-import { SunMoonWidget } from '../widgets/SunMoonWidget';
+
+const CalendarWidget = React.lazy(() =>
+  import('../widgets/CalendarWidget').then((m) => ({ default: m.CalendarWidget }))
+);
+const PhotoFrameWidget = React.lazy(() =>
+  import('../widgets/PhotoFrameWidget').then((m) => ({ default: m.PhotoFrameWidget }))
+);
+const RssWidget = React.lazy(() =>
+  import('../widgets/RssWidget').then((m) => ({ default: m.RssWidget }))
+);
+const ChoreWidget = React.lazy(() =>
+  import('../widgets/ChoreWidget').then((m) => ({ default: m.ChoreWidget }))
+);
+const MealPlannerWidget = React.lazy(() =>
+  import('../widgets/MealPlannerWidget').then((m) => ({ default: m.MealPlannerWidget }))
+);
+const KanbanWidget = React.lazy(() =>
+  import('../widgets/KanbanWidget').then((m) => ({ default: m.KanbanWidget }))
+);
+const FinanceWidget = React.lazy(() =>
+  import('../widgets/FinanceWidget').then((m) => ({ default: m.FinanceWidget }))
+);
+const TimerWidget = React.lazy(() =>
+  import('../widgets/TimerWidget').then((m) => ({ default: m.TimerWidget }))
+);
+const AirQualityWidget = React.lazy(() =>
+  import('../widgets/AirQualityWidget').then((m) => ({ default: m.AirQualityWidget }))
+);
+const SunMoonWidget = React.lazy(() =>
+  import('../widgets/SunMoonWidget').then((m) => ({ default: m.SunMoonWidget }))
+);
 
 interface MobileCompanionProps {
   tabs: DashboardTab[];
@@ -984,7 +1005,9 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
                           ? 'bg-slate-50/90 border-slate-200'
                           : 'bg-gray-950/60 border-gray-800/40'
                       }`}>
-                        {renderWidgetContent(widget, isWidgetLight)}
+                        <React.Suspense fallback={null}>
+                          {renderWidgetContent(widget, isWidgetLight)}
+                        </React.Suspense>
                       </div>
                     </div>
                   );

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTimePrefs } from '../../utils/timePrefs';
 import { useSharedClock } from '../../utils/sharedClock';
+import { useDisplayActivity } from '../../utils/displayActivity';
 import {
   Sun,
   Cloud,
@@ -56,7 +57,8 @@ export const ClockWeatherWidget: React.FC<ClockWeatherWidgetProps> = ({
   transparentBg = false,
 }) => {
   const { hour12 } = useTimePrefs();
-  const time = useSharedClock(showSeconds ? 'second' : '10s');
+  const { isOledNightClock } = useDisplayActivity();
+  const time = useSharedClock(showSeconds ? 'second' : '10s', !isOledNightClock);
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(false);
 
