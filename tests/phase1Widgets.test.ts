@@ -14,6 +14,7 @@ import {
   isTimerActivelyRinging,
   pauseTimerItem,
   resetTimerItem,
+  resolveCrossTabAlarmSwitch,
   resolveWidgetTimers,
   splitDurationHms,
   startTimerItem,
@@ -213,6 +214,70 @@ describe('timerEngine', () => {
       syncTimerAlarmSubscriber('test-sub', false);
       stopAllTimerAlarms();
     });
+  });
+
+  it('resolves cross-tab alarm auto-switch once per trigger and respects modal/editor blocks', () => {
+    const t0 = Date.UTC(2026, 4, 15, 19, 0, 0);
+    const kitchenTimer: TimerItem = {
+      id: 'k1',
+      label: 'Pasta',
+      durationSec: 540,
+      status: 'completed',
+      remainingSec: 0,
+      endsAt: null,
+      completedAt: new Date(t0).toISOString(),
+    };
+    const candidates = [
+      { tabId: 'tab-kitchen', timer: kitchenTimer, key: 'w-kitchen:k1:done1' },
+    ];
+
+    // Modal / active editor open -> blocks tab switch, still marks alarm handled
+    const handledWhileBlocked = new Set<string>();
+    const blockedRes = resolveCrossTabAlarmSwitch(
+      candidates,
+      'tab-photos',
+      t0 + 2000,
+      true,
+      handledWhileBlocked
+    );
+    assert.equal(blockedRes.targetTabId, null);
+    assert.deepEqual(blockedRes.newlyHandledKeys, ['w-kitchen:k1:done1']);
+
+    // Normal state on another tab -> auto-switches straight to the timer's tab once
+    const handled = new Set<string>();
+    const firstSwitch = resolveCrossTabAlarmSwitch(
+      candidates,
+      'tab-photos',
+      t0 + 2000,
+      false,
+      handled
+    );
+    assert.equal(firstSwitch.targetTabId, 'tab-kitchen');
+    assert.deepEqual(firstSwitch.newlyHandledKeys, ['w-kitchen:k1:done1']);
+
+    firstSwitch.newlyHandledKeys.forEach((k) => handled.add(k));
+
+    // Subsequent ticks for the same handled alarm do not hijack tab navigation again
+    const secondTick = resolveCrossTabAlarmSwitch(
+      candidates,
+      'tab-calendar',
+      t0 + 3000,
+      false,
+      handled
+    );
+    assert.equal(secondTick.targetTabId, null);
+    assert.deepEqual(secondTick.newlyHandledKeys, []);
+
+    // Already on the timer's tab -> no switch needed
+    const alreadyOnTab = resolveCrossTabAlarmSwitch(
+      candidates,
+      'tab-kitchen',
+      t0 + 2000,
+      false,
+      new Set()
+    );
+    assert.equal(alreadyOnTab.targetTabId, null);
+    assert.deepEqual(alreadyOnTab.newlyHandledKeys, ['w-kitchen:k1:done1']);
   });
 
   it('formats durations cleanly and parses recipe step durations without false positives', () => {

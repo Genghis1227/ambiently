@@ -24,6 +24,7 @@ import { photoSyncService } from './services/photoSyncService';
 import { UpdateNotificationBanner } from './components/common/UpdateNotificationBanner';
 import { PlexReauthBanner } from './components/common/PlexReauthBanner';
 import { SyncRefusedBanner } from './components/common/SyncRefusedBanner';
+import { GlobalTimerAlarmOverlay } from './components/common/GlobalTimerAlarmOverlay';
 import { isCanvasPinLocked, isSettingsPinRequired } from './utils/pinValidation';
 
 const SettingsModal = lazy(() =>
@@ -875,6 +876,12 @@ export function App() {
           {isParentDrawerOpen && <ParentChoreDrawer />}
         </Suspense>
         <SyncRefusedBanner withDock={false} />
+        <GlobalTimerAlarmOverlay
+          visibleTabs={visibleTabs}
+          activeTabId={activeTabIdResolved}
+          isAnyModalOpen={isAnyOverlayOpen}
+          onSelectTab={setActiveTabId}
+        />
         {isSettingsOpen && (
           <Suspense fallback={null}>
             <SettingsModal
@@ -1034,6 +1041,14 @@ export function App() {
 
       {/* Shown when the cloud refuses some changes because the board is full */}
       <SyncRefusedBanner />
+
+      {/* Cross-Tab Repeating Kitchen Timer Alarm Overlay */}
+      <GlobalTimerAlarmOverlay
+        visibleTabs={visibleTabs}
+        activeTabId={activeTabIdResolved}
+        isAnyModalOpen={isAnyOverlayOpen}
+        onSelectTab={setActiveTabId}
+      />
 
       {/* Dedicated Plex Pairing Modal */}
       {isPlexPairingModalOpen && (() => {

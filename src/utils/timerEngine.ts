@@ -533,3 +533,37 @@ export function syncTimerAlarmSubscriber(subscriberId: string, shouldRing: boole
     }
   }
 }
+
+export interface CrossTabTimerCandidate {
+  tabId: string;
+  timer: TimerItem;
+  key: string;
+}
+
+export function resolveCrossTabAlarmSwitch(
+  candidates: CrossTabTimerCandidate[],
+  activeTabId: string,
+  nowMs: number,
+  isBlockedByOverlayOrInput: boolean,
+  handledKeys: ReadonlySet<string>
+): { targetTabId: string | null; newlyHandledKeys: string[] } {
+  const newlyHandledKeys: string[] = [];
+  let targetTabId: string | null = null;
+
+  for (const candidate of candidates) {
+    if (!isTimerActivelyRinging(candidate.timer, nowMs)) continue;
+    if (handledKeys.has(candidate.key)) continue;
+    newlyHandledKeys.push(candidate.key);
+
+    if (
+      !isBlockedByOverlayOrInput &&
+      !targetTabId &&
+      candidate.tabId &&
+      candidate.tabId !== activeTabId
+    ) {
+      targetTabId = candidate.tabId;
+    }
+  }
+
+  return { targetTabId, newlyHandledKeys };
+}
