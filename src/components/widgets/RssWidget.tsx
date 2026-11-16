@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Rss, ExternalLink, RefreshCw } from 'lucide-react';
 import { fetchRssFeed, type RssArticle } from '../../services/feeds';
 import { CURATED_RSS_FEEDS } from '../../data/curatedFeeds';
+import { useDisplayActivity } from '../../utils/displayActivity';
 
 interface RssWidgetProps {
   feedUrl?: string;
@@ -70,6 +71,10 @@ export const RssWidget: React.FC<RssWidgetProps> = ({
   const [feedTitle, setFeedTitle] = useState("Tony's Tipbits");
   const [articles, setArticles] = useState<RssArticle[]>([]);
   const [loading, setLoading] = useState(false);
+  const { isOledNightClock } = useDisplayActivity();
+  const isOledRef = useRef(isOledNightClock);
+  isOledRef.current = isOledNightClock;
+  const wasOledRef = useRef(false);
 
   // Measure container dimensions adaptively as tile resizes or enters fullscreen
   useEffect(() => {
@@ -96,7 +101,7 @@ export const RssWidget: React.FC<RssWidgetProps> = ({
     }
   }, []);
 
-  const loadFeed = async () => {
+  const loadFeed = useCallback(async () => {
     setLoading(true);
     try {
       const data = await fetchRssFeed(feedUrl);
@@ -113,16 +118,23 @@ export const RssWidget: React.FC<RssWidgetProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [feedUrl]);
 
   useEffect(() => {
-    loadFeed();
+    void loadFeed();
     const interval = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-      loadFeed();
+      if ((typeof document !== 'undefined' && document.visibilityState === 'hidden') || isOledRef.current) return;
+      void loadFeed();
     }, 15 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [feedUrl]);
+  }, [loadFeed]);
+
+  useEffect(() => {
+    if (wasOledRef.current && !isOledNightClock) {
+      void loadFeed();
+    }
+    wasOledRef.current = isOledNightClock;
+  }, [isOledNightClock, loadFeed]);
 
   const handleSelectSuggestedFeed = (url: string) => {
     if (onUpdateConfig) {

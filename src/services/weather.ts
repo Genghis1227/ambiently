@@ -92,6 +92,7 @@ export async function searchLocations(query: string): Promise<GeocodingResult[]>
 const WEATHER_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 const MAX_WEATHER_CACHE_KEYS = 5;
 const memoryWeatherCache = new Map<string, WeatherData>();
+const inFlightWeatherRequests = new Map<string, Promise<WeatherData>>();
 
 function getWeatherCacheKey(lat: number, lon: number, unit: 'F' | 'C'): string {
   return `${lat.toFixed(3)}_${lon.toFixed(3)}_${unit}`;
@@ -162,56 +163,76 @@ export async function fetchWeatherData(
     return { ...cached.data, locationName };
   }
 
+  if (!forceRefresh) {
+    const pending = inFlightWeatherRequests.get(cacheKey);
+    if (pending) {
+      const shared = await pending;
+      return { ...shared, locationName };
+    }
+  }
+
   const tempUnitParam = unit === 'F' ? '&temperature_unit=fahrenheit&wind_speed_unit=mph' : '';
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto${tempUnitParam}`;
 
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Weather fetch failed: ${res.statusText}`);
-    const data = await res.json();
+  const requestPromise = (async (): Promise<WeatherData> => {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Weather fetch failed: ${res.statusText}`);
+      const data = await res.json();
 
-    const current = data.current;
-    const daily = data.daily;
-    const condition = mapWmoCode(current.weather_code);
+      const current = data.current;
+      const daily = data.daily;
+      const condition = mapWmoCode(current.weather_code);
 
-    const forecastDays = (daily.time || []).slice(0, 5).map((dateStr: string, idx: number) => {
-      const d = new Date(dateStr + 'T00:00:00');
-      const dayName = idx === 0 ? 'Today' : d.toLocaleDateString([], { weekday: 'short' });
-      const dayCond = mapWmoCode(daily.weather_code[idx]);
-      return {
-        date: dateStr,
-        dayName,
-        maxTemp: Math.round(daily.temperature_2m_max[idx]),
-        minTemp: Math.round(daily.temperature_2m_min[idx]),
-        conditionCode: daily.weather_code[idx],
-        conditionText: dayCond.text,
+      const forecastDays = (daily.time || []).slice(0, 5).map((dateStr: string, idx: number) => {
+        const d = new Date(dateStr + 'T00:00:00');
+        const dayName = idx === 0 ? 'Today' : d.toLocaleDateString([], { weekday: 'short' });
+        const dayCond = mapWmoCode(daily.weather_code[idx]);
+        return {
+          date: dateStr,
+          dayName,
+          maxTemp: Math.round(daily.temperature_2m_max[idx]),
+          minTemp: Math.round(daily.temperature_2m_min[idx]),
+          conditionCode: daily.weather_code[idx],
+          conditionText: dayCond.text,
+        };
+      });
+
+      const result: WeatherData = {
+        locationName,
+        latitude: lat,
+        longitude: lon,
+        currentTemp: Math.round(current.temperature_2m),
+        apparentTemp: Math.round(current.apparent_temperature),
+        conditionCode: current.weather_code,
+        conditionText: condition.text,
+        isDay: Boolean(current.is_day),
+        highTemp: Math.round(daily.temperature_2m_max[0] ?? current.temperature_2m),
+        lowTemp: Math.round(daily.temperature_2m_min[0] ?? current.temperature_2m),
+        humidity: current.relative_humidity_2m,
+        windSpeed: Math.round(current.wind_speed_10m),
+        unit,
+        forecast: forecastDays,
+        fetchedAt: Date.now(),
       };
-    });
 
-    const result: WeatherData = {
-      locationName,
-      latitude: lat,
-      longitude: lon,
-      currentTemp: Math.round(current.temperature_2m),
-      apparentTemp: Math.round(current.apparent_temperature),
-      conditionCode: current.weather_code,
-      conditionText: condition.text,
-      isDay: Boolean(current.is_day),
-      highTemp: Math.round(daily.temperature_2m_max[0] ?? current.temperature_2m),
-      lowTemp: Math.round(daily.temperature_2m_min[0] ?? current.temperature_2m),
-      humidity: current.relative_humidity_2m,
-      windSpeed: Math.round(current.wind_speed_10m),
-      unit,
-      forecast: forecastDays,
-      fetchedAt: Date.now(),
-    };
-
-    setCachedWeather(cacheKey, result);
-    return result;
-  } catch (err) {
-    if (cached) {
-      return { ...cached.data, locationName };
+      setCachedWeather(cacheKey, result);
+      return result;
+    } catch (err) {
+      if (cached) {
+        return { ...cached.data, locationName };
+      }
+      throw err;
     }
-    throw err;
+  })();
+
+  inFlightWeatherRequests.set(cacheKey, requestPromise);
+  try {
+    const resolved = await requestPromise;
+    return { ...resolved, locationName };
+  } finally {
+    if (inFlightWeatherRequests.get(cacheKey) === requestPromise) {
+      inFlightWeatherRequests.delete(cacheKey);
+    }
   }
 }

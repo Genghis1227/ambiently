@@ -19,20 +19,9 @@ import {
   Maximize2,
   Minimize2,
   Settings,
-  Archive,
   RotateCw,
   Edit2,
-  Copy,
   Layers,
-  BringToFront,
-  SendToBack,
-  ArrowUp,
-  ArrowDown,
-  Calendar,
-  Sun,
-  Moon,
-  Sparkles,
-  Image as ImageIcon,
 } from 'lucide-react';
 import { ClockWeatherWidget } from '../widgets/ClockWeatherWidget';
 import { ClockWidget } from '../widgets/ClockWidget';
@@ -42,10 +31,29 @@ import { CountdownWidget } from '../widgets/CountdownWidget';
 import { QuotesWidget } from '../widgets/QuotesWidget';
 import { TextBoxWidget } from '../widgets/TextBoxWidget';
 import { TileErrorBoundary } from '../common/TileErrorBoundary';
-import { StickyNotesWidget } from '../widgets/StickyNotesWidget';
 import { MediaEmbedWidget } from '../widgets/MediaEmbedWidget';
 import { ImageWidget } from '../widgets/ImageWidget';
-import { ShoppingListNoteBody } from '../common/ShoppingListNoteBody';
+import type { CorkboardContextMenuState } from './CorkboardContextMenu';
+
+const StickyNotesWidget = React.lazy(() =>
+  import('../widgets/StickyNotesWidget').then((m) => ({ default: m.StickyNotesWidget }))
+);
+
+const ShoppingListNoteBody = React.lazy(() =>
+  import('../common/ShoppingListNoteBody').then((m) => ({ default: m.ShoppingListNoteBody }))
+);
+const CanvasBlueprintPicker = React.lazy(() =>
+  import('./CanvasBlueprintPicker').then((m) => ({ default: m.CanvasBlueprintPicker }))
+);
+const CorkboardNoteModal = React.lazy(() =>
+  import('./CorkboardNoteModal').then((m) => ({ default: m.CorkboardNoteModal }))
+);
+const CorkboardTrashModal = React.lazy(() =>
+  import('./CorkboardTrashModal').then((m) => ({ default: m.CorkboardTrashModal }))
+);
+const CorkboardContextMenu = React.lazy(() =>
+  import('./CorkboardContextMenu').then((m) => ({ default: m.CorkboardContextMenu }))
+);
 
 const CalendarWidget = React.lazy(() =>
   import('../widgets/CalendarWidget').then((m) => ({ default: m.CalendarWidget }))
@@ -77,12 +85,10 @@ const AirQualityWidget = React.lazy(() =>
 const SunMoonWidget = React.lazy(() =>
   import('../widgets/SunMoonWidget').then((m) => ({ default: m.SunMoonWidget }))
 );
-import { categorizeIngredient, parseIngredient } from '../../utils/ingredientAggregator';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { CANVAS_THEMES, isCanvasThemeLight } from '../../data/canvasThemes';
 import { findOpenCanvasSpot } from '../../utils/autoLayout';
-import { CANVAS_BLUEPRINTS } from '../../utils/canvasBlueprints';
-import { isStickerCapableWidget, isWidgetStickerMode } from '../../utils/widgetStickerMode';
+import { isWidgetStickerMode } from '../../utils/widgetStickerMode';
 import { inferCuratedCategoryId } from '../../services/photos';
 
 const ChoreDashboardView = React.lazy(() =>
@@ -524,12 +530,11 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   ]);
 
   const [editingWidget, setEditingWidget] = useState<DashboardWidget | null>(null);
-  const [confirmDeleteAllTrash, setConfirmDeleteAllTrash] = useState(false);
   const [photoSourcesTarget, setPhotoSourcesTarget] = useState<{
     widget: DashboardWidget;
     isCommon: boolean;
   } | null>(null);
-  const settings = useDashboardStore((state) => state.settings);
+  const photoModalSettings = useDashboardStore((state) => (photoSourcesTarget ? state.settings : null));
   const applyCommonPhotosToAllWidgets = useDashboardStore((state) => state.applyCommonPhotosToAllWidgets);
 
   // Resizing state
@@ -573,26 +578,13 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   const [selectedFontSize, setSelectedFontSize] = useState<NonNullable<StickyNoteItem['fontSize']>>('base');
   const [selectedNoteTabId, setSelectedNoteTabId] = useState<string>(activeTabId);
   const [checklistItems, setChecklistItems] = useState<StickyNoteChecklistItem[]>([]);
-  const [newItemText, setNewItemText] = useState('');
   const [expiryOption, setExpiryOption] = useState<'permanent' | '1day' | '3days' | 'custom'>('permanent');
   const [customExpiry, setCustomExpiry] = useState('');
   const [highlightedNoteId, setHighlightedNoteId] = useState<string | null>(null);
   const [pendingNoteSpot, setPendingNoteSpot] = useState<{ xRatio: number; yRatio: number } | null>(null);
 
   // Z-Order & Canvas Context Menu state
-  interface ContextMenuState {
-    x: number;
-    y: number;
-    id: string;
-    type: 'widget' | 'note' | 'canvas';
-    title?: string;
-    currentZ: number;
-    isBackground?: boolean;
-    rotation?: number;
-    clickXRatio?: number;
-    clickYRatio?: number;
-  }
-  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [contextMenu, setContextMenu] = useState<CorkboardContextMenuState | null>(null);
 
   interface CanvasItemRecord {
     id: string;
@@ -1353,19 +1345,6 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     };
   }, [draggingId, rotatingId, resizingId]);
 
-  const handleAddChecklistItem = () => {
-    const trimmed = newItemText.trim();
-    if (!trimmed) return;
-    const category = isShoppingList
-      ? categorizeIngredient(parseIngredient(trimmed).itemName || trimmed)
-      : undefined;
-    setChecklistItems([
-      ...checklistItems,
-      { id: Date.now().toString(), text: trimmed, done: false, ...(category ? { category } : {}) },
-    ]);
-    setNewItemText('');
-  };
-
   const handleSaveNoteModal = () => {
     if (!newTitle.trim() && !newContent.trim() && checklistItems.length === 0 && !isShoppingList) return;
 
@@ -1682,39 +1661,9 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             </div>
 
             {!isCanvasLocked && (
-              <div className="pt-3 border-t border-gray-800/80 text-left space-y-2">
-                <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                  <span className="flex items-center gap-1">
-                    <Sparkles className="w-3 h-3 text-emerald-400" />
-                    Quick-Start Blueprints
-                  </span>
-                  <span className="text-gray-500 font-normal normal-case">1-tap layout</span>
-                </div>
-                <div className="space-y-1.5">
-                  {CANVAS_BLUEPRINTS.filter((bp) => bp.id !== 'blank').map((bp) => (
-                    <button
-                      key={bp.id}
-                      type="button"
-                      onClick={() =>
-                        void useDashboardStore.getState().applyCanvasBlueprint(activeTabId, bp.id)
-                      }
-                      className="w-full p-2.5 rounded-xl bg-gray-950/75 hover:bg-emerald-600/15 border border-gray-800 hover:border-emerald-500/40 text-left transition-all cursor-pointer group"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-bold text-gray-100 group-hover:text-emerald-300 transition-colors">
-                          {bp.title}
-                        </span>
-                        <span className="px-1.5 py-0.5 rounded-md bg-gray-800 text-[10px] font-semibold text-gray-400 group-hover:text-emerald-200 shrink-0">
-                          {bp.badge}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">
-                        {bp.summary}
-                      </p>
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <React.Suspense fallback={null}>
+                <CanvasBlueprintPicker activeTabId={activeTabId} variant="desktop" />
+              </React.Suspense>
             )}
           </div>
         </div>
@@ -2355,15 +2304,17 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
               {/* Note Content / Checklist / Shopping List */}
               {note.isShoppingList || note.freeformPos?.isShoppingList ? (
-                <ShoppingListNoteBody
-                  note={note}
-                  fontSizeClass={fontSizeClass}
-                  onUpdateItems={(nextItems) =>
-                    onUpdateNote(note.id, { checklistItems: nextItems })
-                  }
-                  onToggleItem={(itemId) => toggleChecklistItem(note, itemId)}
-                  onCheckDragGuard={() => isDraggingRef.current}
-                />
+                <React.Suspense fallback={null}>
+                  <ShoppingListNoteBody
+                    note={note}
+                    fontSizeClass={fontSizeClass}
+                    onUpdateItems={(nextItems) =>
+                      onUpdateNote(note.id, { checklistItems: nextItems })
+                    }
+                    onToggleItem={(itemId) => toggleChecklistItem(note, itemId)}
+                    onCheckDragGuard={() => isDraggingRef.current}
+                  />
+                </React.Suspense>
               ) : note.isChecklist && note.checklistItems ? (
                 <div className="space-y-1.5 mt-1 select-none touch-none">
                   {note.checklistItems.map((item) => (
@@ -2504,379 +2455,48 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
       {/* Creator & Inline Editor Modal for Sticky Notes */}
       {isCreatorOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          data-no-drag="true"
-          onPointerDown={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-          onDoubleClick={(e) => e.stopPropagation()}
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
-        >
-          <div className="w-full max-w-sm rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl p-5 space-y-3.5">
-            <div className="flex items-center justify-between border-b border-gray-800 pb-3">
-              <span className="text-sm font-bold text-white">
-                {editingNoteId ? 'Edit Sticky Note' : 'Pin Note to Canvas'}
-              </span>
-              <button
-                onClick={resetNoteModal}
-                className="text-gray-400 hover:text-white cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Color Palette Picker & Expiration Selector */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {COLOR_PALETTE.map((color) => (
-                  <button
-                    key={color}
-                    type="button"
-                    onClick={() => setSelectedColor(color)}
-                    style={{ backgroundColor: color }}
-                    className={`w-6 h-6 rounded-full transition-transform cursor-pointer ${
-                      selectedColor === color ? 'scale-125 ring-2 ring-white ring-offset-2 ring-offset-gray-900' : 'opacity-70'
-                    }`}
-                  />
-                ))}
-              </div>
-
-              <div className="flex items-center gap-1 text-xs text-gray-400">
-                <Clock className="w-3.5 h-3.5 text-blue-400" />
-                <select
-                  value={expiryOption}
-                  onChange={(e) => setExpiryOption(e.target.value as any)}
-                  className="bg-gray-950 border border-gray-800 rounded-lg px-2 py-1 text-[11px] text-white focus:outline-none"
-                >
-                  <option value="permanent">Permanent</option>
-                  <option value="1day">Expire 24h</option>
-                  <option value="3days">Expire 3d</option>
-                  <option value="custom">Custom Date</option>
-                </select>
-              </div>
-            </div>
-
-            {expiryOption === 'custom' && (
-              <input
-                type="datetime-local"
-                value={customExpiry}
-                onChange={(e) => setCustomExpiry(e.target.value)}
-                className="w-full rounded-xl bg-gray-950 border border-gray-800 p-2 text-xs text-white"
-              />
-            )}
-
-            {/* Canvas Board Selector & Font Size Selector */}
-            <div className="grid grid-cols-2 gap-2">
-              {tabs.length > 0 && (
-                <div className="flex items-center gap-1.5 bg-gray-950/60 px-2.5 py-1.5 rounded-xl border border-gray-800">
-                  <Layers className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                  <select
-                    value={selectedNoteTabId}
-                    onChange={(e) => setSelectedNoteTabId(e.target.value)}
-                    title="Choose which canvas this note appears on"
-                    className="w-full bg-transparent text-[11px] text-white focus:outline-none truncate"
-                  >
-                    {tabs.map((t) => (
-                      <option key={t.id} value={t.id} className="bg-gray-900 text-white">
-                        {t.name}
-                      </option>
-                    ))}
-                    <option value="all" className="bg-gray-900 text-amber-300">
-                      📌 Pin to All Canvases
-                    </option>
-                  </select>
-                </div>
-              )}
-
-              <div className="flex items-center justify-between bg-gray-950/60 px-2.5 py-1.5 rounded-xl border border-gray-800">
-                <span className="text-[10px] text-gray-400 font-medium">Size:</span>
-                <div className="flex items-center gap-0.5">
-                  {(
-                    [
-                      { id: 'sm', label: 'S' },
-                      { id: 'base', label: 'M' },
-                      { id: 'lg', label: 'L' },
-                      { id: 'xl', label: 'XL' },
-                    ] as const
-                  ).map((sz) => (
-                    <button
-                      key={sz.id}
-                      type="button"
-                      onClick={() => setSelectedFontSize(sz.id)}
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
-                        selectedFontSize === sz.id
-                          ? 'bg-blue-600 text-white'
-                          : 'text-gray-400 hover:text-white'
-                      }`}
-                    >
-                      {sz.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Format Toggle: Message vs Checklist vs Shopping List */}
-            <div className="grid grid-cols-3 gap-1 rounded-lg bg-gray-950 p-1 border border-gray-800 text-xs font-semibold">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsChecklist(false);
-                  setIsShoppingList(false);
-                }}
-                className={`py-1.5 rounded-md text-center transition-all cursor-pointer ${
-                  !isChecklist && !isShoppingList
-                    ? 'bg-blue-600 text-white shadow'
-                    : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                Text Note
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsChecklist(true);
-                  setIsShoppingList(false);
-                }}
-                className={`py-1.5 rounded-md text-center transition-all cursor-pointer ${
-                  isChecklist && !isShoppingList
-                    ? 'bg-blue-600 text-white shadow'
-                    : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                Checklist
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsChecklist(true);
-                  setIsShoppingList(true);
-                  if (!editingNoteId) {
-                    if (!newTitle.trim()) setNewTitle('🛒 Shopping List');
-                    setSelectedColor('#bbf7d0');
-                  }
-                }}
-                className={`py-1.5 rounded-md text-center transition-all cursor-pointer ${
-                  isShoppingList
-                    ? 'bg-emerald-600 text-white shadow'
-                    : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                🛒 Shopping List
-              </button>
-            </div>
-
-            {/* Inputs */}
-            <div className="space-y-3">
-              <input
-                type="text"
-                placeholder="Title (optional)"
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                className="w-full rounded-xl bg-gray-950 border border-gray-800 p-2.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
-              />
-
-              {!isChecklist ? (
-                <textarea
-                  placeholder="Write your note message here..."
-                  value={newContent}
-                  onChange={(e) => setNewContent(e.target.value)}
-                  rows={4}
-                  className="w-full rounded-xl bg-gray-950 border border-gray-800 p-2.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
-                />
-              ) : (
-                <div className="space-y-2">
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Add checklist item..."
-                      value={newItemText}
-                      onChange={(e) => setNewItemText(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleAddChecklistItem()}
-                      className="flex-1 rounded-xl bg-gray-950 border border-gray-800 p-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddChecklistItem}
-                      className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold cursor-pointer"
-                    >
-                      Add
-                    </button>
-                  </div>
-                  <div className="max-h-32 overflow-y-auto space-y-1">
-                    {checklistItems.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex items-center justify-between gap-2 text-xs text-gray-300 bg-gray-950/60 p-1.5 rounded-lg border border-gray-800"
-                      >
-                        <input
-                          type="text"
-                          value={item.text}
-                          onChange={(e) =>
-                            setChecklistItems(
-                              checklistItems.map((i) =>
-                                i.id === item.id ? { ...i, text: e.target.value } : i
-                              )
-                            )
-                          }
-                          className="flex-1 bg-transparent text-xs text-gray-200 focus:outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setChecklistItems(checklistItems.filter((i) => i.id !== item.id))
-                          }
-                          className="text-gray-500 hover:text-red-400 cursor-pointer"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <button
-              type="button"
-              onClick={handleSaveNoteModal}
-              className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-xs font-bold text-white shadow-lg shadow-blue-500/25 transition-all cursor-pointer"
-            >
-              {editingNoteId ? 'Save Note Changes' : 'Pin Note to Board'}
-            </button>
-          </div>
-        </div>
+        <React.Suspense fallback={null}>
+          <CorkboardNoteModal
+            editingNoteId={editingNoteId}
+            newTitle={newTitle}
+            setNewTitle={setNewTitle}
+            newContent={newContent}
+            setNewContent={setNewContent}
+            isChecklist={isChecklist}
+            setIsChecklist={setIsChecklist}
+            isShoppingList={isShoppingList}
+            setIsShoppingList={setIsShoppingList}
+            selectedColor={selectedColor}
+            setSelectedColor={setSelectedColor}
+            selectedFontSize={selectedFontSize}
+            setSelectedFontSize={setSelectedFontSize}
+            selectedNoteTabId={selectedNoteTabId}
+            setSelectedNoteTabId={setSelectedNoteTabId}
+            checklistItems={checklistItems}
+            setChecklistItems={setChecklistItems}
+            expiryOption={expiryOption}
+            setExpiryOption={setExpiryOption}
+            customExpiry={customExpiry}
+            setCustomExpiry={setCustomExpiry}
+            colorPalette={COLOR_PALETTE}
+            tabs={tabs}
+            onClose={resetNoteModal}
+            onSave={handleSaveNoteModal}
+          />
+        </React.Suspense>
       )}
 
       {/* Trash / Archive Recovery Drawer Modal */}
       {isTrashOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          data-no-drag="true"
-          onPointerDown={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-          onDoubleClick={(e) => e.stopPropagation()}
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
-        >
-          <div className="w-full max-w-md rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl p-5 space-y-4 max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between gap-2 border-b border-gray-800 pb-3">
-              <div className="flex items-center gap-2 min-w-0">
-                <Archive className="w-4 h-4 text-amber-400 shrink-0" />
-                <span className="text-sm font-bold text-white truncate">
-                  Archived & Expired Notes ({trashNotes.length})
-                </span>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {trashNotes.length > 0 && (onPermanentlyDeleteNotes || onPermanentlyDeleteNote) && (
-                  confirmDeleteAllTrash ? (
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setConfirmDeleteAllTrash(false)}
-                        className="px-2 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-medium cursor-pointer transition-all"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const ids = trashNotes.map((n) => n.id);
-                          if (onPermanentlyDeleteNotes) {
-                            onPermanentlyDeleteNotes(ids);
-                          } else if (onPermanentlyDeleteNote) {
-                            ids.forEach((id) => onPermanentlyDeleteNote(id));
-                          }
-                          setConfirmDeleteAllTrash(false);
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold cursor-pointer transition-all"
-                      >
-                        Confirm ({trashNotes.length})
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setConfirmDeleteAllTrash(true)}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 hover:text-red-200 text-xs font-semibold cursor-pointer transition-all"
-                      title="Permanently delete all archived and expired notes"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Delete All</span>
-                    </button>
-                  )
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setConfirmDeleteAllTrash(false);
-                    onCloseTrash?.();
-                  }}
-                  className="text-gray-400 hover:text-white cursor-pointer p-1"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-              {trashNotes.length === 0 ? (
-                <div className="text-center py-8 text-xs text-gray-500">
-                  Trash is empty.
-                </div>
-              ) : (
-                trashNotes.map((note) => (
-                  <div
-                    key={note.id}
-                    className="p-3 rounded-xl bg-gray-950 border border-gray-800 flex items-center justify-between gap-3"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="w-2.5 h-2.5 rounded-full shrink-0"
-                          style={{ backgroundColor: note.bgColor || '#fef08a' }}
-                        />
-                        <span className="text-xs font-bold text-white truncate">
-                          {note.title || note.content || 'Checklist Note'}
-                        </span>
-                      </div>
-                      <div className="text-[10px] text-gray-500 mt-0.5">
-                        {note.expiresAt && new Date(note.expiresAt) <= now
-                          ? `Expired on ${new Date(note.expiresAt).toLocaleDateString()}`
-                          : 'Archived'}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onUpdateNote(note.id, { archivedAt: null, expiresAt: null, isPinnedToCanvas: true })
-                        }
-                        className="px-2.5 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 text-xs font-semibold cursor-pointer transition-all"
-                      >
-                        Restore
-                      </button>
-                      {onPermanentlyDeleteNote && (
-                        <button
-                          type="button"
-                          onClick={() => onPermanentlyDeleteNote(note.id)}
-                          className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 cursor-pointer transition-all"
-                          title="Delete permanently"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
+        <React.Suspense fallback={null}>
+          <CorkboardTrashModal
+            trashNotes={trashNotes}
+            onClose={() => onCloseTrash?.()}
+            onUpdateNote={onUpdateNote}
+            onPermanentlyDeleteNote={onPermanentlyDeleteNote}
+            onPermanentlyDeleteNotes={onPermanentlyDeleteNotes}
+          />
+        </React.Suspense>
       )}
 
       {/* Tile Settings & Configuration Modal */}
@@ -2914,6 +2534,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         const activePhotoWidget =
           widgets.find((w) => w.id === photoSourcesTarget.widget.id) || photoSourcesTarget.widget;
         const isUsingCommon = photoSourcesTarget.isCommon;
+        const modalSettings = photoModalSettings || useDashboardStore.getState().settings;
 
         return (
           <React.Suspense fallback={null}>
@@ -2924,28 +2545,28 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               isCommonSource={isUsingCommon}
               initialWebUrls={
                 (isUsingCommon
-                  ? (settings.commonPhotoSourceType === 'web' ? settings.commonPhotoSourceUrl : '')
+                  ? (modalSettings.commonPhotoSourceType === 'web' ? modalSettings.commonPhotoSourceUrl : '')
                   : (activePhotoWidget.config?.sourceType === 'web' ? activePhotoWidget.config?.sourceUrl : '')) || ''
               }
               currentSourceLabel={
                 isUsingCommon
-                  ? settings.commonPhotoSourceLabel ||
-                    (settings.commonPhotos?.length ? 'Shared Library' : undefined)
+                  ? modalSettings.commonPhotoSourceLabel ||
+                    (modalSettings.commonPhotos?.length ? 'Shared Library' : undefined)
                   : activePhotoWidget.config?.sourceLabel
               }
               currentSourceType={
                 isUsingCommon
-                  ? settings.commonPhotoSourceType
+                  ? modalSettings.commonPhotoSourceType
                   : activePhotoWidget.config?.sourceType
               }
               currentCuratedCategoryId={
                 isUsingCommon
-                  ? settings.commonPhotoCuratedCategory
+                  ? modalSettings.commonPhotoCuratedCategory
                   : activePhotoWidget.config?.curatedCategoryId
               }
               currentPhotoCount={
                 isUsingCommon
-                  ? settings.commonPhotos?.length
+                  ? modalSettings.commonPhotos?.length
                   : activePhotoWidget.config?.customPhotos?.length
               }
               onPhotosLoaded={(newPhotos, sourceName, sourceUrl, sourceType, applyToAll, plexSyncConfig, curatedCategoryId) => {
@@ -2986,545 +2607,55 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       })()}
 
       {/* Floating Context Menu for Canvas Actions, Z-Order & Layer Management */}
-      {contextMenu && (() => {
-        if (contextMenu.type === 'canvas') {
-          return (
-            <div
-              data-no-drag="true"
-              onClick={(e) => e.stopPropagation()}
-              onPointerDown={(e) => e.stopPropagation()}
-              style={{
-                left: Math.min(contextMenu.x, window.innerWidth - 250),
-                top: Math.min(contextMenu.y, window.innerHeight - 240),
-              }}
-              className="fixed z-[100] w-60 rounded-2xl bg-gray-950/95 backdrop-blur-2xl border border-gray-800 p-2 shadow-2xl text-xs text-gray-200 select-none animate-in fade-in zoom-in-95 duration-100"
-            >
-              {/* Header */}
-              <div className="px-2.5 py-1.5 mb-1 border-b border-gray-800/80 flex items-center justify-between">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <Sparkles className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                  <span className="font-bold text-white truncate text-[11px]">
-                    {contextMenu.title || 'Canvas Actions'}
-                  </span>
-                </div>
-                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                  Canvas
-                </span>
-              </div>
-
-              <div className="space-y-0.5">
-                {onOpenCreator && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      resetNoteModal();
-                      if (contextMenu.clickXRatio !== undefined && contextMenu.clickYRatio !== undefined) {
-                        setPendingNoteSpot({
-                          xRatio: contextMenu.clickXRatio,
-                          yRatio: contextMenu.clickYRatio,
-                        });
-                      }
-                      setSelectedNoteTabId(activeTabId);
-                      onOpenCreator();
-                      setContextMenu(null);
-                    }}
-                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
-                  >
-                    <Pin className="w-4 h-4 text-amber-400 shrink-0" />
-                    <div>
-                      <div className="font-semibold text-xs">Add Sticky Note</div>
-                      <div className="text-[10px] text-gray-400">Pin a note or checklist here</div>
-                    </div>
-                  </button>
-                )}
-
-                {onOpenCreator && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      resetNoteModal();
-                      if (contextMenu.clickXRatio !== undefined && contextMenu.clickYRatio !== undefined) {
-                        setPendingNoteSpot({
-                          xRatio: contextMenu.clickXRatio,
-                          yRatio: contextMenu.clickYRatio,
-                        });
-                      }
-                      setSelectedNoteTabId(activeTabId);
+      {contextMenu && (
+        <React.Suspense fallback={null}>
+          <CorkboardContextMenu
+            contextMenu={contextMenu}
+            widgets={widgets}
+            notes={notes}
+            hasStickyNotesTile={hasStickyNotesTile}
+            defaultWidgetStyle={defaultWidgetStyle}
+            onClose={() => setContextMenu(null)}
+            onOpenNoteAtSpot={
+              onOpenCreator
+                ? (clickXRatio, clickYRatio, shopping) => {
+                    resetNoteModal();
+                    if (clickXRatio !== undefined && clickYRatio !== undefined) {
+                      setPendingNoteSpot({ xRatio: clickXRatio, yRatio: clickYRatio });
+                    }
+                    setSelectedNoteTabId(activeTabId);
+                    if (shopping) {
                       setIsChecklist(true);
                       setIsShoppingList(true);
                       setNewTitle('🛒 Shopping List');
                       setSelectedColor('#bbf7d0');
-                      onOpenCreator();
-                      setContextMenu(null);
-                    }}
-                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
-                  >
-                    <CheckSquare className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <div>
-                      <div className="font-semibold text-xs">Add Shopping List Note</div>
-                      <div className="text-[10px] text-gray-400">Grouped grocery note & Keep export</div>
-                    </div>
-                  </button>
-                )}
-
-                {onAddWidget && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const wRatio = 0.26;
-                      const hRatio = 0.32;
-                      const xRatio =
-                        contextMenu.clickXRatio !== undefined
-                          ? Math.max(0.01, Math.min(1 - wRatio - 0.01, contextMenu.clickXRatio))
-                          : 0.15;
-                      const yRatio =
-                        contextMenu.clickYRatio !== undefined
-                          ? Math.max(0.01, Math.min(1 - hRatio - 0.01, contextMenu.clickYRatio))
-                          : 0.15;
-                      onAddWidget({
-                        type: 'image',
-                        title: 'Single Image or GIF',
-                        gridPos: { x: 0, y: 0, w: 4, h: 4 },
-                        freeformPos: {
-                          xRatio,
-                          yRatio,
-                          wRatio,
-                          hRatio,
-                          zIndex: getNextZIndex(),
-                          rotation: 0,
-                        },
-                        config: { fit: 'contain' },
-                      });
-                      setContextMenu(null);
-                    }}
-                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
-                  >
-                    <ImageIcon className="w-4 h-4 text-fuchsia-400 shrink-0" />
-                    <div>
-                      <div className="font-semibold text-xs">Add Single Photo / GIF</div>
-                      <div className="text-[10px] text-gray-400">Pin a photo or animated GIF sticker</div>
-                    </div>
-                  </button>
-                )}
-
-                {onOpenAddWidget && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onOpenAddWidget();
-                      setContextMenu(null);
-                    }}
-                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
-                  >
-                    <Plus className="w-4 h-4 text-blue-400 shrink-0" />
-                    <div>
-                      <div className="font-semibold text-xs">Add Widget</div>
-                      <div className="text-[10px] text-gray-400">Add a live tile or GIF sticker</div>
-                    </div>
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        }
-
-        const activeWidget = contextMenu.type === 'widget' ? widgets.find((x) => x.id === contextMenu.id) : null;
-        const currentThemeMode: WidgetThemeMode = (activeWidget?.config?.themeMode as WidgetThemeMode) || 'auto';
-        const itemType = contextMenu.type === 'widget' ? 'widget' : 'note';
-
-        return (
-          <div
-            data-no-drag="true"
-            onClick={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-            style={{
-              left: Math.min(contextMenu.x, window.innerWidth - 250),
-              top: Math.min(contextMenu.y, window.innerHeight - 360),
-            }}
-            className="fixed z-[100] w-60 rounded-2xl bg-gray-950/95 backdrop-blur-2xl border border-gray-800 p-2 shadow-2xl text-xs text-gray-200 select-none animate-in fade-in zoom-in-95 duration-100"
-          >
-            {/* Header */}
-            <div className="px-2.5 py-1.5 mb-1 border-b border-gray-800/80 flex items-center justify-between">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <Layers className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                <span className="font-bold text-white truncate text-[11px]">
-                  {contextMenu.title || (contextMenu.type === 'widget' ? 'Widget' : 'Sticky Note')}
-                </span>
-              </div>
-              {contextMenu.isBackground ? (
-                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                  Background
-                </span>
-              ) : (
-                <span className="text-[10px] font-mono text-gray-400">
-                  L{contextMenu.currentZ}
-                </span>
-              )}
-            </div>
-
-            {/* Layer Order Actions */}
-            <div className="space-y-0.5">
-              <button
-                type="button"
-                onClick={() => handleBringToFront(contextMenu.id, itemType)}
-                className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
-              >
-                <BringToFront className="w-4 h-4 text-emerald-400 shrink-0" />
-                <div>
-                  <div className="font-semibold text-xs">Bring to Front</div>
-                  <div className="text-[10px] text-gray-400">Place on top of all cards</div>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleBringForward(contextMenu.id, itemType)}
-                className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
-              >
-                <ArrowUp className="w-4 h-4 text-blue-400 shrink-0" />
-                <div>
-                  <div className="font-semibold text-xs">Bring Forward</div>
-                  <div className="text-[10px] text-gray-400">Step up 1 layer</div>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSendBackward(contextMenu.id, itemType)}
-                className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
-              >
-                <ArrowDown className="w-4 h-4 text-amber-400 shrink-0" />
-                <div>
-                  <div className="font-semibold text-xs">Send Backward</div>
-                  <div className="text-[10px] text-gray-400">Step down 1 layer</div>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSendToBack(contextMenu.id, itemType)}
-                className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white transition-colors cursor-pointer text-left"
-              >
-                <SendToBack className="w-4 h-4 text-purple-400 shrink-0" />
-                <div>
-                  <div className="font-semibold text-xs">Send to Back</div>
-                  <div className="text-[10px] text-gray-400">Pin as background layer</div>
-                </div>
-              </button>
-            </div>
-
-            {/* Context Options Divider */}
-            <div className="border-t border-gray-800/80 my-1" />
-
-            {/* Quick Context Settings */}
-            {contextMenu.type === 'widget' && (
-              <div className="space-y-1.5 my-1">
-                <div className="px-2 pt-0.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center justify-between">
-                  <span>Card Appearance</span>
-                  <span className="capitalize text-blue-400 font-bold">{currentThemeMode}</span>
-                </div>
-                <div className="grid grid-cols-3 gap-1 px-1">
-                  {(['auto', 'light', 'dark'] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => {
-                        if (onUpdateWidget && activeWidget) {
-                          onUpdateWidget(activeWidget.id, {
-                            config: { ...activeWidget.config, themeMode: mode },
-                          });
-                        }
-                        setContextMenu(null);
-                      }}
-                      className={`flex items-center justify-center gap-1 py-1 px-1.5 rounded-lg text-xs font-medium capitalize transition-all cursor-pointer ${
-                        currentThemeMode === mode
-                          ? 'bg-blue-600 text-white font-semibold shadow'
-                          : 'bg-gray-800/70 hover:bg-gray-700/80 text-gray-300'
-                      }`}
-                    >
-                      {mode === 'light' && <Sun className="w-3 h-3 text-amber-300" />}
-                      {mode === 'dark' && <Moon className="w-3 h-3 text-indigo-300" />}
-                      <span>{mode}</span>
-                    </button>
-                  ))}
-                </div>
-
-                {activeWidget && isStickerCapableWidget(activeWidget.type) && onUpdateWidget && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const isCurrentlySticker = isWidgetStickerMode(activeWidget, defaultWidgetStyle);
-                      const next = !isCurrentlySticker;
-                      if (activeWidget.type === 'textbox') {
-                        onUpdateWidget(activeWidget.id, {
-                          config: {
-                            ...activeWidget.config,
-                            transparentBg: next,
-                            bgStyle: next
-                              ? 'transparent'
-                              : activeWidget.config?.bgStyle && activeWidget.config.bgStyle !== 'transparent'
-                              ? activeWidget.config.bgStyle
-                              : 'glass',
-                          },
-                        });
-                      } else {
-                        onUpdateWidget(activeWidget.id, {
-                          config: { ...activeWidget.config, transparentBg: next },
-                        });
-                      }
-                      setContextMenu(null);
-                    }}
-                    className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-300 hover:text-white transition-colors cursor-pointer text-left"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Sparkles className="w-3.5 h-3.5 text-fuchsia-400 shrink-0" />
-                      <span>{activeWidget.type === 'image' ? 'Sticker / Transparent' : 'Sticker / No Outline'}</span>
-                    </div>
-                    {(() => {
-                      const isStickerOn = isWidgetStickerMode(activeWidget, defaultWidgetStyle);
-                      return (
-                        <span
-                          className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
-                            isStickerOn
-                              ? 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30'
-                              : 'bg-gray-800 text-gray-400'
-                          }`}
-                        >
-                          {isStickerOn ? 'ON' : 'OFF'}
-                        </span>
-                      );
-                    })()}
-                  </button>
-                )}
-
-                {activeWidget?.type === 'photo_frame' && onUpdateWidget && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const next = !(activeWidget.config?.showDateTaken ?? false);
-                      onUpdateWidget(activeWidget.id, {
-                        config: { ...activeWidget.config, showDateTaken: next },
-                      });
-                      setContextMenu(null);
-                    }}
-                    className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-300 hover:text-white transition-colors cursor-pointer text-left"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Calendar className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      <span>Date Taken</span>
-                    </div>
-                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
-                      activeWidget.config?.showDateTaken
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                        : 'bg-gray-800 text-gray-400'
-                    }`}>
-                      {activeWidget.config?.showDateTaken ? 'ON' : 'OFF'}
-                    </span>
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (activeWidget) setEditingWidget(activeWidget);
-                    setContextMenu(null);
-                  }}
-                  className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-300 hover:text-white transition-colors cursor-pointer text-left"
-                >
-                  <Settings className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                  <span>Tile Settings</span>
-                </button>
-              </div>
-            )}
-
-          {((contextMenu.type === 'widget' && onUpdateWidgetPos) ||
-            contextMenu.type === 'note') && (
-            <div className="space-y-1.5 my-1">
-              <div className="px-2 pt-0.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center justify-between">
-                <span>Tilt / Rotation</span>
-                <span className="font-mono text-blue-400 font-bold">
-                  {contextMenu.rotation ?? 0}°
-                </span>
-              </div>
-              <div className="grid grid-cols-5 gap-1 px-1">
-                {([-6, -3, 0, 3, 6] as const).map((deg) => {
-                  const isCurrent = (contextMenu.rotation ?? 0) === deg;
-                  return (
-                    <button
-                      key={deg}
-                      type="button"
-                      onClick={() => {
-                        if (contextMenu.type === 'widget' && onUpdateWidgetPos) {
-                          const w = widgets.find((x) => x.id === contextMenu.id);
-                          const basePos = w?.freeformPos || {
-                            xRatio: 0.1,
-                            yRatio: 0.1,
-                            wRatio: 0.35,
-                            hRatio: 0.45,
-                            zIndex: contextMenu.currentZ || 1,
-                            rotation: 0,
-                          };
-                          onUpdateWidgetPos(contextMenu.id, w?.gridPos, {
-                            ...basePos,
-                            rotation: deg,
-                          });
-                        } else if (contextMenu.type === 'note') {
-                          const n = notes.find((x) => x.id === contextMenu.id);
-                          const basePos = n?.freeformPos || {
-                            xRatio: 0.1,
-                            yRatio: 0.1,
-                            wRatio: 0.26,
-                            hRatio: 0.3,
-                            zIndex: contextMenu.currentZ || 1,
-                            rotation: 0,
-                          };
-                          onUpdateNotePos(contextMenu.id, {
-                            ...basePos,
-                            rotation: deg,
-                          });
-                        }
-                        setContextMenu((prev) => (prev ? { ...prev, rotation: deg } : null));
-                      }}
-                      className={`py-1 px-1 rounded-lg text-[10px] font-mono font-bold transition-all cursor-pointer ${
-                        isCurrent
-                          ? 'bg-blue-600 text-white shadow'
-                          : 'bg-gray-800/70 hover:bg-gray-700/80 text-gray-300'
-                      }`}
-                    >
-                      {deg > 0 ? `+${deg}°` : `${deg}°`}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {contextMenu.type === 'note' && (() => {
-            const activeNote = notes.find((x) => x.id === contextMenu.id);
-            const hasExpiry = Boolean(activeNote?.expiresAt);
-            return (
-              <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (activeNote) {
-                      openNoteEditorForExisting(activeNote);
                     }
-                    setContextMenu(null);
-                  }}
-                  className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-300 hover:text-white transition-colors cursor-pointer text-left"
-                >
-                  <Edit2 className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                  <span>Edit Note</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleDuplicateNote(contextMenu.id, 'plus1d');
-                    setContextMenu(null);
-                  }}
-                  className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-300 hover:text-white transition-colors cursor-pointer text-left"
-                  title={
-                    hasExpiry
-                      ? 'Duplicate note and increment expiration date by +1 day'
-                      : 'Duplicate note'
+                    onOpenCreator();
                   }
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Copy className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                    <span>Duplicate Note</span>
-                  </div>
-                  {hasExpiry && (
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                      +1d
-                    </span>
-                  )}
-                </button>
-
-                {hasExpiry && (
-                  <div className="px-2 pb-1 pt-0.5 flex flex-col gap-1">
-                    <div className="text-[9px] uppercase tracking-wider text-gray-500 font-semibold px-0.5">
-                      Duplicate Time Shift
-                    </div>
-                    <div className="grid grid-cols-4 gap-1">
-                      {(
-                        [
-                          { mode: 'plus1d', label: '+1d', title: 'Increment by 1 day' },
-                          { mode: 'plus1w', label: '+1w', title: 'Increment by 1 week' },
-                          { mode: 'same', label: 'Same', title: 'Keep exact same date/time' },
-                          { mode: 'edit', label: 'Edit', title: 'Open note modal with +1d to customize' },
-                        ] as const
-                      ).map((opt) => (
-                        <button
-                          key={opt.mode}
-                          type="button"
-                          title={opt.title}
-                          onClick={() => {
-                            handleDuplicateNote(contextMenu.id, opt.mode);
-                            setContextMenu(null);
-                          }}
-                          className={`px-1.5 py-1 rounded-lg text-[10px] font-semibold transition-all cursor-pointer text-center border ${
-                            opt.mode === 'plus1d'
-                              ? 'bg-blue-600/20 hover:bg-blue-600/35 text-blue-300 border-blue-500/40'
-                              : 'bg-gray-900/90 hover:bg-gray-800 text-gray-300 hover:text-white border-gray-800'
-                          }`}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
-            );
-          })()}
-
-          {contextMenu.type === 'note' && hasStickyNotesTile ? (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  onUpdateNote(contextMenu.id, { isPinnedToCanvas: false });
-                  setContextMenu(null);
-                }}
-                className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-amber-500/15 text-amber-300 hover:text-amber-200 transition-colors cursor-pointer text-left"
-              >
-                <X className="w-3.5 h-3.5 shrink-0" />
-                <span>Close from Canvas</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  onDeleteNote(contextMenu.id);
-                  setContextMenu(null);
-                }}
-                className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-red-500/15 text-red-400 hover:text-red-300 transition-colors cursor-pointer text-left"
-              >
-                <Trash2 className="w-3.5 h-3.5 shrink-0" />
-                <span>Delete Note</span>
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                if (contextMenu.type === 'widget' && onRemoveWidget) {
-                  onRemoveWidget(contextMenu.id);
-                } else if (contextMenu.type === 'note') {
-                  onDeleteNote(contextMenu.id);
-                }
-                setContextMenu(null);
-              }}
-              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-red-500/15 text-red-400 hover:text-red-300 transition-colors cursor-pointer text-left"
-            >
-              <Trash2 className="w-3.5 h-3.5 shrink-0" />
-              <span>{contextMenu.type === 'note' ? 'Delete Note' : 'Remove from Canvas'}</span>
-            </button>
-          )}
-        </div>
-      );
-    })()}
+                : undefined
+            }
+            onAddWidget={onAddWidget}
+            onOpenAddWidget={onOpenAddWidget}
+            onUpdateWidget={onUpdateWidget}
+            onUpdateWidgetPos={onUpdateWidgetPos}
+            onUpdateNote={onUpdateNote}
+            onUpdateNotePos={onUpdateNotePos}
+            onRemoveWidget={onRemoveWidget}
+            onDeleteNote={onDeleteNote}
+            onEditWidget={(w) => setEditingWidget(w)}
+            onEditNote={openNoteEditorForExisting}
+            onDuplicateNote={handleDuplicateNote}
+            onBringToFront={handleBringToFront}
+            onBringForward={handleBringForward}
+            onSendBackward={handleSendBackward}
+            onSendToBack={handleSendToBack}
+            getNextZIndex={getNextZIndex}
+            onUpdateRotation={(deg) =>
+              setContextMenu((prev) => (prev ? { ...prev, rotation: deg } : null))
+            }
+          />
+        </React.Suspense>
+      )}
     </div>
   );
 };

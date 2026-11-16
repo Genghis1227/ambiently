@@ -14,7 +14,8 @@ import {
   onAuthStateChange,
   pullFromCloud,
   pushToCloud,
-  getCurrentUser,
+  hasSupabaseCredentials,
+  getCachedSessionUser,
   isRealtimeConnected,
 } from './services/supabase';
 import { useIdleCursor } from './hooks/useIdleCursor';
@@ -141,6 +142,7 @@ export function App() {
 
   // Listen for Supabase Auth state changes (cleans up URL hash/code after magic link login)
   useEffect(() => {
+    if (!hasSupabaseCredentials()) return;
     resolveActiveDashboardId().then((target) => {
       setRealtimeBoardId(target?.dashboardId || null);
     });
@@ -189,12 +191,14 @@ export function App() {
 
   // Cloud Pull: fetch fresh state on boot if logged in, on screen wake (visibilitychange), and smart fallback poll
   useEffect(() => {
+    if (!hasSupabaseCredentials()) return;
+
     let isCancelled = false;
     let lastPollTime = 0;
 
     const pullFreshCloudData = async (force = false) => {
       try {
-        const user = await getCurrentUser();
+        const user = await getCachedSessionUser();
         if (user && !isCancelled) {
           await flushPendingCloudPush();
           const res = await pullFromCloud({ force });

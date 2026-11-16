@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.11] - 2026-11-15
+
+### Startup Bundle Deferral, Sync Auth Debouncing, Idle/Night Optimization & Workbox Tuning
+* **Defer `framer-motion` & `@supabase/supabase-js` Off Critical Startup (`vite.config.ts`, `src/index.css`, `PlexReauthBanner.tsx`, `UpdateNotificationBanner.tsx`, `SyncRefusedBanner.tsx`, `src/services/supabase.ts`):**
+  * Replaced `framer-motion` banner transitions in `PlexReauthBanner`, `UpdateNotificationBanner`, and `SyncRefusedBanner` with GPU-composited CSS animations (`.ambiently-toast-enter-down` / `.ambiently-toast-enter-up`) and normalized Windows path matching in `vite.config.ts` `manualChunks` without a separate `vendor-motion` split, co-locating `framer-motion` inside lazy `PhotoFrameWidget` (`165.18 kB`).
+  * Converted `@supabase/supabase-js` (`vendor-supabase`, `214.47 kB`) to on-demand dynamic `import()` via `getSupabaseAsync()` and `hasSupabaseCredentials()`, eliminating both `framer-motion` and `@supabase/supabase-js` from initial `dist/index.html` `<link rel="modulepreload">` tags.
+* **Extract Lazy `Corkboard` Overlays & Narrow Store Selectors (`Corkboard.tsx`, `CorkboardNoteModal.tsx`, `CorkboardTrashModal.tsx`, `CorkboardContextMenu.tsx`, `CanvasBlueprintPicker.tsx`, `MobileCompanion.tsx`, `dashboardStore.ts`):**
+  * Extracted `CorkboardNoteModal`, `CorkboardTrashModal`, `CorkboardContextMenu`, `CanvasBlueprintPicker`, and lazy-loaded `StickyNotesWidget`, `ShoppingListNoteBody`, and `materializeCanvasBlueprint` (`addTab` / `applyCanvasBlueprint`), trimming `index-*.js` from `289.84 kB` (`73.57 kB` gzip) to `248.24 kB` (`66.13 kB` gzip).
+  * Scoped `Corkboard`'s `settings` selector to `photoModalSettings` only when `photoSourcesTarget` is active.
+* **Debounced Cached-Session Sync, Idle/Night Guards, Weather Deduplication & PWA Precache (`dashboardStore.ts`, `App.tsx`, `GlobalTimerAlarmOverlay.tsx`, `NightMode.tsx`, `WeatherWidget.tsx`, `ClockWeatherWidget.tsx`, `QuotesWidget.tsx`, `RssWidget.tsx`, `weather.ts`, `vite.config.ts`, `tests/mediaPerf.test.ts`):**
+  * Made `scheduleCloudAutoPush` debounce for `2.5s` synchronously before checking cached session state via `getCachedSessionUser()` (`sb.auth.getSession()`) instead of firing un-debounced `sb.auth.getUser()` network requests on every local edit.
+  * Gated `GlobalTimerAlarmOverlay` shared clock ticks off when no timers are active or completed, migrated `NightMode` OLED clock updates to shared `useSharedClock('10s')`, and paused background polling/rotation behind `isOledNightClock` in `WeatherWidget`, `ClockWeatherWidget`, `QuotesWidget`, and `RssWidget`.
+  * Deduplicated concurrent cold `fetchWeatherData` calls via `inFlightWeatherRequests`, added Workbox `ambiently-lazy-chunks-v1` runtime caching for `ChangelogModal` (shrinking eager precache from `2639.94 KiB` to `2517.35 KiB`), and updated `ARCHITECTURE.md`.
+
+---
+
 ## [0.7.10] - 2026-11-15
 
 ### Widget/Modal Code-Splitting & Clock, Pointer, and Render Performance Optimizations

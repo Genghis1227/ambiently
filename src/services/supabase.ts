@@ -1,4 +1,4 @@
-import { createClient, type SupabaseClient, type User, type RealtimeChannel } from '@supabase/supabase-js';
+import type { SupabaseClient, User, RealtimeChannel } from '@supabase/supabase-js';
 import { db, DEFAULT_SETTINGS, DEFAULT_TABS, DEFAULT_WIDGETS, DEFAULT_NOTES, DEFAULT_CHORE_SNAPSHOT, DEFAULT_HOUSEHOLD_PROFILES, DEFAULT_MEAL_SNAPSHOT, DEFAULT_KANBAN_BOARDS, DEFAULT_KANBAN_SNAPSHOT } from './db';
 import { stripPlexTokens } from './plexLinks';
 import { isBoardFullError, setSyncRefusal } from './syncRefusal';
@@ -116,6 +116,7 @@ function toDbKanbanCardRow(card: KanbanCard, dashboardId: string, ownerId: strin
 }
 
 let supabaseClient: SupabaseClient | null = null;
+let supabaseClientPromise: Promise<SupabaseClient | null> | null = null;
 let realtimeChannel: RealtimeChannel | null = null;
 let realtimeConnectionActive = false;
 let cachedDashboardTarget: {
@@ -244,7 +245,7 @@ function resolveSupabaseCredentials(): { url?: string; anonKey?: string } {
     return { url: runtimeCfg.supabaseUrl, anonKey: runtimeCfg.supabaseAnonKey };
   }
 
-  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+  if (import.meta.env?.VITE_SUPABASE_URL && import.meta.env?.VITE_SUPABASE_ANON_KEY) {
     return { url: import.meta.env.VITE_SUPABASE_URL, anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY };
   }
 
@@ -264,43 +265,87 @@ function resolveSupabaseCredentials(): { url?: string; anonKey?: string } {
   return {};
 }
 
-export function getSupabase(): SupabaseClient | null {
-  if (supabaseClient) return supabaseClient;
-
+export function hasSupabaseCredentials(): boolean {
+  if (supabaseClient) return true;
   const { url, anonKey } = resolveSupabaseCredentials();
+  return Boolean(url && anonKey);
+}
 
-  if (url && anonKey) {
-    supabaseClient = createClient(url, anonKey);
-  }
+export function getSupabase(): SupabaseClient | null {
   return supabaseClient;
 }
 
+export async function getSupabaseAsync(): Promise<SupabaseClient | null> {
+  if (supabaseClient) return supabaseClient;
+
+  const { url, anonKey } = resolveSupabaseCredentials();
+  if (!url || !anonKey) return null;
+
+  if (!supabaseClientPromise) {
+    supabaseClientPromise = import('@supabase/supabase-js')
+      .then(({ createClient }) => {
+        supabaseClient = createClient(url, anonKey);
+        return supabaseClient;
+      })
+      .catch((err) => {
+        supabaseClientPromise = null;
+        console.warn('Failed to load Supabase client:', err);
+        return null;
+      });
+  }
+  return supabaseClientPromise;
+}
+
+export async function getCachedSessionUser(): Promise<User | null> {
+  if (!hasSupabaseCredentials()) return null;
+  const sb = await getSupabaseAsync();
+  if (!sb) return null;
+  const { data } = await sb.auth.getSession();
+  return data.session?.user ?? null;
+}
+
 export async function getCurrentUser(): Promise<User | null> {
-  const sb = getSupabase();
+  if (!hasSupabaseCredentials()) return null;
+  const sb = await getSupabaseAsync();
   if (!sb) return null;
   const { data } = await sb.auth.getUser();
   return data.user;
 }
 
 export function onAuthStateChange(callback: (user: User | null, event: string) => void): () => void {
-  const sb = getSupabase();
-  if (!sb) return () => {};
+  if (!hasSupabaseCredentials()) return () => {};
 
-  const { data: { subscription } } = sb.auth.onAuthStateChange((event, session) => {
-    if (event === 'SIGNED_IN') {
-      if (window.location.hash.includes('access_token') || window.location.search.includes('code=')) {
-        const cleanUrl = window.location.origin + window.location.pathname;
-        window.history.replaceState({}, document.title, cleanUrl);
+  let disposed = false;
+  let unsub: (() => void) | null = null;
+
+  void getSupabaseAsync().then((sb) => {
+    if (!sb || disposed) return;
+    const {
+      data: { subscription },
+    } = sb.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN') {
+        if (window.location.hash.includes('access_token') || window.location.search.includes('code=')) {
+          const cleanUrl = window.location.origin + window.location.pathname;
+          window.history.replaceState({}, document.title, cleanUrl);
+        }
       }
+      callback(session?.user ?? null, event);
+    });
+    if (disposed) {
+      subscription.unsubscribe();
+    } else {
+      unsub = () => subscription.unsubscribe();
     }
-    callback(session?.user ?? null, event);
   });
 
-  return () => subscription.unsubscribe();
+  return () => {
+    disposed = true;
+    unsub?.();
+  };
 }
 
 export async function sendMagicLink(email: string): Promise<{ success: boolean; error?: string }> {
-  const sb = getSupabase();
+  const sb = await getSupabaseAsync();
   if (!sb) return { success: false, error: 'Supabase credentials not configured in environment.' };
 
   const { error } = await sb.auth.signInWithOtp({
@@ -324,7 +369,7 @@ export async function sendMagicLink(email: string): Promise<{ success: boolean; 
 }
 
 export async function verifyOtpCode(email: string, token: string): Promise<{ success: boolean; error?: string }> {
-  const sb = getSupabase();
+  const sb = await getSupabaseAsync();
   if (!sb) return { success: false, error: 'Supabase credentials not configured in environment.' };
 
   const { error } = await sb.auth.verifyOtp({
@@ -340,14 +385,15 @@ export async function verifyOtpCode(email: string, token: string): Promise<{ suc
 // Emails a sign-in code to the account this screen is signed in to, to remove a forgotten kiosk PIN
 // (see PinOverlay). It never creates an account.
 export async function sendPinResetCode(email: string): Promise<{ success: boolean; error?: string }> {
-  const sb = getSupabase();
+  const sb = await getSupabaseAsync();
   if (!sb) return { success: false, error: 'Cloud sync is not set up on this screen.' };
   const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
   return error ? { success: false, error: error.message } : { success: true };
 }
 
 export async function signOutSupabase(): Promise<void> {
-  const sb = getSupabase();
+  if (!hasSupabaseCredentials()) return;
+  const sb = await getSupabaseAsync();
   if (sb) {
     if (realtimeChannel) {
       sb.removeChannel(realtimeChannel);
@@ -367,23 +413,13 @@ export interface RealtimeBoardHandlers {
   onRemoteTabChange?: (tab: DashboardTab, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void;
 }
 
-// Subscribe to Realtime WebSocket updates ONLY when authenticated to a specific boardId
-export function subscribeToRealtimeBoard(
-  boardId: string | null | undefined,
+function attachRealtimeChannel(
+  sb: SupabaseClient,
+  boardId: string,
   handlers:
     | RealtimeBoardHandlers
     | ((note: StickyNoteItem, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void)
 ): () => void {
-  const sb = getSupabase();
-  if (!sb || !boardId || boardId === 'default') {
-    realtimeConnectionActive = false;
-    if (realtimeChannel && sb) {
-      sb.removeChannel(realtimeChannel);
-      realtimeChannel = null;
-    }
-    return () => {};
-  }
-
   const noteHandler = typeof handlers === 'function' ? handlers : handlers.onRemoteNoteChange;
   const widgetHandler = typeof handlers === 'object' ? handlers.onRemoteWidgetChange : undefined;
   const tabHandler = typeof handlers === 'object' ? handlers.onRemoteTabChange : undefined;
@@ -564,6 +600,40 @@ export function subscribeToRealtimeBoard(
   };
 }
 
+// Subscribe to Realtime WebSocket updates ONLY when authenticated to a specific boardId
+export function subscribeToRealtimeBoard(
+  boardId: string | null | undefined,
+  handlers:
+    | RealtimeBoardHandlers
+    | ((note: StickyNoteItem, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void)
+): () => void {
+  if (!hasSupabaseCredentials() || !boardId || boardId === 'default') {
+    realtimeConnectionActive = false;
+    if (realtimeChannel && supabaseClient) {
+      supabaseClient.removeChannel(realtimeChannel);
+      realtimeChannel = null;
+    }
+    return () => {};
+  }
+
+  if (supabaseClient) {
+    return attachRealtimeChannel(supabaseClient, boardId, handlers);
+  }
+
+  let disposed = false;
+  let detach: (() => void) | null = null;
+
+  void getSupabaseAsync().then((sb) => {
+    if (!sb || disposed) return;
+    detach = attachRealtimeChannel(sb, boardId, handlers);
+  });
+
+  return () => {
+    disposed = true;
+    detach?.();
+  };
+}
+
 export interface HouseholdMember {
   id: string;
   dashboard_id: string;
@@ -583,7 +653,7 @@ export interface BoardInvitation {
 
 // Fetch authorized household members for the current owner's dashboard
 export async function getHouseholdMembers(): Promise<HouseholdMember[]> {
-  const sb = getSupabase();
+  const sb = await getSupabaseAsync();
   const user = await getCurrentUser();
   if (!sb || !user) return [];
 
@@ -606,7 +676,7 @@ export async function addHouseholdMember(
   email: string,
   role: 'editor' | 'viewer' = 'editor'
 ): Promise<{ success: boolean; member?: HouseholdMember; error?: string }> {
-  const sb = getSupabase();
+  const sb = await getSupabaseAsync();
   const user = await getCurrentUser();
   if (!sb || !user) return { success: false, error: 'You must be signed in to add household members.' };
 
@@ -658,7 +728,7 @@ export async function addHouseholdMember(
 
 // Revoke household member access by ID
 export async function removeHouseholdMember(memberId: string): Promise<boolean> {
-  const sb = getSupabase();
+  const sb = await getSupabaseAsync();
   const user = await getCurrentUser();
   if (!sb || !user) return false;
 
@@ -677,7 +747,7 @@ export async function removeHouseholdMember(memberId: string): Promise<boolean> 
 
 // Boards that have invited the signed-in user, accepted or not
 export async function getMyInvitations(): Promise<BoardInvitation[]> {
-  const sb = getSupabase();
+  const sb = await getSupabaseAsync();
   if (!sb) return [];
 
   try {
@@ -690,7 +760,7 @@ export async function getMyInvitations(): Promise<BoardInvitation[]> {
 }
 
 export async function acceptInvitation(invitationId: string): Promise<boolean> {
-  const sb = getSupabase();
+  const sb = await getSupabaseAsync();
   if (!sb) return false;
 
   try {
@@ -707,7 +777,7 @@ export async function acceptInvitation(invitationId: string): Promise<boolean> {
 
 // Decline an invitation, or leave a board already joined
 export async function leaveBoard(invitationId: string): Promise<boolean> {
-  const sb = getSupabase();
+  const sb = await getSupabaseAsync();
   if (!sb) return false;
 
   try {
@@ -721,8 +791,8 @@ export async function leaveBoard(invitationId: string): Promise<boolean> {
 
 // Resolve active target dashboard ID for authenticated user (either own board or a board they accepted an invitation to)
 export async function resolveActiveDashboardId(): Promise<{ dashboardId: string; ownerId: string; isMember: boolean } | null> {
-  const sb = getSupabase();
-  const user = await getCurrentUser();
+  const sb = await getSupabaseAsync();
+  const user = await getCachedSessionUser();
   if (!sb || !user) return null;
 
   if (
@@ -800,8 +870,8 @@ export function clearLegacyJoinKeys(): void {
  */
 export async function syncKanbanRowEventToCloud(event: KanbanRowSyncEvent): Promise<void> {
   try {
-    const sb = getSupabase();
-    const user = await getCurrentUser();
+    const sb = await getSupabaseAsync();
+    const user = await getCachedSessionUser();
     if (!sb || !user) return;
 
     const target = await resolveActiveDashboardId();
@@ -855,8 +925,8 @@ export async function pushToCloud(
   notes: StickyNoteItem[],
   options?: { force?: boolean }
 ): Promise<{ success: boolean; error?: string }> {
-  const sb = getSupabase();
-  const user = await getCurrentUser();
+  const sb = await getSupabaseAsync();
+  const user = await getCachedSessionUser();
   if (!sb || !user) return { success: false, error: 'Not authenticated' };
 
   try {
@@ -1351,8 +1421,8 @@ export function pullFromCloud(options?: { force?: boolean; overwriteLocal?: bool
 }
 
 async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: boolean }): Promise<PullResult> {
-  const sb = getSupabase();
-  const user = await getCurrentUser();
+  const sb = await getSupabaseAsync();
+  const user = await getCachedSessionUser();
   if (!sb || !user) return { success: false, error: 'Not authenticated' };
 
   try {

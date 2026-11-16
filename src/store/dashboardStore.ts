@@ -20,11 +20,17 @@ import type {
 import { MAX_CANVASES } from '../types/dashboard';
 import { saveSnapshotToFile, hasActiveLocalFile } from '../services/fileSync';
 import { computeNonOverlappingLayout, findOpenCanvasSpot } from '../utils/autoLayout';
-import { materializeCanvasBlueprint, type CanvasBlueprintId } from '../utils/canvasBlueprints';
+import type { CanvasBlueprintId } from '../utils/canvasBlueprints';
 import { getDefaultWidgetStickerMode, isStickerCapableWidget } from '../utils/widgetStickerMode';
 import type { PhotoTargetSyncMeta, PlexPhotoSyncConfig } from '../utils/photoSyncPolicy';
 import type { PhotoItem } from '../services/photos';
-import { getSupabase, getCurrentUser, pushToCloud, syncKanbanRowEventToCloud, KANBAN_ENGINE_CLOUD_ROW_ID } from '../services/supabase';
+import {
+  hasSupabaseCredentials,
+  getCachedSessionUser,
+  pushToCloud,
+  syncKanbanRowEventToCloud,
+  KANBAN_ENGINE_CLOUD_ROW_ID,
+} from '../services/supabase';
 import {
   CANVAS_LOOK_FIELDS,
   buildNoteFreeformPos,
@@ -85,11 +91,10 @@ export async function flushPendingCloudPush(): Promise<void> {
   }
   if (!hasPendingCloudPush) return;
   hasPendingCloudPush = false;
+  if (!hasSupabaseCredentials()) return;
 
   try {
-    const sb = getSupabase();
-    if (!sb) return;
-    const user = await getCurrentUser();
+    const user = await getCachedSessionUser();
     if (!user) return;
 
     const state = (latestDashboardGet || (() => useDashboardStore.getState()))();
@@ -114,21 +119,20 @@ export async function flushPendingCloudPush(): Promise<void> {
   }
 }
 
-async function scheduleCloudAutoPush(get: () => DashboardState) {
+function scheduleCloudAutoPush(get: () => DashboardState): void {
   latestDashboardGet = get;
-  try {
-    const sb = getSupabase();
-    if (!sb) return;
-    const user = await getCurrentUser();
-    if (user) {
-      hasPendingCloudPush = true;
-      if (cloudAutoSyncTimer) {
-        clearTimeout(cloudAutoSyncTimer);
-      }
-      cloudAutoSyncTimer = setTimeout(() => {
-        cloudAutoSyncTimer = null;
-        if (!hasPendingCloudPush) return;
-        hasPendingCloudPush = false;
+  if (!hasSupabaseCredentials()) return;
+  hasPendingCloudPush = true;
+  if (cloudAutoSyncTimer) {
+    clearTimeout(cloudAutoSyncTimer);
+  }
+  cloudAutoSyncTimer = setTimeout(() => {
+    cloudAutoSyncTimer = null;
+    if (!hasPendingCloudPush) return;
+    hasPendingCloudPush = false;
+    void getCachedSessionUser()
+      .then((user) => {
+        if (!user) return;
         const state = get();
         const runPush = Promise.resolve(
           pushToCloud(state.settings, state.tabs, state.widgets, state.notes)
@@ -144,11 +148,11 @@ async function scheduleCloudAutoPush(get: () => DashboardState) {
             activeCloudPushPromise = null;
           }
         });
-      }, 2500);
-    }
-  } catch (err) {
-    console.warn('Cloud auto-push skipped:', err);
-  }
+      })
+      .catch((err) => {
+        console.warn('Cloud auto-push skipped:', err);
+      });
+  }, 2500);
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
@@ -533,15 +537,16 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       (max, t, idx) => Math.max(max, Number.isFinite(t.order) ? t.order : idx),
       -1
     );
-    const materialized =
-      blueprintId && blueprintId !== 'blank'
-        ? materializeCanvasBlueprint(blueprintId, {
-            tabId: newId,
-            existingWidgets: state.widgets,
-            defaultWidgetStyle: state.settings.defaultWidgetStyle || 'auto',
-            nowMs,
-          })
-        : null;
+    let materialized: Awaited<ReturnType<typeof import('../utils/canvasBlueprints')['materializeCanvasBlueprint']>> | null = null;
+    if (blueprintId && blueprintId !== 'blank') {
+      const { materializeCanvasBlueprint } = await import('../utils/canvasBlueprints');
+      materialized = materializeCanvasBlueprint(blueprintId, {
+        tabId: newId,
+        existingWidgets: state.widgets,
+        defaultWidgetStyle: state.settings.defaultWidgetStyle || 'auto',
+        nowMs,
+      });
+    }
 
     const newTab: DashboardTab = {
       id: newId,
@@ -588,6 +593,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
 
     const nowMs = Date.now();
     const nowIso = new Date(nowMs).toISOString();
+    const { materializeCanvasBlueprint } = await import('../utils/canvasBlueprints');
     const materialized = materializeCanvasBlueprint(blueprintId, {
       tabId,
       existingWidgets: state.widgets,

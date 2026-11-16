@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useDisplayActivity } from '../../utils/displayActivity';
 import {
   Sun,
   Cloud,
@@ -53,8 +54,12 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({
 }) => {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(false);
+  const { isOledNightClock } = useDisplayActivity();
+  const isOledRef = useRef(isOledNightClock);
+  isOledRef.current = isOledNightClock;
+  const wasOledRef = useRef(false);
 
-  const loadWeather = async () => {
+  const loadWeather = useCallback(async () => {
     setLoading(true);
     try {
       const data = await fetchWeatherData(latitude, longitude, locationName, unit);
@@ -64,16 +69,23 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [latitude, longitude, locationName, unit]);
 
   useEffect(() => {
-    loadWeather();
+    void loadWeather();
     const interval = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-      loadWeather();
+      if ((typeof document !== 'undefined' && document.visibilityState === 'hidden') || isOledRef.current) return;
+      void loadWeather();
     }, 15 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [latitude, longitude, locationName, unit]);
+  }, [loadWeather]);
+
+  useEffect(() => {
+    if (wasOledRef.current && !isOledNightClock) {
+      void loadWeather();
+    }
+    wasOledRef.current = isOledNightClock;
+  }, [isOledNightClock, loadWeather]);
 
   const stickerShadow = transparentBg && !isLight ? 'drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]' : '';
 

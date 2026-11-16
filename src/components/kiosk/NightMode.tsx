@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTimePrefs } from '../../utils/timePrefs';
+import { useSharedClock } from '../../utils/sharedClock';
 import { Moon } from 'lucide-react';
 
 interface NightModeProps {
@@ -16,17 +17,12 @@ export const NightMode: React.FC<NightModeProps> = ({
   onWake,
 }) => {
   const { hour12 } = useTimePrefs();
-  const [time, setTime] = useState(new Date());
+  const time = useSharedClock('10s', enabled && style === 'oled_clock');
   // Pixel shift offset to avoid OLED burn-in
   const [pixelShift, setPixelShift] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
     if (!enabled || style !== 'oled_clock') return;
-    setTime(new Date());
-    const clockInterval = setInterval(() => {
-      if (document.visibilityState === 'hidden') return;
-      setTime(new Date());
-    }, 10000);
     // Shift pixels every 60 seconds by +/- 15px
     const shiftInterval = setInterval(() => {
       if (document.visibilityState === 'hidden') return;
@@ -37,7 +33,6 @@ export const NightMode: React.FC<NightModeProps> = ({
     }, 60000);
 
     return () => {
-      clearInterval(clockInterval);
       clearInterval(shiftInterval);
     };
   }, [enabled, style]);

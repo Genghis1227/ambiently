@@ -84,3 +84,33 @@ html.idle-cursor-hidden body,
   will-change: transform;
 }
 
+@keyframes ambiently-toast-down {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -28px, 0) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes ambiently-toast-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 28px, 0) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.ambiently-toast-enter-down {
+  animation: ambiently-toast-down 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.ambiently-toast-enter-up {
+  animation: ambiently-toast-up 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+

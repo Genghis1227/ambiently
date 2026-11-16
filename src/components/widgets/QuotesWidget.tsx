@@ -1,6 +1,7 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Quote, RefreshCw } from 'lucide-react';
 import { CURATED_QUOTES, type QuoteItem } from '../../services/quotes';
+import { useDisplayActivity } from '../../utils/displayActivity';
 
 interface QuotesWidgetProps {
   customQuotes?: QuoteItem[];
@@ -38,6 +39,9 @@ export const QuotesWidget: React.FC<QuotesWidgetProps> = ({
   const [offset, setOffset] = useState(0);
   const [currentBlock, setCurrentBlock] = useState(timeBlock);
   const [isFading, setIsFading] = useState(false);
+  const { isOledNightClock } = useDisplayActivity();
+  const isOledRef = useRef(isOledNightClock);
+  isOledRef.current = isOledNightClock;
 
   // Sync currentBlock if intervalSec or wall-clock block changes
   useEffect(() => {
@@ -49,7 +53,7 @@ export const QuotesWidget: React.FC<QuotesWidgetProps> = ({
     if (intervalSec <= 0 || pool.length <= 1) return;
 
     const timer = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      if ((typeof document !== 'undefined' && document.visibilityState === 'hidden') || isOledRef.current) return;
       setIsFading(true);
       setTimeout(() => {
         setCurrentBlock((prev) => prev + 1);
