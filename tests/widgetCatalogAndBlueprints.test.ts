@@ -99,9 +99,10 @@ describe('widgetCatalog', () => {
     assert.equal(timeWeatherItems.some((i) => i.entry.id === 'sun_moon'), true);
 
     assert.equal(
-      filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'all', 'pomodoro')[0]?.entry.id,
+      filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'all', 'kitchen timer')[0]?.entry.id,
       'timer'
     );
+    assert.equal(filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'all', 'pomodoro').length, 0);
     assert.equal(
       filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'all', 'pollen')[0]?.entry.id,
       'air_quality'

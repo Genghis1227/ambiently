@@ -1,5 +1,3 @@
-export type TimerMode = 'countdown' | 'pomodoro';
-
 export type TimerStatus = 'idle' | 'running' | 'paused' | 'completed';
 
 export interface TimerItem {
@@ -10,8 +8,6 @@ export interface TimerItem {
   endsAt?: string | null;
   remainingSec?: number;
   completedAt?: string | null;
-  mode?: TimerMode;
-  pomodoroPhase?: 'focus' | 'break';
 }
 
 export interface TimerPreset {
@@ -19,15 +15,11 @@ export interface TimerPreset {
   label: string;
   durationSec: number;
   icon?: string;
-  mode?: TimerMode;
-  pomodoroPhase?: 'focus' | 'break';
 }
 
 export interface TimerWidgetConfig {
   timers?: TimerItem[];
   chimeEnabled?: boolean;
-  defaultFocusMin?: number;
-  defaultBreakMin?: number;
   transparentBg?: boolean;
 }
 

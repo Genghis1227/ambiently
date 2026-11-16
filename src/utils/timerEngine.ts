@@ -1,26 +1,12 @@
 import { MAX_TIMERS_PER_WIDGET, type TimerItem, type TimerPreset, type TimerStatus } from '../types/phase1Widgets';
 
 export const DEFAULT_TIMER_PRESETS: TimerPreset[] = [
-  { id: 'preset-pasta', label: 'Pasta', durationSec: 9 * 60, icon: '🍝', mode: 'countdown' },
-  { id: 'preset-eggs', label: 'Soft Eggs', durationSec: 7 * 60, icon: '🥚', mode: 'countdown' },
-  { id: 'preset-oven', label: 'Oven Bake', durationSec: 20 * 60, icon: '🔥', mode: 'countdown' },
-  { id: 'preset-tea', label: 'Steep Tea', durationSec: 4 * 60, icon: '🫖', mode: 'countdown' },
-  {
-    id: 'preset-pomo-focus',
-    label: 'Focus Pomodoro',
-    durationSec: 25 * 60,
-    icon: '🎯',
-    mode: 'pomodoro',
-    pomodoroPhase: 'focus',
-  },
-  {
-    id: 'preset-pomo-break',
-    label: 'Short Break',
-    durationSec: 5 * 60,
-    icon: '☕',
-    mode: 'pomodoro',
-    pomodoroPhase: 'break',
-  },
+  { id: 'preset-tea', label: 'Steep Tea', durationSec: 4 * 60, icon: '🫖' },
+  { id: 'preset-eggs', label: 'Soft Eggs', durationSec: 7 * 60, icon: '🥚' },
+  { id: 'preset-pasta', label: 'Pasta', durationSec: 9 * 60, icon: '🍝' },
+  { id: 'preset-simmer', label: 'Simmer / Rice', durationSec: 15 * 60, icon: '🍚' },
+  { id: 'preset-oven', label: 'Oven Bake', durationSec: 20 * 60, icon: '🔥' },
+  { id: 'preset-roast', label: 'Roast / Proof', durationSec: 45 * 60, icon: '🍞' },
 ];
 
 export interface TimerLiveState {
@@ -54,16 +40,12 @@ export function resolveWidgetTimers(timers?: TimerItem[]): TimerItem[] {
         : durationSec;
     out.push({
       id: typeof item.id === 'string' && item.id.trim() ? item.id : `timer-${out.length + 1}`,
-      label: typeof item.label === 'string' && item.label.trim() ? item.label.trim() : 'Timer',
+      label: typeof item.label === 'string' && item.label.trim() ? item.label.trim() : 'Kitchen Timer',
       durationSec,
       status,
       endsAt: typeof item.endsAt === 'string' && item.endsAt ? item.endsAt : null,
       remainingSec,
       completedAt: typeof item.completedAt === 'string' && item.completedAt ? item.completedAt : null,
-      mode: item.mode === 'pomodoro' ? 'pomodoro' : 'countdown',
-      ...(item.mode === 'pomodoro'
-        ? { pomodoroPhase: item.pomodoroPhase === 'break' ? 'break' : 'focus' }
-        : {}),
     });
   }
   return out;
@@ -220,27 +202,51 @@ export function addSecondsToTimerItem(timer: TimerItem, deltaSec: number, nowMs:
   };
 }
 
-export function advancePomodoroPhase(
+export function splitDurationHms(durationSec: number): {
+  hours: number;
+  minutes: number;
+  seconds: number;
+} {
+  const safe = Math.max(0, Math.min(24 * 3600, Math.round(Number(durationSec) || 0)));
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const seconds = safe % 60;
+  return { hours, minutes, seconds };
+}
+
+export function combineDurationHms(hours: number, minutes: number, seconds: number): number {
+  const h = Number.isFinite(hours) ? Math.max(0, hours) : 0;
+  const m = Number.isFinite(minutes) ? Math.max(0, minutes) : 0;
+  const s = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
+  const total = Math.round(h * 3600 + m * 60 + s);
+  return Math.max(0, Math.min(24 * 3600, total));
+}
+
+export function updateTimerItem(
   timer: TimerItem,
-  focusMin: number,
-  breakMin: number,
-  nowMs: number
+  updates: { label?: string; durationSec?: number }
 ): TimerItem {
-  const nextPhase = timer.pomodoroPhase === 'focus' ? 'break' : 'focus';
-  const mins =
-    nextPhase === 'focus'
-      ? Math.max(1, Math.round(focusMin || 25))
-      : Math.max(1, Math.round(breakMin || 5));
-  const nextDurationSec = mins * 60;
+  const nextLabel =
+    updates.label !== undefined ? updates.label.trim() || 'Kitchen Timer' : timer.label;
+  const nextDurationSec =
+    updates.durationSec !== undefined
+      ? Math.max(1, Math.min(24 * 3600, Math.round(updates.durationSec)))
+      : timer.durationSec;
+
+  if (nextDurationSec === timer.durationSec) {
+    return {
+      ...timer,
+      label: nextLabel,
+    };
+  }
 
   return {
     ...timer,
-    mode: 'pomodoro',
-    pomodoroPhase: nextPhase,
+    label: nextLabel,
     durationSec: nextDurationSec,
-    status: 'running',
+    status: 'idle',
     remainingSec: nextDurationSec,
-    endsAt: new Date(nowMs + nextDurationSec * 1000).toISOString(),
+    endsAt: null,
     completedAt: null,
   };
 }

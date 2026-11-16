@@ -209,7 +209,6 @@ const CookingModeContent: React.FC<CookingModeContentProps> = ({
         label,
         durationSec,
         status: 'idle',
-        mode: 'countdown',
       },
       now
     );
@@ -257,8 +256,6 @@ const CookingModeContent: React.FC<CookingModeContentProps> = ({
       config: {
         timers: [newTimer],
         chimeEnabled: true,
-        defaultFocusMin: 25,
-        defaultBreakMin: 5,
         transparentBg: false,
       },
     });
