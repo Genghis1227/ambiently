@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.14",
+    date: "November 16, 2026",
+    title: "Confirm Before Deleting Widgets & Move Widget to Canvas",
+    highlights: [
+      "Confirm Before Deleting Widgets: Added a Display & Kiosk setting (confirmWidgetDelete, enabled by default) and a lazy-loaded WidgetDeleteConfirmModal confirmation dialog across Desktop and Mobile views before removing any widget.",
+      "Move Widget to Existing or New Canvas: Added Move to Canvas and + Move to New Canvas… actions to both the widget context/layers menu and Tile Settings (keeping widget IDs and local db.vault secrets intact while placing widgets without overlap via computeMovedWidgetPosition).",
+      "Stay-on-Canvas Toast Shortcut: Moving a widget keeps you on the source canvas and displays a 6-second MovedWidgetToast banner with a one-click Go to <Canvas> jump button.",
+    ],
+  },
+  {
     version: "v0.7.13",
     date: "November 16, 2026",
     title: "Flexible Single & Multi-Day Weekly Schedules for Home Check-Ins",

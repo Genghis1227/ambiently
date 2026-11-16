@@ -1032,11 +1032,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
                           {onRemoveWidget && (
                             <button
                               type="button"
-                              onClick={() => {
-                                if (window.confirm(`Remove "${widget.title}" from this canvas?`)) {
-                                  onRemoveWidget(widget.id);
-                                }
-                              }}
+                              onClick={() => onRemoveWidget(widget.id)}
                               title="Remove widget from canvas"
                               className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/20 transition-all cursor-pointer"
                             >

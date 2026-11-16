@@ -2644,7 +2644,9 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       {contextMenu && (
         <React.Suspense fallback={null}>
           <CorkboardContextMenu
+            key={`${contextMenu.type}-${contextMenu.id}`}
             contextMenu={contextMenu}
+            tabs={tabs}
             widgets={widgets}
             notes={notes}
             hasStickyNotesTile={hasStickyNotesTile}
@@ -2672,6 +2674,12 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             onOpenAddWidget={onOpenAddWidget}
             onUpdateWidget={onUpdateWidget}
             onUpdateWidgetPos={onUpdateWidgetPos}
+            onMoveWidgetToTab={(widgetId, targetTabId) => {
+              void useDashboardStore.getState().moveWidgetToTab(widgetId, targetTabId);
+            }}
+            onMoveWidgetToNewTab={(widgetId, canvasName) => {
+              void useDashboardStore.getState().moveWidgetToNewTab(widgetId, canvasName);
+            }}
             onUpdateNote={onUpdateNote}
             onUpdateNotePos={onUpdateNotePos}
             onRemoveWidget={onRemoveWidget}

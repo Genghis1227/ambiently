@@ -1,12 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ArrowDown,
   ArrowUp,
   BringToFront,
   Calendar,
   CheckSquare,
+  ChevronDown,
+  ChevronRight,
   Copy,
   Edit2,
+  FolderOutput,
+  Home,
   Image as ImageIcon,
   Layers,
   Moon,
@@ -19,7 +23,13 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import type { DashboardWidget, StickyNoteItem, WidgetThemeMode } from '../../types/dashboard';
+import {
+  MAX_CANVASES,
+  type DashboardTab,
+  type DashboardWidget,
+  type StickyNoteItem,
+  type WidgetThemeMode,
+} from '../../types/dashboard';
 import { isStickerCapableWidget, isWidgetStickerMode } from '../../utils/widgetStickerMode';
 
 export interface CorkboardContextMenuState {
@@ -37,6 +47,7 @@ export interface CorkboardContextMenuState {
 
 export interface CorkboardContextMenuProps {
   contextMenu: CorkboardContextMenuState;
+  tabs?: DashboardTab[];
   widgets: DashboardWidget[];
   notes: StickyNoteItem[];
   hasStickyNotesTile: boolean;
@@ -47,6 +58,8 @@ export interface CorkboardContextMenuProps {
   onOpenAddWidget?: () => void;
   onUpdateWidget?: (widgetId: string, updates: Partial<DashboardWidget>) => void;
   onUpdateWidgetPos?: (widgetId: string, gridPos: any, freeformPos: NonNullable<DashboardWidget['freeformPos']>) => void;
+  onMoveWidgetToTab?: (widgetId: string, targetTabId: string) => void;
+  onMoveWidgetToNewTab?: (widgetId: string, canvasName?: string) => void;
   onUpdateNote: (noteId: string, updates: Partial<StickyNoteItem>) => void;
   onUpdateNotePos: (noteId: string, pos: NonNullable<StickyNoteItem['freeformPos']>) => void;
   onRemoveWidget?: (widgetId: string) => void;
@@ -64,6 +77,7 @@ export interface CorkboardContextMenuProps {
 
 export const CorkboardContextMenu: React.FC<CorkboardContextMenuProps> = ({
   contextMenu,
+  tabs = [],
   widgets,
   notes,
   hasStickyNotesTile,
@@ -74,6 +88,8 @@ export const CorkboardContextMenu: React.FC<CorkboardContextMenuProps> = ({
   onOpenAddWidget,
   onUpdateWidget,
   onUpdateWidgetPos,
+  onMoveWidgetToTab,
+  onMoveWidgetToNewTab,
   onUpdateNote,
   onUpdateNotePos,
   onRemoveWidget,
@@ -88,6 +104,10 @@ export const CorkboardContextMenu: React.FC<CorkboardContextMenuProps> = ({
   getNextZIndex,
   onUpdateRotation,
 }) => {
+  const [isMoveOpen, setIsMoveOpen] = useState(false);
+  const [isCreatingCanvas, setIsCreatingCanvas] = useState(false);
+  const [newCanvasName, setNewCanvasName] = useState('');
+
   if (contextMenu.type === 'canvas') {
     return (
       <div
@@ -210,6 +230,12 @@ export const CorkboardContextMenu: React.FC<CorkboardContextMenuProps> = ({
   }
 
   const activeWidget = contextMenu.type === 'widget' ? widgets.find((x) => x.id === contextMenu.id) : null;
+  const activeTabs = tabs.filter((t) => !t.deleted_at);
+  const otherTabs = activeWidget ? activeTabs.filter((t) => t.id !== activeWidget.tabId) : [];
+  const canCreateNewCanvas =
+    Boolean(activeWidget) && activeTabs.length < MAX_CANVASES && Boolean(onMoveWidgetToNewTab);
+  const canMoveWidget =
+    Boolean(activeWidget) && ((otherTabs.length > 0 && Boolean(onMoveWidgetToTab)) || canCreateNewCanvas);
   const currentThemeMode: WidgetThemeMode = (activeWidget?.config?.themeMode as WidgetThemeMode) || 'auto';
   const itemType = contextMenu.type === 'widget' ? 'widget' : 'note';
 
@@ -402,6 +428,116 @@ export const CorkboardContextMenu: React.FC<CorkboardContextMenuProps> = ({
                 {activeWidget.config?.showDateTaken ? 'ON' : 'OFF'}
               </span>
             </button>
+          )}
+
+          {canMoveWidget && activeWidget && (
+            <div className="space-y-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const nextOpen = !isMoveOpen;
+                  setIsMoveOpen(nextOpen);
+                  if (nextOpen) {
+                    setNewCanvasName(`Canvas ${activeTabs.length + 1}`);
+                    if (otherTabs.length === 0 && canCreateNewCanvas) {
+                      setIsCreatingCanvas(true);
+                    }
+                  } else {
+                    setIsCreatingCanvas(false);
+                  }
+                }}
+                className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl hover:bg-gray-800/80 text-gray-300 hover:text-white transition-colors cursor-pointer text-left"
+              >
+                <div className="flex items-center gap-2.5">
+                  <FolderOutput className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                  <span>Move to Canvas</span>
+                </div>
+                {isMoveOpen ? (
+                  <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                ) : (
+                  <ChevronRight className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                )}
+              </button>
+
+              {isMoveOpen && (
+                <div className="pl-2 pr-1 space-y-1">
+                  {otherTabs.length > 0 && onMoveWidgetToTab && (
+                    <div className="max-h-36 overflow-y-auto space-y-0.5">
+                      {otherTabs.map((tab) => (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => {
+                            onMoveWidgetToTab(activeWidget.id, tab.id);
+                            onClose();
+                          }}
+                          className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-gray-900/80 hover:bg-blue-600/25 border border-gray-800 hover:border-blue-500/40 text-gray-200 hover:text-white text-[11px] font-medium transition-colors cursor-pointer text-left"
+                        >
+                          <span className="truncate">{tab.name}</span>
+                          {tab.isHome && <Home className="w-3 h-3 text-amber-400 shrink-0" />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {canCreateNewCanvas && onMoveWidgetToNewTab && (
+                    !isCreatingCanvas ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCreatingCanvas(true);
+                          setNewCanvasName(`Canvas ${activeTabs.length + 1}`);
+                        }}
+                        className="w-full flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-[11px] font-semibold transition-colors cursor-pointer text-left"
+                      >
+                        <Plus className="w-3.5 h-3.5 shrink-0" />
+                        <span>Move to New Canvas…</span>
+                      </button>
+                    ) : (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          onMoveWidgetToNewTab(activeWidget.id, newCanvasName);
+                          onClose();
+                        }}
+                        className="p-1.5 rounded-lg bg-gray-900/90 border border-gray-800 space-y-1.5"
+                      >
+                        <input
+                          type="text"
+                          value={newCanvasName}
+                          onChange={(e) => setNewCanvasName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') {
+                              e.stopPropagation();
+                              setIsCreatingCanvas(false);
+                            }
+                          }}
+                          placeholder="Canvas name..."
+                          maxLength={40}
+                          autoFocus
+                          className="w-full rounded-md bg-gray-950 border border-gray-700 px-2 py-1 text-[11px] text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
+                        />
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setIsCreatingCanvas(false)}
+                            className="px-2 py-0.5 rounded text-[10px] text-gray-400 hover:text-white cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            className="px-2.5 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold cursor-pointer"
+                          >
+                            Create &amp; Move
+                          </button>
+                        </div>
+                      </form>
+                    )
+                  )}
+                </div>
+              )}
+            </div>
           )}
 
           <button

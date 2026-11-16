@@ -391,3 +391,108 @@ export function findOpenCanvasSpot(
     isFullScreen: false,
   };
 }
+
+/**
+ * Computes destination freeform coordinates when moving a widget to another canvas.
+ * Preserves unobstructed in-bounds placement, relocates to an open spot via `findOpenCanvasSpot`
+ * when overlapping existing tiles/notes, elevates zIndex above destination items, and resets
+ * fullscreen widgets (`chores`/`kanban` hub/view modes) cleanly to tile dimensions.
+ */
+export function computeMovedWidgetPosition(
+  widget: Pick<DashboardWidget, 'freeformPos' | 'type'>,
+  targetTabWidgets: DashboardWidget[],
+  targetTabNotes: StickyNoteItem[],
+  overrideFreeformPos?: FreeformPosition
+): { freeformPos: FreeformPosition; configPatch?: Record<string, any> } {
+  const basePos: FreeformPosition = overrideFreeformPos ||
+    widget.freeformPos || {
+      xRatio: 0.1,
+      yRatio: 0.1,
+      wRatio: 0.35,
+      hRatio: 0.45,
+      zIndex: 10,
+      rotation: 0,
+    };
+
+  const existingBoxes = [
+    ...targetTabWidgets.map((w) => ({
+      xRatio: w.freeformPos?.xRatio ?? 0.1,
+      yRatio: w.freeformPos?.yRatio ?? 0.1,
+      wRatio: w.freeformPos?.wRatio ?? 0.35,
+      hRatio: w.freeformPos?.hRatio ?? 0.45,
+    })),
+    ...targetTabNotes.map((n) => ({
+      xRatio: n.freeformPos?.xRatio ?? 0.15,
+      yRatio: n.freeformPos?.yRatio ?? 0.15,
+      wRatio: n.freeformPos?.wRatio ?? 0.24,
+      hRatio: n.freeformPos?.hRatio ?? 0.28,
+    })),
+  ];
+
+  const maxZ = Math.max(
+    10,
+    ...targetTabWidgets.map((w) => w.freeformPos?.zIndex || 1),
+    ...targetTabNotes.map((n) => n.freeformPos?.zIndex || 1)
+  );
+  const nextZ = maxZ + 1;
+
+  if (basePos.isFullScreen) {
+    const tileW = 0.45;
+    const tileH = 0.5;
+    const spot = findOpenCanvasSpot(existingBoxes, tileW, tileH, 0);
+    return {
+      freeformPos: {
+        ...spot,
+        zIndex: nextZ,
+        isFullScreen: false,
+      },
+      ...(widget.type === 'chores' || widget.type === 'kanban'
+        ? { configPatch: { displayMode: 'tile' } }
+        : {}),
+    };
+  }
+
+  const wRatio = Math.max(0.08, Math.min(0.95, basePos.wRatio || 0.35));
+  const hRatio = Math.max(0.08, Math.min(0.95, basePos.hRatio || 0.45));
+  const rotation = basePos.rotation ?? 0;
+  const candX = basePos.xRatio ?? 0.1;
+  const candY = basePos.yRatio ?? 0.1;
+
+  const inBounds =
+    candX >= 0.01 &&
+    candY >= 0.01 &&
+    candX + wRatio <= 0.99 &&
+    candY + hRatio <= 0.99;
+
+  const margin = 0.01;
+  const hasOverlap = existingBoxes.some((box) => {
+    const xOverlap =
+      Math.min(candX + wRatio + margin, box.xRatio + box.wRatio + margin) -
+      Math.max(candX, box.xRatio);
+    const yOverlap =
+      Math.min(candY + hRatio + margin, box.yRatio + box.hRatio + margin) -
+      Math.max(candY, box.yRatio);
+    return xOverlap > 0 && yOverlap > 0;
+  });
+
+  let finalX = candX;
+  let finalY = candY;
+  if (!inBounds || hasOverlap) {
+    const spot = findOpenCanvasSpot(existingBoxes, wRatio, hRatio, rotation);
+    finalX = spot.xRatio;
+    finalY = spot.yRatio;
+  }
+
+  return {
+    freeformPos: {
+      ...basePos,
+      xRatio: Number(finalX.toFixed(4)),
+      yRatio: Number(finalY.toFixed(4)),
+      wRatio,
+      hRatio,
+      rotation,
+      isFullScreen: false,
+      zIndex: basePos.isBackground ? 0 : nextZ,
+    },
+  };
+}
