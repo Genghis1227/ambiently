@@ -214,6 +214,7 @@ export const WIDGET_CATALOG_ENTRIES: WidgetCatalogEntry[] = [
       'feeding',
       'meds',
       'vitamins',
+      'weekly',
       'trash',
       'recycling',
       'curbside',
@@ -227,12 +228,12 @@ export const WIDGET_CATALOG_ENTRIES: WidgetCatalogEntry[] = [
         pillLabel: 'Home Check-Ins & Rhythms',
         title: 'Home Check-Ins & Rhythms',
         description:
-          'Track pet feeding, daily/AM-PM habits, alternating recycling weeks, and filter/plant intervals with household avatar check-ins.',
+          'Track pet feeding, daily/AM-PM habits, fixed-weekday schedules, alternating recycling weeks, and filter/plant intervals with household avatar check-ins.',
         defaultGridPos: { w: 4, h: 6 },
         defaultConfig: {
           items: DEFAULT_ROUTINE_ITEMS,
         },
-        keywords: ['routines', 'pet', 'trash', 'recycling', 'meds', 'filter', 'plants'],
+        keywords: ['routines', 'weekly', 'pet', 'trash', 'recycling', 'meds', 'filter', 'plants'],
       },
     ],
   },

@@ -11,6 +11,15 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.13",
+    date: "November 16, 2026",
+    title: "Flexible Single & Multi-Day Weekly Schedules for Home Check-Ins",
+    highlights: [
+      "Fixed-Weekday Weekly Cadence (S M T W T F S Pills): Added a compact 7-day toggle bar in both Tile Settings and Home Check-Ins & Rhythms quick-add so routines can repeat on one specific weekday (e.g., Every Fri) or any subset (e.g., Tue & Fri, Weekdays, Weekends) without drifting when checked off early or late.",
+      "Early Prep & Late Check-In Protection: Added automatic Today / Tomorrow / in Nd countdown pills, Early prep stamping 1 day ahead, and previous-occurrence logging (Logged <Day>) so weekend check-ins never accidentally mark next week done.",
+    ],
+  },
+  {
     version: "v0.7.12",
     date: "November 15, 2026",
     title: "Household Check-In Routines, Zero-Cloud Guest Wi-Fi QR & Family Decision Wheel",
