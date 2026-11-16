@@ -109,6 +109,27 @@ import {
   searchFinanceSymbols,
 } from '../../services/finance';
 import { HouseholdAvatar } from '../common/HouseholdAvatar';
+import {
+  DecisionMakerSettingsPanel,
+  RoutinesSettingsPanel,
+  WifiQrSettingsPanel,
+} from './Phase2WidgetSettingsPanels';
+import {
+  MAX_EMERGENCY_CONTACTS,
+  type DecisionMakerMode,
+  type DecisionOption,
+  type HouseSitterContact,
+  type RoutineItem,
+  type WifiCardDisplayView,
+  type WifiSecurityType,
+} from '../../types/phase2Widgets';
+import { resolveRoutineItems } from '../../utils/routinesEngine';
+import {
+  deleteWifiCredentialsFromVault,
+  loadWifiCredentialsFromVault,
+  saveWifiCredentialsToVault,
+} from '../../utils/wifiQr';
+import { resolveDecisionOptions } from '../../utils/decisionEngine';
 
 interface WidgetSettingsModalProps {
   isOpen: boolean;
@@ -321,6 +342,29 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   // Sun Arc & Moon Phase widget states
   const [sunShowGoldenHour, setSunShowGoldenHour] = useState<boolean>(true);
   const [sunShowMoonDetails, setSunShowMoonDetails] = useState<boolean>(true);
+
+  // Phase 2: Home Check-Ins & Rhythms
+  const [routineDraftItems, setRoutineDraftItems] = useState<RoutineItem[]>([]);
+  const [routineCompactMode, setRoutineCompactMode] = useState<boolean>(false);
+
+  // Phase 2: Guest Wi-Fi QR & House-Sitter
+  const [wifiSsid, setWifiSsid] = useState<string>('');
+  const [wifiPassword, setWifiPassword] = useState<string>('');
+  const [wifiSecurity, setWifiSecurity] = useState<WifiSecurityType>('WPA');
+  const [wifiHiddenNetwork, setWifiHiddenNetwork] = useState<boolean>(false);
+  const [wifiActiveView, setWifiActiveView] = useState<WifiCardDisplayView>('wifi');
+  const [wifiAutoHideSec, setWifiAutoHideSec] = useState<number>(30);
+  const [wifiHomeAddress, setWifiHomeAddress] = useState<string>('');
+  const [wifiEmergencyContacts, setWifiEmergencyContacts] = useState<HouseSitterContact[]>([]);
+  const [wifiSitterNotes, setWifiSitterNotes] = useState<string>('');
+
+  // Phase 2: Decision Wheel & Quick Poll
+  const [decisionMode, setDecisionMode] = useState<DecisionMakerMode>('wheel');
+  const [decisionPrompt, setDecisionPrompt] = useState<string>('What should we pick?');
+  const [decisionOptions, setDecisionOptions] = useState<DecisionOption[]>([]);
+  const [decisionAllowMultiVote, setDecisionAllowMultiVote] = useState<boolean>(false);
+  const [decisionRemoveWinnerOnSpin, setDecisionRemoveWinnerOnSpin] = useState<boolean>(false);
+  const [decisionResetRequested, setDecisionResetRequested] = useState<boolean>(false);
 
   const [rssCategoryFilter, setRssCategoryFilter] = useState<'All' | RssFeedCategory>('All');
   const [rssSearchQuery, setRssSearchQuery] = useState('');
@@ -602,6 +646,38 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setTimezone(widget.config?.timezone || inheritedWeather.timezone || '');
       setSunShowGoldenHour(widget.config?.showGoldenHour !== false);
       setSunShowMoonDetails(widget.config?.showMoonDetails !== false);
+    } else if (widget.type === 'routines') {
+      setRoutineDraftItems(resolveRoutineItems(widget.config?.items));
+      setRoutineCompactMode(Boolean(widget.config?.compactMode));
+    } else if (widget.type === 'wifi_qr') {
+      setWifiSsid('');
+      setWifiPassword('');
+      setWifiSecurity('WPA');
+      setWifiHiddenNetwork(false);
+      setWifiActiveView(widget.config?.activeView || 'wifi');
+      setWifiAutoHideSec(widget.config?.autoHidePasswordSec ?? 30);
+      setWifiHomeAddress(widget.config?.homeAddress || '');
+      setWifiEmergencyContacts(
+        Array.isArray(widget.config?.emergencyContacts) ? widget.config.emergencyContacts : []
+      );
+      setWifiSitterNotes(widget.config?.sitterNotes || '');
+
+      const targetId = widget.id;
+      void loadWifiCredentialsFromVault(targetId).then((creds) => {
+        if (lastOpenedWidgetIdRef.current === targetId && creds) {
+          setWifiSsid(creds.ssid);
+          setWifiPassword(creds.password);
+          setWifiSecurity(creds.security);
+          setWifiHiddenNetwork(creds.hiddenNetwork);
+        }
+      });
+    } else if (widget.type === 'decision_maker') {
+      setDecisionMode(widget.config?.mode || 'wheel');
+      setDecisionPrompt(widget.config?.prompt || 'What should we pick?');
+      setDecisionOptions(resolveDecisionOptions(widget.config?.options));
+      setDecisionAllowMultiVote(Boolean(widget.config?.allowMultiVote));
+      setDecisionRemoveWinnerOnSpin(Boolean(widget.config?.removeWinnerOnSpin));
+      setDecisionResetRequested(false);
     }
   }, [widget, isOpen, settings.commonPhotos, settings.defaultWidgetStyle]);
 
@@ -843,6 +919,9 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
         'timer',
         'air_quality',
         'sun_moon',
+        'routines',
+        'wifi_qr',
+        'decision_maker',
       ].includes(effectiveType)
     ) {
       configUpdates.transparentBg = widgetTransparentBg;
@@ -1091,6 +1170,46 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.timezone = timezone || undefined;
       configUpdates.showGoldenHour = sunShowGoldenHour;
       configUpdates.showMoonDetails = sunShowMoonDetails;
+    } else if (effectiveType === 'routines') {
+      configUpdates.items = resolveRoutineItems(routineDraftItems);
+      configUpdates.compactMode = routineCompactMode;
+    } else if (effectiveType === 'wifi_qr') {
+      delete configUpdates.ssid;
+      delete configUpdates.password;
+      delete configUpdates.security;
+      delete configUpdates.hiddenNetwork;
+      delete configUpdates.credentialStorage;
+
+      configUpdates.activeView = wifiActiveView;
+      configUpdates.autoHidePasswordSec = wifiAutoHideSec;
+      configUpdates.homeAddress = wifiHomeAddress.trim();
+      configUpdates.emergencyContacts = wifiEmergencyContacts
+        .filter((c) => c.name.trim() || c.phone.trim())
+        .slice(0, MAX_EMERGENCY_CONTACTS);
+      configUpdates.sitterNotes = wifiSitterNotes.trim();
+
+      const cleanSsid = wifiSsid.trim();
+      if (cleanSsid) {
+        void saveWifiCredentialsToVault(widget.id, {
+          ssid: cleanSsid,
+          password: wifiSecurity === 'nopass' ? '' : wifiPassword,
+          security: wifiSecurity,
+          hiddenNetwork: wifiHiddenNetwork,
+        });
+      } else {
+        void deleteWifiCredentialsFromVault(widget.id);
+      }
+    } else if (effectiveType === 'decision_maker') {
+      configUpdates.mode = decisionMode;
+      configUpdates.prompt = decisionPrompt.trim() || 'What should we pick?';
+      configUpdates.options = resolveDecisionOptions(decisionOptions);
+      configUpdates.allowMultiVote = decisionAllowMultiVote;
+      configUpdates.removeWinnerOnSpin = decisionRemoveWinnerOnSpin;
+      if (decisionResetRequested) {
+        configUpdates.votes = {};
+        configUpdates.eliminatedOptionIds = [];
+        configUpdates.lastWinnerOptionId = null;
+      }
     }
 
     onSave(widget.id, {
@@ -1274,6 +1393,9 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
               'timer',
               'air_quality',
               'sun_moon',
+              'routines',
+              'wifi_qr',
+              'decision_maker',
             ].includes(effectiveType) && (
               <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-800/60">
                 <div>
@@ -4690,6 +4812,62 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                   </div>
                 </div>
               </div>
+            )}
+
+            {/* HOME CHECK-INS & RHYTHMS SETTINGS */}
+            {effectiveType === 'routines' && (
+              <RoutinesSettingsPanel
+                items={routineDraftItems}
+                setItems={setRoutineDraftItems}
+                compactMode={routineCompactMode}
+                setCompactMode={setRoutineCompactMode}
+                onClearHistory={() =>
+                  setRoutineDraftItems((prev) =>
+                    prev.map((item) => ({ ...item, completions: [] }))
+                  )
+                }
+              />
+            )}
+
+            {/* GUEST WI-FI QR & HOUSE-SITTER SETTINGS */}
+            {effectiveType === 'wifi_qr' && (
+              <WifiQrSettingsPanel
+                ssid={wifiSsid}
+                setSsid={setWifiSsid}
+                password={wifiPassword}
+                setPassword={setWifiPassword}
+                security={wifiSecurity}
+                setSecurity={setWifiSecurity}
+                hiddenNetwork={wifiHiddenNetwork}
+                setHiddenNetwork={setWifiHiddenNetwork}
+                activeView={wifiActiveView}
+                setActiveView={setWifiActiveView}
+                autoHidePasswordSec={wifiAutoHideSec}
+                setAutoHidePasswordSec={setWifiAutoHideSec}
+                homeAddress={wifiHomeAddress}
+                setHomeAddress={setWifiHomeAddress}
+                emergencyContacts={wifiEmergencyContacts}
+                setEmergencyContacts={setWifiEmergencyContacts}
+                sitterNotes={wifiSitterNotes}
+                setSitterNotes={setWifiSitterNotes}
+              />
+            )}
+
+            {/* DECISION WHEEL & POLL SETTINGS */}
+            {effectiveType === 'decision_maker' && (
+              <DecisionMakerSettingsPanel
+                mode={decisionMode}
+                setMode={setDecisionMode}
+                prompt={decisionPrompt}
+                setPrompt={setDecisionPrompt}
+                options={decisionOptions}
+                setOptions={setDecisionOptions}
+                allowMultiVote={decisionAllowMultiVote}
+                setAllowMultiVote={setDecisionAllowMultiVote}
+                removeWinnerOnSpin={decisionRemoveWinnerOnSpin}
+                setRemoveWinnerOnSpin={setDecisionRemoveWinnerOnSpin}
+                onClearVotesAndEliminated={() => setDecisionResetRequested(true)}
+              />
             )}
         </div>
 

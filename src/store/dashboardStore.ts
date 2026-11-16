@@ -44,6 +44,7 @@ import {
 import { inferCuratedCategoryId } from '../data/curatedScenery';
 import { applySharedPhotoUpdateToWidgets, sanitizeRestoredPhotoWidget } from '../utils/photoSourceIsolation';
 import { applyPinLockTransition, normalizePinLockSettings } from '../utils/pinValidation';
+import { getWifiVaultKey } from '../utils/wifiQr';
 import { useChoreStore, registerChorePersistListener } from './choreStore';
 import type { ChoreEngineSnapshot } from '../types/chores';
 import { useProfileStore, registerProfileSyncListener } from '../stores/useProfileStore';
@@ -681,6 +682,13 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const now = nextMonotonicIso(tab.updated_at);
     const updated = { ...tab, deleted_at: now, updated_at: now };
     await db.tabs.put(updated).catch(() => {});
+
+    const wifiVaultKeysToDelete = get().widgets
+      .filter((w) => w.tabId === tabId && w.type === 'wifi_qr')
+      .map((w) => getWifiVaultKey(w.id));
+    if (wifiVaultKeysToDelete.length > 0) {
+      await db.vault.bulkDelete(wifiVaultKeysToDelete).catch(() => {});
+    }
 
     const remainingTabs = get().tabs.filter((t) => t.id !== tabId);
     let nextActiveTabId = get().activeTabId;
@@ -1446,6 +1454,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     }
 
     if (eventType === 'DELETE' || remoteWidget.deleted_at) {
+      if (existing?.type === 'wifi_qr' || remoteWidget.type === 'wifi_qr') {
+        db.vault.delete(getWifiVaultKey(remoteWidget.id)).catch(() => {});
+      }
       const recordedTombstone = resolveTombstoneIso(remoteWidget.updated_at, remoteWidget.deleted_at);
       set({
         widgets: get().widgets.filter((w) => w.id !== remoteWidget.id),
@@ -1652,6 +1663,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   removeWidget: async (widgetId) => {
     const existing = get().widgets.find((w) => w.id === widgetId);
     if (!existing) return;
+    if (existing.type === 'wifi_qr') {
+      await db.vault.delete(getWifiVaultKey(widgetId)).catch(() => {});
+    }
     const nowIso = nextMonotonicIso(existing.updated_at);
     const updated: DashboardWidget = {
       ...existing,

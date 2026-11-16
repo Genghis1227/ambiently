@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.12",
+    date: "November 15, 2026",
+    title: "Household Check-In Routines, Zero-Cloud Guest Wi-Fi QR & Family Decision Wheel",
+    highlights: [
+      "Did Someone Already…? Check-In & Home Rhythms: Added lazy-loaded routines tracking across daily, AM/PM, alternating-week (Week A/Week B pickup), and every-N-days cadences with 1-tap useProfileStore avatar stamps, bounded 14-entry completion logs, and Sticker Mode support.",
+      "Zero-Cloud Guest Wi-Fi QR & House-Sitter Card: Added client-side scannable SVG Wi-Fi QR generation (qrcode.react), masked tap-to-reveal auto-rehide password display, strict device-local db.vault storage (wifi-cred:<widgetId>) never synced to Supabase Cloud, and synced House-Sitter emergency contacts & care notes.",
+      "Family Decision Wheel & Quick Poll: Added an interactive SVG spin wheel and multi-member useProfileStore avatar poll with tie-breaker spins, optional elimination on spin, starter presets, 1-click Meal Planner recipe & family profile imports, full Tile Settings, Mobile Companion support, and Sticker Mode.",
+    ],
+  },
+  {
     version: "v0.7.11",
     date: "November 15, 2026",
     title: "Startup Bundle Deferral, Sync Auth Debouncing, Idle/Night Optimization & Workbox Tuning",

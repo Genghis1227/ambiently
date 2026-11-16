@@ -33,6 +33,9 @@ import {
   AlarmClock,
   Wind,
   SunMoon,
+  ListChecks,
+  Wifi,
+  Dices,
 } from 'lucide-react';
 import type { DashboardTab, DashboardWidget, StickyNoteItem, WidgetThemeMode } from '../../types/dashboard';
 import { categorizeIngredient, parseIngredient } from '../../utils/ingredientAggregator';
@@ -104,6 +107,15 @@ const AirQualityWidget = React.lazy(() =>
 );
 const SunMoonWidget = React.lazy(() =>
   import('../widgets/SunMoonWidget').then((m) => ({ default: m.SunMoonWidget }))
+);
+const RoutinesWidget = React.lazy(() =>
+  import('../widgets/RoutinesWidget').then((m) => ({ default: m.RoutinesWidget }))
+);
+const WifiQrWidget = React.lazy(() =>
+  import('../widgets/WifiQrWidget').then((m) => ({ default: m.WifiQrWidget }))
+);
+const DecisionMakerWidget = React.lazy(() =>
+  import('../widgets/DecisionMakerWidget').then((m) => ({ default: m.DecisionMakerWidget }))
 );
 
 interface MobileCompanionProps {
@@ -351,6 +363,12 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return Wind;
       case 'sun_moon':
         return SunMoon;
+      case 'routines':
+        return ListChecks;
+      case 'wifi_qr':
+        return Wifi;
+      case 'decision_maker':
+        return Dices;
       default:
         return LayoutGrid;
     }
@@ -396,6 +414,12 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return 'Air Quality, Pollen & UV';
       case 'sun_moon':
         return 'Sun Arc & Moon Phase';
+      case 'routines':
+        return 'Home Check-Ins & Rhythms';
+      case 'wifi_qr':
+        return 'Guest Wi-Fi & House-Sitter';
+      case 'decision_maker':
+        return 'Decision Wheel & Poll';
       default:
         return 'Widget';
     }
@@ -650,6 +674,49 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
             isLight={isLight}
             transparentBg={false}
           />
+        );
+      case 'routines':
+        return (
+          <div className="max-h-96 overflow-y-auto">
+            <RoutinesWidget
+              title={widget.title}
+              config={widget.config}
+              isLight={isLight}
+              transparentBg={false}
+              onUpdateConfig={(updates) =>
+                onUpdateWidget?.(widget.id, { config: { ...widget.config, ...updates } })
+              }
+            />
+          </div>
+        );
+      case 'wifi_qr':
+        return (
+          <div className="max-h-[28rem] overflow-y-auto">
+            <WifiQrWidget
+              widgetId={widget.id}
+              title={widget.title}
+              config={widget.config}
+              isLight={isLight}
+              transparentBg={false}
+              onUpdateConfig={(updates) =>
+                onUpdateWidget?.(widget.id, { config: { ...widget.config, ...updates } })
+              }
+            />
+          </div>
+        );
+      case 'decision_maker':
+        return (
+          <div className="h-[24rem] overflow-hidden">
+            <DecisionMakerWidget
+              title={widget.title}
+              config={widget.config}
+              isLight={isLight}
+              transparentBg={false}
+              onUpdateConfig={(updates) =>
+                onUpdateWidget?.(widget.id, { config: { ...widget.config, ...updates } })
+              }
+            />
+          </div>
         );
       default:
         return (

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.12] - 2026-11-15
+
+### Household Check-In Routines, Zero-Cloud Guest Wi-Fi QR & Family Decision Wheel (`#142`)
+* **"Did Someone Already…?" Check-In & Home Rhythms (`RoutinesWidget.tsx`, `routinesEngine.ts`, `phase2Widgets.ts`):**
+  * Added a non-point household habit & maintenance tracker supporting `daily`, `am_pm`, `alternating_week` (Week A vs Week B pickup parity + manual swap), and `every_n_days` cadences with one-tap `useProfileStore` avatar stamps, same-slot undo, bounded 14-entry completion logs (`MAX_ROUTINE_COMPLETIONS`), and **Sticker / No Outline Mode**.
+* **Guest Wi-Fi QR & House-Sitter Card (`WifiQrWidget.tsx`, `wifiQr.ts`, `mediaOptimization.ts`, `supabase.ts`, `dashboardStore.ts`):**
+  * Added client-side scannable SVG QR codes (`qrcode.react`) with ZXing field escaping (`escapeWifiQrField`, `buildWifiQrPayload`) and masked tap-to-reveal + configurable auto-rehide password bars, alongside toggleable or automatic split **House-Sitter Mode** (street address banner, up to 6 emergency contacts, house/pet/alarm notes).
+  * Enforced **strict zero-cloud storage** for Wi-Fi QR credentials (`WifiLocalVaultCredentials`: `ssid`, `password`, `security`, `hiddenNetwork`) exclusively inside device-local `db.vault` (`wifi-cred:<widgetId>`), unconditionally stripped across Cloud Sync push, pull, and Realtime handlers (`sanitizeWidgetConfigForCloud`, `stripWifiCredentialsFromConfig`) and cleaned up automatically on widget removal, tab deletion, and Realtime deletes.
+* **Family Decision Wheel & Quick Poll (`DecisionMakerWidget.tsx`, `decisionEngine.ts`):**
+  * Added an interactive radial SVG prize wheel (`buildWheelSliceGeometry`, `computeWheelSpinTargetDeg`, `pickRandomOptionIndex`) and household avatar tap-to-vote poll (`castPollVote`, `tallyPollVotes`) with tie detection and a one-tap tie-breaker spin, optional eliminate-after-spin mode, starter presets, and 1-click imports from saved Meal Planner recipes (`useMealStore`) and household profiles.
+* **Catalog, Settings, Mobile Companion, Documentation & Tests (`widgetCatalog.ts`, `widgetStickerMode.ts`, `Phase2WidgetSettingsPanels.tsx`, `WidgetSettingsModal.tsx`, `Corkboard.tsx`, `MobileCompanion.tsx`, `tests/phase2Widgets.test.ts`):**
+  * Registered all three lazy-loaded widgets across `AddWidgetModal` (`20` catalog entries covering `23` `WidgetType`s), **Sticker / No Outline Mode** (`15` compatible widgets), in-modal **Tile Settings** editors, and the **Mobile Companion** tile stream, updating `FEATURES.md`, `README.md`, `ARCHITECTURE.md`, and adding comprehensive unit tests (`125 / 125` passing).
+
+---
+
 ## [0.7.11] - 2026-11-15
 
 ### Startup Bundle Deferral, Sync Auth Debouncing, Idle/Night Optimization & Workbox Tuning

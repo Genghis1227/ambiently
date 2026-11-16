@@ -85,6 +85,15 @@ const AirQualityWidget = React.lazy(() =>
 const SunMoonWidget = React.lazy(() =>
   import('../widgets/SunMoonWidget').then((m) => ({ default: m.SunMoonWidget }))
 );
+const RoutinesWidget = React.lazy(() =>
+  import('../widgets/RoutinesWidget').then((m) => ({ default: m.RoutinesWidget }))
+);
+const WifiQrWidget = React.lazy(() =>
+  import('../widgets/WifiQrWidget').then((m) => ({ default: m.WifiQrWidget }))
+);
+const DecisionMakerWidget = React.lazy(() =>
+  import('../widgets/DecisionMakerWidget').then((m) => ({ default: m.DecisionMakerWidget }))
+);
 import { useDashboardStore } from '../../store/dashboardStore';
 import { CANVAS_THEMES, isCanvasThemeLight } from '../../data/canvasThemes';
 import { findOpenCanvasSpot } from '../../utils/autoLayout';
@@ -446,6 +455,31 @@ const MemoizedCanvasWidgetBody: React.FC<CanvasWidgetBodyProps> = React.memo(({
           showMoonDetails={widget.config?.showMoonDetails}
           isLight={isWidgetLight}
           transparentBg={isFramelessWidget}
+        />
+      ) : widget.type === 'routines' ? (
+        <RoutinesWidget
+          title={widget.title}
+          config={widget.config}
+          isLight={isWidgetLight}
+          transparentBg={isFramelessWidget}
+          onUpdateConfig={handleConfigUpdate}
+        />
+      ) : widget.type === 'wifi_qr' ? (
+        <WifiQrWidget
+          widgetId={widget.id}
+          title={widget.title}
+          config={widget.config}
+          isLight={isWidgetLight}
+          transparentBg={isFramelessWidget}
+          onUpdateConfig={handleConfigUpdate}
+        />
+      ) : widget.type === 'decision_maker' ? (
+        <DecisionMakerWidget
+          title={widget.title}
+          config={widget.config}
+          isLight={isWidgetLight}
+          transparentBg={isFramelessWidget}
+          onUpdateConfig={handleConfigUpdate}
         />
       ) : null}
       </React.Suspense>

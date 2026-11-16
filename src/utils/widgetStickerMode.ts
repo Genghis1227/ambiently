@@ -14,6 +14,9 @@ export const STICKER_CAPABLE_WIDGET_TYPES = new Set<DashboardWidget['type']>([
   'timer',
   'air_quality',
   'sun_moon',
+  'routines',
+  'wifi_qr',
+  'decision_maker',
 ]);
 
 export function isStickerCapableWidget(type?: DashboardWidget['type']): boolean {
