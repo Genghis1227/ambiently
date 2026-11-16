@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   X,
   Settings,
   Check,
   FolderOpen,
+  Layers,
   Plus,
   Trash2,
   Search,
@@ -41,7 +42,13 @@ import {
   isTargetRescannable,
 } from '../../utils/photoSyncPolicy';
 import { isWidgetStickerMode } from '../../utils/widgetStickerMode';
-import type { DashboardWidget, ImageWidgetConfig, WidgetThemeMode, WidgetType } from '../../types/dashboard';
+import {
+  MAX_CANVASES,
+  type DashboardWidget,
+  type ImageWidgetConfig,
+  type WidgetThemeMode,
+  type WidgetType,
+} from '../../types/dashboard';
 import {
   CLOCK_MODE_OPTIONS,
   TEXT_MODE_OPTIONS,
@@ -147,6 +154,8 @@ interface WidgetSettingsModalProps {
   onOpenPhotoSources?: (asCommonSource?: boolean) => void;
 }
 
+const NEW_CANVAS_SENTINEL = '__new_canvas__';
+
 interface GeoHit {
   id: number;
   name: string;
@@ -184,12 +193,19 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   onOpenPhotoSources,
 }) => {
   const settings = useDashboardStore((state) => state.settings);
+  const allTabs = useDashboardStore((state) => state.tabs);
+  const moveWidgetToTab = useDashboardStore((state) => state.moveWidgetToTab);
+  const moveWidgetToNewTab = useDashboardStore((state) => state.moveWidgetToNewTab);
   const applyCommonPhotosToAllWidgets = useDashboardStore((state) => state.applyCommonPhotosToAllWidgets);
   const photoSyncState = useDashboardStore((state) => state.photoSyncState);
   const photoSyncMeta = useDashboardStore((state) => state.photoSyncMeta);
+  const availableTabs = useMemo(() => allTabs.filter((t) => !t.deleted_at), [allTabs]);
+  const canCreateNewCanvas = availableTabs.length < MAX_CANVASES;
   const [photoSyncNowTick, setPhotoSyncNowTick] = useState<number>(() => Date.now());
   const [photoRescanNotice, setPhotoRescanNotice] = useState<string>('');
   const [title, setTitle] = useState('');
+  const [targetTabId, setTargetTabId] = useState<string>('');
+  const [newCanvasName, setNewCanvasName] = useState<string>('');
   const [themeMode, setThemeMode] = useState<WidgetThemeMode>('auto');
   const [widgetTransparentBg, setWidgetTransparentBg] = useState<boolean>(false);
 
@@ -392,6 +408,10 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     );
     setSelectedWidgetType(widget.type);
     setTitle(widget.title || '');
+    setTargetTabId(widget.tabId);
+    setNewCanvasName(
+      `Canvas ${useDashboardStore.getState().tabs.filter((t) => !t.deleted_at).length + 1}`
+    );
     setThemeMode((widget.config?.themeMode as WidgetThemeMode) || 'auto');
     setWidgetTransparentBg(resolvedStickerMode);
     setGeoStatus('');
@@ -1212,12 +1232,20 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       }
     }
 
-    onSave(widget.id, {
+    const pendingUpdates = {
       title: title.trim() || widget.title,
       ...(effectiveType !== widget.type ? { type: effectiveType } : {}),
       config: configUpdates,
       ...(freeformPosUpdate ? { freeformPos: freeformPosUpdate } : {}),
-    });
+    };
+
+    if (targetTabId === NEW_CANVAS_SENTINEL && canCreateNewCanvas) {
+      void moveWidgetToNewTab(widget.id, newCanvasName, pendingUpdates);
+    } else if (targetTabId && targetTabId !== widget.tabId) {
+      void moveWidgetToTab(widget.id, targetTabId, pendingUpdates);
+    } else {
+      onSave(widget.id, pendingUpdates);
+    }
     onClose();
   };
 
@@ -1266,6 +1294,59 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
               className="w-full rounded-xl bg-gray-950 border border-gray-800 p-2.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
             />
           </div>
+
+          {/* Canvas Assignment / Move Widget */}
+          {widget && (availableTabs.length > 1 || canCreateNewCanvas) && (
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Canvas</span>
+              </label>
+              <select
+                value={targetTabId}
+                onChange={(e) => setTargetTabId(e.target.value)}
+                className="w-full rounded-xl bg-gray-950 border border-gray-800 px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+              >
+                {availableTabs.map((tab) => (
+                  <option key={tab.id} value={tab.id}>
+                    {tab.name}
+                    {tab.id === widget.tabId ? ' (Current)' : ''}
+                  </option>
+                ))}
+                {canCreateNewCanvas && (
+                  <option value={NEW_CANVAS_SENTINEL}>+ Move to New Canvas…</option>
+                )}
+              </select>
+
+              {targetTabId === NEW_CANVAS_SENTINEL && canCreateNewCanvas && (
+                <div className="space-y-1">
+                  <input
+                    type="text"
+                    value={newCanvasName}
+                    onChange={(e) => setNewCanvasName(e.target.value)}
+                    placeholder="New canvas name..."
+                    maxLength={40}
+                    className="w-full rounded-xl bg-gray-950 border border-emerald-500/40 px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
+                  />
+                  <p className="text-[10px] text-emerald-300/80">
+                    Creates a new Midnight Dots canvas and moves this tile when saved.
+                  </p>
+                </div>
+              )}
+
+              {targetTabId &&
+                targetTabId !== widget.tabId &&
+                targetTabId !== NEW_CANVAS_SENTINEL && (
+                  <p className="text-[10px] text-cyan-300/80">
+                    Tile will move to{' '}
+                    <span className="font-semibold">
+                      {availableTabs.find((t) => t.id === targetTabId)?.name || 'selected canvas'}
+                    </span>{' '}
+                    when saved.
+                  </p>
+                )}
+            </div>
+          )}
 
           {/* Clock Family In-Place Mode Switcher */}
           {isClockFamilyType(effectiveType) && (

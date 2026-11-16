@@ -26,6 +26,7 @@ import { photoSyncService } from './services/photoSyncService';
 import { UpdateNotificationBanner } from './components/common/UpdateNotificationBanner';
 import { PlexReauthBanner } from './components/common/PlexReauthBanner';
 import { SyncRefusedBanner } from './components/common/SyncRefusedBanner';
+import { MovedWidgetToast } from './components/common/MovedWidgetToast';
 import { GlobalTimerAlarmOverlay } from './components/common/GlobalTimerAlarmOverlay';
 import { isCanvasPinLocked, isSettingsPinRequired } from './utils/pinValidation';
 
@@ -61,6 +62,11 @@ const ParentChoreDrawer = lazy(() =>
 );
 const QuickStartModal = lazy(() =>
   import('./components/settings/QuickStartModal').then((m) => ({ default: m.QuickStartModal }))
+);
+const WidgetDeleteConfirmModal = lazy(() =>
+  import('./components/common/WidgetDeleteConfirmModal').then((m) => ({
+    default: m.WidgetDeleteConfirmModal,
+  }))
 );
 
 export function App() {
@@ -109,6 +115,7 @@ export function App() {
   const [isTrashOpen, setIsTrashOpen] = useState(false);
   const [isPlexPairingModalOpen, setIsPlexPairingModalOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
+  const [pendingDeleteWidgetId, setPendingDeleteWidgetId] = useState<string | null>(null);
   const [isQuickStartOpen, setIsQuickStartOpen] = useState<boolean>(() => {
     try {
       return localStorage.getItem('ambiently_quickstart_dismissed_v1') !== 'true';
@@ -769,6 +776,44 @@ export function App() {
     (mode: AutoOrganizeMode) => autoOrganizeCanvas(activeTabIdResolved, mode),
     [autoOrganizeCanvas, activeTabIdResolved]
   );
+  const handleRequestRemoveWidget = useCallback(
+    (widgetId: string) => {
+      if (useDashboardStore.getState().settings.confirmWidgetDelete === false) {
+        void removeWidget(widgetId);
+        return;
+      }
+      setPendingDeleteWidgetId(widgetId);
+    },
+    [removeWidget]
+  );
+
+  const pendingDeleteWidget = pendingDeleteWidgetId
+    ? widgets.find((w) => w.id === pendingDeleteWidgetId && !w.deleted_at) || null
+    : null;
+  const pendingDeleteCanvasName = pendingDeleteWidget
+    ? tabs.find((t) => t.id === pendingDeleteWidget.tabId)?.name || 'this canvas'
+    : 'this canvas';
+
+  const widgetSafetyOverlays = (
+    <>
+      <MovedWidgetToast onSelectTab={setActiveTabId} />
+      {pendingDeleteWidget && (
+        <Suspense fallback={null}>
+          <WidgetDeleteConfirmModal
+            isOpen={true}
+            widgetTitle={pendingDeleteWidget.title || 'Widget'}
+            canvasName={pendingDeleteCanvasName}
+            onCancel={() => setPendingDeleteWidgetId(null)}
+            onConfirm={() => {
+              const id = pendingDeleteWidget.id;
+              setPendingDeleteWidgetId(null);
+              void removeWidget(id);
+            }}
+          />
+        </Suspense>
+      )}
+    </>
+  );
 
   // `visibleTabs` is a new array on every render, and a background cloud refresh renders every 60
   // seconds. Depending on the ids instead keeps that from restarting the countdown.
@@ -879,7 +924,7 @@ export function App() {
             onUpdateNote={updateNote}
             onDeleteNote={deleteNote}
             onUpdateWidget={updateWidget}
-            onRemoveWidget={removeWidget}
+            onRemoveWidget={handleRequestRemoveWidget}
             onAddWidget={addWidget}
             onToggleDesktopView={() => setForceDesktopMode(true)}
             onOpenSettings={handleOpenSettings}
@@ -899,6 +944,7 @@ export function App() {
           isAnyModalOpen={isAnyOverlayOpen}
           onSelectTab={setActiveTabId}
         />
+        {widgetSafetyOverlays}
         {isSettingsOpen && (
           <Suspense fallback={null}>
             <SettingsModal
@@ -1003,7 +1049,7 @@ export function App() {
           onPermanentlyDeleteNote={permanentlyDeleteNote}
           onPermanentlyDeleteNotes={permanentlyDeleteNotes}
           onAddWidget={addWidget}
-          onRemoveWidget={removeWidget}
+          onRemoveWidget={handleRequestRemoveWidget}
           onOpenAddWidget={handleOpenAddWidget}
           onUpdateWidget={updateWidget}
           onUpdateTab={updateTab}
@@ -1240,6 +1286,7 @@ export function App() {
         {/* Unified 4-Digit Parent PIN Chore & Reward Drawer */}
         {isParentDrawerOpen && <ParentChoreDrawer />}
       </Suspense>
+      {widgetSafetyOverlays}
     </div>
   );
 }

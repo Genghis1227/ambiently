@@ -19,7 +19,11 @@ import type {
 } from '../types/dashboard';
 import { MAX_CANVASES } from '../types/dashboard';
 import { saveSnapshotToFile, hasActiveLocalFile } from '../services/fileSync';
-import { computeNonOverlappingLayout, findOpenCanvasSpot } from '../utils/autoLayout';
+import {
+  computeMovedWidgetPosition,
+  computeNonOverlappingLayout,
+  findOpenCanvasSpot,
+} from '../utils/autoLayout';
 import type { CanvasBlueprintId } from '../utils/canvasBlueprints';
 import { getDefaultWidgetStickerMode, isStickerCapableWidget } from '../utils/widgetStickerMode';
 import type { PhotoTargetSyncMeta, PlexPhotoSyncConfig } from '../utils/photoSyncPolicy';
@@ -172,8 +176,16 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 // marks the settings as changed too, or it would never reach other devices.
 async function markCanvasLooksChanged(get: () => DashboardState, set: (partial: Partial<DashboardState>) => void) {
   const settings: AppSettings = { ...get().settings, updated_at: new Date().toISOString() };
-  await db.settings.put(settings);
+  await db.settings.put(settings).catch(() => {});
   set({ settings });
+}
+
+export interface MovedWidgetToastState {
+  widgetId: string;
+  widgetTitle: string;
+  targetTabId: string;
+  targetTabName: string;
+  nonce: number;
 }
 
 export interface PhotoSyncState {
@@ -210,6 +222,7 @@ interface DashboardState {
   needsFileReconnect: boolean;
   isUnlocked: boolean; // runtime unlock state when pinLockEnabled is on
   lastLayoutSnapshot: LayoutSnapshot | null;
+  movedWidgetToast: MovedWidgetToastState | null;
   photoSyncState: PhotoSyncState | null;
   photoSyncMeta: Record<string, PhotoTargetSyncMeta>;
 
@@ -295,6 +308,17 @@ interface DashboardState {
   removeWidget: (widgetId: string) => Promise<void>;
   updateWidget: (widgetId: string, updates: Partial<DashboardWidget>) => Promise<void>;
   updateWidgetConfig: (widgetId: string, configUpdates: Record<string, any>) => Promise<void>;
+  moveWidgetToTab: (
+    widgetId: string,
+    targetTabId: string,
+    extraUpdates?: Partial<DashboardWidget>
+  ) => Promise<boolean>;
+  moveWidgetToNewTab: (
+    widgetId: string,
+    canvasName?: string,
+    extraUpdates?: Partial<DashboardWidget>
+  ) => Promise<string | null>;
+  dismissMovedWidgetToast: () => void;
   addNote: (note: Partial<StickyNoteItem>) => Promise<void>;
   updateNote: (noteId: string, updates: Partial<StickyNoteItem>) => Promise<void>;
   deleteNote: (noteId: string) => Promise<void>;
@@ -377,6 +401,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   needsFileReconnect: false,
   isUnlocked: true,
   lastLayoutSnapshot: null,
+  movedWidgetToast: null,
   photoSyncState: null,
   photoSyncMeta: {},
 
@@ -1713,6 +1738,142 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     });
     get().saveLocalBackup();
   },
+
+  moveWidgetToTab: async (widgetId, targetTabId, extraUpdates) => {
+    const state = get();
+    const existing = state.widgets.find((w) => w.id === widgetId && !w.deleted_at);
+    const targetTab = state.tabs.find((t) => t.id === targetTabId && !t.deleted_at);
+    if (!existing || !targetTab) return false;
+
+    if (existing.tabId === targetTabId) {
+      if (extraUpdates) {
+        await state.updateWidget(widgetId, extraUpdates);
+      }
+      return false;
+    }
+
+    const nowMs = Date.now();
+    const targetTabWidgets = state.widgets.filter(
+      (w) => !w.deleted_at && w.tabId === targetTabId && w.id !== widgetId
+    );
+    const targetTabNotes = state.notes.filter(
+      (n) =>
+        !n.deleted_at &&
+        !n.archivedAt &&
+        n.isPinnedToCanvas !== false &&
+        (!n.expiresAt || Date.parse(n.expiresAt) > nowMs) &&
+        ((n.tabId || 'tab-corkboard') === targetTabId || n.tabId === 'all')
+    );
+
+    const { freeformPos, configPatch } = computeMovedWidgetPosition(
+      { type: extraUpdates?.type || existing.type, freeformPos: existing.freeformPos },
+      targetTabWidgets,
+      targetTabNotes,
+      extraUpdates?.freeformPos
+    );
+
+    const updated: DashboardWidget = {
+      ...existing,
+      ...(extraUpdates || {}),
+      id: existing.id,
+      tabId: targetTabId,
+      freeformPos,
+      config: {
+        ...(existing.config || {}),
+        ...(extraUpdates?.config || {}),
+        ...(configPatch || {}),
+      },
+      updated_at: nextMonotonicIso(existing.updated_at, nowMs),
+    };
+
+    await db.widgets.put(updated).catch(() => {});
+    set({
+      widgets: get().widgets.map((w) => (w.id === widgetId ? updated : w)),
+      movedWidgetToast: {
+        widgetId: updated.id,
+        widgetTitle: updated.title || 'Widget',
+        targetTabId,
+        targetTabName: targetTab.name,
+        nonce: nowMs,
+      },
+    });
+    void get().saveLocalBackup();
+    return true;
+  },
+
+  moveWidgetToNewTab: async (widgetId, canvasName, extraUpdates) => {
+    const state = get();
+    const existing = state.widgets.find((w) => w.id === widgetId && !w.deleted_at);
+    if (!existing) return null;
+
+    const activeTabs = state.tabs.filter((t) => !t.deleted_at);
+    if (activeTabs.length >= MAX_CANVASES) {
+      console.warn(`Canvas limit of ${MAX_CANVASES} reached.`);
+      return null;
+    }
+
+    const nowMs = Date.now();
+    const newTabId = `tab-${nowMs}`;
+    const maxOrder = state.tabs.reduce(
+      (max, t, idx) => Math.max(max, Number.isFinite(t.order) ? t.order : idx),
+      -1
+    );
+    const cleanName = canvasName?.trim().slice(0, 40) || `Canvas ${activeTabs.length + 1}`;
+
+    const newTab: DashboardTab = {
+      id: newTabId,
+      name: cleanName,
+      icon: 'Pin',
+      order: maxOrder + 1,
+      backgroundTheme: 'midnight_dots',
+      backgroundDimLevel: 45,
+      hideNotes: false,
+      autoRotateDurationSec: state.settings.defaultRotateDurationSec || 30,
+      enabled: true,
+      updated_at: new Date(nowMs).toISOString(),
+    };
+
+    const { freeformPos, configPatch } = computeMovedWidgetPosition(
+      { type: extraUpdates?.type || existing.type, freeformPos: existing.freeformPos },
+      [],
+      [],
+      extraUpdates?.freeformPos
+    );
+
+    const updatedWidget: DashboardWidget = {
+      ...existing,
+      ...(extraUpdates || {}),
+      id: existing.id,
+      tabId: newTabId,
+      freeformPos,
+      config: {
+        ...(existing.config || {}),
+        ...(extraUpdates?.config || {}),
+        ...(configPatch || {}),
+      },
+      updated_at: nextMonotonicIso(existing.updated_at, nowMs),
+    };
+
+    await db.tabs.put(newTab).catch(() => {});
+    await db.widgets.put(updatedWidget).catch(() => {});
+
+    set({
+      tabs: [...get().tabs, newTab],
+      widgets: get().widgets.map((w) => (w.id === widgetId ? updatedWidget : w)),
+      movedWidgetToast: {
+        widgetId: updatedWidget.id,
+        widgetTitle: updatedWidget.title || 'Widget',
+        targetTabId: newTabId,
+        targetTabName: cleanName,
+        nonce: nowMs,
+      },
+    });
+    await markCanvasLooksChanged(get, set);
+    void get().saveLocalBackup();
+    return newTabId;
+  },
+
+  dismissMovedWidgetToast: () => set({ movedWidgetToast: null }),
 
   updateWidgetPosition: async (widgetId, gridPos, freeformPos) => {
     const widget = get().widgets.find((w) => w.id === widgetId);

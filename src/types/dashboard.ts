@@ -210,6 +210,7 @@ export interface AppSettings {
 
   // Canvas & Dock Options
   snapToGrid?: boolean;
+  confirmWidgetDelete?: boolean; // default true (unset counts as true)
   defaultWidgetStyle?: DefaultWidgetFrameStyle;
   isDockHidden?: boolean;
   autoHideCursor?: boolean;

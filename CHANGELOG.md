@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.14] - 2026-11-16
+
+### Confirm Before Deleting Widgets & Move Widget to Canvas
+* **Widget Deletion Confirmation (`dashboard.ts`, `db.ts`, `SettingsModal.tsx`, `WidgetDeleteConfirmModal.tsx`, `App.tsx`, `MobileCompanion.tsx`):**
+  * Added `confirmWidgetDelete` to `AppSettings` (defaulting to `true` in `DEFAULT_SETTINGS`) with a **Confirm Before Deleting Widgets** toggle in **Settings → Display & Kiosk**.
+  * Added lazy-loaded portal `WidgetDeleteConfirmModal` (`Cancel` / `Remove Widget`, guarded via `createBackdropDismissHandlers` and `Escape` key handling) wired through `handleRequestRemoveWidget` across Desktop and `MobileCompanion` (replacing legacy `window.confirm`).
+* **Move Widget to Existing or `+ New Canvas…` (`autoLayout.ts`, `dashboardStore.ts`, `Corkboard.tsx`, `CorkboardContextMenu.tsx`, `WidgetSettingsModal.tsx`, `MovedWidgetToast.tsx`):**
+  * Added `computeMovedWidgetPosition` (`autoLayout.ts`) and `moveWidgetToTab` / `moveWidgetToNewTab` (`dashboardStore.ts`), preserving `widget.id` (and local `db.vault` secrets), avoiding overlap on the destination canvas, creating new canvases with `'midnight_dots'` (`dimLevel: 45`, `icon: 'Pin'`) up to `MAX_CANVASES = 10`, keeping `activeTabId` on the source canvas, and guarding `markCanvasLooksChanged` promises.
+  * Exposed **Move to Canvas** and **`+ Move to New Canvas…`** inline/modal selectors in `CorkboardContextMenu` and `WidgetSettingsModal` (applied atomically in `handleSave`), alongside a 6-second CSS-animated `MovedWidgetToast` banner with a **`Go to <Canvas>`** shortcut and `dismissMovedWidgetToast`.
+* **Documentation & Verification (`FEATURES.md`, `ARCHITECTURE.md`, `tests/widgetDeleteAndMove.test.ts`):**
+  * Documented widget delete confirmation and cross-canvas widget movement in `FEATURES.md` and `ARCHITECTURE.md`, and added unit tests in `tests/widgetDeleteAndMove.test.ts` (`133 / 133` passing across `34` suites).
+
+---
+
 ## [0.7.13] - 2026-11-16
 
 ### Flexible Single & Multi-Day Weekly Schedules for Home Check-Ins
