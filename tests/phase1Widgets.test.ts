@@ -3,17 +3,22 @@ import assert from 'node:assert/strict';
 import { MAX_TIMERS_PER_WIDGET, type TimerItem } from '../src/types/phase1Widgets';
 import {
   DEFAULT_TIMER_PRESETS,
+  MAX_ALARM_RING_MS,
   addSecondsToTimerItem,
   combineDurationHms,
+  dismissTimerItem,
   extractStepDurations,
   formatShortDurationLabel,
   formatTimerDuration,
   getTimerLiveState,
+  isTimerActivelyRinging,
   pauseTimerItem,
   resetTimerItem,
   resolveWidgetTimers,
   splitDurationHms,
   startTimerItem,
+  stopAllTimerAlarms,
+  syncTimerAlarmSubscriber,
   updateTimerItem,
 } from '../src/utils/timerEngine';
 import {
@@ -166,6 +171,48 @@ describe('timerEngine', () => {
     assert.equal(resizedTimer.remainingSec, 300);
     assert.equal(resizedTimer.endsAt, null);
     assert.equal(resizedTimer.completedAt, null);
+  });
+
+  it('tracks active repeating alarm state until dismissed or past MAX_ALARM_RING_MS and handles Node SSR safely', () => {
+    const t0 = Date.UTC(2026, 4, 15, 18, 0, 0);
+    const running = startTimerItem(
+      { id: 'ring-1', label: 'Broil', durationSec: 60, status: 'idle' },
+      t0
+    );
+
+    // Not ringing while still counting down
+    assert.equal(isTimerActivelyRinging(running, t0 + 30_000), false);
+
+    // Rings immediately once countdown expires
+    assert.equal(isTimerActivelyRinging(running, t0 + 60_000), true);
+    assert.equal(isTimerActivelyRinging(running, t0 + 60_000 + 60_000), true);
+
+    // Rings while completedAt is within MAX_ALARM_RING_MS (15 min)
+    const completedTimer: TimerItem = {
+      id: 'ring-2',
+      label: 'Oven',
+      durationSec: 120,
+      status: 'completed',
+      remainingSec: 0,
+      endsAt: null,
+      completedAt: new Date(t0).toISOString(),
+    };
+    assert.equal(isTimerActivelyRinging(completedTimer, t0 + MAX_ALARM_RING_MS), true);
+    assert.equal(isTimerActivelyRinging(completedTimer, t0 + MAX_ALARM_RING_MS + 1), false);
+
+    // Explicitly dismissing silences the alarm and resets back to idle at original duration
+    const dismissed = dismissTimerItem(completedTimer);
+    assert.equal(dismissed.status, 'idle');
+    assert.equal(dismissed.remainingSec, 120);
+    assert.equal(dismissed.completedAt, null);
+    assert.equal(isTimerActivelyRinging(dismissed, t0 + 5000), false);
+
+    // Node test environment (no window) safely ignores audio alarm subscription calls
+    assert.doesNotThrow(() => {
+      syncTimerAlarmSubscriber('test-sub', true);
+      syncTimerAlarmSubscriber('test-sub', false);
+      stopAllTimerAlarms();
+    });
   });
 
   it('formats durations cleanly and parses recipe step durations without false positives', () => {

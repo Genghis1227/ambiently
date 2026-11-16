@@ -1,6 +1,7 @@
-import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useState } from 'react';
 import {
   AlarmClock,
+  BellOff,
   Pause,
   Pencil,
   Play,
@@ -17,15 +18,17 @@ import {
   DEFAULT_TIMER_PRESETS,
   addSecondsToTimerItem,
   combineDurationHms,
+  dismissTimerItem,
   formatShortDurationLabel,
   formatTimerDuration,
   getTimerLiveState,
+  isTimerActivelyRinging,
   pauseTimerItem,
-  playTimerChime,
   resetTimerItem,
   resolveWidgetTimers,
   splitDurationHms,
   startTimerItem,
+  syncTimerAlarmSubscriber,
   updateTimerItem,
 } from '../../utils/timerEngine';
 import { useSharedClock } from '../../utils/sharedClock';
@@ -65,7 +68,8 @@ export const TimerWidget: React.FC<TimerWidgetProps> = ({
   const chimeEnabled = config?.chimeEnabled !== false;
 
   const hasRunning = timers.some((t) => t.status === 'running');
-  const nowDate = useSharedClock(hasRunning ? 'second' : '10s');
+  const hasCompleted = timers.some((t) => t.status === 'completed');
+  const nowDate = useSharedClock(hasRunning || hasCompleted ? 'second' : '10s');
   const nowMs = nowDate.getTime() > 0 ? nowDate.getTime() : Date.now();
 
   const { isNightMode } = useDisplayActivity();
@@ -91,34 +95,14 @@ export const TimerWidget: React.FC<TimerWidgetProps> = ({
         ? 'add'
         : 'closed';
 
-  // Track already-expired timers on mount so stale alarms do not chime on page load
-  const chimedIdsRef = useRef<Set<string> | null>(null);
-  if (chimedIdsRef.current === null) {
-    const initialSet = new Set<string>();
-    const mountNow = Date.now();
-    for (const t of timers) {
-      const live = getTimerLiveState(t, mountNow);
-      if (t.status === 'completed' || live.isExpired) {
-        initialSet.add(t.id);
-      }
-    }
-    chimedIdsRef.current = initialSet;
-  }
-
-  // Detect running timers crossing 00:00 -> mark completed and chime
+  // Detect running timers crossing 00:00 and persist completed state immediately
   useEffect(() => {
-    const newlyExpiredIds: string[] = [];
     let needsPersist = false;
-
     const nextTimers = timers.map((t) => {
       if (t.status !== 'running') return t;
       const live = getTimerLiveState(t, nowMs);
       if (!live.isExpired) return t;
       needsPersist = true;
-      if (!chimedIdsRef.current?.has(t.id)) {
-        chimedIdsRef.current?.add(t.id);
-        newlyExpiredIds.push(t.id);
-      }
       return {
         ...t,
         status: 'completed' as const,
@@ -128,13 +112,23 @@ export const TimerWidget: React.FC<TimerWidgetProps> = ({
       };
     });
 
-    if (newlyExpiredIds.length > 0 && chimeEnabled && !nightActive) {
-      playTimerChime();
-    }
     if (needsPersist && onUpdateConfig) {
       onUpdateConfig({ timers: nextTimers });
     }
-  }, [timers, nowMs, chimeEnabled, nightActive, onUpdateConfig]);
+  }, [timers, nowMs, onUpdateConfig]);
+
+  // Repeat urgent piezo kitchen alarm continuously while any timer is un-dismissed within MAX_ALARM_RING_MS
+  const hasRingingAlarm =
+    chimeEnabled &&
+    !nightActive &&
+    timers.some((t) => isTimerActivelyRinging(t, nowMs));
+
+  useEffect(() => {
+    syncTimerAlarmSubscriber(svgBaseId, hasRingingAlarm);
+    return () => {
+      syncTimerAlarmSubscriber(svgBaseId, false);
+    };
+  }, [svgBaseId, hasRingingAlarm]);
 
   const commitTimers = (nextTimers: TimerItem[]) => {
     onUpdateConfig?.({ timers: nextTimers.slice(0, MAX_TIMERS_PER_WIDGET) });
@@ -177,27 +171,36 @@ export const TimerWidget: React.FC<TimerWidgetProps> = ({
       if (live.effectiveStatus === 'running') {
         return pauseTimerItem(t, actionNow);
       }
-      chimedIdsRef.current?.delete(t.id);
       return startTimerItem(t, actionNow);
     });
     commitTimers(nextTimers);
   };
 
   const handleReset = (timer: TimerItem) => {
-    chimedIdsRef.current?.delete(timer.id);
     commitTimers(timers.map((t) => (t.id === timer.id ? resetTimerItem(t) : t)));
+  };
+
+  const handleDismiss = (timer: TimerItem) => {
+    commitTimers(timers.map((t) => (t.id === timer.id ? dismissTimerItem(t) : t)));
+  };
+
+  const handleDismissAll = () => {
+    const actionNow = Date.now();
+    commitTimers(
+      timers.map((t) =>
+        getTimerLiveState(t, actionNow).effectiveStatus === 'completed' ? dismissTimerItem(t) : t
+      )
+    );
   };
 
   const handleAdjustSeconds = (timer: TimerItem, deltaSec: number) => {
     const actionNow = Date.now();
-    chimedIdsRef.current?.delete(timer.id);
     commitTimers(
       timers.map((t) => (t.id === timer.id ? addSecondsToTimerItem(t, deltaSec, actionNow) : t))
     );
   };
 
   const handleRemoveTimer = (timerId: string) => {
-    chimedIdsRef.current?.delete(timerId);
     if (editingTimerId === timerId) {
       closePanel();
     }
@@ -247,7 +250,6 @@ export const TimerWidget: React.FC<TimerWidgetProps> = ({
   const applyEditSubmit = (andStart: boolean) => {
     if (!editingTimer || parsedDraftTotalSec <= 0) return;
     const actionNow = Date.now();
-    chimedIdsRef.current?.delete(editingTimer.id);
     const nextTimers = timers.map((t) => {
       if (t.id !== editingTimer.id) return t;
       const updated = updateTimerItem(t, {
@@ -307,11 +309,15 @@ export const TimerWidget: React.FC<TimerWidgetProps> = ({
           />
           <span
             className={`text-xs font-semibold truncate ${
-              isLight ? 'text-slate-700' : 'text-gray-300'
+              completedCount > 0
+                ? 'text-rose-400 animate-pulse'
+                : isLight
+                  ? 'text-slate-700'
+                  : 'text-gray-300'
             }`}
           >
             {completedCount > 0
-              ? `${completedCount} Done!`
+              ? `${completedCount} Ringing!`
               : runningCount > 0
                 ? `${runningCount} Running`
                 : 'Timers'}
@@ -328,6 +334,17 @@ export const TimerWidget: React.FC<TimerWidgetProps> = ({
 
           {onUpdateConfig && (
             <div className="flex items-center gap-1 shrink-0 ml-1" onPointerDown={stopDrag}>
+              {completedCount > 0 && (
+                <button
+                  type="button"
+                  onClick={handleDismissAll}
+                  className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold inline-flex items-center gap-1 animate-pulse shadow-sm cursor-pointer"
+                  title="Dismiss all ringing timers"
+                >
+                  <BellOff className="w-3 h-3 shrink-0" />
+                  <span>{completedCount > 1 ? 'Dismiss All' : 'Dismiss'}</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => onUpdateConfig({ chimeEnabled: !chimeEnabled })}
@@ -634,11 +651,15 @@ export const TimerWidget: React.FC<TimerWidgetProps> = ({
             </span>
             <span
               className={`text-[11px] font-medium truncate max-w-[92px] inline-flex items-center gap-1 ${
-                isLight ? 'text-slate-600' : 'text-gray-300'
+                isDone
+                  ? 'text-rose-400 font-bold uppercase tracking-wider'
+                  : isLight
+                    ? 'text-slate-600'
+                    : 'text-gray-300'
               }`}
             >
-              <span className="truncate">{isDone ? 'Time is up!' : singleTimer.label}</span>
-              {onUpdateConfig && (
+              <span className="truncate">{isDone ? "TIME'S UP!" : singleTimer.label}</span>
+              {onUpdateConfig && !isDone && (
                 <Pencil className="w-2.5 h-2.5 shrink-0 opacity-50 group-hover/edit:opacity-100 transition-opacity" />
               )}
             </span>
@@ -648,7 +669,11 @@ export const TimerWidget: React.FC<TimerWidgetProps> = ({
         return (
           <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-2 py-1">
             <div className="relative flex items-center justify-center">
-              <svg className="w-32 h-32 -rotate-90" viewBox="0 0 120 120" aria-hidden="true">
+              <svg
+                className={`w-32 h-32 -rotate-90 ${isDone ? 'animate-pulse' : ''}`}
+                viewBox="0 0 120 120"
+                aria-hidden="true"
+              >
                 <defs>
                   <linearGradient id={`timer-ring-${svgBaseId}`} x1="0%" y1="0%" x2="100%" y2="100%">
                     <stop offset="0%" stopColor={ringColor} />
@@ -698,32 +723,57 @@ export const TimerWidget: React.FC<TimerWidgetProps> = ({
 
             {onUpdateConfig && (
               <div className="flex flex-wrap items-center justify-center gap-1" onPointerDown={stopDrag}>
-                <button
-                  type="button"
-                  onClick={() => handleStartOrPause(singleTimer)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
-                    isRunning
-                      ? 'bg-amber-600 hover:bg-amber-500 text-white'
-                      : 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                  }`}
-                >
-                  {isRunning ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-                  <span>{isRunning ? 'Pause' : isDone ? 'Restart' : 'Start'}</span>
-                </button>
+                {isDone ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleDismiss(singleTimer)}
+                      className="px-3.5 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 bg-rose-600 hover:bg-rose-500 text-white shadow-md shadow-rose-950/50 animate-pulse transition-colors cursor-pointer"
+                    >
+                      <BellOff className="w-3.5 h-3.5" />
+                      <span>Dismiss</span>
+                    </button>
 
-                <button
-                  type="button"
-                  disabled={!canSubtractMinute}
-                  onClick={() => handleAdjustSeconds(singleTimer, -60)}
-                  className={`px-2 py-1.5 rounded-xl text-xs font-semibold border transition-colors cursor-pointer disabled:opacity-35 ${
-                    isLight
-                      ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
-                      : 'bg-gray-900/80 border-gray-700 text-gray-200 hover:bg-gray-800'
-                  }`}
-                  title="Subtract 1 minute"
-                >
-                  -1m
-                </button>
+                    <button
+                      type="button"
+                      onClick={() => handleStartOrPause(singleTimer)}
+                      className="px-2.5 py-1.5 rounded-xl text-xs font-semibold inline-flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 text-white transition-colors cursor-pointer"
+                      title="Restart timer"
+                    >
+                      <Play className="w-3 h-3" />
+                      <span>Restart</span>
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleStartOrPause(singleTimer)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
+                      isRunning
+                        ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                        : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                    }`}
+                  >
+                    {isRunning ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                    <span>{isRunning ? 'Pause' : 'Start'}</span>
+                  </button>
+                )}
+
+                {!isDone && (
+                  <button
+                    type="button"
+                    disabled={!canSubtractMinute}
+                    onClick={() => handleAdjustSeconds(singleTimer, -60)}
+                    className={`px-2 py-1.5 rounded-xl text-xs font-semibold border transition-colors cursor-pointer disabled:opacity-35 ${
+                      isLight
+                        ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                        : 'bg-gray-900/80 border-gray-700 text-gray-200 hover:bg-gray-800'
+                    }`}
+                    title="Subtract 1 minute"
+                  >
+                    -1m
+                  </button>
+                )}
 
                 <button
                   type="button"
@@ -817,15 +867,15 @@ export const TimerWidget: React.FC<TimerWidgetProps> = ({
                 className={`relative overflow-hidden rounded-xl border px-2.5 py-2 transition-colors ${
                   isDone
                     ? isLight
-                      ? 'bg-rose-50 border-rose-300'
-                      : 'bg-rose-950/40 border-rose-500/50'
+                      ? 'bg-rose-50 border-rose-400 ring-1 ring-rose-400/60'
+                      : 'bg-rose-950/50 border-rose-500/70 ring-1 ring-rose-500/50'
                     : cardBgClass
                 }`}
               >
                 {/* Progress backdrop bar */}
                 <div
                   className={`absolute inset-y-0 left-0 pointer-events-none transition-[width] duration-300 ${
-                    isDone ? 'bg-rose-500/15' : 'bg-amber-500/15'
+                    isDone ? 'bg-rose-500/20' : 'bg-amber-500/15'
                   }`}
                   style={{ width: `${pct}%` }}
                 />
@@ -857,7 +907,7 @@ export const TimerWidget: React.FC<TimerWidgetProps> = ({
                               : 'text-white'
                         }`}
                       >
-                        {isDone ? 'Done! 00:00' : formatTimerDuration(live.remainingSec)}
+                        {isDone ? "TIME'S UP! • 00:00" : formatTimerDuration(live.remainingSec)}
                       </div>
                     </button>
                   ) : (
@@ -878,44 +928,59 @@ export const TimerWidget: React.FC<TimerWidgetProps> = ({
                               : 'text-white'
                         }`}
                       >
-                        {isDone ? 'Done! 00:00' : formatTimerDuration(live.remainingSec)}
+                        {isDone ? "TIME'S UP! • 00:00" : formatTimerDuration(live.remainingSec)}
                       </div>
                     </div>
                   )}
 
                   {onUpdateConfig && (
                     <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handleStartOrPause(timer)}
-                        className={`p-1.5 rounded-lg text-white transition-colors cursor-pointer ${
-                          isRunning
-                            ? 'bg-amber-600 hover:bg-amber-500'
-                            : 'bg-emerald-600 hover:bg-emerald-500'
-                        }`}
-                        title={isRunning ? 'Pause' : 'Start'}
-                        aria-label={isRunning ? `Pause ${timer.label}` : `Start ${timer.label}`}
-                      >
-                        {isRunning ? (
-                          <Pause className="w-3.5 h-3.5" />
-                        ) : (
-                          <Play className="w-3.5 h-3.5" />
-                        )}
-                      </button>
+                      {isDone ? (
+                        <button
+                          type="button"
+                          onClick={() => handleDismiss(timer)}
+                          className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold inline-flex items-center gap-1 animate-pulse shadow-sm transition-colors cursor-pointer"
+                          title={`Dismiss alarm for ${timer.label}`}
+                          aria-label={`Dismiss ${timer.label}`}
+                        >
+                          <BellOff className="w-3 h-3 shrink-0" />
+                          <span>Dismiss</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleStartOrPause(timer)}
+                          className={`p-1.5 rounded-lg text-white transition-colors cursor-pointer ${
+                            isRunning
+                              ? 'bg-amber-600 hover:bg-amber-500'
+                              : 'bg-emerald-600 hover:bg-emerald-500'
+                          }`}
+                          title={isRunning ? 'Pause' : 'Start'}
+                          aria-label={isRunning ? `Pause ${timer.label}` : `Start ${timer.label}`}
+                        >
+                          {isRunning ? (
+                            <Pause className="w-3.5 h-3.5" />
+                          ) : (
+                            <Play className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      )}
 
-                      <button
-                        type="button"
-                        disabled={!canSubtractMinute}
-                        onClick={() => handleAdjustSeconds(timer, -60)}
-                        className={`px-1.5 py-1 rounded-lg text-[10px] font-bold border transition-colors cursor-pointer disabled:opacity-35 ${
-                          isLight
-                            ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
-                            : 'bg-gray-900/90 border-gray-700 text-gray-200 hover:bg-gray-800'
-                        }`}
-                        title="Subtract 1 minute"
-                      >
-                        -1m
-                      </button>
+                      {!isDone && (
+                        <button
+                          type="button"
+                          disabled={!canSubtractMinute}
+                          onClick={() => handleAdjustSeconds(timer, -60)}
+                          className={`px-1.5 py-1 rounded-lg text-[10px] font-bold border transition-colors cursor-pointer disabled:opacity-35 ${
+                            isLight
+                              ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                              : 'bg-gray-900/90 border-gray-700 text-gray-200 hover:bg-gray-800'
+                          }`}
+                          title="Subtract 1 minute"
+                        >
+                          -1m
+                        </button>
+                      )}
 
                       <button
                         type="button"
@@ -925,38 +990,52 @@ export const TimerWidget: React.FC<TimerWidgetProps> = ({
                             ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
                             : 'bg-gray-900/90 border-gray-700 text-gray-200 hover:bg-gray-800'
                         }`}
-                        title="Add 1 minute"
+                        title={isDone ? 'Snooze +1 minute' : 'Add 1 minute'}
                       >
                         +1m
                       </button>
 
-                      <button
-                        type="button"
-                        onClick={() => openEditPanel(timer)}
-                        className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
-                          isLight
-                            ? 'bg-white border-slate-200 text-slate-500 hover:text-amber-700'
-                            : 'bg-gray-900/90 border-gray-700 text-gray-400 hover:text-amber-300'
-                        }`}
-                        title={`Edit ${timer.label}`}
-                        aria-label={`Edit ${timer.label}`}
-                      >
-                        <Pencil className="w-3 h-3" />
-                      </button>
+                      {isDone ? (
+                        <button
+                          type="button"
+                          onClick={() => handleStartOrPause(timer)}
+                          className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors cursor-pointer"
+                          title={`Restart ${timer.label}`}
+                          aria-label={`Restart ${timer.label}`}
+                        >
+                          <Play className="w-3 h-3" />
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => openEditPanel(timer)}
+                            className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                              isLight
+                                ? 'bg-white border-slate-200 text-slate-500 hover:text-amber-700'
+                                : 'bg-gray-900/90 border-gray-700 text-gray-400 hover:text-amber-300'
+                            }`}
+                            title={`Edit ${timer.label}`}
+                            aria-label={`Edit ${timer.label}`}
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
 
-                      <button
-                        type="button"
-                        onClick={() => handleReset(timer)}
-                        className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
-                          isLight
-                            ? 'bg-white border-slate-200 text-slate-500 hover:text-slate-900'
-                            : 'bg-gray-900/90 border-gray-700 text-gray-400 hover:text-white'
-                        }`}
-                        title="Reset"
-                        aria-label={`Reset ${timer.label}`}
-                      >
-                        <RotateCcw className="w-3 h-3" />
-                      </button>
+                          <button
+                            type="button"
+                            onClick={() => handleReset(timer)}
+                            className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                              isLight
+                                ? 'bg-white border-slate-200 text-slate-500 hover:text-slate-900'
+                                : 'bg-gray-900/90 border-gray-700 text-gray-400 hover:text-white'
+                            }`}
+                            title="Reset"
+                            aria-label={`Reset ${timer.label}`}
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                          </button>
+                        </>
+                      )}
 
                       <button
                         type="button"

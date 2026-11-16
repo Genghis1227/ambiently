@@ -140,6 +140,9 @@ export function pauseTimerItem(timer: TimerItem, nowMs: number): TimerItem {
   };
 }
 
+export const MAX_ALARM_RING_MS = 15 * 60 * 1000;
+export const ALARM_REPEAT_INTERVAL_MS = 1600;
+
 export function resetTimerItem(timer: TimerItem): TimerItem {
   const totalSec = Math.max(1, Math.round(timer.durationSec || 60));
   return {
@@ -150,6 +153,25 @@ export function resetTimerItem(timer: TimerItem): TimerItem {
     endsAt: null,
     completedAt: null,
   };
+}
+
+export function dismissTimerItem(timer: TimerItem): TimerItem {
+  return resetTimerItem(timer);
+}
+
+export function isTimerActivelyRinging(
+  timer: TimerItem,
+  nowMs: number,
+  maxRingMs: number = MAX_ALARM_RING_MS
+): boolean {
+  const live = getTimerLiveState(timer, nowMs);
+  if (live.effectiveStatus !== 'completed') return false;
+  const expiredIso = timer.completedAt || timer.endsAt;
+  if (!expiredIso) return false;
+  const expiredMs = Date.parse(expiredIso);
+  if (!Number.isFinite(expiredMs)) return false;
+  const ageMs = nowMs - expiredMs;
+  return ageMs >= -2000 && ageMs <= maxRingMs;
 }
 
 export function addSecondsToTimerItem(timer: TimerItem, deltaSec: number, nowMs: number): TimerItem {
@@ -372,39 +394,142 @@ export function extractStepDurations(stepText: string): StepDurationChip[] {
   return chips;
 }
 
+function getAudioCtxConstructor(): typeof AudioContext | null {
+  if (typeof window === 'undefined') return null;
+  return (
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext ||
+    null
+  );
+}
+
+function playUrgentAlarmBurst(ctx: AudioContext): void {
+  if (ctx.state === 'suspended') {
+    void ctx.resume().catch(() => {});
+  }
+  const baseTime = ctx.currentTime + 0.015;
+  const beepOffsets = [0, 0.135, 0.27, 0.405];
+
+  for (const offset of beepOffsets) {
+    const start = baseTime + offset;
+    const stopTime = start + 0.095;
+
+    // Piercing primary piezo tone (C7 square)
+    const primaryOsc = ctx.createOscillator();
+    const primaryGain = ctx.createGain();
+    primaryOsc.type = 'square';
+    primaryOsc.frequency.setValueAtTime(2093.0, start);
+
+    primaryGain.gain.setValueAtTime(0.0001, start);
+    primaryGain.gain.exponentialRampToValueAtTime(0.24, start + 0.008);
+    primaryGain.gain.setValueAtTime(0.22, start + 0.072);
+    primaryGain.gain.exponentialRampToValueAtTime(0.0001, stopTime);
+
+    primaryOsc.connect(primaryGain);
+    primaryGain.connect(ctx.destination);
+    primaryOsc.start(start);
+    primaryOsc.stop(stopTime + 0.005);
+
+    // Harmonic upper overtone (E7 triangle) for kitchen audibility
+    const overtoneOsc = ctx.createOscillator();
+    const overtoneGain = ctx.createGain();
+    overtoneOsc.type = 'triangle';
+    overtoneOsc.frequency.setValueAtTime(2637.02, start);
+
+    overtoneGain.gain.setValueAtTime(0.0001, start);
+    overtoneGain.gain.exponentialRampToValueAtTime(0.14, start + 0.008);
+    overtoneGain.gain.setValueAtTime(0.12, start + 0.072);
+    overtoneGain.gain.exponentialRampToValueAtTime(0.0001, stopTime);
+
+    overtoneOsc.connect(overtoneGain);
+    overtoneGain.connect(ctx.destination);
+    overtoneOsc.start(start);
+    overtoneOsc.stop(stopTime + 0.005);
+  }
+}
+
 export function playTimerChime(): void {
-  if (typeof window === 'undefined') return;
+  const AudioCtx = getAudioCtxConstructor();
+  if (!AudioCtx) return;
   try {
-    const AudioCtx =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AudioCtx) return;
-
     const ctx = new AudioCtx();
-    const notes = [523.25, 659.25, 783.99, 1046.5]; // C5 -> E5 -> G5 -> C6
-    const baseTime = ctx.currentTime + 0.02;
-
-    notes.forEach((freq, idx) => {
-      const start = baseTime + idx * 0.14;
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = idx === notes.length - 1 ? 'triangle' : 'sine';
-      osc.frequency.setValueAtTime(freq, start);
-
-      gain.gain.setValueAtTime(0.0001, start);
-      gain.gain.exponentialRampToValueAtTime(0.16, start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.55);
-
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(start);
-      osc.stop(start + 0.58);
-    });
-
+    playUrgentAlarmBurst(ctx);
     window.setTimeout(() => {
       void ctx.close().catch(() => {});
-    }, 1600);
+    }, 900);
   } catch {
     // Ignore Web Audio errors on restricted kiosk contexts
+  }
+}
+
+const activeSubscribers = new Set<string>();
+let activeAlarmCtx: AudioContext | null = null;
+let repeatTimerId: number | null = null;
+
+function stopAlarmEngine(): void {
+  if (repeatTimerId !== null && typeof window !== 'undefined') {
+    window.clearInterval(repeatTimerId);
+    repeatTimerId = null;
+  }
+  if (activeAlarmCtx) {
+    const ctxToClose = activeAlarmCtx;
+    activeAlarmCtx = null;
+    void ctxToClose.close().catch(() => {});
+  }
+}
+
+function ensureAlarmEngineRunning(): void {
+  const AudioCtx = getAudioCtxConstructor();
+  if (!AudioCtx || typeof window === 'undefined') return;
+
+  try {
+    if (!activeAlarmCtx || activeAlarmCtx.state === 'closed') {
+      activeAlarmCtx = new AudioCtx();
+    }
+  } catch {
+    return;
+  }
+
+  if (repeatTimerId !== null) return;
+
+  try {
+    playUrgentAlarmBurst(activeAlarmCtx);
+  } catch {
+    // Ignore transient Web Audio restrictions
+  }
+
+  repeatTimerId = window.setInterval(() => {
+    if (activeSubscribers.size === 0) {
+      stopAlarmEngine();
+      return;
+    }
+    try {
+      if (!activeAlarmCtx || activeAlarmCtx.state === 'closed') {
+        const Ctor = getAudioCtxConstructor();
+        if (!Ctor) return;
+        activeAlarmCtx = new Ctor();
+      }
+      playUrgentAlarmBurst(activeAlarmCtx);
+    } catch {
+      // Ignore transient Web Audio errors
+    }
+  }, ALARM_REPEAT_INTERVAL_MS);
+}
+
+export function stopAllTimerAlarms(): void {
+  activeSubscribers.clear();
+  stopAlarmEngine();
+}
+
+export function syncTimerAlarmSubscriber(subscriberId: string, shouldRing: boolean): void {
+  if (!subscriberId) return;
+  if (shouldRing) {
+    activeSubscribers.add(subscriberId);
+    ensureAlarmEngineRunning();
+  } else {
+    activeSubscribers.delete(subscriberId);
+    if (activeSubscribers.size === 0) {
+      stopAlarmEngine();
+    }
   }
 }
