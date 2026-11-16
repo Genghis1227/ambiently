@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.9",
+    date: "November 15, 2026",
+    title: "Repeating Kitchen Timer Alarm, Cross-Tab Auto-Switch & Global Dismiss Overlay",
+    highlights: [
+      "Loud Repeating Kitchen Alarm Until Dismissed: Replaced the soft one-shot chime with an urgent 4-beep digital kitchen piezo alarm that repeats continuously until explicitly dismissed, snoozed (+1m), muted, or reset.",
+      "Prominent Dismiss Controls Across Views: Added high-contrast pulsing rose Dismiss and Dismiss All buttons inside the Kitchen Timer header, single-timer hero ring, multi-timer rows, and Cooking Mode header pills.",
+      "Cross-Tab Carousel Protection & Smart Auto-Switch Overlay: Monitors timers across all boards even when the carousel is on another page, freezes carousel rotation when finished, automatically switches to the timer's tab (unless a modal or text input is open), and pops a prominent top-of-screen Alarm Overlay to Dismiss or +1m from anywhere.",
+    ],
+  },
+  {
     version: "v0.7.8",
     date: "November 15, 2026",
     title: "Kitchen Timer Inline & Settings Editor + Pure Kitchen Presets",

@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   AlarmClock,
+  BellOff,
   Play,
   Pause,
 } from 'lucide-react';
@@ -31,15 +32,19 @@ import {
   pluralizeItemName,
 } from '../../utils/ingredientAggregator';
 import {
+  dismissTimerItem,
   extractStepDurations,
   formatTimerDuration,
   getTimerLiveState,
+  isTimerActivelyRinging,
   pauseTimerItem,
-  resetTimerItem,
   resolveWidgetTimers,
   startTimerItem,
+  syncTimerAlarmSubscriber,
 } from '../../utils/timerEngine';
 import { useSharedClock } from '../../utils/sharedClock';
+import { useDisplayActivity } from '../../utils/displayActivity';
+import { isAmbientlyInNightMode } from '../../utils/confetti';
 import { WIDGET_CATALOG_ENTRIES, buildWidgetPayloadFromVariant } from '../../utils/widgetCatalog';
 import { ProfileAvatar } from '../common/ProfileAvatar';
 
@@ -170,9 +175,56 @@ const CookingModeContent: React.FC<CookingModeContentProps> = ({
     );
   }, [tabTimerWidgets]);
 
-  const hasRunningTabTimer = allTabTimers.some(({ timer }) => timer.status === 'running');
-  const nowDate = useSharedClock(hasRunningTabTimer ? 'second' : '10s');
+  const { isNightMode } = useDisplayActivity();
+  const dashboardSettings = useDashboardStore((s) => s.settings);
+  const nightActive = isNightMode || isAmbientlyInNightMode(dashboardSettings);
+
+  const hasActiveOrDoneTabTimer = allTabTimers.some(
+    ({ timer }) => timer.status === 'running' || timer.status === 'completed'
+  );
+  const nowDate = useSharedClock(hasActiveOrDoneTabTimer ? 'second' : '10s');
   const nowMs = nowDate.getTime() > 0 ? nowDate.getTime() : Date.now();
+
+  // Persist expired running timers on active tab even when TimerWidget is off-screen
+  useEffect(() => {
+    for (const widget of tabTimerWidgets) {
+      const resolved = resolveWidgetTimers(
+        (widget.config as TimerWidgetConfig | undefined)?.timers
+      );
+      let changed = false;
+      const nextTimers = resolved.map((t) => {
+        if (t.status !== 'running') return t;
+        const live = getTimerLiveState(t, nowMs);
+        if (!live.isExpired) return t;
+        changed = true;
+        return {
+          ...t,
+          status: 'completed' as const,
+          remainingSec: 0,
+          endsAt: null,
+          completedAt: new Date(nowMs).toISOString(),
+        };
+      });
+      if (changed) {
+        void updateWidgetConfig(widget.id, { timers: nextTimers });
+      }
+    }
+  }, [tabTimerWidgets, nowMs, updateWidgetConfig]);
+
+  const hasRingingModalAlarm =
+    !nightActive &&
+    allTabTimers.some(
+      ({ widget, timer }) =>
+        (widget.config as TimerWidgetConfig | undefined)?.chimeEnabled !== false &&
+        isTimerActivelyRinging(timer, nowMs)
+    );
+
+  useEffect(() => {
+    syncTimerAlarmSubscriber('cooking-mode-modal', hasRingingModalAlarm);
+    return () => {
+      syncTimerAlarmSubscriber('cooking-mode-modal', false);
+    };
+  }, [hasRingingModalAlarm]);
 
   const activeTimerPills = useMemo(() => {
     return allTabTimers
@@ -275,7 +327,7 @@ const CookingModeContent: React.FC<CookingModeContentProps> = ({
         return pauseTimerItem(item, now);
       }
       if (effectiveStatus === 'completed') {
-        return resetTimerItem(item);
+        return dismissTimerItem(item);
       }
       return startTimerItem(item, now);
     });
@@ -689,28 +741,34 @@ const CookingModeContent: React.FC<CookingModeContentProps> = ({
                     }
                     title={
                       isCompleted
-                        ? `Silence & reset ${timer.label}`
+                        ? `Dismiss alarm for ${timer.label}`
                         : `Pause ${timer.label}`
                     }
                     className={`px-2.5 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
                       isCompleted
-                        ? isLight
-                          ? 'bg-amber-100 border-amber-400 text-amber-900 animate-pulse'
-                          : 'bg-amber-500/20 border-amber-400/70 text-amber-200 animate-pulse'
+                        ? 'bg-rose-600 border-rose-400 text-white hover:bg-rose-500 animate-pulse shadow-lg shadow-rose-950/50'
                         : isLight
                           ? 'bg-emerald-50 border-emerald-300 text-emerald-900 hover:bg-emerald-100'
                           : 'bg-emerald-950/60 border-emerald-600/50 text-emerald-200 hover:bg-emerald-900/60'
                     }`}
                   >
-                    <AlarmClock className="w-3.5 h-3.5 shrink-0" />
-                    <span className="max-w-[96px] truncate">{timer.label}</span>
-                    <span className="font-mono tabular-nums font-bold">
-                      {isCompleted ? 'Done' : formatTimerDuration(live.remainingSec)}
-                    </span>
                     {isCompleted ? (
-                      <RotateCcw className="w-3 h-3 shrink-0 opacity-80" />
+                      <BellOff className="w-3.5 h-3.5 shrink-0" />
                     ) : (
-                      <Pause className="w-3 h-3 shrink-0 opacity-80" />
+                      <AlarmClock className="w-3.5 h-3.5 shrink-0" />
+                    )}
+                    <span className="max-w-[96px] truncate">{timer.label}</span>
+                    {isCompleted ? (
+                      <span className="font-bold uppercase tracking-wide text-[11px]">
+                        Dismiss
+                      </span>
+                    ) : (
+                      <>
+                        <span className="font-mono tabular-nums font-bold">
+                          {formatTimerDuration(live.remainingSec)}
+                        </span>
+                        <Pause className="w-3 h-3 shrink-0 opacity-80" />
+                      </>
                     )}
                   </button>
                 );

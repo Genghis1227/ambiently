@@ -4511,7 +4511,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                       Completion Audio Chime
                     </span>
                     <span className="text-[10px] text-gray-500">
-                      Plays a soft chime when timers finish (muted automatically during Night Mode)
+                      Repeats a loud kitchen alarm until dismissed (muted automatically during Night Mode)
                     </span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0 ml-3">
