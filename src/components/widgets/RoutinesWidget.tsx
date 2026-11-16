@@ -18,9 +18,14 @@ import type {
 import { MAX_ROUTINES_PER_WIDGET } from '../../types/phase2Widgets';
 import {
   evaluateRoutineStatus,
+  formatWeeklyDaysSummary,
+  normalizeDaysOfWeek,
   resolveRoutineItems,
+  toggleDayOfWeek,
   toggleRoutineCheckIn,
+  WEEKDAY_FULL_LABELS,
   WEEKDAY_SHORT_LABELS,
+  WEEKDAY_SINGLE_LETTERS,
 } from '../../utils/routinesEngine';
 import { useProfileStore } from '../../stores/useProfileStore';
 import { ProfileAvatar } from '../common/ProfileAvatar';
@@ -40,12 +45,17 @@ interface RoutinesWidgetProps {
 const CADENCE_LABELS: Record<RoutineCadenceType, string> = {
   am_pm: 'AM / PM',
   daily: 'Daily',
+  weekly: 'Weekly',
   alternating_week: 'Alt Week Pickup',
   every_n_days: 'Every N Days',
 };
 
 function currentTimestampIso(): string {
   return new Date().toISOString();
+}
+
+function getCurrentWeekday(): number {
+  return new Date().getDay();
 }
 
 export const RoutinesWidget: React.FC<RoutinesWidgetProps> = ({
@@ -81,6 +91,7 @@ export const RoutinesWidget: React.FC<RoutinesWidgetProps> = ({
   const [newCadence, setNewCadence] = useState<RoutineCadenceType>('daily');
   const [newIntervalDays, setNewIntervalDays] = useState('7');
   const [newPickupDay, setNewPickupDay] = useState(4);
+  const [newDaysOfWeek, setNewDaysOfWeek] = useState<number[]>(() => [getCurrentWeekday()]);
 
   const effectiveProfileId =
     selectedProfileId && profileMap.has(selectedProfileId)
@@ -131,6 +142,9 @@ export const RoutinesWidget: React.FC<RoutinesWidgetProps> = ({
       label: trimmed.slice(0, 60),
       emoji: newEmoji.trim() || undefined,
       cadence: newCadence,
+      ...(newCadence === 'weekly'
+        ? { daysOfWeek: normalizeDaysOfWeek(newDaysOfWeek, getCurrentWeekday()) }
+        : {}),
       ...(newCadence === 'every_n_days'
         ? { intervalDays: Math.max(1, Math.min(365, parseInt(newIntervalDays, 10) || 7)) }
         : {}),
@@ -379,6 +393,41 @@ export const RoutinesWidget: React.FC<RoutinesWidgetProps> = ({
               </select>
             )}
 
+            {newCadence === 'weekly' && (
+              <div className="w-full flex flex-wrap items-center justify-between gap-2 pt-1">
+                <div className="flex items-center gap-1" role="group" aria-label="Days of week">
+                  {WEEKDAY_SINGLE_LETTERS.map((letter, dIdx) => {
+                    const active = newDaysOfWeek.includes(dIdx);
+                    return (
+                      <button
+                        key={WEEKDAY_FULL_LABELS[dIdx]}
+                        type="button"
+                        aria-pressed={active}
+                        title={WEEKDAY_FULL_LABELS[dIdx]}
+                        onClick={() => setNewDaysOfWeek((prev) => toggleDayOfWeek(prev, dIdx))}
+                        className={`w-6 h-6 rounded-md text-[10px] font-bold border transition-colors cursor-pointer flex items-center justify-center ${
+                          active
+                            ? 'bg-blue-600 border-blue-500 text-white shadow-xs'
+                            : isLight
+                              ? 'bg-white border-slate-300 text-slate-600 hover:border-slate-400'
+                              : 'bg-gray-900 border-gray-800 text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        {letter}
+                      </button>
+                    );
+                  })}
+                </div>
+                <span
+                  className={`text-[10px] font-semibold ${
+                    isLight ? 'text-blue-700' : 'text-blue-300'
+                  }`}
+                >
+                  {formatWeeklyDaysSummary(newDaysOfWeek)}
+                </span>
+              </div>
+            )}
+
             <button
               type="submit"
               className="ml-auto px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold cursor-pointer"
@@ -522,6 +571,102 @@ export const RoutinesWidget: React.FC<RoutinesWidgetProps> = ({
                         );
                       })}
                     </div>
+                  </div>
+                )}
+
+                {/* FIXED-WEEKDAY WEEKLY */}
+                {evalResult.cadence === 'weekly' && (
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {item.emoji && <span className="text-sm shrink-0">{item.emoji}</span>}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span
+                            className={`text-xs font-semibold truncate ${
+                              evalResult.isDueToday && evalResult.activeStamp
+                                ? isLight
+                                  ? 'text-slate-500 line-through'
+                                  : 'text-gray-400 line-through'
+                                : isLight
+                                  ? 'text-slate-900'
+                                  : 'text-white'
+                            }`}
+                          >
+                            {item.label}
+                          </span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold shrink-0 ${
+                              evalResult.daysUntilNext === 0
+                                ? evalResult.activeStamp
+                                  ? isLight
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : 'bg-emerald-500/20 text-emerald-300'
+                                  : 'bg-amber-500/25 text-amber-300 border border-amber-500/40'
+                                : evalResult.daysUntilNext === 1
+                                  ? isLight
+                                    ? 'bg-blue-100 text-blue-800'
+                                    : 'bg-blue-500/20 text-blue-300'
+                                  : isLight
+                                    ? 'bg-slate-200 text-slate-700'
+                                    : 'bg-gray-800 text-gray-300'
+                            }`}
+                          >
+                            {evalResult.daysUntilNext === 0
+                              ? `${evalResult.nextDayLabel} • Today`
+                              : evalResult.daysUntilNext === 1
+                                ? `${evalResult.nextDayLabel} • Tomorrow`
+                                : `${evalResult.nextDayLabel} • in ${evalResult.daysUntilNext}d`}
+                          </span>
+                        </div>
+                        <div
+                          className={`text-[10px] truncate ${
+                            isLight ? 'text-slate-500' : 'text-gray-400'
+                          }`}
+                        >
+                          {evalResult.settledFromPrevSlot
+                            ? `${evalResult.scheduleLabel} • Logged ${evalResult.prevDayLabel}`
+                            : evalResult.scheduleLabel}
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      data-no-drag="true"
+                      onPointerDown={stopDrag}
+                      onClick={() => handleToggle(item.id, evalResult.activeSlotKey)}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold border inline-flex items-center gap-1 transition-all cursor-pointer shrink-0 max-w-[46%] ${
+                        evalResult.activeStamp
+                          ? isLight
+                            ? 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100'
+                            : 'bg-emerald-500/20 border-emerald-500/40 text-emerald-200 hover:bg-emerald-500/30'
+                          : isLight
+                            ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                            : 'bg-gray-900 border-gray-700 text-gray-200 hover:border-blue-500/60'
+                      }`}
+                      title={
+                        evalResult.activeStamp
+                          ? 'Tap to undo check-in'
+                          : evalResult.daysUntilNext === 1
+                            ? `Check in early for ${evalResult.nextDayLabel}`
+                            : evalResult.daysUntilNext >= 2
+                              ? `Log check-in for ${evalResult.prevDayLabel}`
+                              : `Check in for ${evalResult.nextDayLabel}`
+                      }
+                    >
+                      {evalResult.activeStamp ? (
+                        renderAttribution(
+                          evalResult.activeStamp.profileId,
+                          evalResult.activeStamp.completedAt,
+                          true
+                        )
+                      ) : (
+                        <>
+                          <Check className="w-3 h-3 opacity-60" />
+                          <span>{evalResult.daysUntilNext === 1 ? 'Early' : 'Check In'}</span>
+                        </>
+                      )}
+                    </button>
                   </div>
                 )}
 

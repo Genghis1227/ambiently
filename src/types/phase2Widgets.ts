@@ -3,7 +3,12 @@ export const MAX_ROUTINE_COMPLETIONS = 14;
 export const MAX_EMERGENCY_CONTACTS = 6;
 export const MAX_DECISION_OPTIONS = 16;
 
-export type RoutineCadenceType = 'daily' | 'am_pm' | 'alternating_week' | 'every_n_days';
+export type RoutineCadenceType =
+  | 'daily'
+  | 'am_pm'
+  | 'weekly'
+  | 'alternating_week'
+  | 'every_n_days';
 export type RoutinePeriodSlot = 'DAY' | 'AM' | 'PM';
 
 export interface RoutineCompletionStamp {
@@ -17,6 +22,8 @@ export interface RoutineItem {
   label: string;
   emoji?: string; // e.g. '🐕', '💊', '♻️', '🪴'
   cadence: RoutineCadenceType;
+  // For 'weekly' (sorted unique weekday indices 0=Sun .. 6=Sat, minimum 1 day)
+  daysOfWeek?: number[];
   // For 'every_n_days'
   intervalDays?: number; // 1..365 (default 7)
   // For 'alternating_week'

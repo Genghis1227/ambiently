@@ -28,7 +28,15 @@ import {
   type WifiCardDisplayView,
   type WifiSecurityType,
 } from '../../types/phase2Widgets';
-import { swapAlternatingWeekParity, WEEKDAY_SHORT_LABELS } from '../../utils/routinesEngine';
+import {
+  formatWeeklyDaysSummary,
+  normalizeDaysOfWeek,
+  swapAlternatingWeekParity,
+  toggleDayOfWeek,
+  WEEKDAY_FULL_LABELS,
+  WEEKDAY_SHORT_LABELS,
+  WEEKDAY_SINGLE_LETTERS,
+} from '../../utils/routinesEngine';
 import {
   DECISION_STARTER_PRESETS,
   DECISION_WHEEL_PALETTE,
@@ -37,6 +45,45 @@ import {
 } from '../../utils/decisionEngine';
 import { useMealStore } from '../../stores/useMealStore';
 import { useProfileStore } from '../../stores/useProfileStore';
+
+function getCurrentWeekday(): number {
+  return new Date().getDay();
+}
+
+const WeeklyDaysPillPicker: React.FC<{
+  selectedDays: number[];
+  onToggleDay: (day: number) => void;
+}> = ({ selectedDays, onToggleDay }) => {
+  const normalized = normalizeDaysOfWeek(selectedDays);
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex items-center gap-1" role="group" aria-label="Days of week">
+        {WEEKDAY_SINGLE_LETTERS.map((letter, dIdx) => {
+          const active = normalized.includes(dIdx);
+          return (
+            <button
+              key={WEEKDAY_FULL_LABELS[dIdx]}
+              type="button"
+              aria-pressed={active}
+              title={WEEKDAY_FULL_LABELS[dIdx]}
+              onClick={() => onToggleDay(dIdx)}
+              className={`w-6 h-6 rounded-md text-[10px] font-bold border transition-colors cursor-pointer flex items-center justify-center ${
+                active
+                  ? 'bg-blue-600 border-blue-500 text-white shadow-xs'
+                  : 'bg-gray-900 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'
+              }`}
+            >
+              {letter}
+            </button>
+          );
+        })}
+      </div>
+      <span className="text-[11px] font-semibold text-blue-300">
+        {formatWeeklyDaysSummary(normalized)}
+      </span>
+    </div>
+  );
+};
 
 interface RoutinesSettingsPanelProps {
   items: RoutineItem[];
@@ -56,6 +103,7 @@ export const RoutinesSettingsPanel: React.FC<RoutinesSettingsPanelProps> = ({
   const [newLabel, setNewLabel] = useState('');
   const [newEmoji, setNewEmoji] = useState('✓');
   const [newCadence, setNewCadence] = useState<RoutineCadenceType>('daily');
+  const [newDaysOfWeek, setNewDaysOfWeek] = useState<number[]>(() => [getCurrentWeekday()]);
 
   const updateItem = (idx: number, patch: Partial<RoutineItem>) => {
     setItems(items.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
@@ -78,6 +126,9 @@ export const RoutinesSettingsPanel: React.FC<RoutinesSettingsPanelProps> = ({
       label: trimmed.slice(0, 60),
       emoji: newEmoji.trim() || undefined,
       cadence: newCadence,
+      ...(newCadence === 'weekly'
+        ? { daysOfWeek: normalizeDaysOfWeek(newDaysOfWeek, getCurrentWeekday()) }
+        : {}),
       ...(newCadence === 'every_n_days' ? { intervalDays: 7 } : {}),
       ...(newCadence === 'alternating_week'
         ? {
@@ -134,6 +185,7 @@ export const RoutinesSettingsPanel: React.FC<RoutinesSettingsPanelProps> = ({
         >
           <option value="daily">Daily</option>
           <option value="am_pm">AM / PM</option>
+          <option value="weekly">Weekly</option>
           <option value="alternating_week">Alt Week</option>
           <option value="every_n_days">Every N Days</option>
         </select>
@@ -147,6 +199,15 @@ export const RoutinesSettingsPanel: React.FC<RoutinesSettingsPanelProps> = ({
           <span>Add</span>
         </button>
       </div>
+
+      {newCadence === 'weekly' && (
+        <div className="px-2.5 py-2 rounded-xl bg-gray-950/80 border border-gray-800">
+          <WeeklyDaysPillPicker
+            selectedDays={newDaysOfWeek}
+            onToggleDay={(day) => setNewDaysOfWeek((prev) => toggleDayOfWeek(prev, day))}
+          />
+        </div>
+      )}
 
       {/* Existing Routines */}
       <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
@@ -172,11 +233,21 @@ export const RoutinesSettingsPanel: React.FC<RoutinesSettingsPanelProps> = ({
               />
               <select
                 value={item.cadence}
-                onChange={(e) => updateItem(idx, { cadence: e.target.value as RoutineCadenceType })}
+                onChange={(e) => {
+                  const nextCadence = e.target.value as RoutineCadenceType;
+                  updateItem(idx, {
+                    cadence: nextCadence,
+                    ...(nextCadence === 'weekly' &&
+                    (!item.daysOfWeek || item.daysOfWeek.length === 0)
+                      ? { daysOfWeek: [item.pickupDayOfWeek ?? getCurrentWeekday()] }
+                      : {}),
+                  });
+                }}
                 className="rounded-lg bg-gray-900 border border-gray-800 px-2 py-1 text-[11px] text-gray-200"
               >
                 <option value="daily">Daily</option>
                 <option value="am_pm">AM / PM</option>
+                <option value="weekly">Weekly</option>
                 <option value="alternating_week">Alt Week</option>
                 <option value="every_n_days">Every N Days</option>
               </select>
@@ -207,6 +278,17 @@ export const RoutinesSettingsPanel: React.FC<RoutinesSettingsPanelProps> = ({
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
             </div>
+
+            {item.cadence === 'weekly' && (
+              <div className="pl-10">
+                <WeeklyDaysPillPicker
+                  selectedDays={normalizeDaysOfWeek(item.daysOfWeek, item.pickupDayOfWeek ?? 5)}
+                  onToggleDay={(day) =>
+                    updateItem(idx, { daysOfWeek: toggleDayOfWeek(item.daysOfWeek, day) })
+                  }
+                />
+              </div>
+            )}
 
             {item.cadence === 'every_n_days' && (
               <div className="flex items-center gap-2 pl-10 text-xs text-gray-300">

@@ -8,6 +8,16 @@ import {
 } from '../types/phase2Widgets';
 
 export const WEEKDAY_SHORT_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+export const WEEKDAY_SINGLE_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'] as const;
+export const WEEKDAY_FULL_LABELS = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+] as const;
 
 export const DEFAULT_ROUTINE_ITEMS: RoutineItem[] = [
   {
@@ -52,10 +62,61 @@ function clampInt(value: unknown, min: number, max: number, fallback: number): n
 }
 
 function normalizeCadence(raw: unknown): RoutineCadenceType {
-  if (raw === 'am_pm' || raw === 'alternating_week' || raw === 'every_n_days') {
+  if (
+    raw === 'am_pm' ||
+    raw === 'weekly' ||
+    raw === 'alternating_week' ||
+    raw === 'every_n_days'
+  ) {
     return raw;
   }
   return 'daily';
+}
+
+export function normalizeDaysOfWeek(raw: unknown, fallbackDay: number = 5): number[] {
+  const unique = new Set<number>();
+  if (Array.isArray(raw)) {
+    for (const val of raw) {
+      if (typeof val !== 'number' && (typeof val !== 'string' || val.trim() === '')) continue;
+      const num = Number(val);
+      if (!Number.isFinite(num)) continue;
+      const day = Math.round(num);
+      if (day >= 0 && day <= 6) {
+        unique.add(day);
+      }
+    }
+  }
+  if (unique.size === 0) {
+    return [clampInt(fallbackDay, 0, 6, 5)];
+  }
+  return [...unique].sort((a, b) => a - b);
+}
+
+export function toggleDayOfWeek(current: number[] | undefined, day: number): number[] {
+  const list = normalizeDaysOfWeek(current);
+  const safeDay = clampInt(day, 0, 6, 5);
+  if (list.includes(safeDay)) {
+    return list.length > 1 ? list.filter((d) => d !== safeDay) : list;
+  }
+  return [...list, safeDay].sort((a, b) => a - b);
+}
+
+export function formatWeeklyDaysSummary(daysOfWeek: number[]): string {
+  const days = normalizeDaysOfWeek(daysOfWeek);
+  if (days.length === 7) return 'Every Day';
+  if (days.length === 5 && days.every((d, idx) => d === idx + 1)) {
+    return 'Weekdays (Mon–Fri)';
+  }
+  if (days.length === 2 && days[0] === 0 && days[1] === 6) {
+    return 'Weekends (Sat & Sun)';
+  }
+  if (days.length === 1) {
+    return `Every ${WEEKDAY_SHORT_LABELS[days[0]]}`;
+  }
+  if (days.length === 2) {
+    return `${WEEKDAY_SHORT_LABELS[days[0]]} & ${WEEKDAY_SHORT_LABELS[days[1]]}`;
+  }
+  return days.map((d) => WEEKDAY_SHORT_LABELS[d]).join(', ');
 }
 
 function sanitizeCompletions(raw: unknown): RoutineCompletionStamp[] {
@@ -114,7 +175,9 @@ export function resolveRoutineItems(raw?: unknown): RoutineItem[] {
       completions: sanitizeCompletions(item.completions),
     };
 
-    if (cadence === 'every_n_days') {
+    if (cadence === 'weekly') {
+      clean.daysOfWeek = normalizeDaysOfWeek(item.daysOfWeek, item.pickupDayOfWeek ?? 5);
+    } else if (cadence === 'every_n_days') {
       clean.intervalDays = clampInt(item.intervalDays, 1, 365, 7);
     } else if (cadence === 'alternating_week') {
       clean.pickupDayOfWeek = clampInt(item.pickupDayOfWeek, 0, 6, 4);
@@ -160,6 +223,19 @@ export interface AmPmRoutineEvaluation {
   pmStamp: RoutineCompletionStamp | null;
 }
 
+export interface WeeklyRoutineEvaluation {
+  cadence: 'weekly';
+  daysOfWeek: number[];
+  scheduleLabel: string;
+  activeSlotKey: string;
+  activeStamp: RoutineCompletionStamp | null;
+  isDueToday: boolean;
+  daysUntilNext: number;
+  nextDayLabel: string;
+  prevDayLabel: string;
+  settledFromPrevSlot: boolean;
+}
+
 export interface AlternatingWeekEvaluation {
   cadence: 'alternating_week';
   cycleSlotKey: string;
@@ -188,6 +264,7 @@ export interface EveryNDaysEvaluation {
 export type RoutineEvaluation =
   | DailyRoutineEvaluation
   | AmPmRoutineEvaluation
+  | WeeklyRoutineEvaluation
   | AlternatingWeekEvaluation
   | EveryNDaysEvaluation;
 
@@ -206,6 +283,45 @@ export function evaluateRoutineStatus(item: RoutineItem, now: Date): RoutineEval
       activeHalf: now.getHours() < 12 ? 'AM' : 'PM',
       amStamp: completions.find((c) => c.slotKey === amSlotKey) || null,
       pmStamp: completions.find((c) => c.slotKey === pmSlotKey) || null,
+    };
+  }
+
+  if (item.cadence === 'weekly') {
+    const days = normalizeDaysOfWeek(item.daysOfWeek, item.pickupDayOfWeek ?? 5);
+    const todayDow = todayDate.getDay();
+    const daysUntilNext = Math.min(...days.map((d) => (d - todayDow + 7) % 7));
+    const nextDate = new Date(
+      todayDate.getFullYear(),
+      todayDate.getMonth(),
+      todayDate.getDate() + daysUntilNext
+    );
+    const nextSlotKey = localDateKey(nextDate);
+    const nextDayLabel = WEEKDAY_SHORT_LABELS[nextDate.getDay()];
+
+    const daysSincePrev = Math.min(...days.map((d) => (todayDow - d + 7) % 7 || 7));
+    const prevDate = new Date(
+      todayDate.getFullYear(),
+      todayDate.getMonth(),
+      todayDate.getDate() - daysSincePrev
+    );
+    const prevSlotKey = localDateKey(prevDate);
+    const prevDayLabel = WEEKDAY_SHORT_LABELS[prevDate.getDay()];
+
+    const activeSlotKey = daysUntilNext <= 1 ? nextSlotKey : prevSlotKey;
+    const activeStamp = completions.find((c) => c.slotKey === activeSlotKey) || null;
+    const settledFromPrevSlot = daysUntilNext >= 2 && Boolean(activeStamp);
+
+    return {
+      cadence: 'weekly',
+      daysOfWeek: days,
+      scheduleLabel: formatWeeklyDaysSummary(days),
+      activeSlotKey,
+      activeStamp,
+      isDueToday: daysUntilNext === 0,
+      daysUntilNext,
+      nextDayLabel,
+      prevDayLabel,
+      settledFromPrevSlot,
     };
   }
 

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.13] - 2026-11-16
+
+### Flexible Single & Multi-Day Weekly Schedules for Home Check-Ins
+* **Fixed-Weekday `weekly` Cadence (`phase2Widgets.ts`, `routinesEngine.ts`, `RoutinesWidget.tsx`, `Phase2WidgetSettingsPanels.tsx`):**
+  * Added a `weekly` cadence option with a compact `S M T W T F S` pill selector across both Tile Settings and the inline widget quick-add bar, supporting single-day (`Every Fri`), multi-day (`Tue & Fri`), `Weekdays (Mon–Fri)`, `Weekends (Sat & Sun)`, and `Every Day` schedules with a minimum 1-day guard (`toggleDayOfWeek`).
+  * Added `WeeklyRoutineEvaluation` in `evaluateRoutineStatus` supporting 1-day-early prep (`Early`) and previous-occurrence late logging (`Logged <Day>`) without drifting future due dates or pre-stamping next week.
+  * Updated catalog search keywords (`widgetCatalog.ts`), `FEATURES.md`, `README.md`, and unit tests in `tests/phase2Widgets.test.ts` (`127 / 127` passing).
+
+---
+
 ## [0.7.12] - 2026-11-15
 
 ### Household Check-In Routines, Zero-Cloud Guest Wi-Fi QR & Family Decision Wheel (`#142`)

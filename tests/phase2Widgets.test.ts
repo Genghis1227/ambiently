@@ -11,8 +11,11 @@ import {
 import {
   DEFAULT_ROUTINE_ITEMS,
   evaluateRoutineStatus,
+  formatWeeklyDaysSummary,
+  normalizeDaysOfWeek,
   resolveRoutineItems,
   swapAlternatingWeekParity,
+  toggleDayOfWeek,
   toggleRoutineCheckIn,
 } from '../src/utils/routinesEngine.ts';
 import {
@@ -230,6 +233,115 @@ describe('routinesEngine', () => {
     assert.equal(nineDaysAgo.daysElapsed, 9);
     assert.equal(nineDaysAgo.isOverdue, true);
     assert.equal(nineDaysAgo.daysOverdue, 2);
+  });
+
+  it('normalizes, toggles, and formats single and multiple weekdays without emptying', () => {
+    assert.deepEqual(normalizeDaysOfWeek(undefined, 5), [5]);
+    assert.deepEqual(normalizeDaysOfWeek([5, 2, 5, -1, 9], 1), [2, 5]);
+
+    assert.deepEqual(toggleDayOfWeek([5], 2), [2, 5]);
+    assert.deepEqual(toggleDayOfWeek([2, 5], 5), [2]);
+    // Cannot remove the sole active day
+    assert.deepEqual(toggleDayOfWeek([2], 2), [2]);
+
+    assert.equal(formatWeeklyDaysSummary([5]), 'Every Fri');
+    assert.equal(formatWeeklyDaysSummary([2, 5]), 'Tue & Fri');
+    assert.equal(formatWeeklyDaysSummary([1, 2, 3, 4, 5]), 'Weekdays (Mon–Fri)');
+    assert.equal(formatWeeklyDaysSummary([0, 6]), 'Weekends (Sat & Sun)');
+    assert.equal(formatWeeklyDaysSummary([0, 1, 2, 3, 4, 5, 6]), 'Every Day');
+  });
+
+  it('evaluates fixed-weekday weekly routines cleanly without drifting across early/late check-ins', () => {
+    const fridayTrash = resolveRoutineItems([
+      {
+        id: 'weekly-trash',
+        label: 'Trash Bins',
+        cadence: 'weekly',
+        daysOfWeek: [5], // Friday
+        completions: [],
+      },
+    ])[0];
+    assert.equal(fridayTrash.cadence, 'weekly');
+    assert.deepEqual(fridayTrash.daysOfWeek, [5]);
+
+    // Thursday (1 day early) -> targets Friday 2026-11-20
+    const thu = new Date('2026-11-19T19:00:00');
+    const evalThu = evaluateRoutineStatus(fridayTrash, thu);
+    assert.equal(evalThu.cadence, 'weekly');
+    assert.equal(evalThu.daysUntilNext, 1);
+    assert.equal(evalThu.nextDayLabel, 'Fri');
+    assert.equal(evalThu.activeSlotKey, '2026-11-20');
+    assert.equal(evalThu.isDueToday, false);
+
+    // Checking in early on Thursday carries into Friday
+    const checkedEarly = toggleRoutineCheckIn(
+      fridayTrash,
+      evalThu.activeSlotKey,
+      'p_dad',
+      '2026-11-19T19:05:00.000Z'
+    );
+    const fri = new Date('2026-11-20T09:00:00');
+    const evalFri = evaluateRoutineStatus(checkedEarly, fri);
+    assert.equal(evalFri.cadence, 'weekly');
+    assert.equal(evalFri.isDueToday, true);
+    assert.equal(evalFri.daysUntilNext, 0);
+    assert.equal(evalFri.activeStamp?.profileId, 'p_dad');
+
+    // Checking in late on Saturday stamps last Friday (2026-11-20) without pre-stamping next Friday (2026-11-27)
+    const sat = new Date('2026-11-21T10:00:00');
+    const evalSat = evaluateRoutineStatus(fridayTrash, sat);
+    assert.equal(evalSat.cadence, 'weekly');
+    assert.equal(evalSat.daysUntilNext, 6);
+    assert.equal(evalSat.activeSlotKey, '2026-11-20');
+    assert.equal(evalSat.settledFromPrevSlot, false);
+
+    const checkedLateOnSat = toggleRoutineCheckIn(
+      fridayTrash,
+      evalSat.activeSlotKey,
+      'p_mom',
+      '2026-11-21T10:05:00.000Z'
+    );
+    const evalSatSettled = evaluateRoutineStatus(checkedLateOnSat, sat);
+    assert.equal(evalSatSettled.cadence, 'weekly');
+    assert.equal(evalSatSettled.settledFromPrevSlot, true);
+    assert.equal(evalSatSettled.prevDayLabel, 'Fri');
+
+    // By next Thursday (2026-11-26), target shifts cleanly to 2026-11-27 (not pre-checked)
+    const nextThu = new Date('2026-11-26T08:00:00');
+    const evalNextThu = evaluateRoutineStatus(checkedLateOnSat, nextThu);
+    assert.equal(evalNextThu.cadence, 'weekly');
+    assert.equal(evalNextThu.activeSlotKey, '2026-11-27');
+    assert.equal(evalNextThu.activeStamp, null);
+
+    // Multi-day weekly routine (Tue & Fri) tracks each occurrence independently
+    const tueFri = resolveRoutineItems([
+      {
+        id: 'tue-fri',
+        label: 'Water Porch Fern',
+        cadence: 'weekly',
+        daysOfWeek: [2, 5],
+        completions: [],
+      },
+    ])[0];
+    const tue = new Date('2026-11-17T09:00:00');
+    const evalTue = evaluateRoutineStatus(tueFri, tue);
+    assert.equal(evalTue.cadence, 'weekly');
+    assert.equal(evalTue.scheduleLabel, 'Tue & Fri');
+    assert.equal(evalTue.isDueToday, true);
+    assert.equal(evalTue.activeSlotKey, '2026-11-17');
+
+    const stampedTue = toggleRoutineCheckIn(tueFri, '2026-11-17', 'p_kid', '2026-11-17T09:01:00.000Z');
+    const wed = new Date('2026-11-18T12:00:00');
+    const evalWed = evaluateRoutineStatus(stampedTue, wed);
+    assert.equal(evalWed.cadence, 'weekly');
+    assert.equal(evalWed.daysUntilNext, 2);
+    assert.equal(evalWed.settledFromPrevSlot, true);
+    assert.equal(evalWed.prevDayLabel, 'Tue');
+
+    const evalThuForFri = evaluateRoutineStatus(stampedTue, thu);
+    assert.equal(evalThuForFri.cadence, 'weekly');
+    assert.equal(evalThuForFri.activeSlotKey, '2026-11-20');
+    assert.equal(evalThuForFri.activeStamp, null);
   });
 });
 
