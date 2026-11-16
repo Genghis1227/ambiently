@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.9] - 2026-11-15
+
+### Repeating Kitchen Timer Alarm, Cross-Tab Auto-Switch & Global Dismiss Overlay
+* **Urgent 4-Beep Piezo Kitchen Alarm & Singleton Repeater (`src/utils/timerEngine.ts`):**
+  * Replaced the soft single-pass chime with an urgent 4-beep digital kitchen piezo alarm burst (`2093.0 Hz` C7 square + `2637.02 Hz` E7 triangle) that repeats every `1.6s` (up to a `15`-minute safety ceiling) until explicitly dismissed, snoozed (`+1m`), muted, reset, or deleted.
+  * Added `dismissTimerItem`, `isTimerActivelyRinging`, `resolveCrossTabAlarmSwitch`, `syncTimerAlarmSubscriber`, and `stopAllTimerAlarms` so all views share a single deduplicated `AudioContext` that cuts off immediately when silenced.
+* **Prominent `Dismiss` Controls on Timer Widget & Cooking Mode (`src/components/widgets/TimerWidget.tsx`, `src/components/meals/CookingModeModal.tsx`, `src/components/widgets/WidgetSettingsModal.tsx`):**
+  * Upgraded finished timer visuals with pulsing `TIME'S UP!` / `Ringing!` states and prominent rose **Dismiss** / **Dismiss All** (`BellOff`) controls alongside `+1m` snooze and **Restart** inside `TimerWidget` and `CookingModeModal`, and updated Tile Settings chime descriptions.
+* **Cross-Tab Carousel Monitoring, Auto-Switch & Global Alarm Overlay (`src/components/common/GlobalTimerAlarmOverlay.tsx`, `src/App.tsx`, `tests/phase1Widgets.test.ts`, `FEATURES.md`, `README.md`):**
+  * Mounted `<GlobalTimerAlarmOverlay />` across Desktop and Mobile views to monitor timers across every visible canvas, persist expired timers on off-screen tabs, freeze auto-carousel rotation, automatically switch to the timer's tab when no modal or editor is active, and display a floating `Dismiss` / `+1m` / `Restart` overlay until silenced.
+
+---
+
 ## [0.7.8] - 2026-11-15
 
 ### Kitchen Timer Inline & Settings Editor + Pure Kitchen Presets
