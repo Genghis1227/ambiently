@@ -21,6 +21,9 @@ import {
   AlarmClock,
   Wind,
   SunMoon,
+  ListChecks,
+  Wifi,
+  Dices,
 } from 'lucide-react';
 import type { DashboardWidget } from '../../types/dashboard';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -61,6 +64,9 @@ const CATALOG_ICONS: Record<WidgetCatalogIconKey, React.ComponentType<{ classNam
   timer: AlarmClock,
   air_quality: Wind,
   sun_moon: SunMoon,
+  routines: ListChecks,
+  wifi_qr: Wifi,
+  decision_maker: Dices,
 };
 
 export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({

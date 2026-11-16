@@ -34,6 +34,9 @@ const ALL_WIDGET_TYPES: WidgetType[] = [
   'chores',
   'meals',
   'kanban',
+  'routines',
+  'wifi_qr',
+  'decision_maker',
   'finance',
   'timer',
   'air_quality',
@@ -66,8 +69,8 @@ function boxesOverlap(a: FreeformPosition, b: FreeformPosition): boolean {
 }
 
 describe('widgetCatalog', () => {
-  it('covers all 20 WidgetTypes cleanly across 17 entries and 4 categories', () => {
-    assert.equal(WIDGET_CATALOG_ENTRIES.length, 17);
+  it('covers all 23 WidgetTypes cleanly across 20 entries and 4 categories', () => {
+    assert.equal(WIDGET_CATALOG_ENTRIES.length, 20);
     assert.deepEqual(
       WIDGET_CATEGORIES.map((c) => c.id),
       ['all', 'household', 'time_weather', 'media_ambient', 'text_feeds']
@@ -91,8 +94,17 @@ describe('widgetCatalog', () => {
     const householdItems = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'household', '');
     assert.deepEqual(
       householdItems.map((i) => i.entry.id),
-      ['calendar', 'meals', 'chores', 'kanban', 'sticky_notes', 'timer']
+      ['calendar', 'meals', 'chores', 'kanban', 'routines', 'wifi_qr', 'decision_maker', 'sticky_notes', 'timer']
     );
+
+    const recyclingResults = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'all', 'recycling');
+    assert.equal(recyclingResults.some((r) => r.entry.id === 'routines'), true);
+
+    const babysitterResults = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'all', 'babysitter');
+    assert.equal(babysitterResults.some((r) => r.entry.id === 'wifi_qr'), true);
+
+    const spinnerResults = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'all', 'spinner');
+    assert.equal(spinnerResults.some((r) => r.entry.id === 'decision_maker'), true);
 
     const timeWeatherItems = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'time_weather', '');
     assert.equal(timeWeatherItems.some((i) => i.entry.id === 'air_quality'), true);

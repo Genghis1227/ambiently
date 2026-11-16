@@ -132,11 +132,38 @@ export function resolveOptimizedImageMedia(
   };
 }
 
+const WIFI_SECRET_KEYS = ['ssid', 'password', 'security', 'hiddenNetwork', 'credentialStorage'] as const;
+
 /**
- * Strips bulky client-only arrays and multi-MB inline Data URLs from widget config before Cloud Sync.
+ * Strips all Guest Wi-Fi QR credentials from a widget config object so SSID, password,
+ * security protocol, and hidden-SSID flags never enter Cloud Sync or persistent widget rows.
  */
-export function sanitizeWidgetConfigForCloud(config: Record<string, any>): Record<string, any> {
+export function stripWifiCredentialsFromConfig(config: Record<string, any>): Record<string, any> {
   const next = { ...(config || {}) };
+  for (const key of WIFI_SECRET_KEYS) {
+    if (key in next) {
+      delete next[key];
+    }
+  }
+  return next;
+}
+
+/**
+ * Strips bulky client-only arrays, multi-MB inline Data URLs, and Guest Wi-Fi QR credentials
+ * from widget config before Cloud Sync.
+ */
+export function sanitizeWidgetConfigForCloud(
+  config: Record<string, any>,
+  widgetType?: string
+): Record<string, any> {
+  const hasWifiKeys = Boolean(
+    config && WIFI_SECRET_KEYS.some((key) => key !== 'security' && key in config)
+  );
+  const next =
+    widgetType === 'wifi_qr' || hasWifiKeys
+      ? stripWifiCredentialsFromConfig(config)
+      : { ...(config || {}) };
+
   if ('customPhotos' in next) {
     delete next.customPhotos;
   }

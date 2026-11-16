@@ -22,6 +22,21 @@ export type {
   AirQualityWidgetConfig,
   SunMoonWidgetConfig,
 } from './phase1Widgets';
+export type {
+  RoutineCadenceType,
+  RoutinePeriodSlot,
+  RoutineCompletionStamp,
+  RoutineItem,
+  RoutinesWidgetConfig,
+  WifiSecurityType,
+  WifiLocalVaultCredentials,
+  WifiCardDisplayView,
+  HouseSitterContact,
+  WifiQrWidgetConfig,
+  DecisionMakerMode,
+  DecisionOption,
+  DecisionMakerWidgetConfig,
+} from './phase2Widgets';
 export type { PhotoAutoSyncInterval, PlexPhotoSyncConfig, PhotoTargetSyncMeta };
 
 export type DockPosition = 'left' | 'top' | 'right' | 'bottom';
@@ -63,7 +78,10 @@ export type WidgetType =
   | 'finance'
   | 'timer'
   | 'air_quality'
-  | 'sun_moon';
+  | 'sun_moon'
+  | 'routines'
+  | 'wifi_qr'
+  | 'decision_maker';
 
 export interface RssWidgetConfig {
   feedUrl?: string;

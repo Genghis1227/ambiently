@@ -78,6 +78,9 @@ describe('widgetStickerMode defaults and overrides', () => {
     assert.equal(isStickerCapableWidget('timer'), true);
     assert.equal(isStickerCapableWidget('air_quality'), true);
     assert.equal(isStickerCapableWidget('sun_moon'), true);
+    assert.equal(isStickerCapableWidget('routines'), true);
+    assert.equal(isStickerCapableWidget('wifi_qr'), true);
+    assert.equal(isStickerCapableWidget('decision_maker'), true);
 
     assert.equal(isStickerCapableWidget('chores'), false);
     assert.equal(isStickerCapableWidget('meals'), false);

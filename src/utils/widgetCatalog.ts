@@ -1,5 +1,7 @@
 import type { DashboardWidget, WidgetType } from '../types/dashboard';
 import { DEFAULT_FINANCE_WATCHLIST } from '../types/finance';
+import { DEFAULT_ROUTINE_ITEMS } from './routinesEngine';
+import { DEFAULT_DECISION_OPTIONS } from './decisionEngine';
 
 export type WidgetCategoryId =
   | 'all'
@@ -25,7 +27,10 @@ export type WidgetCatalogIconKey =
   | 'finance'
   | 'timer'
   | 'air_quality'
-  | 'sun_moon';
+  | 'sun_moon'
+  | 'routines'
+  | 'wifi_qr'
+  | 'decision_maker';
 
 export interface WidgetCategoryMeta {
   id: WidgetCategoryId;
@@ -188,6 +193,127 @@ export const WIDGET_CATALOG_ENTRIES: WidgetCatalogEntry[] = [
           displayMode: 'tile',
         },
         keywords: ['kanban', 'project board', 'task board', 'board', 'projects', 'tasks', 'to-do'],
+      },
+    ],
+  },
+  {
+    id: 'routines',
+    category: 'household',
+    title: 'Home Check-Ins & Rhythms',
+    description:
+      'Non-point household trackers for AM/PM pet feeding, meds, alternating-week trash vs. recycling pickup, and Every-N-Days plant/filter care with 1-tap avatar stamps.',
+    iconKey: 'routines',
+    color: 'from-emerald-500/20 to-cyan-500/20 text-emerald-300 border-emerald-500/30',
+    keywords: [
+      'routines',
+      'check-in',
+      'did someone already',
+      'pet',
+      'dog',
+      'cat',
+      'feeding',
+      'meds',
+      'vitamins',
+      'trash',
+      'recycling',
+      'curbside',
+      'filter',
+      'plants',
+      'habits',
+    ],
+    variants: [
+      {
+        type: 'routines',
+        pillLabel: 'Home Check-Ins & Rhythms',
+        title: 'Home Check-Ins & Rhythms',
+        description:
+          'Track pet feeding, daily/AM-PM habits, alternating recycling weeks, and filter/plant intervals with household avatar check-ins.',
+        defaultGridPos: { w: 4, h: 6 },
+        defaultConfig: {
+          items: DEFAULT_ROUTINE_ITEMS,
+        },
+        keywords: ['routines', 'pet', 'trash', 'recycling', 'meds', 'filter', 'plants'],
+      },
+    ],
+  },
+  {
+    id: 'wifi_qr',
+    category: 'household',
+    title: 'Guest Wi-Fi & House-Sitter',
+    description:
+      'Instant scannable Guest Wi-Fi QR code with masked tap-to-reveal password (stored strictly in local db.vault, never synced) and synced House-Sitter emergency contacts & care sheet.',
+    iconKey: 'wifi_qr',
+    color: 'from-cyan-500/20 to-blue-500/20 text-cyan-300 border-cyan-500/30',
+    keywords: [
+      'wifi',
+      'wi-fi',
+      'qr',
+      'guest',
+      'password',
+      'network',
+      'house sitter',
+      'babysitter',
+      'emergency',
+      'contacts',
+      'vet',
+      'vault',
+    ],
+    variants: [
+      {
+        type: 'wifi_qr',
+        pillLabel: 'Guest Wi-Fi & House-Sitter',
+        title: 'Guest Wi-Fi & House-Sitter',
+        description:
+          'Scannable Guest Wi-Fi QR card kept strictly in device-local db.vault (never synced to cloud), plus synced House-Sitter emergency notes.',
+        defaultGridPos: { w: 4, h: 6 },
+        defaultConfig: {
+          activeView: 'wifi',
+          autoHidePasswordSec: 30,
+          emergencyContacts: [],
+        },
+        keywords: ['wifi', 'qr', 'guest', 'babysitter', 'emergency', 'contacts'],
+      },
+    ],
+  },
+  {
+    id: 'decision_maker',
+    category: 'household',
+    title: 'Decision Wheel & Poll',
+    description:
+      'Spin an interactive household prize wheel or run an avatar tap-to-vote poll with 1-click saved Meal Planner recipe & family profile imports.',
+    iconKey: 'decision_maker',
+    color: 'from-amber-500/20 to-fuchsia-500/20 text-amber-300 border-amber-500/30',
+    keywords: [
+      'wheel',
+      'spin',
+      'spinner',
+      'poll',
+      'vote',
+      'voting',
+      'decision',
+      'random',
+      'picker',
+      'dinner',
+      'movie',
+      'tie breaker',
+    ],
+    variants: [
+      {
+        type: 'decision_maker',
+        pillLabel: 'Decision Wheel & Poll',
+        title: 'Decision Wheel & Poll',
+        description:
+          'Interactive spin-the-wheel and family avatar poll with 1-click recipe & profile imports plus tie-breaker spin.',
+        defaultGridPos: { w: 4, h: 6 },
+        defaultConfig: {
+          mode: 'wheel',
+          prompt: 'What should we pick?',
+          options: DEFAULT_DECISION_OPTIONS,
+          votes: {},
+          allowMultiVote: false,
+          removeWinnerOnSpin: false,
+        },
+        keywords: ['wheel', 'spinner', 'poll', 'vote', 'decision', 'dinner', 'movie'],
       },
     ],
   },

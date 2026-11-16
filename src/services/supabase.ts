@@ -19,7 +19,8 @@ import {
   isSameWidgetPhotoSource,
   sanitizeRestoredPhotoWidget,
 } from '../utils/photoSourceIsolation';
-import { sanitizeWidgetConfigForCloud } from '../utils/mediaOptimization';
+import { sanitizeWidgetConfigForCloud, stripWifiCredentialsFromConfig } from '../utils/mediaOptimization';
+import { getWifiVaultKey } from '../utils/wifiQr';
 import type { DashboardTab, DashboardWidget, StickyNoteItem, AppSettings } from '../types/dashboard';
 import type { ChoreEngineSnapshot } from '../types/chores';
 import type { HouseholdProfile } from '../types/profiles';
@@ -471,7 +472,10 @@ function attachRealtimeChannel(
           title: raw.title,
           gridPos: raw.grid_pos || { x: 0, y: 0, w: 4, h: 4 },
           freeformPos: raw.freeform_pos || {},
-          config: raw.config || {},
+          config:
+            raw.type === 'wifi_qr'
+              ? stripWifiCredentialsFromConfig(raw.config || {})
+              : (raw.config || {}),
           updated_at: raw.updated_at || new Date().toISOString(),
           deleted_at: raw.deleted_at,
         };
@@ -1042,8 +1046,8 @@ export async function pushToCloud(
     let widgetsToUpsert: any[] = [];
     if (widgetsToPush.length > 0) {
       const formattedWidgets = widgetsToPush.map((w) => {
-        // Strip customPhotos and oversized inline Data URLs from cloud sync payloads
-        const configToPush = sanitizeWidgetConfigForCloud(w.config || {});
+        // Strip customPhotos, oversized inline Data URLs, and Guest Wi-Fi QR credentials from cloud sync payloads
+        const configToPush = sanitizeWidgetConfigForCloud(w.config || {}, w.type);
         return {
           id: w.id,
           dashboard_id: dashboardId,
@@ -1677,20 +1681,29 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
 
       const widgetsToPut: DashboardWidget[] = [];
       const toDeleteWidgetIds: string[] = [];
+      const wifiVaultKeysToDelete = new Set<string>();
       for (const w of canvasWidgetRows) {
+        const local = localMap.get(w.id);
         if (overwriteLocal && w.deleted_at) {
           toDeleteWidgetIds.push(w.id);
+          if (w.type === 'wifi_qr' || local?.type === 'wifi_qr') {
+            wifiVaultKeysToDelete.add(getWifiVaultKey(w.id));
+          }
           continue;
         }
-        const local = localMap.get(w.id);
-        const config = {
-          ...(w.config || {}),
-          // Preserve local customPhotos only when cloud widget config still targets the same album
-          customPhotos:
-            local?.config?.customPhotos?.length && isSameWidgetPhotoSource(w.config, local.config)
-              ? local.config.customPhotos
-              : (w.config?.customPhotos || []),
-        };
+        const baseConfig =
+          w.type === 'wifi_qr' ? stripWifiCredentialsFromConfig(w.config || {}) : (w.config || {});
+        const config =
+          w.type === 'wifi_qr'
+            ? baseConfig
+            : {
+                ...baseConfig,
+                // Preserve local customPhotos only when cloud widget config still targets the same album
+                customPhotos:
+                  local?.config?.customPhotos?.length && isSameWidgetPhotoSource(w.config, local.config)
+                    ? local.config.customPhotos
+                    : (w.config?.customPhotos || []),
+              };
 
         const mapped: DashboardWidget = sanitizeRestoredPhotoWidget({
           id: w.id,
@@ -1718,6 +1731,9 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
             cloudDeletedOrArchived,
           })
         ) {
+          if (mapped.deleted_at && (mapped.type === 'wifi_qr' || local?.type === 'wifi_qr')) {
+            wifiVaultKeysToDelete.add(getWifiVaultKey(mapped.id));
+          }
           widgetsToPut.push(!local ? mapped : keepLocalWidgetFields(mapped, local));
         } else if (!switchingBoards && !overwriteLocal && local) {
           hasUnsyncedLocalChanges = true;
@@ -1730,6 +1746,9 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
         if (!cloudWidgetIds.has(lw.id)) {
           if (overwriteLocal || defaultWidgetIds.has(lw.id)) {
             toDeleteWidgetIds.push(lw.id);
+            if (lw.type === 'wifi_qr') {
+              wifiVaultKeysToDelete.add(getWifiVaultKey(lw.id));
+            }
           } else if (!switchingBoards && !joiningExistingCloudBoard) {
             hasUnsyncedLocalChanges = true;
           }
@@ -1741,6 +1760,9 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
       }
       if (toDeleteWidgetIds.length > 0) {
         await db.widgets.bulkDelete(toDeleteWidgetIds);
+      }
+      if (wifiVaultKeysToDelete.size > 0) {
+        await db.vault.bulkDelete([...wifiVaultKeysToDelete]).catch(() => {});
       }
     }
 
