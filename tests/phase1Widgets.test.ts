@@ -4,7 +4,7 @@ import { MAX_TIMERS_PER_WIDGET, type TimerItem } from '../src/types/phase1Widget
 import {
   DEFAULT_TIMER_PRESETS,
   addSecondsToTimerItem,
-  advancePomodoroPhase,
+  combineDurationHms,
   extractStepDurations,
   formatShortDurationLabel,
   formatTimerDuration,
@@ -12,7 +12,9 @@ import {
   pauseTimerItem,
   resetTimerItem,
   resolveWidgetTimers,
+  splitDurationHms,
   startTimerItem,
+  updateTimerItem,
 } from '../src/utils/timerEngine';
 import {
   classifyPollenLevel,
@@ -27,21 +29,40 @@ import {
 } from '../src/utils/astronomy';
 
 describe('timerEngine', () => {
-  it('provides kitchen & pomodoro presets and enforces MAX_TIMERS_PER_WIDGET in resolveWidgetTimers', () => {
-    assert.equal(DEFAULT_TIMER_PRESETS.some((p) => p.mode === 'pomodoro'), true);
-    assert.equal(DEFAULT_TIMER_PRESETS.some((p) => p.mode === 'countdown'), true);
+  it('provides 6 pure kitchen presets and enforces MAX_TIMERS_PER_WIDGET in resolveWidgetTimers', () => {
+    assert.equal(DEFAULT_TIMER_PRESETS.length, 6);
+    assert.equal(
+      DEFAULT_TIMER_PRESETS.every(
+        (p) => p.durationSec > 0 && !p.label.toLowerCase().includes('pomodoro')
+      ),
+      true
+    );
 
-    const overflow: TimerItem[] = Array.from({ length: MAX_TIMERS_PER_WIDGET + 3 }, (_, idx) => ({
-      id: `t-${idx}`,
-      label: idx === 0 ? '   ' : `Timer ${idx}`,
-      durationSec: idx === 1 ? -10 : (idx + 1) * 60,
-      status: 'idle',
-    }));
+    const legacyPomodoro = {
+      id: 'legacy-1',
+      label: '  ',
+      durationSec: -10,
+      status: 'idle' as const,
+      mode: 'pomodoro',
+      pomodoroPhase: 'focus',
+    } as unknown as TimerItem;
+
+    const overflow: TimerItem[] = [
+      legacyPomodoro,
+      ...Array.from({ length: MAX_TIMERS_PER_WIDGET + 2 }, (_, idx) => ({
+        id: `t-${idx + 1}`,
+        label: `Timer ${idx + 1}`,
+        durationSec: (idx + 1) * 60,
+        status: 'idle' as const,
+      })),
+    ];
 
     const resolved = resolveWidgetTimers(overflow);
     assert.equal(resolved.length, MAX_TIMERS_PER_WIDGET);
-    assert.equal(resolved[0].label, 'Timer');
-    assert.equal(resolved[1].durationSec, 1);
+    assert.equal(resolved[0].label, 'Kitchen Timer');
+    assert.equal(resolved[0].durationSec, 1);
+    assert.equal('mode' in resolved[0], false);
+    assert.equal('pomodoroPhase' in resolved[0], false);
   });
 
   it('tracks running countdowns via endsAt ISO timestamps across pause, resume, reset, and completion', () => {
@@ -51,7 +72,6 @@ describe('timerEngine', () => {
       label: 'Pasta',
       durationSec: 600,
       status: 'idle',
-      mode: 'countdown',
     };
 
     const started = startTimerItem(baseTimer, t0);
@@ -86,7 +106,7 @@ describe('timerEngine', () => {
     assert.equal(reset.completedAt, null);
   });
 
-  it('adds +1m accurately across running, paused, and completed states and flips Pomodoro phases', () => {
+  it('adjusts +/-60s across states and edits labels/durations via splitDurationHms, combineDurationHms, and updateTimerItem', () => {
     const t0 = Date.UTC(2026, 4, 15, 14, 0, 0);
     const running = startTimerItem(
       { id: 'r1', label: 'Roast', durationSec: 120, status: 'idle' },
@@ -97,6 +117,10 @@ describe('timerEngine', () => {
     assert.equal(addedRunning.status, 'running');
     assert.equal(addedRunning.remainingSec, 150);
     assert.equal(addedRunning.endsAt, new Date(t0 + 180_000).toISOString());
+
+    const subtractedRunning = addSecondsToTimerItem(addedRunning, -60, t0 + 30_000);
+    assert.equal(subtractedRunning.status, 'running');
+    assert.equal(subtractedRunning.remainingSec, 90);
 
     const paused: TimerItem = {
       id: 'p1',
@@ -124,22 +148,24 @@ describe('timerEngine', () => {
     assert.equal(restartedByAdd.remainingSec, 60);
     assert.equal(restartedByAdd.endsAt, new Date(t0 + 65_000).toISOString());
 
-    const focusTimer: TimerItem = {
-      id: 'pomo-1',
-      label: 'Focus Session',
-      durationSec: 25 * 60,
-      status: 'completed',
-      mode: 'pomodoro',
-      pomodoroPhase: 'focus',
-    };
-    const breakPhase = advancePomodoroPhase(focusTimer, 25, 5, t0);
-    assert.equal(breakPhase.pomodoroPhase, 'break');
-    assert.equal(breakPhase.durationSec, 300);
-    assert.equal(breakPhase.status, 'running');
+    assert.deepEqual(splitDurationHms(3665), { hours: 1, minutes: 1, seconds: 5 });
+    assert.equal(combineDurationHms(1, 1, 5), 3665);
+    assert.equal(combineDurationHms(0, 0, 0), 0);
 
-    const nextFocus = advancePomodoroPhase(breakPhase, 30, 5, t0 + 300_000);
-    assert.equal(nextFocus.pomodoroPhase, 'focus');
-    assert.equal(nextFocus.durationSec, 1800);
+    // Renaming a running timer with the same duration preserves its active countdown
+    const renamedRunning = updateTimerItem(running, { label: 'Sunday Roast', durationSec: 120 });
+    assert.equal(renamedRunning.label, 'Sunday Roast');
+    assert.equal(renamedRunning.status, 'running');
+    assert.equal(renamedRunning.endsAt, running.endsAt);
+
+    // Changing duration resets cleanly to idle at the new duration
+    const resizedTimer = updateTimerItem(running, { label: 'Short Boil', durationSec: 300 });
+    assert.equal(resizedTimer.label, 'Short Boil');
+    assert.equal(resizedTimer.durationSec, 300);
+    assert.equal(resizedTimer.status, 'idle');
+    assert.equal(resizedTimer.remainingSec, 300);
+    assert.equal(resizedTimer.endsAt, null);
+    assert.equal(resizedTimer.completedAt, null);
   });
 
   it('formats durations cleanly and parses recipe step durations without false positives', () => {

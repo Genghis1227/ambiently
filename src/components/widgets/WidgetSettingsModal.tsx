@@ -73,10 +73,16 @@ import {
   Volume2,
 } from 'lucide-react';
 import {
+  DEFAULT_TIMER_PRESETS,
+  combineDurationHms,
+  formatShortDurationLabel,
   playTimerChime,
   resetTimerItem,
   resolveWidgetTimers,
+  splitDurationHms,
+  updateTimerItem,
 } from '../../utils/timerEngine';
+import { MAX_TIMERS_PER_WIDGET, type TimerItem } from '../../types/phase1Widgets';
 import { useChoreStore } from '../../store/choreStore';
 import { useMealStore } from '../../stores/useMealStore';
 import { useKanbanStore } from '../../stores/useKanbanStore';
@@ -300,10 +306,11 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const [financeSearchResults, setFinanceSearchResults] = useState<FinanceSearchResult[]>([]);
   const [financeSearchLoading, setFinanceSearchLoading] = useState<boolean>(false);
 
-  // Kitchen Timer & Pomodoro widget states
+  // Kitchen Timer widget states
   const [timerChimeEnabled, setTimerChimeEnabled] = useState<boolean>(true);
-  const [timerDefaultFocusMin, setTimerDefaultFocusMin] = useState<number>(25);
-  const [timerDefaultBreakMin, setTimerDefaultBreakMin] = useState<number>(5);
+  const [timerDraftItems, setTimerDraftItems] = useState<
+    Array<{ id: string; label: string; hours: string; minutes: string; seconds: string }>
+  >([]);
   const [timerResetAction, setTimerResetAction] = useState<'none' | 'clear_done' | 'reset_all'>('none');
 
   // Air Quality, Pollen & UV widget states
@@ -549,11 +556,18 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setFinanceSearchLoading(false);
     } else if (widget.type === 'timer') {
       setTimerChimeEnabled(widget.config?.chimeEnabled !== false);
-      setTimerDefaultFocusMin(
-        Math.max(1, Math.min(180, Number(widget.config?.defaultFocusMin) || 25))
-      );
-      setTimerDefaultBreakMin(
-        Math.max(1, Math.min(60, Number(widget.config?.defaultBreakMin) || 5))
+      const resolvedTimers = resolveWidgetTimers(widget.config?.timers);
+      setTimerDraftItems(
+        resolvedTimers.map((t) => {
+          const { hours, minutes, seconds } = splitDurationHms(t.durationSec);
+          return {
+            id: t.id,
+            label: t.label,
+            hours: String(hours),
+            minutes: String(minutes),
+            seconds: String(seconds),
+          };
+        })
       );
       setTimerResetAction('none');
     } else if (widget.type === 'air_quality') {
@@ -1024,21 +1038,44 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.refreshIntervalMin = financeRefreshMin;
     } else if (effectiveType === 'timer') {
       configUpdates.chimeEnabled = timerChimeEnabled;
-      configUpdates.defaultFocusMin = Math.max(
-        1,
-        Math.min(180, Math.round(timerDefaultFocusMin) || 25)
+      delete configUpdates.defaultFocusMin;
+      delete configUpdates.defaultBreakMin;
+
+      const existingTimersById = new Map(
+        resolveWidgetTimers(widget.config?.timers).map((t) => [t.id, t])
       );
-      configUpdates.defaultBreakMin = Math.max(
-        1,
-        Math.min(60, Math.round(timerDefaultBreakMin) || 5)
-      );
+      let nextTimers: TimerItem[] = timerDraftItems
+        .slice(0, MAX_TIMERS_PER_WIDGET)
+        .map((draft) => {
+          const parsedSec = combineDurationHms(
+            parseInt(draft.hours, 10) || 0,
+            parseInt(draft.minutes, 10) || 0,
+            parseInt(draft.seconds, 10) || 0
+          );
+          const durationSec = parsedSec > 0 ? parsedSec : 60;
+          const existing = existingTimersById.get(draft.id);
+          if (existing) {
+            return updateTimerItem(existing, {
+              label: draft.label,
+              durationSec,
+            });
+          }
+          return {
+            id: draft.id,
+            label: draft.label.trim() || `${formatShortDurationLabel(durationSec)} Timer`,
+            durationSec,
+            status: 'idle',
+            remainingSec: durationSec,
+          };
+        });
+
       if (timerResetAction === 'clear_done') {
-        configUpdates.timers = resolveWidgetTimers(widget.config?.timers).filter(
-          (t) => t.status !== 'completed'
-        );
+        nextTimers = nextTimers.filter((t) => t.status !== 'completed');
       } else if (timerResetAction === 'reset_all') {
-        configUpdates.timers = resolveWidgetTimers(widget.config?.timers).map(resetTimerItem);
+        nextTimers = nextTimers.map(resetTimerItem);
       }
+
+      configUpdates.timers = nextTimers;
     } else if (effectiveType === 'air_quality') {
       configUpdates.locationName = locationName.trim() || 'Austin, TX';
       configUpdates.latitude = Number(latitude);
@@ -4288,12 +4325,184 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
               </div>
             )}
 
-            {/* KITCHEN TIMER & POMODORO SETTINGS */}
+            {/* KITCHEN TIMER SETTINGS */}
             {effectiveType === 'timer' && (
               <div className="space-y-4 pt-2 border-t border-gray-800">
                 <div className="flex items-center gap-2 text-xs font-semibold text-amber-300">
                   <AlarmClock className="w-4 h-4" />
-                  <span>Timer & Pomodoro Options</span>
+                  <span>Kitchen Timer Options</span>
+                </div>
+
+                {/* Configured Timers Editor */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-gray-300">
+                      Configured Timers ({timerDraftItems.length}/{MAX_TIMERS_PER_WIDGET})
+                    </span>
+                    <button
+                      type="button"
+                      disabled={timerDraftItems.length >= MAX_TIMERS_PER_WIDGET}
+                      onClick={() =>
+                        setTimerDraftItems((prev) => {
+                          if (prev.length >= MAX_TIMERS_PER_WIDGET) return prev;
+                          return [
+                            ...prev,
+                            {
+                              id: `timer-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                              label: `Timer ${prev.length + 1}`,
+                              hours: '0',
+                              minutes: '5',
+                              seconds: '0',
+                            },
+                          ];
+                        })
+                      }
+                      className="px-2.5 py-1 rounded-lg bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/40 text-[11px] font-semibold text-amber-200 inline-flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Add Custom Timer</span>
+                    </button>
+                  </div>
+
+                  {timerDraftItems.length === 0 ? (
+                    <div className="p-3 rounded-xl bg-gray-950 border border-dashed border-gray-800 text-xs text-gray-400">
+                      No timers configured yet. Click <span className="text-amber-300 font-semibold">Add Custom Timer</span> or pick a preset below.
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-0.5">
+                      {timerDraftItems.map((item, idx) => (
+                        <div
+                          key={item.id}
+                          className="p-2.5 rounded-xl bg-gray-950 border border-gray-800 space-y-2"
+                        >
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={item.label}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setTimerDraftItems((prev) =>
+                                  prev.map((row) =>
+                                    row.id === item.id ? { ...row, label: val } : row
+                                  )
+                                );
+                              }}
+                              placeholder={`Timer ${idx + 1} name`}
+                              aria-label={`Timer ${idx + 1} name`}
+                              className="flex-1 min-w-0 rounded-lg bg-gray-900 border border-gray-700 px-2.5 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-amber-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setTimerDraftItems((prev) =>
+                                  prev.filter((row) => row.id !== item.id)
+                                )
+                              }
+                              title="Remove timer"
+                              aria-label={`Remove ${item.label || `Timer ${idx + 1}`}`}
+                              className="p-1.5 rounded-lg bg-gray-900 border border-gray-800 text-gray-400 hover:text-rose-400 hover:border-rose-500/40 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-[11px] text-gray-400 mr-1">Duration:</span>
+                            <input
+                              type="number"
+                              min={0}
+                              max={23}
+                              value={item.hours}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setTimerDraftItems((prev) =>
+                                  prev.map((row) =>
+                                    row.id === item.id ? { ...row, hours: val } : row
+                                  )
+                                );
+                              }}
+                              aria-label={`Timer ${idx + 1} hours`}
+                              className="w-12 rounded-lg bg-gray-900 border border-gray-700 px-1.5 py-1 text-xs font-mono text-center text-white focus:outline-none focus:border-amber-500"
+                            />
+                            <span className="text-[11px] text-gray-400">h</span>
+
+                            <input
+                              type="number"
+                              min={0}
+                              max={59}
+                              value={item.minutes}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setTimerDraftItems((prev) =>
+                                  prev.map((row) =>
+                                    row.id === item.id ? { ...row, minutes: val } : row
+                                  )
+                                );
+                              }}
+                              aria-label={`Timer ${idx + 1} minutes`}
+                              className="w-12 rounded-lg bg-gray-900 border border-gray-700 px-1.5 py-1 text-xs font-mono text-center text-white focus:outline-none focus:border-amber-500"
+                            />
+                            <span className="text-[11px] text-gray-400">m</span>
+
+                            <input
+                              type="number"
+                              min={0}
+                              max={59}
+                              value={item.seconds}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setTimerDraftItems((prev) =>
+                                  prev.map((row) =>
+                                    row.id === item.id ? { ...row, seconds: val } : row
+                                  )
+                                );
+                              }}
+                              aria-label={`Timer ${idx + 1} seconds`}
+                              className="w-12 rounded-lg bg-gray-900 border border-gray-700 px-1.5 py-1 text-xs font-mono text-center text-white focus:outline-none focus:border-amber-500"
+                            />
+                            <span className="text-[11px] text-gray-400">s</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Quick Add Preset Pills */}
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">
+                      Quick Add Kitchen Presets
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {DEFAULT_TIMER_PRESETS.map((preset) => {
+                        const { hours, minutes, seconds } = splitDurationHms(preset.durationSec);
+                        return (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            disabled={timerDraftItems.length >= MAX_TIMERS_PER_WIDGET}
+                            onClick={() =>
+                              setTimerDraftItems((prev) => {
+                                if (prev.length >= MAX_TIMERS_PER_WIDGET) return prev;
+                                return [
+                                  ...prev,
+                                  {
+                                    id: `timer-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                                    label: preset.label,
+                                    hours: String(hours),
+                                    minutes: String(minutes),
+                                    seconds: String(seconds),
+                                  },
+                                ];
+                              })
+                            }
+                            className="px-2.5 py-1 rounded-lg bg-gray-950 hover:bg-gray-900 border border-gray-800 hover:border-amber-500/40 text-[11px] text-gray-300 hover:text-amber-200 transition-colors cursor-pointer disabled:opacity-40"
+                          >
+                            {preset.icon} {preset.label} ({formatShortDurationLabel(preset.durationSec)})
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between p-3 rounded-xl bg-gray-950 border border-gray-800">
@@ -4327,35 +4536,6 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                         }`}
                       />
                     </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold text-gray-300 block mb-1.5">
-                      Pomodoro Focus (min)
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={180}
-                      value={timerDefaultFocusMin}
-                      onChange={(e) => setTimerDefaultFocusMin(parseInt(e.target.value, 10) || 25)}
-                      className="w-full rounded-xl bg-gray-950 border border-gray-800 p-2 text-xs font-mono text-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-300 block mb-1.5">
-                      Pomodoro Break (min)
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={60}
-                      value={timerDefaultBreakMin}
-                      onChange={(e) => setTimerDefaultBreakMin(parseInt(e.target.value, 10) || 5)}
-                      className="w-full rounded-xl bg-gray-950 border border-gray-800 p-2 text-xs font-mono text-white"
-                    />
                   </div>
                 </div>
 

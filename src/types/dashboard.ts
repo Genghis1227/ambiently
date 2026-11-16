@@ -15,7 +15,6 @@ export type {
   FinanceDisplayMode,
 } from './finance';
 export type {
-  TimerMode,
   TimerStatus,
   TimerItem,
   TimerPreset,

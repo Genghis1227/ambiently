@@ -215,9 +215,9 @@ export const WIDGET_CATALOG_ENTRIES: WidgetCatalogEntry[] = [
   {
     id: 'timer',
     category: 'household',
-    title: 'Kitchen Timer & Pomodoro',
+    title: 'Kitchen Timer',
     description:
-      'Concurrent named cooking and focus timers with audio chimes, +1m quick-extend, and Pomodoro focus/break cycles.',
+      'Concurrent named kitchen timers with quick presets, editable durations, +1m/-1m adjustments, and audio chimes.',
     iconKey: 'timer',
     color: 'from-amber-500/20 to-rose-500/20 text-amber-300 border-amber-500/30',
     keywords: [
@@ -225,8 +225,7 @@ export const WIDGET_CATALOG_ENTRIES: WidgetCatalogEntry[] = [
       'timers',
       'kitchen timer',
       'cooking timer',
-      'pomodoro',
-      'focus',
+      'countdown',
       'alarm',
       'pasta',
       'oven',
@@ -235,15 +234,13 @@ export const WIDGET_CATALOG_ENTRIES: WidgetCatalogEntry[] = [
     variants: [
       {
         type: 'timer',
-        pillLabel: 'Timer & Pomodoro',
-        title: 'Kitchen Timer & Pomodoro',
+        pillLabel: 'Kitchen Timer',
+        title: 'Kitchen Timer',
         description:
-          'Concurrent named cooking and focus timers with audio chimes, +1m quick-extend, and Pomodoro cycles.',
+          'Concurrent named kitchen timers with quick presets, editable durations, +1m/-1m adjustments, and audio chimes.',
         defaultGridPos: { w: 4, h: 5 },
         defaultConfig: {
           chimeEnabled: true,
-          defaultFocusMin: 25,
-          defaultBreakMin: 5,
           timers: [
             {
               id: 'timer-default-1',
@@ -251,11 +248,10 @@ export const WIDGET_CATALOG_ENTRIES: WidgetCatalogEntry[] = [
               durationSec: 600,
               status: 'idle',
               remainingSec: 600,
-              mode: 'countdown',
             },
           ],
         },
-        keywords: ['timer', 'kitchen timer', 'pomodoro', 'focus', 'alarm'],
+        keywords: ['timer', 'kitchen timer', 'cooking timer', 'countdown', 'alarm'],
       },
     ],
   },

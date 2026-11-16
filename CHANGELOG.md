@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.8] - 2026-11-15
+
+### Kitchen Timer Inline & Settings Editor + Pure Kitchen Presets
+* **Removed Pomodoro Mode & Updated Presets (`src/types/phase1Widgets.ts`, `src/types/dashboard.ts`, `src/utils/timerEngine.ts`, `src/utils/widgetCatalog.ts`, `src/components/mobile/MobileCompanion.tsx`, `src/components/meals/CookingModeModal.tsx`):**
+  * Removed Pomodoro focus/break types, cycle buttons, settings fields, and catalog keywords so **Kitchen Timer** stays focused strictly on cooking and household countdowns.
+  * Replaced Pomodoro presets with 6 pure kitchen presets (*Steep Tea 4m*, *Soft Eggs 7m*, *Pasta 9m*, *Simmer / Rice 15m*, *Oven Bake 20m*, *Roast / Proof 45m*), stripped legacy `mode`/`pomodoroPhase` fields in `resolveWidgetTimers`, and added `splitDurationHms`, `combineDurationHms`, and `updateTimerItem`.
+* **Non-Overlapping Header & Inline Timer Editing (`src/components/widgets/TimerWidget.tsx`):**
+  * Shifted the `Mute/Unmute` toggle and `+ Add` button onto the left side of the widget header (`pr-20` clearance) so Corkboard's floating top-right hover toolbar cannot cover `+ Add`.
+  * Made the default `10:00` center ring display (plus single-timer and multi-timer rows) directly clickable to open the inline `Edit Kitchen Timer` form with timer name, `h` / `m` / `s` inputs, quick duration chips (`1m`–`1h`), kitchen presets, `-1m` / `+1m` adjustments, and `Save` / `Save & Start` (plus `Add` / `Start` when creating new timers).
+* **Full Timer Editor in Tile Settings & Regression Tests (`src/components/widgets/WidgetSettingsModal.tsx`, `tests/phase1Widgets.test.ts`, `tests/widgetCatalogAndBlueprints.test.ts`, `FEATURES.md`, `README.md`, `ARCHITECTURE.md`):**
+  * Replaced Pomodoro Focus/Break settings with a **Configured Timers** editor to rename, adjust `h` / `m` / `s` durations, remove, custom-add, or preset-append timers (and strip legacy `defaultFocusMin` / `defaultBreakMin` config keys on save), backed by updated unit tests and documentation.
+
+---
+
 ## [0.7.7] - 2026-11-15
 
 ### Kitchen Multi-Timer, Air Quality/Pollen/UV & Offline Sun/Moon Widgets (Phase 1)

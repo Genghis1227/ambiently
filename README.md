@@ -51,8 +51,8 @@
   * **Distraction-Free Article Reader (`/api/reader`):** Powered by Mozilla Readability and Linkedom to extract clean article text, hero images, and tables without leaving kiosk mode, paired with an edge **Web Preview (`/api/web-proxy`)** fallback and a 26-feed curated directory across 6 categories.
 * **📈 Live Markets & Watchlist (`/api/finance`):**
   * Track stocks, ETFs, market indices, and crypto with zero API keys required—featuring `1D` / `5D` / `1M` SVG sparklines, adaptive row/grid/ticker-strip layouts, preset bundles, live symbol search, offline quote caching, and Sticker Mode support.
-* **⏲️ Kitchen Multi-Timer & Focus Pomodoro:**
-  * Run up to 6 concurrent wall-clock-accurate kitchen countdowns and Pomodoro focus/break loops with quick presets, `+1m` / `Reset` controls, Web Audio chimes, Sticker Mode support, and 1-tap recipe step timer chips inside **Cooking Mode**.
+* **⏲️ Kitchen Multi-Timer:**
+  * Run and edit up to 6 concurrent wall-clock-accurate kitchen countdowns with quick presets, inline `h`/`m`/`s` duration & label editing, `-1m` / `+1m` / `Reset` controls, Web Audio chimes, Sticker Mode support, and 1-tap recipe step timer chips inside **Cooking Mode**.
 * **🌤️ Air Quality, Pollen, UV & Offline Sun/Moon Ephemeris:**
   * Zero-API-key US EPA AQI, Tree/Grass/Weed pollen (with `PM2.5`/`PM10`/`O₃` fallback), and daytime UV strips via Open-Meteo paired with a 100% offline NOAA Sun Arc, Golden Hour, daylight delta, and SVG Moon Phase widget—both inheriting your household location automatically.
 * **📱 Mobile Companion Remote & Vertical Tile Stream:**

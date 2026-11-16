@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.8",
+    date: "November 15, 2026",
+    title: "Kitchen Timer Inline & Settings Editor + Pure Kitchen Presets",
+    highlights: [
+      "Focused Pure Kitchen Timer (Pomodoro Removed): Replaced Pomodoro focus/break presets and settings with 6 pure kitchen presets (Steep Tea, Soft Eggs, Pasta, Simmer / Rice, Oven Bake, Roast / Proof) and streamlined Kitchen Timer labels across the catalog and Mobile Companion.",
+      "Direct Inline Timer Editing & Non-Overlapping Controls: Click the center 10:00 ring countdown or row Edit button to customize any timer's name and Hours / Minutes / Seconds duration, adjust with -1m / +1m, or save ready without auto-starting—with the Add button anchored clear of Corkboard's top-right hover toolbar.",
+      "Configured Timers Editor in Tile Settings: Add custom timers, append kitchen presets, rename existing timers, edit h/m/s durations, or delete timers directly from Tile Settings.",
+    ],
+  },
+  {
     version: "v0.7.7",
     date: "November 15, 2026",
     title: "Kitchen Multi-Timer, Air Quality/Pollen/UV & Offline Sun/Moon Widgets",

@@ -365,7 +365,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
       case 'finance':
         return 'Markets & Watchlist';
       case 'timer':
-        return 'Kitchen Timer & Pomodoro';
+        return 'Kitchen Timer';
       case 'air_quality':
         return 'Air Quality, Pollen & UV';
       case 'sun_moon':
