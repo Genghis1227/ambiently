@@ -107,7 +107,7 @@ export const GlobalTimerAlarmOverlay: React.FC<GlobalTimerAlarmOverlayProps> = (
   const hasActiveOrDoneAcrossTabs = allTabTimerEntries.some(
     ({ timer }) => timer.status === 'running' || timer.status === 'completed'
   );
-  const nowDate = useSharedClock(hasActiveOrDoneAcrossTabs ? 'second' : '10s');
+  const nowDate = useSharedClock('second', hasActiveOrDoneAcrossTabs);
   const nowMs = nowDate.getTime() > 0 ? nowDate.getTime() : Date.now();
 
   // Persist running -> completed timers across ALL visible tabs even when their tab is hidden

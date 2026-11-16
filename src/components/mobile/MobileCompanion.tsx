@@ -35,9 +35,15 @@ import {
   SunMoon,
 } from 'lucide-react';
 import type { DashboardTab, DashboardWidget, StickyNoteItem, WidgetThemeMode } from '../../types/dashboard';
-import { ShoppingListNoteBody } from '../common/ShoppingListNoteBody';
 import { categorizeIngredient, parseIngredient } from '../../utils/ingredientAggregator';
 import { getCurrentUser } from '../../services/supabase';
+
+const ShoppingListNoteBody = React.lazy(() =>
+  import('../common/ShoppingListNoteBody').then((m) => ({ default: m.ShoppingListNoteBody }))
+);
+const CanvasBlueprintPicker = React.lazy(() =>
+  import('../layout/CanvasBlueprintPicker').then((m) => ({ default: m.CanvasBlueprintPicker }))
+);
 import { isCanvasThemeLight } from '../../data/canvasThemes';
 import { APP_VERSION } from '../../data/version';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -52,7 +58,6 @@ import { WorldClockWidget } from '../widgets/WorldClockWidget';
 import { WeatherWidget } from '../widgets/WeatherWidget';
 import { CountdownWidget } from '../widgets/CountdownWidget';
 import { inferCuratedCategoryId } from '../../services/photos';
-import { CANVAS_BLUEPRINTS } from '../../utils/canvasBlueprints';
 import { isWidgetStickerMode } from '../../utils/widgetStickerMode';
 import { isSettingsPinRequired } from '../../utils/pinValidation';
 import { QuotesWidget } from '../widgets/QuotesWidget';
@@ -881,34 +886,9 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
                 <div className="p-5 text-center text-xs text-gray-400 bg-gray-950/40 rounded-2xl border border-gray-800/40 space-y-3">
                   <p>No widgets on this canvas. Tap &ldquo;+ Add Tile&rdquo; to add one!</p>
                   {activeNotes.length === 0 && onAddWidget && (
-                    <div className="pt-2 border-t border-gray-800/60 text-left space-y-1.5">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1">
-                        <Sparkles className="w-3 h-3 text-emerald-400" />
-                        <span>Or Launch a Starter Blueprint</span>
-                      </span>
-                      <div className="space-y-1.5">
-                        {CANVAS_BLUEPRINTS.filter((bp) => bp.id !== 'blank').map((bp) => (
-                          <button
-                            key={bp.id}
-                            type="button"
-                            onClick={() =>
-                              void useDashboardStore.getState().applyCanvasBlueprint(activeTabId, bp.id)
-                            }
-                            className="w-full p-2.5 rounded-xl bg-gray-900/80 hover:bg-emerald-600/15 border border-gray-800 hover:border-emerald-500/40 text-left transition-all cursor-pointer"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-xs font-bold text-white">{bp.title}</span>
-                              <span className="px-1.5 py-0.5 rounded-md bg-gray-800 text-[10px] font-semibold text-gray-400 shrink-0">
-                                {bp.badge}
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">
-                              {bp.summary}
-                            </p>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                    <React.Suspense fallback={null}>
+                      <CanvasBlueprintPicker activeTabId={activeTabId} variant="mobile" />
+                    </React.Suspense>
                   )}
                 </div>
               ) : (
@@ -1124,13 +1104,15 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
                       </div>
 
                       {note.isShoppingList || note.freeformPos?.isShoppingList ? (
-                        <ShoppingListNoteBody
-                          note={note}
-                          onUpdateItems={(nextItems) =>
-                            onUpdateNote(note.id, { checklistItems: nextItems })
-                          }
-                          onToggleItem={(itemId) => toggleItem(note, itemId)}
-                        />
+                        <React.Suspense fallback={null}>
+                          <ShoppingListNoteBody
+                            note={note}
+                            onUpdateItems={(nextItems) =>
+                              onUpdateNote(note.id, { checklistItems: nextItems })
+                            }
+                            onToggleItem={(itemId) => toggleItem(note, itemId)}
+                          />
+                        </React.Suspense>
                       ) : note.isChecklist && note.checklistItems ? (
                         <div className="space-y-2 mt-1">
                           {note.checklistItems.map((item) => (

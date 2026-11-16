@@ -12,6 +12,7 @@ import {
   sanitizeWidgetConfigForCloud,
 } from '../src/utils/mediaOptimization';
 import { createSharedClockTicker } from '../src/utils/sharedClock';
+import { fetchWeatherData } from '../src/services/weather';
 
 describe('mediaOptimization helpers', () => {
   let restoreMocks: (() => void) | null = null;
@@ -295,5 +296,51 @@ describe('createSharedClockTicker', () => {
     assert.equal(ticker.hasActiveTimer(), false);
     assert.equal(scheduledTimers.size, 0);
     assert.equal(visibilityUnsubscribed, true);
+  });
+});
+
+describe('fetchWeatherData in-flight deduplication', () => {
+  it('coalesces concurrent cold requests for the same coordinates while preserving caller locationName', async () => {
+    const originalFetch = globalThis.fetch;
+    let fetchCalls = 0;
+
+    globalThis.fetch = (async () => {
+      fetchCalls += 1;
+      await new Promise((r) => setTimeout(r, 10));
+      return new Response(
+        JSON.stringify({
+          current: {
+            temperature_2m: 72.4,
+            relative_humidity_2m: 50,
+            apparent_temperature: 73.1,
+            is_day: 1,
+            weather_code: 0,
+            wind_speed_10m: 8.2,
+          },
+          daily: {
+            time: ['2026-11-15', '2026-11-16'],
+            weather_code: [0, 2],
+            temperature_2m_max: [78.6, 80.1],
+            temperature_2m_min: [58.2, 60.4],
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }) as typeof globalThis.fetch;
+
+    try {
+      const [resHome, resKitchen] = await Promise.all([
+        fetchWeatherData(31.123, -97.456, 'Home', 'F', false),
+        fetchWeatherData(31.123, -97.456, 'Kitchen', 'F', false),
+      ]);
+
+      assert.equal(fetchCalls, 1);
+      assert.equal(resHome.locationName, 'Home');
+      assert.equal(resKitchen.locationName, 'Kitchen');
+      assert.equal(resHome.currentTemp, 72);
+      assert.equal(resKitchen.currentTemp, 72);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });

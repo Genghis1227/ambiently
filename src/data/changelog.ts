@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.11",
+    date: "November 15, 2026",
+    title: "Startup Bundle Deferral, Sync Auth Debouncing, Idle/Night Optimization & Workbox Tuning",
+    highlights: [
+      "Zero Boot-Time Motion or Supabase Payloads: Replaced framer-motion on toast banners with CSS animations and deferred @supabase/supabase-js via dynamic import(), removing both from initial page preloads while shrinking the main entry chunk to 248.24 kB (66.13 kB gzip).",
+      "Extracted Lazy Corkboard Overlays & Scoped Selectors: Split out lazy CorkboardNoteModal, CorkboardTrashModal, CorkboardContextMenu, CanvasBlueprintPicker, StickyNotesWidget, and ShoppingListNoteBody, and scoped Corkboard settings reads to active photo-source edits.",
+      "Lower Cloud Auth Chatter, Night Mode Idle & Precache Updates: Debounced cloud auto-push before reading cached session state, gated off idle timer/widget polling during OLED Night Clock mode, coalesced duplicate weather fetches, and moved ChangelogModal to Workbox runtime caching.",
+    ],
+  },
+  {
     version: "v0.7.10",
     date: "November 15, 2026",
     title: "Widget/Modal Code-Splitting & Clock, Pointer, and Render Performance Optimizations",

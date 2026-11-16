@@ -82,11 +82,29 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         // The app's own scripts and styles are built into assets/, so they must be cached for the app to
         // open offline. Only the donation pictures from public/assets are left out.
-        globIgnores: ['**/og-banner.png', 'assets/{paypal,venmo,zelle}.*', 'assets/vendor-heif-*.js', 'config.js'],
+        globIgnores: ['**/og-banner.png', 'assets/{paypal,venmo,zelle}.*', 'assets/vendor-heif-*.js', 'assets/ChangelogModal-*.js', 'config.js'],
         // Never intercept /api/*, /functions/*, or runtime /config.js requests
         // with the SPA index.html navigation fallback.
         navigateFallbackDenylist: [/^\/api\//, /^\/functions\//, /^\/config\.js$/],
         runtimeCaching: [
+          {
+            // Cache lazy-excluded immutable hashed chunks on first demand rather than eager precache
+            urlPattern: ({ url }) =>
+              url.origin === (globalThis as unknown as { location: { origin: string } }).location.origin &&
+              /^\/assets\/(ChangelogModal|vendor-heif)-[a-zA-Z0-9_-]+\.js$/.test(url.pathname),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'ambiently-lazy-chunks-v1',
+              expiration: {
+                maxEntries: 8,
+                maxAgeSeconds: 30 * 24 * 60 * 60,
+                purgeOnQuotaError: true,
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
           {
             // Bounded CacheFirst store for static external GIF/MP4/WebP/image CDN assets (GIPHY, Wikimedia).
             // Never caches Plex tokens or dynamic API calls.
@@ -156,14 +174,20 @@ export default defineConfig({
     rolldownOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('node_modules')) {
-            if (id.includes('react-dom') || id.includes('/react/') || id.includes('scheduler')) return 'vendor-react';
-            if (id.includes('ical.js')) return 'vendor-ical';
-            if (id.includes('@supabase')) return 'vendor-supabase';
-            if (id.includes('framer-motion')) return 'vendor-motion';
-            if (id.includes('lucide-react')) return 'vendor-icons';
-            if (id.includes('dexie')) return 'vendor-db';
-            if (id.includes('libheif-js')) return 'vendor-heif';
+          const normalizedId = id.replace(/\\/g, '/');
+          if (normalizedId.includes('/node_modules/')) {
+            if (
+              normalizedId.includes('/react-dom/') ||
+              normalizedId.includes('/react/') ||
+              normalizedId.includes('/scheduler/')
+            ) {
+              return 'vendor-react';
+            }
+            if (normalizedId.includes('/ical.js/')) return 'vendor-ical';
+            if (normalizedId.includes('/@supabase/')) return 'vendor-supabase';
+            if (normalizedId.includes('/lucide-react/')) return 'vendor-icons';
+            if (normalizedId.includes('/dexie/')) return 'vendor-db';
+            if (normalizedId.includes('/libheif-js/')) return 'vendor-heif';
           }
         },
       },
