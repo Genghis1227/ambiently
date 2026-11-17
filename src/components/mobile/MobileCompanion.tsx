@@ -750,7 +750,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
   return (
     <>
       <div
-        onPointerDown={onSwipePointerDown}
+        onPointerDownCapture={onSwipePointerDown}
         className="fixed inset-0 w-full h-[100dvh] bg-[#090d16] text-white flex flex-col px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-36 mobile-companion-scroll overscroll-y-contain z-30"
       >
         {/* Top Mobile Bar with Clickable Version Tag */}

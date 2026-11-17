@@ -3,13 +3,19 @@ import assert from 'node:assert/strict';
 
 import { DEFAULT_SETTINGS } from '../src/services/db.ts';
 import {
+  classifyCanvasSwipeStartTarget,
+  computeLongSwipeCommitThresholdPx,
+  computeLongSwipeFastFlickMinPx,
   computeSwipeCommitThresholdPx,
   evaluatePointerSwipeProgress,
   evaluateWheelHorizontalSwipe,
   isCanvasSwipeEnabled,
+  isPointInCanvasEdgeSwipeZone,
+  requestCancelActiveCardDrag,
   resolveAdjacentCanvasTab,
   shouldCommitPointerSwipeRelease,
   shouldIgnoreCanvasSwipeTarget,
+  subscribeCancelActiveCardDrag,
 } from '../src/utils/canvasSwipe.ts';
 
 interface MockElementNode {
@@ -299,6 +305,9 @@ describe('shouldIgnoreCanvasSwipeTarget', () => {
     const buttonInsideLockedCard = makeMockElement('BUTTON', {
       parentElement: unlockedCardChild,
     });
+    const inputInsideLockedCard = makeMockElement('INPUT', {
+      parentElement: unlockedCardChild,
+    });
     const kanbanCard = makeMockElement('DIV', {
       attributes: { 'data-kanban-card-id': 'card-1' },
     });
@@ -333,8 +342,16 @@ describe('shouldIgnoreCanvasSwipeTarget', () => {
       }),
       false
     );
+    // Non-input tappable buttons remain swipeable; inputs stay blocked
     assert.equal(
       shouldIgnoreCanvasSwipeTarget(buttonInsideLockedCard as unknown as EventTarget, {
+        mode: 'desktop',
+        isCanvasLocked: true,
+      }),
+      false
+    );
+    assert.equal(
+      shouldIgnoreCanvasSwipeTarget(inputInsideLockedCard as unknown as EventTarget, {
         mode: 'desktop',
         isCanvasLocked: true,
       }),
@@ -391,5 +408,283 @@ describe('shouldIgnoreCanvasSwipeTarget', () => {
     } finally {
       (globalThis as { window?: unknown }).window = prevWindow;
     }
+  });
+});
+
+describe('dock-aware edge zones, fullscreen classification, and long-swipe override', () => {
+  it('detects 36px left/right edge swipe zones accounting for visible side docks', () => {
+    // Bottom dock: edges at [0..36] and [1244..1280]
+    assert.equal(
+      isPointInCanvasEdgeSwipeZone({
+        clientX: 20,
+        viewportWidth: 1280,
+        dockPosition: 'bottom',
+        isDockHidden: false,
+      }),
+      true
+    );
+    assert.equal(
+      isPointInCanvasEdgeSwipeZone({
+        clientX: 1250,
+        viewportWidth: 1280,
+        dockPosition: 'bottom',
+        isDockHidden: false,
+      }),
+      true
+    );
+    assert.equal(
+      isPointInCanvasEdgeSwipeZone({
+        clientX: 120,
+        viewportWidth: 1280,
+        dockPosition: 'bottom',
+        isDockHidden: false,
+      }),
+      false
+    );
+
+    // Visible left dock (80px wide): left canvas edge starts at 80..116
+    assert.equal(
+      isPointInCanvasEdgeSwipeZone({
+        clientX: 98,
+        viewportWidth: 1280,
+        dockPosition: 'left',
+        isDockHidden: false,
+      }),
+      true
+    );
+    assert.equal(
+      isPointInCanvasEdgeSwipeZone({
+        clientX: 50,
+        viewportWidth: 1280,
+        dockPosition: 'left',
+        isDockHidden: false,
+      }),
+      false
+    );
+
+    // Hidden left dock: reverts to 0..36
+    assert.equal(
+      isPointInCanvasEdgeSwipeZone({
+        clientX: 20,
+        viewportWidth: 1280,
+        dockPosition: 'left',
+        isDockHidden: true,
+      }),
+      true
+    );
+
+    // Visible right dock (80px wide): right canvas edge spans 1164..1200
+    assert.equal(
+      isPointInCanvasEdgeSwipeZone({
+        clientX: 1180,
+        viewportWidth: 1280,
+        dockPosition: 'right',
+        isDockHidden: false,
+      }),
+      true
+    );
+    assert.equal(
+      isPointInCanvasEdgeSwipeZone({
+        clientX: 1240,
+        viewportWidth: 1280,
+        dockPosition: 'right',
+        isDockHidden: false,
+      }),
+      false
+    );
+  });
+
+  it('classifies fullscreen tiles and edge zones as standard while keeping unlocked center cards on long_card', () => {
+    const fullscreenButtonChild = makeMockElement('BUTTON', {
+      parentElement: makeMockElement('DIV', {
+        attributes: { 'data-canvas-card': 'true', 'data-canvas-fullscreen': 'true' },
+      }),
+    });
+    const unlockedCardButtonChild = makeMockElement('BUTTON', {
+      parentElement: makeMockElement('DIV', {
+        attributes: { 'data-canvas-card': 'true' },
+      }),
+    });
+    const resizeHandleChild = makeMockElement('SVG', {
+      parentElement: makeMockElement('DIV', {
+        attributes: { 'data-no-drag': 'true', 'data-no-canvas-swipe': 'true' },
+        parentElement: unlockedCardButtonChild,
+      }),
+    });
+
+    assert.equal(
+      classifyCanvasSwipeStartTarget(fullscreenButtonChild as unknown as EventTarget, {
+        mode: 'desktop',
+        isCanvasLocked: false,
+        clientX: 600,
+        viewportWidth: 1280,
+      }),
+      'standard'
+    );
+
+    assert.equal(
+      classifyCanvasSwipeStartTarget(unlockedCardButtonChild as unknown as EventTarget, {
+        mode: 'desktop',
+        isCanvasLocked: false,
+        clientX: 600,
+        viewportWidth: 1280,
+      }),
+      'long_card'
+    );
+
+    // Same unlocked card inside the 36px screen edge elevates to standard swipe
+    assert.equal(
+      classifyCanvasSwipeStartTarget(unlockedCardButtonChild as unknown as EventTarget, {
+        mode: 'desktop',
+        isCanvasLocked: false,
+        clientX: 102,
+        viewportWidth: 1280,
+        dockPosition: 'left',
+        isDockHidden: false,
+      }),
+      'standard'
+    );
+
+    // Resize/rotate handles stay ignored everywhere
+    assert.equal(
+      classifyCanvasSwipeStartTarget(resizeHandleChild as unknown as EventTarget, {
+        mode: 'desktop',
+        isCanvasLocked: false,
+        clientX: 20,
+        viewportWidth: 1280,
+        dockPosition: 'bottom',
+        isDockHidden: false,
+      }),
+      'ignore'
+    );
+  });
+
+  it('computes long-swipe thresholds and rejects slow, diagonal, or paused widget drags', () => {
+    assert.equal(computeLongSwipeCommitThresholdPx(800), 256);
+    assert.equal(computeLongSwipeCommitThresholdPx(1280), 410);
+    assert.equal(computeLongSwipeCommitThresholdPx(1920), 420);
+    assert.equal(computeLongSwipeFastFlickMinPx(1280), 282);
+
+    // Active progress past 55% of longThreshold shows preview and arms at >= 410px
+    const midLong = evaluatePointerSwipeProgress({
+      startX: 700,
+      startY: 300,
+      currentX: 430,
+      currentY: 304,
+      viewportWidth: 1280,
+      lockedAxis: 'x',
+      tier: 'long_card',
+      elapsedMs: 220,
+      recentVelocityPxPerMs: 0.9,
+    });
+    assert.equal(midLong.active, true);
+    assert.equal(midLong.armed, false);
+    assert.equal(midLong.direction, 'next');
+
+    const armedLong = evaluatePointerSwipeProgress({
+      startX: 700,
+      startY: 300,
+      currentX: 260,
+      currentY: 310,
+      viewportWidth: 1280,
+      lockedAxis: 'x',
+      tier: 'long_card',
+      elapsedMs: 360,
+      recentVelocityPxPerMs: 1.0,
+    });
+    assert.equal(armedLong.active, true);
+    assert.equal(armedLong.armed, true);
+
+    // Commits on full long swipe with active momentum
+    assert.equal(
+      shouldCommitPointerSwipeRelease({
+        startX: 700,
+        startY: 300,
+        endX: 260,
+        endY: 312,
+        elapsedMs: 380,
+        viewportWidth: 1280,
+        lockedAxis: 'x',
+        tier: 'long_card',
+        recentVelocityPxPerMs: 0.7,
+      }),
+      'next'
+    );
+
+    // Commits on fast wide flick (>= 22% width, <= 380ms, >= 0.65 px/ms)
+    assert.equal(
+      shouldCommitPointerSwipeRelease({
+        startX: 300,
+        startY: 300,
+        endX: 610,
+        endY: 305,
+        elapsedMs: 290,
+        viewportWidth: 1280,
+        lockedAxis: 'x',
+        tier: 'long_card',
+        recentVelocityPxPerMs: 0.85,
+      }),
+      'prev'
+    );
+
+    // Rejects drag-then-pause widget placement (low trailing release velocity)
+    assert.equal(
+      shouldCommitPointerSwipeRelease({
+        startX: 700,
+        startY: 300,
+        endX: 220,
+        endY: 305,
+        elapsedMs: 420,
+        viewportWidth: 1280,
+        lockedAxis: 'x',
+        tier: 'long_card',
+        recentVelocityPxPerMs: 0.05,
+      }),
+      null
+    );
+
+    // Rejects slow widget drag (> 650ms)
+    assert.equal(
+      shouldCommitPointerSwipeRelease({
+        startX: 700,
+        startY: 300,
+        endX: 220,
+        endY: 305,
+        elapsedMs: 850,
+        viewportWidth: 1280,
+        lockedAxis: 'x',
+        tier: 'long_card',
+        recentVelocityPxPerMs: 0.8,
+      }),
+      null
+    );
+
+    // Rejects diagonal widget move (|dy| > 56px)
+    assert.equal(
+      shouldCommitPointerSwipeRelease({
+        startX: 700,
+        startY: 300,
+        endX: 220,
+        endY: 380,
+        elapsedMs: 320,
+        viewportWidth: 1280,
+        lockedAxis: 'x',
+        tier: 'long_card',
+        recentVelocityPxPerMs: 0.9,
+      }),
+      null
+    );
+  });
+
+  it('notifies and unsubscribes drag cancellation listeners synchronously', () => {
+    let calls = 0;
+    const unsubscribe = subscribeCancelActiveCardDrag(() => {
+      calls += 1;
+    });
+    requestCancelActiveCardDrag();
+    assert.equal(calls, 1);
+    unsubscribe();
+    requestCancelActiveCardDrag();
+    assert.equal(calls, 1);
   });
 });
