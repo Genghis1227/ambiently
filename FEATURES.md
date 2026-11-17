@@ -33,7 +33,8 @@
   * Position the glassmorphic navigation dock on the **Left, Right, Top, or Bottom** of the screen.
   * All Canvas board buttons (`1`–`0` hotkeys) stay directly accessible on the main toolbar while secondary actions expand into sleek **horizontal pop-out bars** so controls never clip on smaller screens:
     * **`+` Add Menu Pop-Out (`Plus`):** Opens **New Sticky Note**, **Add Widget Tile**, and **Create New Canvas** (while keeping **Auto-Organize (`Wand2`)** and **Trash & Recovery (`Archive`)** directly on the toolbar).
-    * **Auto-Organize Pop-Out (`Wand2`):** Choose between **Smart Bento Grid**, **Keep Sizes & Pack**, or **Split Zones**, plus a 1-click **Undo Layout** button when a snapshot is available.
+    * **Auto-Organize Pop-Out (`Wand2`):** Choose between **Smart Bento Grid**, **Keep Sizes & Pack**, or **Split Zones**, plus a 1-click **Undo** button covering both Auto-Organize snapshots and recent manual widget/note moves, resizes, or rotations.
+    * **Multi-Step Layout Undo (`Ctrl+Z` / `Cmd+Z` & `LayoutUndoToast`):** Accidentally drag, resize, rotate, or maximize a widget or sticky note? Press `Ctrl+Z` (`⌘Z` on macOS, when not typing inside an input/modal) or tap **Undo** in the floating toast or Dock menu to step back up to 20 layout changes on the active canvas.
     * **Quick Utilities Pop-Out (`SlidersHorizontal`):** Opens **Night Mode**, **Fullscreen**, **Refresh / Apply Update** (with cyan live-update pulse badge), and **Hide Toolbar** right above the 1-click **Settings / Lock** button.
 * **Automated Tab Carousel & Canvas-to-Canvas Swipe (`useCanvasSwipe.ts`, `CanvasSwipePreviewPill.tsx`):**
   * Enable auto-rotation (`15s`, `30s`, `45s`, `1m`, `2m`) to cycle across your canvases automatically. Touching or clicking anywhere on the screen temporarily pauses the carousel for 20 seconds.

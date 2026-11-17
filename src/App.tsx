@@ -27,6 +27,7 @@ import { UpdateNotificationBanner } from './components/common/UpdateNotification
 import { PlexReauthBanner } from './components/common/PlexReauthBanner';
 import { SyncRefusedBanner } from './components/common/SyncRefusedBanner';
 import { MovedWidgetToast } from './components/common/MovedWidgetToast';
+import { LayoutUndoToast } from './components/common/LayoutUndoToast';
 import { CanvasSwipePreviewPill } from './components/common/CanvasSwipePreviewPill';
 import { GlobalTimerAlarmOverlay } from './components/common/GlobalTimerAlarmOverlay';
 import { isCanvasPinLocked, isSettingsPinRequired } from './utils/pinValidation';
@@ -100,8 +101,7 @@ export function App() {
   const addTab = useDashboardStore((s) => s.addTab);
   const updateTab = useDashboardStore((s) => s.updateTab);
   const autoOrganizeCanvas = useDashboardStore((s) => s.autoOrganizeCanvas);
-  const undoAutoOrganize = useDashboardStore((s) => s.undoAutoOrganize);
-  const lastLayoutSnapshot = useDashboardStore((s) => s.lastLayoutSnapshot);
+  const layoutUndoStack = useDashboardStore((s) => s.layoutUndoStack);
   const toggleDockHidden = useDashboardStore((s) => s.toggleDockHidden);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -779,6 +779,12 @@ export function App() {
     (mode: AutoOrganizeMode) => autoOrganizeCanvas(activeTabIdResolved, mode),
     [autoOrganizeCanvas, activeTabIdResolved]
   );
+  const handleUndoActiveTabLayout = useCallback(() => {
+    void useDashboardStore.getState().undoLayoutChange();
+  }, []);
+  const canUndoActiveTabLayout = layoutUndoStack.some(
+    (entry) => entry.tabId === activeTabIdResolved
+  );
   const handleRequestRemoveWidget = useCallback(
     (widgetId: string) => {
       if (useDashboardStore.getState().settings.confirmWidgetDelete === false) {
@@ -813,6 +819,44 @@ export function App() {
   );
 
   const isMobileCompanionActive = isMobileViewport && !forceDesktopMode;
+
+  useEffect(() => {
+    if (isMobileCompanionActive || isCanvasLocked || isAnyOverlayOpen || settings.nightModeEnabled) {
+      return;
+    }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
+      if (e.key.toLowerCase() !== 'z') return;
+
+      const isEditable = (node: EventTarget | Element | null): boolean => {
+        if (!node || !(node instanceof HTMLElement)) return false;
+        const tag = node.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || node.isContentEditable) {
+          return true;
+        }
+        return Boolean(node.closest('[contenteditable="true"]'));
+      };
+
+      if (isEditable(e.target) || isEditable(document.activeElement)) return;
+      if (document.querySelector('[role="dialog"], [aria-modal="true"]')) return;
+
+      const st = useDashboardStore.getState();
+      if (!st.layoutUndoStack.some((entry) => entry.tabId === activeTabIdResolved)) return;
+
+      e.preventDefault();
+      void st.undoLayoutChange(activeTabIdResolved);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    activeTabIdResolved,
+    isAnyOverlayOpen,
+    isCanvasLocked,
+    isMobileCompanionActive,
+    settings.nightModeEnabled,
+  ]);
   const {
     swipePreview,
     transitionClass: swipeTransitionClass,
@@ -832,6 +876,7 @@ export function App() {
   const widgetSafetyOverlays = (
     <>
       <MovedWidgetToast onSelectTab={setActiveTabId} />
+      <LayoutUndoToast />
       <CanvasSwipePreviewPill preview={swipePreview} />
       {pendingDeleteWidget && (
         <Suspense fallback={null}>
@@ -1112,8 +1157,8 @@ export function App() {
         onOpenTrash={handleOpenTrash}
         trashCount={trashCount}
         onAutoOrganize={handleAutoOrganizeActiveTab}
-        onUndoOrganize={undoAutoOrganize}
-        canUndoOrganize={lastLayoutSnapshot?.tabId === activeTabIdResolved}
+        onUndoOrganize={handleUndoActiveTabLayout}
+        canUndoOrganize={canUndoActiveTabLayout}
         onToggleMobileCompanion={isMobileViewport ? handleEnterMobileCompanion : undefined}
         isDockHidden={settings.isDockHidden}
         onToggleDockHidden={toggleDockHidden}
