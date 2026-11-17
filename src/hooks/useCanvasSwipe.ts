@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { AppSettings } from '../types/dashboard';
 import {
+  classifyCanvasSwipeStartTarget,
   evaluatePointerSwipeProgress,
   evaluateWheelHorizontalSwipe,
+  requestCancelActiveCardDrag,
   resolveAdjacentCanvasTab,
   shouldCommitPointerSwipeRelease,
   shouldIgnoreCanvasSwipeTarget,
   type CanvasSwipeAxis,
   type CanvasSwipeDirection,
   type CanvasSwipePreviewState,
+  type CanvasSwipeTriggerTier,
 } from '../utils/canvasSwipe';
 
 interface SwipeTabSummary {
@@ -22,22 +26,52 @@ export interface UseCanvasSwipeOptions {
   mode: 'desktop' | 'mobile';
   isCanvasLocked: boolean;
   isBlocked: boolean;
+  dockPosition?: AppSettings['dockPosition'];
+  isDockHidden?: boolean;
   onSelectTab: (tabId: string) => void;
+}
+
+interface PointerSample {
+  x: number;
+  t: number;
 }
 
 interface ActiveGestureState {
   pointerId: number;
   sessionToken: string;
+  tier: CanvasSwipeTriggerTier;
   startX: number;
   startY: number;
   startedAtMs: number;
   lockedAxis: CanvasSwipeAxis;
+  samples: PointerSample[];
 }
 
 interface WheelSwipeState {
   accumulatedPx: number;
   lastEventMs: number;
   cooldownUntilMs: number;
+}
+
+function computeRecentHorizontalVelocity(
+  samples: readonly PointerSample[],
+  currentX: number,
+  nowMs: number
+): number {
+  if (samples.length === 0) return 0;
+  const latest = samples[samples.length - 1];
+  if (nowMs - latest.t > 110) {
+    return 0;
+  }
+  let anchor = samples[0];
+  for (let i = samples.length - 1; i >= 0; i -= 1) {
+    const age = nowMs - samples[i].t;
+    anchor = samples[i];
+    if (age >= 45) break;
+  }
+  const dt = nowMs - anchor.t;
+  if (dt <= 0) return 0;
+  return Math.abs(currentX - anchor.x) / dt;
 }
 
 export function useCanvasSwipe({
@@ -47,6 +81,8 @@ export function useCanvasSwipe({
   mode,
   isCanvasLocked,
   isBlocked,
+  dockPosition,
+  isDockHidden,
   onSelectTab,
 }: UseCanvasSwipeOptions) {
   const currentSwipeToken = `${enabled ? '1' : '0'}:${isBlocked ? '1' : '0'}:${activeTabId}`;
@@ -64,6 +100,8 @@ export function useCanvasSwipe({
     mode,
     isCanvasLocked,
     isBlocked,
+    dockPosition,
+    isDockHidden,
     onSelectTab,
   });
 
@@ -75,6 +113,8 @@ export function useCanvasSwipe({
       mode,
       isCanvasLocked,
       isBlocked,
+      dockPosition,
+      isDockHidden,
       onSelectTab,
     };
   });
@@ -82,6 +122,7 @@ export function useCanvasSwipe({
   const gestureRef = useRef<ActiveGestureState | null>(null);
   const cleanupListenersRef = useRef<(() => void) | null>(null);
   const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suppressClickUntilMsRef = useRef<number>(0);
   const wheelStateRef = useRef<WheelSwipeState>({
     accumulatedPx: 0,
     lastEventMs: 0,
@@ -108,6 +149,21 @@ export function useCanvasSwipe({
   }, []);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleClickCapture = (ev: MouseEvent) => {
+      if (suppressClickUntilMsRef.current > Date.now()) {
+        suppressClickUntilMsRef.current = 0;
+        ev.preventDefault();
+        ev.stopPropagation();
+      }
+    };
+    window.addEventListener('click', handleClickCapture, true);
+    return () => {
+      window.removeEventListener('click', handleClickCapture, true);
+    };
+  }, []);
+
+  useEffect(() => {
     return () => {
       cleanupListenersRef.current?.();
       cleanupListenersRef.current = null;
@@ -129,6 +185,9 @@ export function useCanvasSwipe({
 
   const onPointerDown: React.PointerEventHandler<HTMLDivElement> = useCallback(
     (e) => {
+      if (e.isPrimary) {
+        suppressClickUntilMsRef.current = 0;
+      }
       const cfg = configRef.current;
       if (!cfg.enabled || cfg.isBlocked || cfg.tabs.length < 2) return;
       if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -139,31 +198,40 @@ export function useCanvasSwipe({
       ) {
         return;
       }
-      if (
-        shouldIgnoreCanvasSwipeTarget(e.target, {
-          mode: cfg.mode,
-          isCanvasLocked: cfg.isCanvasLocked,
-        })
-      ) {
+
+      const viewportWidth =
+        typeof window !== 'undefined' ? window.innerWidth : 1024;
+      const tier = classifyCanvasSwipeStartTarget(e.target, {
+        mode: cfg.mode,
+        isCanvasLocked: cfg.isCanvasLocked,
+        clientX: e.clientX,
+        viewportWidth,
+        dockPosition: cfg.dockPosition,
+        isDockHidden: cfg.isDockHidden,
+      });
+      if (tier === 'ignore') {
         return;
       }
 
       cleanupListenersRef.current?.();
       setSwipePreviewState(null);
 
+      const startedAtMs = Date.now();
       gestureRef.current = {
         pointerId: e.pointerId,
         sessionToken: `${cfg.enabled ? '1' : '0'}:${cfg.isBlocked ? '1' : '0'}:${cfg.activeTabId}`,
+        tier,
         startX: e.clientX,
         startY: e.clientY,
-        startedAtMs: Date.now(),
+        startedAtMs,
         lockedAxis: null,
+        samples: [{ x: e.clientX, t: startedAtMs }],
       };
 
       const detach = () => {
         if (typeof window !== 'undefined') {
           window.removeEventListener('pointermove', handleWindowPointerMove);
-          window.removeEventListener('pointerup', handleWindowPointerUp);
+          window.removeEventListener('pointerup', handleWindowPointerUp, true);
           window.removeEventListener('pointercancel', handleWindowPointerCancel);
         }
         cleanupListenersRef.current = null;
@@ -181,15 +249,29 @@ export function useCanvasSwipe({
           return;
         }
 
-        const viewportWidth =
+        const nowMs = Date.now();
+        gesture.samples.push({ x: ev.clientX, t: nowMs });
+        while (gesture.samples.length > 2 && nowMs - gesture.samples[0].t > 140) {
+          gesture.samples.shift();
+        }
+        const recentVelocityPxPerMs = computeRecentHorizontalVelocity(
+          gesture.samples,
+          ev.clientX,
+          nowMs
+        );
+
+        const moveViewportWidth =
           typeof window !== 'undefined' ? window.innerWidth : 1024;
         const result = evaluatePointerSwipeProgress({
           startX: gesture.startX,
           startY: gesture.startY,
           currentX: ev.clientX,
           currentY: ev.clientY,
-          viewportWidth,
+          viewportWidth: moveViewportWidth,
           lockedAxis: gesture.lockedAxis,
+          tier: gesture.tier,
+          elapsedMs: nowMs - gesture.startedAtMs,
+          recentVelocityPxPerMs,
         });
 
         gesture.lockedAxis = result.axis;
@@ -238,19 +320,31 @@ export function useCanvasSwipe({
           return;
         }
 
-        const viewportWidth =
+        const nowMs = Date.now();
+        const recentVelocityPxPerMs = computeRecentHorizontalVelocity(
+          gesture.samples,
+          ev.clientX,
+          nowMs
+        );
+        const upViewportWidth =
           typeof window !== 'undefined' ? window.innerWidth : 1024;
         const committed = shouldCommitPointerSwipeRelease({
           startX: gesture.startX,
           startY: gesture.startY,
           endX: ev.clientX,
           endY: ev.clientY,
-          elapsedMs: Date.now() - gesture.startedAtMs,
-          viewportWidth,
+          elapsedMs: nowMs - gesture.startedAtMs,
+          viewportWidth: upViewportWidth,
           lockedAxis: gesture.lockedAxis,
+          tier: gesture.tier,
+          recentVelocityPxPerMs,
         });
 
         if (committed) {
+          if (gesture.tier === 'long_card') {
+            requestCancelActiveCardDrag();
+          }
+          suppressClickUntilMsRef.current = nowMs + 350;
           triggerCanvasSwitch(committed);
         }
       };
@@ -268,7 +362,10 @@ export function useCanvasSwipe({
 
       if (typeof window !== 'undefined') {
         window.addEventListener('pointermove', handleWindowPointerMove, { passive: true });
-        window.addEventListener('pointerup', handleWindowPointerUp, { passive: true });
+        window.addEventListener('pointerup', handleWindowPointerUp, {
+          capture: true,
+          passive: true,
+        });
         window.addEventListener('pointercancel', handleWindowPointerCancel, { passive: true });
       }
     },
@@ -340,5 +437,6 @@ export function useCanvasSwipe({
     swipePreview,
     transitionClass,
     onPointerDown,
+    onPointerDownCapture: onPointerDown,
   };
 }

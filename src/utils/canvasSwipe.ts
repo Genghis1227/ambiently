@@ -2,6 +2,11 @@ import type { AppSettings } from '../types/dashboard';
 
 export type CanvasSwipeDirection = 'next' | 'prev';
 export type CanvasSwipeAxis = 'x' | 'y' | null;
+export type CanvasSwipeTriggerTier = 'standard' | 'long_card';
+export type CanvasSwipeStartClassification = CanvasSwipeTriggerTier | 'ignore';
+
+export const EDGE_SWIPE_ZONE_PX = 36;
+export const DESKTOP_SIDE_DOCK_WIDTH_PX = 80;
 
 export interface CanvasSwipePreviewState {
   direction: CanvasSwipeDirection;
@@ -12,14 +17,43 @@ export interface CanvasSwipePreviewState {
 }
 
 const INTERACTIVE_SWIPE_BLOCKER_SELECTOR =
-  '[role="dialog"], [aria-modal="true"], nav, [data-no-canvas-swipe="true"], input, textarea, select, button, a, label, [contenteditable="true"], [data-kanban-card-id]';
-
-const UNLOCKED_DESKTOP_CARD_SELECTOR = '[data-canvas-card="true"], [data-no-drag="true"]';
+  '[role="dialog"], [aria-modal="true"], nav, [data-no-canvas-swipe="true"], input, textarea, select, option, [contenteditable="true"], [role="slider"], [data-kanban-card-id]';
 
 export function isCanvasSwipeEnabled(
   settings?: Pick<AppSettings, 'canvasSwipeEnabled'> | null
 ): boolean {
   return settings?.canvasSwipeEnabled !== false;
+}
+
+export function isPointInCanvasEdgeSwipeZone(params: {
+  clientX: number;
+  viewportWidth: number;
+  dockPosition?: AppSettings['dockPosition'];
+  isDockHidden?: boolean;
+  edgePx?: number;
+}): boolean {
+  const safeWidth =
+    Number.isFinite(params.viewportWidth) && params.viewportWidth > 0
+      ? params.viewportWidth
+      : 1024;
+  const edgePx = params.edgePx ?? EDGE_SWIPE_ZONE_PX;
+  if (!Number.isFinite(params.clientX) || edgePx <= 0 || safeWidth <= edgePx * 2) {
+    return false;
+  }
+  const leftEdge =
+    !params.isDockHidden && params.dockPosition === 'left'
+      ? DESKTOP_SIDE_DOCK_WIDTH_PX
+      : 0;
+  const rightEdge =
+    safeWidth -
+    (!params.isDockHidden && params.dockPosition === 'right'
+      ? DESKTOP_SIDE_DOCK_WIDTH_PX
+      : 0);
+
+  return (
+    (params.clientX >= leftEdge && params.clientX <= leftEdge + edgePx) ||
+    (params.clientX >= rightEdge - edgePx && params.clientX <= rightEdge)
+  );
 }
 
 export function resolveAdjacentCanvasTab<T extends { id: string; name: string }>(
@@ -43,6 +77,18 @@ export function computeSwipeCommitThresholdPx(viewportWidth: number): number {
   return Math.max(56, Math.min(110, Math.round(safeWidth * 0.14)));
 }
 
+export function computeLongSwipeCommitThresholdPx(viewportWidth: number): number {
+  const safeWidth =
+    Number.isFinite(viewportWidth) && viewportWidth > 0 ? viewportWidth : 1024;
+  return Math.max(220, Math.min(420, Math.round(safeWidth * 0.32)));
+}
+
+export function computeLongSwipeFastFlickMinPx(viewportWidth: number): number {
+  const safeWidth =
+    Number.isFinite(viewportWidth) && viewportWidth > 0 ? viewportWidth : 1024;
+  return Math.max(170, Math.min(290, Math.round(safeWidth * 0.22)));
+}
+
 export function evaluatePointerSwipeProgress(params: {
   startX: number;
   startY: number;
@@ -50,6 +96,9 @@ export function evaluatePointerSwipeProgress(params: {
   currentY: number;
   viewportWidth: number;
   lockedAxis: CanvasSwipeAxis;
+  tier?: CanvasSwipeTriggerTier;
+  elapsedMs?: number;
+  recentVelocityPxPerMs?: number;
 }): {
   axis: CanvasSwipeAxis;
   active: boolean;
@@ -65,6 +114,47 @@ export function evaluatePointerSwipeProgress(params: {
 
   if (params.lockedAxis === 'y') {
     return { axis: 'y', active: false, direction: null, progress: 0, armed: false, dx };
+  }
+
+  if (params.tier === 'long_card') {
+    if (absDx < 14 && absDy < 14) {
+      return { axis: null, active: false, direction: null, progress: 0, armed: false, dx };
+    }
+    if (
+      absDy > 56 ||
+      (absDx >= 24 && absDy > absDx * 0.45) ||
+      (params.lockedAxis === null && absDy > absDx * 0.65)
+    ) {
+      return { axis: 'y', active: false, direction: null, progress: 0, armed: false, dx };
+    }
+
+    const axis: CanvasSwipeAxis = 'x';
+    const direction: CanvasSwipeDirection = dx < 0 ? 'next' : 'prev';
+    const longThreshold = computeLongSwipeCommitThresholdPx(params.viewportWidth);
+    const flickMin = computeLongSwipeFastFlickMinPx(params.viewportWidth);
+    const elapsed = params.elapsedMs ?? 0;
+    const recentVel = params.recentVelocityPxPerMs ?? 0;
+
+    if (elapsed > 650 || (absDx >= flickMin && recentVel < 0.18)) {
+      return { axis, active: false, direction, progress: 0, armed: false, dx };
+    }
+
+    const previewStart = Math.round(longThreshold * 0.55);
+    const active = absDx >= previewStart && recentVel >= 0.18;
+    const progress = active
+      ? Math.min(
+          1,
+          Math.max(
+            0,
+            (absDx - (previewStart - 24)) / Math.max(1, longThreshold - (previewStart - 24))
+          )
+        )
+      : 0;
+    const fastFlickArmed =
+      absDx >= flickMin && elapsed > 0 && elapsed <= 380 && recentVel >= 0.65;
+    const armed = active && (absDx >= longThreshold || fastFlickArmed);
+
+    return { axis, active, direction, progress, armed, dx };
   }
 
   let axis: CanvasSwipeAxis;
@@ -95,12 +185,31 @@ export function shouldCommitPointerSwipeRelease(params: {
   elapsedMs: number;
   viewportWidth: number;
   lockedAxis: CanvasSwipeAxis;
+  tier?: CanvasSwipeTriggerTier;
+  recentVelocityPxPerMs?: number;
 }): CanvasSwipeDirection | null {
   if (params.lockedAxis !== 'x') return null;
 
   const dx = params.endX - params.startX;
   const absDx = Math.abs(dx);
   const absDy = Math.abs(params.endY - params.startY);
+
+  if (params.tier === 'long_card') {
+    if (absDy > 56 || absDx < absDy * 2.2) return null;
+    if (params.elapsedMs <= 0 || params.elapsedMs > 650) return null;
+    if ((params.recentVelocityPxPerMs ?? 0) < 0.25) return null;
+
+    const longThreshold = computeLongSwipeCommitThresholdPx(params.viewportWidth);
+    const flickMin = computeLongSwipeFastFlickMinPx(params.viewportWidth);
+    const overallVelocity = absDx / params.elapsedMs;
+    const fastWideFlick =
+      absDx >= flickMin && params.elapsedMs <= 380 && overallVelocity >= 0.65;
+
+    if (absDx >= longThreshold || fastWideFlick) {
+      return dx < 0 ? 'next' : 'prev';
+    }
+    return null;
+  }
 
   if (absDx < 22 || absDy > absDx * 0.85) return null;
 
@@ -187,27 +296,30 @@ export function evaluateWheelHorizontalSwipe(params: {
   };
 }
 
-export function shouldIgnoreCanvasSwipeTarget(
+export function classifyCanvasSwipeStartTarget(
   target: EventTarget | null,
-  options: { mode: 'desktop' | 'mobile' | 'wheel'; isCanvasLocked: boolean }
-): boolean {
-  if (!target || typeof (target as Element).closest !== 'function') return false;
+  options: {
+    mode: 'desktop' | 'mobile' | 'wheel';
+    isCanvasLocked: boolean;
+    clientX?: number;
+    viewportWidth?: number;
+    dockPosition?: AppSettings['dockPosition'];
+    isDockHidden?: boolean;
+  }
+): CanvasSwipeStartClassification {
+  if (!target || typeof (target as Element).closest !== 'function') {
+    return 'standard';
+  }
   const el = target as Element;
 
   if (el.closest(INTERACTIVE_SWIPE_BLOCKER_SELECTOR)) {
-    return true;
-  }
-
-  if (options.mode === 'desktop' && !options.isCanvasLocked) {
-    if (el.closest(UNLOCKED_DESKTOP_CARD_SELECTOR)) {
-      return true;
-    }
+    return 'ignore';
   }
 
   let cur: Element | null = el;
   while (cur && cur.tagName !== 'BODY' && cur.tagName !== 'HTML') {
     if (cur.getAttribute?.('data-no-canvas-swipe') === 'true') {
-      return true;
+      return 'ignore';
     }
     if (cur.scrollWidth > cur.clientWidth + 4) {
       const ox =
@@ -215,11 +327,65 @@ export function shouldIgnoreCanvasSwipeTarget(
           ? window.getComputedStyle(cur).overflowX
           : '';
       if (ox === 'auto' || ox === 'scroll' || ox === 'overlay') {
-        return true;
+        return 'ignore';
       }
     }
     cur = cur.parentElement;
   }
 
-  return false;
+  if (options.mode !== 'desktop' || options.isCanvasLocked) {
+    return 'standard';
+  }
+
+  if (
+    typeof options.clientX === 'number' &&
+    isPointInCanvasEdgeSwipeZone({
+      clientX: options.clientX,
+      viewportWidth: options.viewportWidth ?? 1024,
+      dockPosition: options.dockPosition,
+      isDockHidden: options.isDockHidden,
+    })
+  ) {
+    return 'standard';
+  }
+
+  if (el.closest('[data-canvas-fullscreen="true"]')) {
+    return 'standard';
+  }
+
+  if (el.closest('[data-canvas-card="true"]')) {
+    return 'long_card';
+  }
+
+  return 'standard';
+}
+
+export function shouldIgnoreCanvasSwipeTarget(
+  target: EventTarget | null,
+  options: {
+    mode: 'desktop' | 'mobile' | 'wheel';
+    isCanvasLocked: boolean;
+    clientX?: number;
+    viewportWidth?: number;
+    dockPosition?: AppSettings['dockPosition'];
+    isDockHidden?: boolean;
+  }
+): boolean {
+  const classification = classifyCanvasSwipeStartTarget(target, options);
+  return classification === 'ignore' || classification === 'long_card';
+}
+
+const cancelCardDragListeners = new Set<() => void>();
+
+export function subscribeCancelActiveCardDrag(listener: () => void): () => void {
+  cancelCardDragListeners.add(listener);
+  return () => {
+    cancelCardDragListeners.delete(listener);
+  };
+}
+
+export function requestCancelActiveCardDrag(): void {
+  cancelCardDragListeners.forEach((listener) => {
+    listener();
+  });
 }

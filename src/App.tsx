@@ -816,7 +816,7 @@ export function App() {
   const {
     swipePreview,
     transitionClass: swipeTransitionClass,
-    onPointerDown: handleCanvasSwipePointerDown,
+    onPointerDownCapture: handleCanvasSwipePointerDown,
   } = useCanvasSwipe({
     tabs: visibleTabs,
     activeTabId: activeTabIdResolved,
@@ -824,6 +824,8 @@ export function App() {
     mode: isMobileCompanionActive ? 'mobile' : 'desktop',
     isCanvasLocked,
     isBlocked: isAnyOverlayOpen || Boolean(settings.nightModeEnabled),
+    dockPosition: settings.dockPosition,
+    isDockHidden: Boolean(settings.isDockHidden),
     onSelectTab: setActiveTabId,
   });
 
@@ -1030,7 +1032,7 @@ export function App() {
 
   return (
     <div
-      onPointerDown={(e) => {
+      onPointerDownCapture={(e) => {
         if (settings.carouselEnabled) {
           pauseCarouselTemporarily(20000);
         }

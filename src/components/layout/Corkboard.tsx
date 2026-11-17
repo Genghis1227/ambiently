@@ -99,6 +99,10 @@ import { CANVAS_THEMES, isCanvasThemeLight } from '../../data/canvasThemes';
 import { findOpenCanvasSpot } from '../../utils/autoLayout';
 import { isWidgetStickerMode } from '../../utils/widgetStickerMode';
 import { inferCuratedCategoryId } from '../../services/photos';
+import {
+  isPointInCanvasEdgeSwipeZone,
+  subscribeCancelActiveCardDrag,
+} from '../../utils/canvasSwipe';
 
 const ChoreDashboardView = React.lazy(() =>
   import('../chores/ChoreDashboardView').then((m) => ({ default: m.ChoreDashboardView }))
@@ -519,6 +523,9 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const defaultWidgetStyle = useDashboardStore((s) => s.settings.defaultWidgetStyle || 'auto');
+  const canvasSwipeEnabled = useDashboardStore((s) => s.settings.canvasSwipeEnabled !== false);
+  const dockPosition = useDashboardStore((s) => s.settings.dockPosition);
+  const isDockHidden = useDashboardStore((s) => Boolean(s.settings.isDockHidden));
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [draggingType, setDraggingType] = useState<'note' | 'widget'>('note');
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -528,6 +535,20 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   const dragTargetInitialPosRef = useRef<NonNullable<DashboardWidget['freeformPos']> | null>(null);
   const isDraggingRef = useRef(false);
   const lastTapRef = useRef<{ id: string; time: number }>({ id: '', time: 0 });
+
+  const shouldYieldToEdgeSwipe = (e: React.PointerEvent): boolean => {
+    if (!canvasSwipeEnabled || tabs.length < 2) return false;
+    if ((e.target as HTMLElement | null)?.closest?.('[data-no-canvas-swipe="true"]')) {
+      return false;
+    }
+    const vw = typeof window !== 'undefined' ? window.innerWidth : 1024;
+    return isPointInCanvasEdgeSwipeZone({
+      clientX: e.clientX,
+      viewportWidth: vw,
+      dockPosition,
+      isDockHidden,
+    });
+  };
 
   const notesRef = useRef(notes);
   const widgetsRef = useRef(widgets);
@@ -1379,6 +1400,25 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     };
   }, [draggingId, rotatingId, resizingId]);
 
+  useEffect(() => {
+    return subscribeCancelActiveCardDrag(() => {
+      if (gestureRafRef.current !== null && typeof window !== 'undefined') {
+        window.cancelAnimationFrame(gestureRafRef.current);
+        gestureRafRef.current = null;
+      }
+      activeContainerRectRef.current = null;
+      dragPosRef.current = null;
+      dragTargetInitialPosRef.current = null;
+      lastTapRef.current = { id: '', time: 0 };
+      isDraggingRef.current = true;
+      setDraggingId(null);
+      setDragPos(null);
+      setTimeout(() => {
+        isDraggingRef.current = false;
+      }, 100);
+    });
+  }, []);
+
   const handleSaveNoteModal = () => {
     if (!newTitle.trim() && !newContent.trim() && checklistItems.length === 0 && !isShoppingList) return;
 
@@ -1743,12 +1783,15 @@ export const Corkboard: React.FC<CorkboardProps> = ({
           <div
             key={widget.id}
             data-canvas-card="true"
+            data-canvas-fullscreen={isFullScreen ? 'true' : undefined}
             onPointerDown={(e) => {
               if (isPortalEvent(e)) return;
+              if (shouldYieldToEdgeSwipe(e)) return;
               if (!isFullScreen && !isCanvasLocked) handlePointerDown(e, widget.id, 'widget', pos);
             }}
             onPointerDownCapture={(e) => {
               if (isPortalEvent(e)) return;
+              if (shouldYieldToEdgeSwipe(e)) return;
               if (!isFullScreen && !isCanvasLocked && !pos?.isBackground && (pos?.zIndex || 1) < getTopZIndex()) {
                 handleBringToFront(widget.id, 'widget');
               }
@@ -1780,7 +1823,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                     width: '100%',
                     height: '100%',
                     zIndex: 60,
-                    touchAction: 'auto',
+                    touchAction: 'pan-y',
                     WebkitTouchCallout: 'none',
                     userSelect: 'none',
                     WebkitUserSelect: 'none',
@@ -1839,6 +1882,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             {!isFullScreen && !isCanvasLocked && onUpdateWidgetPos && (
               <div
                 data-no-drag="true"
+                data-no-canvas-swipe="true"
                 onPointerDown={(e) => handleRotatePointerDown(e, widget.id, 'widget', pos)}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
@@ -1890,6 +1934,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               {!isFullScreen && !isCanvasLocked && onUpdateWidgetPos && (
                 <button
                   type="button"
+                  data-no-canvas-swipe="true"
                   onPointerDown={(e) => handleRotatePointerDown(e, widget.id, 'widget', pos)}
                   onDoubleClick={(e) => {
                     e.stopPropagation();
@@ -2048,6 +2093,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             {!isFullScreen && !isCanvasLocked && (
               <div
                 data-no-drag="true"
+                data-no-canvas-swipe="true"
                 onPointerDown={(e) => handleResizePointerDown(e, widget.id, 'widget', pos)}
                 title="Drag to resize tile"
                 className={`absolute bottom-1 right-1 p-1.5 cursor-nwse-resize z-40 opacity-40 group-hover:opacity-100 hover:opacity-100 touch-none transition-opacity ${
@@ -2127,10 +2173,12 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             data-canvas-card="true"
             onPointerDown={(e) => {
               if (isPortalEvent(e)) return;
+              if (shouldYieldToEdgeSwipe(e)) return;
               if (!isCanvasLocked) handlePointerDown(e, note.id, 'note', pos);
             }}
             onPointerDownCapture={(e) => {
               if (isPortalEvent(e)) return;
+              if (shouldYieldToEdgeSwipe(e)) return;
               if (!isCanvasLocked && !pos?.isBackground && (pos?.zIndex || 1) < getTopZIndex()) {
                 handleBringToFront(note.id, 'note');
               }
@@ -2207,6 +2255,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             {!isCanvasLocked && (
               <div
                 data-no-drag="true"
+                data-no-canvas-swipe="true"
                 onPointerDown={(e) => handleRotatePointerDown(e, note.id, 'note', pos)}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
@@ -2469,6 +2518,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             {!isCanvasLocked && (
               <div
                 data-no-drag="true"
+                data-no-canvas-swipe="true"
                 onPointerDown={(e) => handleResizePointerDown(e, note.id, 'note', pos)}
                 title="Drag to resize note (from mini post-it to full poster)"
                 className="absolute bottom-1 right-1 p-1.5 cursor-nwse-resize z-20 opacity-50 group-hover:opacity-100 hover:opacity-100 touch-none text-gray-700 hover:text-black transition-opacity"
