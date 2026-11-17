@@ -108,6 +108,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   nightModeWakeTimeoutMin: 2,
   nightScheduleEnabled: true,
   snapToGrid: false,
+  canvasSwipeEnabled: true,
   confirmWidgetDelete: true,
   defaultWidgetStyle: 'auto',
   isDockHidden: false,

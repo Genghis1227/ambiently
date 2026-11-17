@@ -27,8 +27,10 @@ import { UpdateNotificationBanner } from './components/common/UpdateNotification
 import { PlexReauthBanner } from './components/common/PlexReauthBanner';
 import { SyncRefusedBanner } from './components/common/SyncRefusedBanner';
 import { MovedWidgetToast } from './components/common/MovedWidgetToast';
+import { CanvasSwipePreviewPill } from './components/common/CanvasSwipePreviewPill';
 import { GlobalTimerAlarmOverlay } from './components/common/GlobalTimerAlarmOverlay';
 import { isCanvasPinLocked, isSettingsPinRequired } from './utils/pinValidation';
+import { useCanvasSwipe } from './hooks/useCanvasSwipe';
 
 const SettingsModal = lazy(() =>
   import('./components/settings/SettingsModal').then((m) => ({ default: m.SettingsModal }))
@@ -795,9 +797,40 @@ export function App() {
     ? tabs.find((t) => t.id === pendingDeleteWidget.tabId)?.name || 'this canvas'
     : 'this canvas';
 
+  const isAnyOverlayOpen = Boolean(
+    isChoreFullScreenOpen ||
+      isParentDrawerOpen ||
+      isSettingsOpen ||
+      isQuickStartOpen ||
+      isAddWidgetOpen ||
+      isCreateCanvasOpen ||
+      isNoteCreatorOpen ||
+      isTrashOpen ||
+      isShareOpen ||
+      isBackupModalOpen ||
+      pinChallenge ||
+      activeWebModal
+  );
+
+  const isMobileCompanionActive = isMobileViewport && !forceDesktopMode;
+  const {
+    swipePreview,
+    transitionClass: swipeTransitionClass,
+    onPointerDown: handleCanvasSwipePointerDown,
+  } = useCanvasSwipe({
+    tabs: visibleTabs,
+    activeTabId: activeTabIdResolved,
+    enabled: settings.canvasSwipeEnabled !== false && visibleTabs.length >= 2,
+    mode: isMobileCompanionActive ? 'mobile' : 'desktop',
+    isCanvasLocked,
+    isBlocked: isAnyOverlayOpen || Boolean(settings.nightModeEnabled),
+    onSelectTab: setActiveTabId,
+  });
+
   const widgetSafetyOverlays = (
     <>
       <MovedWidgetToast onSelectTab={setActiveTabId} />
+      <CanvasSwipePreviewPill preview={swipePreview} />
       {pendingDeleteWidget && (
         <Suspense fallback={null}>
           <WidgetDeleteConfirmModal
@@ -820,20 +853,6 @@ export function App() {
   // seconds. Depending on the ids instead keeps that from restarting the countdown.
   const visibleTabIds = visibleTabs.map((t) => t.id).join('\n');
   const rotateDurationSec = settings.defaultRotateDurationSec || 30;
-  const isAnyOverlayOpen = Boolean(
-    isChoreFullScreenOpen ||
-      isParentDrawerOpen ||
-      isSettingsOpen ||
-      isQuickStartOpen ||
-      isAddWidgetOpen ||
-      isCreateCanvasOpen ||
-      isNoteCreatorOpen ||
-      isTrashOpen ||
-      isShareOpen ||
-      isBackupModalOpen ||
-      pinChallenge ||
-      activeWebModal
-  );
 
   // Pause carousel on any pointer, touch, or wheel activity (including inside portals)
   useEffect(() => {
@@ -929,6 +948,8 @@ export function App() {
             onAddWidget={addWidget}
             onToggleDesktopView={() => setForceDesktopMode(true)}
             onOpenSettings={handleOpenSettings}
+            onSwipePointerDown={handleCanvasSwipePointerDown}
+            transitionClass={swipeTransitionClass}
           />
           {isChoreFullScreenOpen && (
             <ChoreDashboardView
@@ -1009,10 +1030,11 @@ export function App() {
 
   return (
     <div
-      onPointerDown={() => {
+      onPointerDown={(e) => {
         if (settings.carouselEnabled) {
           pauseCarouselTemporarily(20000);
         }
+        handleCanvasSwipePointerDown(e);
       }}
       className={`relative w-screen h-screen overflow-hidden ${
         isCanvasLight ? 'bg-slate-100 text-slate-800' : 'bg-[#090d16] text-white'
@@ -1027,7 +1049,13 @@ export function App() {
       </header>
 
       {/* Full native 1:1 Canvas (visibility hidden under opaque OLED Night Clock to suspend background GIF/video decoding) */}
-      <div className={isOledNightClock ? 'w-full h-full invisible pointer-events-none' : 'w-full h-full'}>
+      <div
+        className={
+          isOledNightClock
+            ? 'w-full h-full invisible pointer-events-none'
+            : `w-full h-full${swipeTransitionClass ? ` ${swipeTransitionClass}` : ''}`
+        }
+      >
         <Corkboard
           notes={activeCanvasNotes}
           widgets={tabWidgets}

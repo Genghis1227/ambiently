@@ -112,6 +112,7 @@ export const CorkboardContextMenu: React.FC<CorkboardContextMenuProps> = ({
     return (
       <div
         data-no-drag="true"
+        data-no-canvas-swipe="true"
         onClick={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}
         style={{
@@ -242,6 +243,7 @@ export const CorkboardContextMenu: React.FC<CorkboardContextMenuProps> = ({
   return (
     <div
       data-no-drag="true"
+      data-no-canvas-swipe="true"
       onClick={(e) => e.stopPropagation()}
       onPointerDown={(e) => e.stopPropagation()}
       style={{

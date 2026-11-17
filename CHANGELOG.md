@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.16] - 2026-11-16
+
+### Canvas-to-Canvas Swipe Gesture Across Desktop, Mobile & Trackpad
+* **Settings Schema & Toggle (`dashboard.ts`, `db.ts`, `SettingsModal.tsx`):**
+  * Added `canvasSwipeEnabled` to `AppSettings` (defaulting to `true` in `DEFAULT_SETTINGS`) and added a **Swipe Between Canvases** toggle under **Settings → Display & Kiosk**.
+* **Pure Swipe Engine, Preview Pill & Hook (`canvasSwipe.ts`, `useCanvasSwipe.ts`, `CanvasSwipePreviewPill.tsx`, `index.css`):**
+  * Added `canvasSwipe.ts` (`isCanvasSwipeEnabled`, `resolveAdjacentCanvasTab` continuous wrap-around, `computeSwipeCommitThresholdPx`, `evaluatePointerSwipeProgress`, `shouldCommitPointerSwipeRelease`, `evaluateWheelHorizontalSwipe` with `520ms` cooldown against inertial trackpad tails, and `shouldIgnoreCanvasSwipeTarget` protecting unlocked cards, Kanban drags, dialogs, interactive inputs, and horizontal scroll containers).
+  * Created `useCanvasSwipe.ts` and portal-mounted `CanvasSwipePreviewPill.tsx` with a live progress bar, target canvas name, and directional `180ms` entrance keyframes (respecting `prefers-reduced-motion`).
+* **Desktop & Mobile Integration (`App.tsx`, `MobileCompanion.tsx`, `CorkboardContextMenu.tsx`):**
+  * Wired `useCanvasSwipe` across Desktop/Kiosk and Mobile Companion (excluding tab pills and context menus with `data-no-canvas-swipe="true"`).
+* **Documentation & Verification (`FEATURES.md`, `ARCHITECTURE.md`, `README.md`, `tests/canvasSwipe.test.ts`):**
+  * Updated documentation and added unit tests covering settings defaults, wrap-around resolution, pointer drag/flick thresholds, trackpad wheel cooldown, and target isolation (`147 / 147` passing across `40` suites).
+
+---
+
 ## [0.7.15] - 2026-11-16
 
 ### Parent Drawer Backdrop Dismiss, Widget Trash Recovery & Shared Household Rhythms Store
