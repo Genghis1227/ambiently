@@ -14,6 +14,8 @@ import {
   type StapleItem,
 } from '../types/meals';
 import type { KanbanBoard, KanbanCard, KanbanEngineSnapshot } from '../types/kanban';
+import type { RoutinesSnapshot } from '../types/phase2Widgets';
+import { DEFAULT_ROUTINE_ITEMS } from '../utils/routinesEngine';
 
 export class AmbientlyDatabase extends Dexie {
   tabs!: EntityTable<DashboardTab, 'id'>;
@@ -27,6 +29,7 @@ export class AmbientlyDatabase extends Dexie {
   kanbanBoards!: EntityTable<KanbanBoard, 'id'>;
   kanbanCards!: EntityTable<KanbanCard, 'id'>;
   kanban!: EntityTable<KanbanEngineSnapshot, 'id'>;
+  routines!: EntityTable<RoutinesSnapshot, 'id'>;
 
   constructor() {
     super('AmbientlyDB');
@@ -68,6 +71,20 @@ export class AmbientlyDatabase extends Dexie {
       kanbanBoards: 'id, sortOrder, updatedAt',
       kanbanCards: 'id, boardId, [boardId+columnId+isArchived+sortOrder], updatedAt',
       kanban: 'id, updated_at',
+    });
+    this.version(5).stores({
+      tabs: 'id, order, updated_at, deleted_at',
+      widgets: 'id, tabId, type, updated_at, deleted_at',
+      notes: 'id, tabId, widgetId, expiresAt, archivedAt, updated_at, deleted_at',
+      settings: 'id, updated_at',
+      vault: 'key, updated_at',
+      chores: 'id, updated_at',
+      profiles: 'id, role, updatedAt, deletedAt',
+      meals: 'id, updated_at',
+      kanbanBoards: 'id, sortOrder, updatedAt',
+      kanbanCards: 'id, boardId, [boardId+columnId+isArchived+sortOrder], updatedAt',
+      kanban: 'id, updated_at',
+      routines: 'id, updated_at',
     });
   }
 }
@@ -514,6 +531,13 @@ export const DEFAULT_KANBAN_SNAPSHOT: KanbanEngineSnapshot = {
   cards: DEFAULT_KANBAN_CARDS,
   deletedBoardIds: [],
   deletedCardIds: [],
+  updated_at: '1970-01-01T00:00:00.000Z',
+};
+
+export const DEFAULT_ROUTINES_SNAPSHOT: RoutinesSnapshot = {
+  id: 'household_routines',
+  items: DEFAULT_ROUTINE_ITEMS.map((item) => ({ ...item, completions: [] })),
+  deletedRoutineIds: [],
   updated_at: '1970-01-01T00:00:00.000Z',
 };
 

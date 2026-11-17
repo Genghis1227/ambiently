@@ -28,11 +28,33 @@ const TAB_FIELDS_KEPT_ELSEWHERE = [
 
 const NOTE_FIELDS_NOT_IN_CLOUD = ['isPinnedToCanvas', 'textColor', 'imageUrl', 'giphyUrl'] as const;
 
+export function isPermanentlyPurgedWidget(
+  widget?: Pick<DashboardWidget, 'permanentlyDeleted' | 'config'> | null
+): boolean {
+  if (!widget) return false;
+  if (widget.permanentlyDeleted) return true;
+  const cfg = widget.config as Record<string, unknown> | undefined;
+  return Boolean(cfg && cfg.__purged === true);
+}
+
 export function keepLocalWidgetFields(incoming: DashboardWidget, local?: DashboardWidget): DashboardWidget {
-  if (!local) return incoming;
   const merged: DashboardWidget = { ...incoming };
+  if (isPermanentlyPurgedWidget(incoming)) {
+    merged.permanentlyDeleted = true;
+  }
+  if (!local) return merged;
   if (incoming.mobileOrder === undefined && local.mobileOrder !== undefined) {
     merged.mobileOrder = local.mobileOrder;
+  }
+  if (
+    !merged.permanentlyDeleted &&
+    incoming.deleted_at &&
+    Object.keys(incoming.config || {}).length === 0 &&
+    local.config &&
+    !isPermanentlyPurgedWidget(local) &&
+    Object.keys(local.config).length > 0
+  ) {
+    merged.config = { ...local.config };
   }
   const localPhotos = local.config?.customPhotos;
   if (

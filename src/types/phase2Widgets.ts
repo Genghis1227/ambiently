@@ -2,6 +2,7 @@ export const MAX_ROUTINES_PER_WIDGET = 12;
 export const MAX_ROUTINE_COMPLETIONS = 14;
 export const MAX_EMERGENCY_CONTACTS = 6;
 export const MAX_DECISION_OPTIONS = 16;
+export const ROUTINES_CLOUD_ROW_ID = '__ambiently_routines_store__';
 
 export type RoutineCadenceType =
   | 'daily'
@@ -33,6 +34,14 @@ export interface RoutineItem {
   weekBLabel?: string; // e.g. 'Trash Only'
   // Bounded completion log (most recent 14 entries retained)
   completions?: RoutineCompletionStamp[];
+  updatedAt?: string;
+}
+
+export interface RoutinesSnapshot {
+  id: 'household_routines';
+  items: RoutineItem[];
+  deletedRoutineIds?: string[];
+  updated_at: string;
 }
 
 export interface RoutinesWidgetConfig {

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   Check,
@@ -22,11 +22,11 @@ import {
   normalizeDaysOfWeek,
   resolveRoutineItems,
   toggleDayOfWeek,
-  toggleRoutineCheckIn,
   WEEKDAY_FULL_LABELS,
   WEEKDAY_SHORT_LABELS,
   WEEKDAY_SINGLE_LETTERS,
 } from '../../utils/routinesEngine';
+import { useRoutinesStore } from '../../stores/useRoutinesStore';
 import { useProfileStore } from '../../stores/useProfileStore';
 import { ProfileAvatar } from '../common/ProfileAvatar';
 import { useSharedClock } from '../../utils/sharedClock';
@@ -79,7 +79,22 @@ export const RoutinesWidget: React.FC<RoutinesWidgetProps> = ({
   const minuteBucketMs = Math.floor(nowRaw.getTime() / 60_000) * 60_000;
   const now = useMemo(() => new Date(minuteBucketMs), [minuteBucketMs]);
 
-  const items = useMemo(() => resolveRoutineItems(config?.items), [config?.items]);
+  const isStoreInitialized = useRoutinesStore((s) => s.isInitialized);
+  const storeItems = useRoutinesStore((s) => s.items);
+  const toggleCheckIn = useRoutinesStore((s) => s.toggleCheckIn);
+  const addRoutineItem = useRoutinesStore((s) => s.addRoutineItem);
+  const removeRoutineItem = useRoutinesStore((s) => s.removeRoutineItem);
+
+  useEffect(() => {
+    if (!isStoreInitialized) {
+      void useRoutinesStore.getState().initRoutinesStore();
+    }
+  }, [isStoreInitialized]);
+
+  const items = useMemo(
+    () => (isStoreInitialized ? storeItems : resolveRoutineItems(config?.items)),
+    [isStoreInitialized, storeItems, config?.items]
+  );
   const compactMode = Boolean(config?.compactMode);
 
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(
@@ -120,19 +135,12 @@ export const RoutinesWidget: React.FC<RoutinesWidgetProps> = ({
   };
 
   const handleToggle = (itemId: string, slotKey: string) => {
-    if (!onUpdateConfig) return;
     const nowIso = currentTimestampIso();
-    const nextItems = items.map((item) =>
-      item.id === itemId
-        ? toggleRoutineCheckIn(item, slotKey, effectiveProfileId, nowIso)
-        : item
-    );
-    onUpdateConfig({ items: nextItems });
+    void toggleCheckIn(itemId, slotKey, effectiveProfileId, nowIso);
   };
 
   const handleAddRoutine = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!onUpdateConfig) return;
     const trimmed = newLabel.trim();
     if (!trimmed) return;
     if (items.length >= MAX_ROUTINES_PER_WIDGET) return;
@@ -159,15 +167,14 @@ export const RoutinesWidget: React.FC<RoutinesWidgetProps> = ({
       completions: [],
     };
 
-    onUpdateConfig({ items: [...items, added] });
+    void addRoutineItem(added);
     setNewLabel('');
     setNewEmoji('✓');
     setIsAddOpen(false);
   };
 
   const handleDeleteRoutine = (itemId: string) => {
-    if (!onUpdateConfig) return;
-    onUpdateConfig({ items: items.filter((item) => item.id !== itemId) });
+    void removeRoutineItem(itemId);
   };
 
   const renderAttribution = (
@@ -226,7 +233,7 @@ export const RoutinesWidget: React.FC<RoutinesWidgetProps> = ({
           </span>
         </div>
 
-        {onUpdateConfig && items.length < MAX_ROUTINES_PER_WIDGET && (
+        {items.length < MAX_ROUTINES_PER_WIDGET && (
           <button
             type="button"
             data-no-drag="true"
@@ -851,8 +858,8 @@ export const RoutinesWidget: React.FC<RoutinesWidgetProps> = ({
                   </div>
                 )}
 
-                {/* Tiny quick-remove shown only if hovered while quick-add form is open */}
-                {isAddOpen && onUpdateConfig && (
+                {/* Tiny quick-remove shown only while quick-add form is open */}
+                {isAddOpen && (
                   <div className="flex justify-end mt-1 pt-1 border-t border-gray-800/30">
                     <button
                       type="button"

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.15] - 2026-11-16
+
+### Parent Drawer Backdrop Dismiss, Widget Trash Recovery & Shared Household Rhythms Store
+* **Parent Command Drawer Backdrop & `Escape` Dismiss (`ParentChoreDrawer.tsx`, `tests/modalBackdropGuard.test.ts`):**
+  * Attached `createBackdropDismissHandlers(handleCloseDrawer)` to the `fixed inset-0` backdrop and added a PIN-unlocked `Escape` keydown listener so clicking outside the drawer after approving chores closes it cleanly without dismissing during text-selection drags.
+* **Recently Deleted Widgets in Trash & Recovery (`dashboard.ts`, `syncMerge.ts`, `supabase.ts`, `dashboardStore.ts`, `localMediaVault.ts`, `CorkboardTrashModal.tsx`, `App.tsx`, `NavigationDock.tsx`, `MobileCompanion.tsx`):**
+  * Added `permanentlyDeleted` on `DashboardWidget`, `isPermanentlyPurgedWidget` and empty cloud tombstone config fallback preservation in `syncMerge.ts`, and sanitized soft-deleted widget preservation in `supabase.ts` (`{ __purged: true }` when permanently purged).
+  * Added `deletedWidgets`, `restoreWidget`, `permanentlyDeleteWidget`, and `permanentlyDeleteWidgets` (paired with `parseVaultMediaKey` cleanup for unreferenced uploaded media in `db.vault`), surfaced in portal-rendered `CorkboardTrashModal` (**Trash & Recovery**) across both Desktop Dock and Mobile Companion.
+* **Shared Household Store for Home Check-Ins & Rhythms (`phase2Widgets.ts`, `routinesEngine.ts`, `db.ts`, `useRoutinesStore.ts`, `RoutinesWidget.tsx`, `WidgetSettingsModal.tsx`, `widgetCatalog.ts`, `fileSync.ts`, `supabase.ts`, `dashboardStore.ts`):**
+  * Upgraded `AmbientlyDB` to Dexie v5 with `db.routines` (`DEFAULT_ROUTINES_SNAPSHOT`) and added `useRoutinesStore` (`initRoutinesStore`, `pickMigratableRoutineWidget`, `isDefaultStarterRoutines`, `mergeRoutinesSnapshots`, `toggleCheckIn`, `addRoutineItem`, `removeRoutineItem`, `setRoutineItems`, `clearAllCompletions`), migrating active or soft-deleted custom routines automatically and syncing via JSON backups and `ROUTINES_CLOUD_ROW_ID`.
+* **Documentation & Verification (`FEATURES.md`, `ARCHITECTURE.md`, `README.md`, `tests/trashAndRoutinesStore.test.ts`):**
+  * Updated documentation and added unit tests covering shared routines migration/merging and widget Trash recovery (`141 / 141` passing across `36` suites).
+
+---
+
 ## [0.7.14] - 2026-11-16
 
 ### Confirm Before Deleting Widgets & Move Widget to Canvas

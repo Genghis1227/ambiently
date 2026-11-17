@@ -642,7 +642,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = React.memo(({
                   setShowOrganizeMenu(false);
                   onOpenTrash();
                 }}
-                title={`Archived & Expired Notes (${trashCount})`}
+                title={`Trash & Recovery (${trashCount})`}
                 className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gray-800/80 hover:bg-gray-700 text-amber-400 border border-amber-500/30 transition-all cursor-pointer"
               >
                 <Archive className="w-4 h-4" />

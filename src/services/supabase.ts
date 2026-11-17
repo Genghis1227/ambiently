@@ -1,10 +1,11 @@
 import type { SupabaseClient, User, RealtimeChannel } from '@supabase/supabase-js';
-import { db, DEFAULT_SETTINGS, DEFAULT_TABS, DEFAULT_WIDGETS, DEFAULT_NOTES, DEFAULT_CHORE_SNAPSHOT, DEFAULT_HOUSEHOLD_PROFILES, DEFAULT_MEAL_SNAPSHOT, DEFAULT_KANBAN_BOARDS, DEFAULT_KANBAN_SNAPSHOT } from './db';
+import { db, DEFAULT_SETTINGS, DEFAULT_TABS, DEFAULT_WIDGETS, DEFAULT_NOTES, DEFAULT_CHORE_SNAPSHOT, DEFAULT_HOUSEHOLD_PROFILES, DEFAULT_MEAL_SNAPSHOT, DEFAULT_KANBAN_BOARDS, DEFAULT_KANBAN_SNAPSHOT, DEFAULT_ROUTINES_SNAPSHOT } from './db';
 import { stripPlexTokens } from './plexLinks';
 import { isBoardFullError, setSyncRefusal } from './syncRefusal';
 import {
   buildNoteCloudFreeformPos,
   hydrateNoteFromCloudRow,
+  isPermanentlyPurgedWidget,
   keepLocalNoteFields,
   keepLocalTabFields,
   keepLocalWidgetFields,
@@ -26,10 +27,12 @@ import type { ChoreEngineSnapshot } from '../types/chores';
 import type { HouseholdProfile } from '../types/profiles';
 import type { MealPlannerSnapshot } from '../types/meals';
 import type { KanbanBoard, KanbanCard, KanbanChecklistItem, KanbanColumnId, KanbanEngineSnapshot } from '../types/kanban';
+import { ROUTINES_CLOUD_ROW_ID, type RoutinesSnapshot } from '../types/phase2Widgets';
 import { useChoreStore } from '../store/choreStore';
 import { useProfileStore } from '../stores/useProfileStore';
 import { useMealStore } from '../stores/useMealStore';
 import { useKanbanStore, type KanbanRowSyncEvent } from '../stores/useKanbanStore';
+import { useRoutinesStore } from '../stores/useRoutinesStore';
 
 const CHORE_ENGINE_CLOUD_ROW_ID = '__ambiently_chore_engine__';
 const HOUSEHOLD_PROFILES_CLOUD_ROW_ID = '__ambiently_household_profiles__';
@@ -194,7 +197,7 @@ async function clearLocalBoard(): Promise<void> {
   const current = await db.settings.get('global');
   await db.transaction(
     'rw',
-    [db.tabs, db.widgets, db.notes, db.settings, db.chores, db.profiles, db.meals, db.kanbanBoards, db.kanbanCards, db.kanban],
+    [db.tabs, db.widgets, db.notes, db.settings, db.chores, db.profiles, db.meals, db.kanbanBoards, db.kanbanCards, db.kanban, db.routines],
     async () => {
       await Promise.all([
         db.tabs.clear(),
@@ -206,6 +209,7 @@ async function clearLocalBoard(): Promise<void> {
         db.kanbanBoards.clear(),
         db.kanbanCards.clear(),
         db.kanban.clear(),
+        db.routines.clear(),
       ]);
       await db.settings.put({ ...DEFAULT_SETTINGS, ...deviceOwnSettings(current) });
       await db.chores.put(DEFAULT_CHORE_SNAPSHOT);
@@ -213,6 +217,7 @@ async function clearLocalBoard(): Promise<void> {
       await db.meals.put(DEFAULT_MEAL_SNAPSHOT);
       await db.kanbanBoards.bulkPut(DEFAULT_KANBAN_BOARDS);
       await db.kanban.put(DEFAULT_KANBAN_SNAPSHOT);
+      await db.routines.put(DEFAULT_ROUTINES_SNAPSHOT);
     }
   );
 }
@@ -947,7 +952,7 @@ export async function pushToCloud(
     }
 
     // 1. Query Dexie to include all active and soft-deleted records so remote devices sync additions and deletions
-    const [dbSettings, dbTabs, dbWidgets, dbNotes, dbChoreSnapshot, dbProfiles, dbMealSnapshot, dbKanbanSnapshot] = await Promise.all([
+    const [dbSettings, dbTabs, dbWidgets, dbNotes, dbChoreSnapshot, dbProfiles, dbMealSnapshot, dbKanbanSnapshot, dbRoutinesSnapshot] = await Promise.all([
       db.settings.get('global'),
       db.tabs.toArray(),
       db.widgets.toArray(),
@@ -956,6 +961,7 @@ export async function pushToCloud(
       db.profiles.toArray(),
       db.meals.get('household_meals'),
       db.kanban.get('household_kanban'),
+      db.routines.get('household_routines'),
     ]);
 
     const propSettingsTime = Date.parse(settings?.updated_at || '') || 0;
@@ -1048,6 +1054,7 @@ export async function pushToCloud(
       const formattedWidgets = widgetsToPush.map((w) => {
         // Strip customPhotos, oversized inline Data URLs, and Guest Wi-Fi QR credentials from cloud sync payloads
         const configToPush = sanitizeWidgetConfigForCloud(w.config || {}, w.type);
+        const isPurged = isPermanentlyPurgedWidget(w);
         return {
           id: w.id,
           dashboard_id: dashboardId,
@@ -1056,10 +1063,12 @@ export async function pushToCloud(
           type: w.type,
           title: w.title,
           grid_pos: w.gridPos,
-          freeform_pos: w.freeformPos,
-          // A deleted widget only needs its id and deletion time, so its content (an uploaded image, say)
-          // doesn't keep using the board's space for the 30 days the deletion is kept
-          config: w.deleted_at ? {} : stripPlexTokens(configToPush),
+          freeform_pos: isPurged
+            ? { xRatio: 0, yRatio: 0, wRatio: 0.3, hRatio: 0.3, zIndex: 1, rotation: 0 }
+            : w.freeformPos,
+          // Keep sanitized widget config for recoverable soft-deleted Trash widgets;
+          // permanently purged widgets shrink to { __purged: true }
+          config: isPurged ? { __purged: true } : stripPlexTokens(configToPush),
           updated_at: w.updated_at,
           deleted_at: w.deleted_at || null,
         };
@@ -1194,6 +1203,34 @@ export async function pushToCloud(
       }
       return shouldPushKanban;
     })();
+
+    // Sync Home Check-Ins & Rhythms singleton household snapshot via reserved system row
+    const activeRoutinesSnapshot = dbRoutinesSnapshot || useRoutinesStore.getState().snapshot;
+    if (activeRoutinesSnapshot && activeRoutinesSnapshot.id === 'household_routines') {
+      const localRoutinesTime = new Date(activeRoutinesSnapshot.updated_at || 0).getTime();
+      const remoteRoutinesTime = remoteWidgetsMap.get(ROUTINES_CLOUD_ROW_ID)?.time;
+      const shouldPushRoutines =
+        Boolean(options?.force) ||
+        (remoteRoutinesTime === undefined
+          ? localRoutinesTime > 0
+          : localRoutinesTime > remoteRoutinesTime);
+
+      if (shouldPushRoutines) {
+        widgetsToUpsert.push({
+          id: ROUTINES_CLOUD_ROW_ID,
+          dashboard_id: dashboardId,
+          tab_id: null,
+          user_id: ownerId,
+          type: 'routines_store',
+          title: 'Household Routines Store',
+          grid_pos: {},
+          freeform_pos: {},
+          config: activeRoutinesSnapshot,
+          updated_at: activeRoutinesSnapshot.updated_at,
+          deleted_at: null,
+        });
+      }
+    }
 
     // Upsert Notes: only send notes with genuinely newer timestamps or new records (or all when forced)
     let notesToUpsert: any[] = [];
@@ -1668,12 +1705,26 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
         }
       }
 
+      // Extract the Home Check-Ins & Rhythms system row if present
+      const routinesRow = widgetsRes.data.find((w: any) => w.id === ROUTINES_CLOUD_ROW_ID);
+      if (routinesRow && !routinesRow.deleted_at && routinesRow.config?.id === 'household_routines') {
+        if (overwriteLocal) {
+          await db.routines.put(routinesRow.config as RoutinesSnapshot);
+          await useRoutinesStore.getState().initRoutinesStore();
+        } else {
+          await useRoutinesStore
+            .getState()
+            .applyRemoteRoutinesSnapshot(routinesRow.config as RoutinesSnapshot);
+        }
+      }
+
       const canvasWidgetRows = widgetsRes.data.filter(
         (w: any) =>
           w.id !== CHORE_ENGINE_CLOUD_ROW_ID &&
           w.id !== HOUSEHOLD_PROFILES_CLOUD_ROW_ID &&
           w.id !== MEAL_PLANNER_CLOUD_ROW_ID &&
-          w.id !== KANBAN_ENGINE_CLOUD_ROW_ID
+          w.id !== KANBAN_ENGINE_CLOUD_ROW_ID &&
+          w.id !== ROUTINES_CLOUD_ROW_ID
       );
       const localWidgets = await db.widgets.toArray();
       const localMap = new Map(localWidgets.map((w) => [w.id, w]));
@@ -1715,6 +1766,7 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
           config,
           updated_at: w.updated_at,
           deleted_at: w.deleted_at,
+          ...(isPermanentlyPurgedWidget({ config }) ? { permanentlyDeleted: true } : {}),
         }).widget;
 
         const localTime = local ? new Date(local.updated_at || 0).getTime() : 0;

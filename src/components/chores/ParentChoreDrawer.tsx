@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   Check,
   CheckCheck,
@@ -41,6 +41,7 @@ import { HouseholdProfileManager } from '../common/HouseholdProfileManager';
 import { PinOverlay } from '../kiosk/PinOverlay';
 import { openInAppWebViewer } from '../../utils/webViewer';
 import { sanitizePinDigits, validatePinSetup } from '../../utils/pinValidation';
+import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 
 const CHORE_ICON_PRESETS = [
   '🧹', '🛏️', '🍽️', '🐕', '🐈', '🗑️', '🧺', '📚', '🦷', '🌱', '🧸', '🎒',
@@ -192,15 +193,33 @@ export const ParentChoreDrawer: React.FC = () => {
     return [...list].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   }, [ledger, ledgerFilterProfileId]);
 
-  if (!isParentDrawerOpen) return null;
-
-  const handleCloseDrawer = () => {
+  const handleCloseDrawer = useCallback(() => {
     setIsSessionVerified(false);
     setEditingSplitInstanceId(null);
     setPriceInputs({});
     lockKiosk();
     setParentDrawerOpen(false);
-  };
+  }, [lockKiosk, setParentDrawerOpen]);
+
+  const backdropHandlers = useMemo(
+    () => createBackdropDismissHandlers(handleCloseDrawer),
+    [handleCloseDrawer]
+  );
+
+  useEffect(() => {
+    if (!isParentDrawerOpen) return;
+    const pinLocked = Boolean(settings.pinLockEnabled && settings.pinHash && !isSessionVerified);
+    if (pinLocked) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !e.defaultPrevented) {
+        handleCloseDrawer();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isParentDrawerOpen, settings.pinLockEnabled, settings.pinHash, isSessionVerified, handleCloseDrawer]);
+
+  if (!isParentDrawerOpen) return null;
 
   // Require 4-Digit Parent PIN if configured and not yet verified for this drawer opening
   const needsPinVerification = Boolean(
@@ -456,6 +475,7 @@ export const ParentChoreDrawer: React.FC = () => {
 
   return (
     <div
+      {...backdropHandlers}
       className="fixed inset-0 z-[9200] flex justify-end bg-black/75 backdrop-blur-md animate-in fade-in duration-200"
       role="dialog"
       aria-modal="true"
