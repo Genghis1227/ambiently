@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.17",
+    date: "November 16, 2026",
+    title: "Fullscreen, Screen-Edge & Long-Swipe Canvas Switching",
+    highlights: [
+      "Fullscreen Widget Swiping: Maximized and fullscreen widgets (Photo Frames, Chores Hub, Kanban View, Calendar, Meal Planner) now support smooth horizontal canvas swipes alongside native vertical scrolling.",
+      "Velocity-Guarded Long Swipe Override: On dense unlocked multi-widget boards, a brisk straight horizontal swipe (~32% of screen width or fast wide flick) snaps the touched widget back untouched and switches canvases, while slow, diagonal, or paused drags rearrange widgets normally.",
+      "Dock-Aware 36px Screen-Edge Swipe & Click Guard: Swiping inward from the visible left or right canvas edge switches canvases immediately without grabbing edge tiles, with capture-phase synthetic click suppression preventing accidental button taps.",
+    ],
+  },
+  {
     version: "v0.7.16",
     date: "November 16, 2026",
     title: "Canvas-to-Canvas Swipe Gesture Across Desktop, Mobile & Trackpad",

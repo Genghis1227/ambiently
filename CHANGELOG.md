@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.17] - 2026-11-16
+
+### Fullscreen, Screen-Edge & Long-Swipe Canvas Switching
+* **Fullscreen Widget Swipes (`Corkboard.tsx`, `canvasSwipe.ts`):**
+  * Added `data-canvas-fullscreen="true"` and `touchAction: 'pan-y'` on maximized/fullscreen widget wrappers so standard horizontal swipes work anywhere over fullscreen Photo Frames, Chores Hubs, Kanban Views, Calendars, and Meal Planners while preserving vertical scrolling and Kanban card drags (`[data-kanban-card-id]`).
+  * Refined `INTERACTIVE_SWIPE_BLOCKER_SELECTOR` so non-input tappable buttons/rows remain swipeable while dialogs, `nav`, text inputs, sliders, Kanban cards, `[data-no-canvas-swipe="true"]` handles, and horizontal scrollers stay protected.
+* **Dock-Aware `36px` Screen-Edge Swipe Zone (`canvasSwipe.ts`, `Corkboard.tsx`, `App.tsx`):**
+  * Added `EDGE_SWIPE_ZONE_PX = 36` and `isPointInCanvasEdgeSwipeZone` (accounting for the `80px` Left/Right Navigation Dock inset when visible) plus `shouldYieldToEdgeSwipe` on widgets and sticky notes, and `data-no-canvas-swipe="true"` on all 5 resize/rotate handles.
+* **Velocity-Guarded Long Swipe Override & Snap-Back (`canvasSwipe.ts`, `useCanvasSwipe.ts`, `Corkboard.tsx`, `App.tsx`, `MobileCompanion.tsx`):**
+  * Added `classifyCanvasSwipeStartTarget`, `computeLongSwipeCommitThresholdPx` (`~32%` width, `220–420px`), `computeLongSwipeFastFlickMinPx` (`~22%` width, `170–290px`), capture-phase `onPointerDownCapture` + `pointerup` + post-swipe synthetic `click` suppression, and synchronous `subscribeCancelActiveCardDrag` / `requestCancelActiveCardDrag` so brisk horizontal swipes across unlocked cards snap the card back untouched and switch canvases while slow/diagonal/paused drags move widgets normally.
+* **Documentation & Verification (`FEATURES.md`, `ARCHITECTURE.md`, `tests/canvasSwipe.test.ts`):**
+  * Updated documentation and expanded `tests/canvasSwipe.test.ts` (`151 / 151` passing across `41` suites).
+
+---
+
 ## [0.7.16] - 2026-11-16
 
 ### Canvas-to-Canvas Swipe Gesture Across Desktop, Mobile & Trackpad
