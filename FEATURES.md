@@ -35,7 +35,9 @@
     * **`+` Add Menu Pop-Out (`Plus`):** Opens **New Sticky Note**, **Add Widget Tile**, and **Create New Canvas** (while keeping **Auto-Organize (`Wand2`)** and **Trash & Recovery (`Archive`)** directly on the toolbar).
     * **Auto-Organize Pop-Out (`Wand2`):** Choose between **Smart Bento Grid**, **Keep Sizes & Pack**, or **Split Zones**, plus a 1-click **Undo Layout** button when a snapshot is available.
     * **Quick Utilities Pop-Out (`SlidersHorizontal`):** Opens **Night Mode**, **Fullscreen**, **Refresh / Apply Update** (with cyan live-update pulse badge), and **Hide Toolbar** right above the 1-click **Settings / Lock** button.
-* **Automated Tab Carousel:** Enable auto-rotation (`15s`, `30s`, `45s`, `1m`, `2m`) to cycle across your canvases automatically. Touching or clicking anywhere on the screen temporarily pauses the carousel for 20 seconds.
+* **Automated Tab Carousel & Canvas-to-Canvas Swipe (`useCanvasSwipe.ts`, `CanvasSwipePreviewPill.tsx`):**
+  * Enable auto-rotation (`15s`, `30s`, `45s`, `1m`, `2m`) to cycle across your canvases automatically. Touching or clicking anywhere on the screen temporarily pauses the carousel for 20 seconds.
+  * **Swipe Between Canvases** (`Settings → Display & Kiosk`, enabled by default via `canvasSwipeEnabled`): Drag or swipe horizontally on empty desktop canvas space (or any non-interactive surface when canvas layout is locked), anywhere in the Mobile Companion feed (without interrupting vertical scrolling or horizontal pill bars), or two-finger swipe horizontally on a trackpad to wrap continuously between canvases with a live floating edge preview pill and subtle directional slide transition.
 
 ### Kiosk Hardware & Screen Polish
 * **Screen Wake Lock API:** Prevents tablets and smart displays from dimming or locking while the dashboard is open.

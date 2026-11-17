@@ -137,6 +137,8 @@ interface MobileCompanionProps {
   onAddWidget?: (widget: Partial<DashboardWidget>) => void;
   onToggleDesktopView: () => void;
   onOpenSettings: () => void;
+  onSwipePointerDown?: React.PointerEventHandler<HTMLDivElement>;
+  transitionClass?: string;
 }
 
 type CompanionViewMode = 'all' | 'widgets' | 'notes';
@@ -155,6 +157,8 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
   onAddWidget,
   onToggleDesktopView,
   onOpenSettings,
+  onSwipePointerDown,
+  transitionClass,
 }) => {
   const settings = useDashboardStore((state) => state.settings);
   const deletedWidgetCount = useDashboardStore((state) => state.deletedWidgets.length);
@@ -745,7 +749,10 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
 
   return (
     <>
-      <div className="fixed inset-0 w-full h-[100dvh] bg-[#090d16] text-white flex flex-col px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-36 mobile-companion-scroll overscroll-y-contain z-30">
+      <div
+        onPointerDown={onSwipePointerDown}
+        className="fixed inset-0 w-full h-[100dvh] bg-[#090d16] text-white flex flex-col px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-36 mobile-companion-scroll overscroll-y-contain z-30"
+      >
         {/* Top Mobile Bar with Clickable Version Tag */}
         <div className="flex items-center justify-between border-b border-gray-800 pb-3 mb-3 shrink-0">
           <div className="flex items-center gap-2.5">
@@ -839,7 +846,10 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         )}
 
         {/* Tab Switcher Pills */}
-        <div className="flex items-center gap-2 overflow-x-auto py-1.5 mb-2.5 no-scrollbar shrink-0 min-h-[44px]">
+        <div
+          data-no-canvas-swipe="true"
+          className="flex items-center gap-2 overflow-x-auto py-1.5 mb-2.5 no-scrollbar shrink-0 min-h-[44px]"
+        >
           {tabs.map((tab, idx) => {
             const hasExplicitHome = tabs.some((t) => t.isHome);
             const isHome = tab.isHome || (!hasExplicitHome && idx === 0);
@@ -957,7 +967,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         )}
 
         {/* Unified Vertical Stream Container */}
-        <div className="space-y-4 w-full shrink-0">
+        <div className={`space-y-4 w-full shrink-0${transitionClass ? ` ${transitionClass}` : ''}`}>
           {/* SECTION 1: WIDGET TILES (Shown if in 'all' or 'widgets' view) */}
           {(viewMode === 'all' || viewMode === 'widgets') && (
             <div className="space-y-3">

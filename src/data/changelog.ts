@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.16",
+    date: "November 16, 2026",
+    title: "Canvas-to-Canvas Swipe Gesture Across Desktop, Mobile & Trackpad",
+    highlights: [
+      "Swipe Between Canvases: Swipe horizontally on empty desktop canvas space (or non-interactive surfaces when Canvas Layout is locked), anywhere in the Mobile Companion feed, or with two fingers on a trackpad to wrap continuously between canvases.",
+      "Smart Target Isolation & Edge Preview Pill: Added CanvasSwipePreviewPill and useCanvasSwipe so widget/note dragging, Kanban card drags, dialogs, buttons, vertical scrolling, and horizontal pill bars never collide with canvas swipes, paired with a smooth directional slide transition.",
+      "Display & Kiosk Toggle: Enabled by default (canvasSwipeEnabled) with a Swipe Between Canvases setting toggle under Settings → Display & Kiosk.",
+    ],
+  },
+  {
     version: "v0.7.15",
     date: "November 16, 2026",
     title: "Parent Drawer Backdrop Dismiss, Widget Trash Recovery & Shared Household Rhythms Store",

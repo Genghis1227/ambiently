@@ -114,3 +114,40 @@ html.idle-cursor-hidden body,
   animation: ambiently-toast-up 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+@keyframes ambiently-canvas-enter-from-right {
+  from {
+    opacity: 0.72;
+    transform: translate3d(22px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes ambiently-canvas-enter-from-left {
+  from {
+    opacity: 0.72;
+    transform: translate3d(-22px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.ambiently-canvas-enter-next {
+  animation: ambiently-canvas-enter-from-right 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ambiently-canvas-enter-prev {
+  animation: ambiently-canvas-enter-from-left 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambiently-canvas-enter-next,
+  .ambiently-canvas-enter-prev {
+    animation: none !important;
+  }
+}
+
