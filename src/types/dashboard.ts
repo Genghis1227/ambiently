@@ -155,6 +155,7 @@ export interface DashboardWidget<TConfig = Record<string, any>> {
   config: TConfig;
   updated_at: string;
   deleted_at?: string | null;
+  permanentlyDeleted?: boolean;
 }
 
 export interface StickyNoteChecklistItem {

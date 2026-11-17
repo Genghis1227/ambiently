@@ -38,6 +38,7 @@ import {
 import {
   CANVAS_LOOK_FIELDS,
   buildNoteFreeformPos,
+  isPermanentlyPurgedWidget,
   keepLocalNoteFields,
   keepLocalTabFields,
   keepLocalWidgetFields,
@@ -49,6 +50,7 @@ import { inferCuratedCategoryId } from '../data/curatedScenery';
 import { applySharedPhotoUpdateToWidgets, sanitizeRestoredPhotoWidget } from '../utils/photoSourceIsolation';
 import { applyPinLockTransition, normalizePinLockSettings } from '../utils/pinValidation';
 import { getWifiVaultKey } from '../utils/wifiQr';
+import { parseVaultMediaKey } from '../utils/localMediaVault';
 import { useChoreStore, registerChorePersistListener } from './choreStore';
 import type { ChoreEngineSnapshot } from '../types/chores';
 import { useProfileStore, registerProfileSyncListener } from '../stores/useProfileStore';
@@ -61,10 +63,19 @@ import {
   registerKanbanRowSyncListener,
 } from '../stores/useKanbanStore';
 import type { KanbanEngineSnapshot } from '../types/kanban';
+import { useRoutinesStore, registerRoutinesPersistListener } from '../stores/useRoutinesStore';
+import { ROUTINES_CLOUD_ROW_ID, type RoutinesSnapshot } from '../types/phase2Widgets';
 
 const CHORE_ENGINE_CLOUD_ROW_ID = '__ambiently_chore_engine__';
 const HOUSEHOLD_PROFILES_CLOUD_ROW_ID = '__ambiently_household_profiles__';
 const MEAL_PLANNER_CLOUD_ROW_ID = '__ambiently_meal_planner__';
+const SYSTEM_WIDGET_CLOUD_ROW_IDS = new Set([
+  CHORE_ENGINE_CLOUD_ROW_ID,
+  HOUSEHOLD_PROFILES_CLOUD_ROW_ID,
+  MEAL_PLANNER_CLOUD_ROW_ID,
+  KANBAN_ENGINE_CLOUD_ROW_ID,
+  ROUTINES_CLOUD_ROW_ID,
+]);
 
 let backupDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 let cloudAutoSyncTimer: ReturnType<typeof setTimeout> | null = null;
@@ -211,6 +222,7 @@ interface DashboardState {
   tabs: DashboardTab[];
   activeTabId: string;
   widgets: DashboardWidget[];
+  deletedWidgets: DashboardWidget[];
   notes: StickyNoteItem[];
   deletedNoteTimestamps: Record<string, string>;
   deletedWidgetTimestamps: Record<string, string>;
@@ -306,6 +318,9 @@ interface DashboardState {
   // Widget / Note operations
   addWidget: (widget: Partial<DashboardWidget>) => Promise<void>;
   removeWidget: (widgetId: string) => Promise<void>;
+  restoreWidget: (widgetId: string, targetTabId?: string) => Promise<boolean>;
+  permanentlyDeleteWidget: (widgetId: string) => Promise<void>;
+  permanentlyDeleteWidgets: (widgetIds: string[]) => Promise<void>;
   updateWidget: (widgetId: string, updates: Partial<DashboardWidget>) => Promise<void>;
   updateWidgetConfig: (widgetId: string, configUpdates: Record<string, any>) => Promise<void>;
   moveWidgetToTab: (
@@ -385,12 +400,47 @@ function resolveTombstoneIso(updatedAt?: string | null, deletedAt?: string | nul
   return updatedAt || new Date().toISOString();
 }
 
+function sortDeletedWidgetsNewestFirst(list: DashboardWidget[]): DashboardWidget[] {
+  return [...list].sort((a, b) => {
+    const aMs = Date.parse(a.deleted_at || a.updated_at || '') || 0;
+    const bMs = Date.parse(b.deleted_at || b.updated_at || '') || 0;
+    return bMs - aMs;
+  });
+}
+
+function computePlacementForTab(
+  state: Pick<DashboardState, 'widgets' | 'notes'>,
+  movingWidget: Pick<DashboardWidget, 'id' | 'type' | 'freeformPos'>,
+  targetTabId: string,
+  preferredPos?: FreeformPosition
+) {
+  const nowMs = Date.now();
+  const targetTabWidgets = state.widgets.filter(
+    (w) => !w.deleted_at && w.tabId === targetTabId && w.id !== movingWidget.id
+  );
+  const targetTabNotes = state.notes.filter(
+    (n) =>
+      !n.deleted_at &&
+      !n.archivedAt &&
+      n.isPinnedToCanvas !== false &&
+      (!n.expiresAt || Date.parse(n.expiresAt) > nowMs) &&
+      ((n.tabId || 'tab-corkboard') === targetTabId || n.tabId === 'all')
+  );
+  return computeMovedWidgetPosition(
+    { type: movingWidget.type, freeformPos: movingWidget.freeformPos },
+    targetTabWidgets,
+    targetTabNotes,
+    preferredPos
+  );
+}
+
 export const useDashboardStore = create<DashboardState>((set, get) => ({
   isInitialized: false,
   settings: DEFAULT_SETTINGS,
   tabs: [],
   activeTabId: 'tab-corkboard',
   widgets: [],
+  deletedWidgets: [],
   notes: [],
   deletedNoteTimestamps: {},
   deletedWidgetTimestamps: {},
@@ -460,24 +510,19 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     }
     const allWidgetsRaw = await db.widgets.toArray();
     const deletedWidgetTimestamps: Record<string, string> = {};
+    const deletedWidgetsList: DashboardWidget[] = [];
     for (const w of allWidgetsRaw) {
-      if (
-        w.deleted_at &&
-        w.id !== CHORE_ENGINE_CLOUD_ROW_ID &&
-        w.id !== HOUSEHOLD_PROFILES_CLOUD_ROW_ID &&
-        w.id !== MEAL_PLANNER_CLOUD_ROW_ID &&
-        w.id !== KANBAN_ENGINE_CLOUD_ROW_ID
-      ) {
+      if (SYSTEM_WIDGET_CLOUD_ROW_IDS.has(w.id)) continue;
+      if (w.deleted_at) {
         deletedWidgetTimestamps[w.id] = resolveTombstoneIso(w.updated_at, w.deleted_at);
+        if (!isPermanentlyPurgedWidget(w)) {
+          deletedWidgetsList.push(w);
+        }
       }
     }
+    const deletedWidgets = sortDeletedWidgetsNewestFirst(deletedWidgetsList);
     const rawLoadedWidgets = allWidgetsRaw.filter(
-      (w) =>
-        !w.deleted_at &&
-        w.id !== CHORE_ENGINE_CLOUD_ROW_ID &&
-        w.id !== HOUSEHOLD_PROFILES_CLOUD_ROW_ID &&
-        w.id !== MEAL_PLANNER_CLOUD_ROW_ID &&
-        w.id !== KANBAN_ENGINE_CLOUD_ROW_ID
+      (w) => !w.deleted_at && !SYSTEM_WIDGET_CLOUD_ROW_IDS.has(w.id)
     );
     const widgetsToRepair: DashboardWidget[] = [];
     const loadedWidgets = rawLoadedWidgets.map((w) => {
@@ -499,11 +544,12 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       .filter((n) => !n.deleted_at)
       .map((n) => normalizeLoadedNote(n));
 
-    // Initialize Global Household Profile Store, Chore Engine Store, Meal Planner Store & Kanban Store
+    // Initialize Global Household Profile Store, Chore Engine Store, Meal Planner Store, Kanban Store & Routines Store
     await useProfileStore.getState().initProfileStore();
     await useChoreStore.getState().initChoreStore();
     await useMealStore.getState().initMealStore();
     await useKanbanStore.getState().initKanbanStore();
+    await useRoutinesStore.getState().initRoutinesStore();
 
     const tabsToUse = loadedTabs.length > 0 ? loadedTabs : DEFAULT_TABS;
     const explicitHome = tabsToUse.find((t) => t.isHome && (t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false));
@@ -525,6 +571,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       tabs: tabsToUse,
       activeTabId: resolvedActiveTabId,
       widgets: loadedWidgets,
+      deletedWidgets,
       notes: loadedNotes,
       deletedNoteTimestamps,
       deletedWidgetTimestamps,
@@ -1113,6 +1160,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         chores: useChoreStore.getState().snapshot,
         meals: useMealStore.getState().snapshot,
         kanban: useKanbanStore.getState().snapshot,
+        routines: useRoutinesStore.getState().snapshot,
       });
     }, 400);
   },
@@ -1136,6 +1184,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       chores: useChoreStore.getState().snapshot,
       meals: useMealStore.getState().snapshot,
       kanban: useKanbanStore.getState().snapshot,
+      routines: useRoutinesStore.getState().snapshot,
     });
   },
 
@@ -1453,8 +1502,24 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       return;
     }
 
+    if (incomingWidget.id === ROUTINES_CLOUD_ROW_ID) {
+      if (
+        eventType !== 'DELETE' &&
+        !incomingWidget.deleted_at &&
+        incomingWidget.config?.id === 'household_routines'
+      ) {
+        useRoutinesStore
+          .getState()
+          .applyRemoteRoutinesSnapshot(incomingWidget.config as RoutinesSnapshot)
+          .catch(() => {});
+      }
+      return;
+    }
+
     const state = get();
-    const existing = state.widgets.find((w) => w.id === incomingWidget.id);
+    const existing =
+      state.widgets.find((w) => w.id === incomingWidget.id) ||
+      state.deletedWidgets.find((w) => w.id === incomingWidget.id);
     const tombstoneIso = state.deletedWidgetTimestamps[incomingWidget.id];
     const hasLocalRow = Boolean(existing || tombstoneIso);
     const localTime = existing
@@ -1483,8 +1548,16 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         db.vault.delete(getWifiVaultKey(remoteWidget.id)).catch(() => {});
       }
       const recordedTombstone = resolveTombstoneIso(remoteWidget.updated_at, remoteWidget.deleted_at);
+      const purged = eventType === 'DELETE' || isPermanentlyPurgedWidget(remoteWidget);
+      const nextDeletedWidgets = purged
+        ? get().deletedWidgets.filter((w) => w.id !== remoteWidget.id)
+        : sortDeletedWidgetsNewestFirst([
+            remoteWidget,
+            ...get().deletedWidgets.filter((w) => w.id !== remoteWidget.id),
+          ]);
       set({
         widgets: get().widgets.filter((w) => w.id !== remoteWidget.id),
+        deletedWidgets: nextDeletedWidgets,
         deletedWidgetTimestamps: {
           ...get().deletedWidgetTimestamps,
           [remoteWidget.id]: recordedTombstone,
@@ -1503,6 +1576,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         widgets: exists
           ? get().widgets.map((w) => (w.id === remoteWidget.id ? remoteWidget : w))
           : [...get().widgets, remoteWidget],
+        deletedWidgets: get().deletedWidgets.filter((w) => w.id !== remoteWidget.id),
         deletedWidgetTimestamps: nextDeletedTimestamps,
       });
       db.widgets.put(remoteWidget).catch(() => {});
@@ -1694,16 +1768,173 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const nowIso = nextMonotonicIso(existing.updated_at);
     const updated: DashboardWidget = {
       ...existing,
+      permanentlyDeleted: false,
       deleted_at: nowIso,
       updated_at: nowIso,
     };
     await db.widgets.put(updated).catch(() => {});
     set({
       widgets: get().widgets.filter((w) => w.id !== widgetId),
+      deletedWidgets: [updated, ...get().deletedWidgets.filter((w) => w.id !== widgetId)],
       deletedWidgetTimestamps: {
         ...get().deletedWidgetTimestamps,
         [widgetId]: nowIso,
       },
+    });
+    get().saveLocalBackup();
+  },
+
+  restoreWidget: async (widgetId, targetTabId) => {
+    const state = get();
+    const memoryMatch = state.deletedWidgets.find(
+      (w) => w.id === widgetId && !isPermanentlyPurgedWidget(w)
+    );
+    const dbMatch =
+      memoryMatch || typeof indexedDB === 'undefined'
+        ? undefined
+        : await db.widgets.get(widgetId).catch(() => undefined);
+    const existing =
+      memoryMatch ||
+      (dbMatch && dbMatch.deleted_at && !isPermanentlyPurgedWidget(dbMatch) ? dbMatch : undefined);
+    if (!existing) return false;
+
+    const activeTabs = state.tabs.filter((t) => !t.deleted_at);
+    const preferredTabId = targetTabId || existing.tabId;
+    const resolvedTab =
+      activeTabs.find((t) => t.id === preferredTabId) ||
+      activeTabs.find((t) => t.id === state.activeTabId) ||
+      activeTabs[0];
+    if (!resolvedTab) return false;
+
+    const nowMs = Date.now();
+    const { freeformPos, configPatch } = computePlacementForTab(
+      state,
+      existing,
+      resolvedTab.id,
+      existing.freeformPos
+    );
+
+    const cleanConfig: Record<string, any> = { ...(existing.config || {}) };
+    delete cleanConfig.__purged;
+
+    const restoredRaw: DashboardWidget = {
+      ...existing,
+      tabId: resolvedTab.id,
+      deleted_at: null,
+      permanentlyDeleted: false,
+      freeformPos,
+      config: {
+        ...cleanConfig,
+        ...(configPatch || {}),
+      },
+      updated_at: nextMonotonicIso(
+        resolveTombstoneIso(existing.updated_at, existing.deleted_at),
+        nowMs
+      ),
+    };
+    const restored = sanitizeRestoredPhotoWidget(restoredRaw).widget;
+
+    await db.widgets.put(restored).catch(() => {});
+
+    const latest = get();
+    const nextDeletedTimestamps = { ...latest.deletedWidgetTimestamps };
+    delete nextDeletedTimestamps[widgetId];
+
+    set({
+      widgets: [...latest.widgets.filter((w) => w.id !== widgetId), restored],
+      deletedWidgets: latest.deletedWidgets.filter((w) => w.id !== widgetId),
+      deletedWidgetTimestamps: nextDeletedTimestamps,
+      ...(resolvedTab.id !== latest.activeTabId
+        ? {
+            movedWidgetToast: {
+              widgetId: restored.id,
+              widgetTitle: restored.title || 'Widget',
+              targetTabId: resolvedTab.id,
+              targetTabName: resolvedTab.name,
+              nonce: nowMs,
+            },
+          }
+        : {}),
+    });
+    void get().saveLocalBackup();
+    return true;
+  },
+
+  permanentlyDeleteWidget: async (widgetId) => {
+    await get().permanentlyDeleteWidgets([widgetId]);
+  },
+
+  permanentlyDeleteWidgets: async (widgetIds) => {
+    if (!widgetIds || widgetIds.length === 0) return;
+    const state = get();
+    const idSet = new Set(widgetIds);
+    const matchedById = new Map<string, DashboardWidget>();
+    for (const w of [
+      ...state.deletedWidgets.filter((item) => idSet.has(item.id)),
+      ...state.widgets.filter((item) => idSet.has(item.id)),
+    ]) {
+      matchedById.set(w.id, w);
+    }
+
+    const missingIds = [...idSet].filter((id) => !matchedById.has(id));
+    if (missingIds.length > 0 && typeof indexedDB !== 'undefined') {
+      const dbRows = await db.widgets.bulkGet(missingIds).catch(() => []);
+      for (const row of dbRows) {
+        if (row && !isPermanentlyPurgedWidget(row)) {
+          matchedById.set(row.id, row);
+        }
+      }
+    }
+
+    const targets = [...matchedById.values()];
+    if (targets.length === 0) return;
+
+    const remainingMediaKeys = new Set<string>();
+    for (const w of [...state.widgets, ...state.deletedWidgets]) {
+      if (idSet.has(w.id) || isPermanentlyPurgedWidget(w)) continue;
+      const key = parseVaultMediaKey(w.config?.url);
+      if (key) remainingMediaKeys.add(key);
+    }
+
+    const vaultKeysToDelete = new Set<string>();
+    const baseNowMs = Date.now();
+    const purgedRows: DashboardWidget[] = [];
+    const nextDeletedTimestamps = { ...state.deletedWidgetTimestamps };
+
+    for (const w of targets) {
+      if (w.type === 'wifi_qr') {
+        vaultKeysToDelete.add(getWifiVaultKey(w.id));
+      }
+      const mediaKey = parseVaultMediaKey(w.config?.url);
+      if (mediaKey && !remainingMediaKeys.has(mediaKey)) {
+        vaultKeysToDelete.add(mediaKey);
+      }
+
+      const nowIso = nextMonotonicIso(
+        resolveTombstoneIso(w.updated_at, w.deleted_at),
+        baseNowMs
+      );
+      nextDeletedTimestamps[w.id] = nowIso;
+      purgedRows.push({
+        ...w,
+        config: { __purged: true },
+        freeformPos: { xRatio: 0, yRatio: 0, wRatio: 0.3, hRatio: 0.3, zIndex: 1, rotation: 0 },
+        permanentlyDeleted: true,
+        deleted_at: w.deleted_at || nowIso,
+        updated_at: nowIso,
+      });
+    }
+
+    if (vaultKeysToDelete.size > 0 && typeof indexedDB !== 'undefined') {
+      await db.vault.bulkDelete([...vaultKeysToDelete]).catch(() => {});
+    }
+    await db.widgets.bulkPut(purgedRows).catch(() => {});
+
+    const latest = get();
+    set({
+      widgets: latest.widgets.filter((w) => !idSet.has(w.id)),
+      deletedWidgets: latest.deletedWidgets.filter((w) => !idSet.has(w.id)),
+      deletedWidgetTimestamps: nextDeletedTimestamps,
     });
     get().saveLocalBackup();
   },
@@ -1753,22 +1984,14 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     }
 
     const nowMs = Date.now();
-    const targetTabWidgets = state.widgets.filter(
-      (w) => !w.deleted_at && w.tabId === targetTabId && w.id !== widgetId
-    );
-    const targetTabNotes = state.notes.filter(
-      (n) =>
-        !n.deleted_at &&
-        !n.archivedAt &&
-        n.isPinnedToCanvas !== false &&
-        (!n.expiresAt || Date.parse(n.expiresAt) > nowMs) &&
-        ((n.tabId || 'tab-corkboard') === targetTabId || n.tabId === 'all')
-    );
-
-    const { freeformPos, configPatch } = computeMovedWidgetPosition(
-      { type: extraUpdates?.type || existing.type, freeformPos: existing.freeformPos },
-      targetTabWidgets,
-      targetTabNotes,
+    const { freeformPos, configPatch } = computePlacementForTab(
+      state,
+      {
+        id: existing.id,
+        type: extraUpdates?.type || existing.type,
+        freeformPos: existing.freeformPos,
+      },
+      targetTabId,
       extraUpdates?.freeformPos
     );
 
@@ -1933,6 +2156,13 @@ registerProfileSyncListener(() => {
 });
 
 registerKanbanPersistListener(() => {
+  const dashState = useDashboardStore.getState();
+  if (dashState.isInitialized) {
+    dashState.saveLocalBackup();
+  }
+});
+
+registerRoutinesPersistListener(() => {
   const dashState = useDashboardStore.getState();
   if (dashState.isInitialized) {
     dashState.saveLocalBackup();

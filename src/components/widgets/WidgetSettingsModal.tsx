@@ -93,6 +93,7 @@ import { MAX_TIMERS_PER_WIDGET, type TimerItem } from '../../types/phase1Widgets
 import { useChoreStore } from '../../store/choreStore';
 import { useMealStore } from '../../stores/useMealStore';
 import { useKanbanStore } from '../../stores/useKanbanStore';
+import { useRoutinesStore } from '../../stores/useRoutinesStore';
 import type { MealSlot, WeekStartDay, WidgetMealScope } from '../../types/meals';
 import {
   DEFAULT_KANBAN_ACTIVE_COLUMN,
@@ -667,7 +668,12 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setSunShowGoldenHour(widget.config?.showGoldenHour !== false);
       setSunShowMoonDetails(widget.config?.showMoonDetails !== false);
     } else if (widget.type === 'routines') {
-      setRoutineDraftItems(resolveRoutineItems(widget.config?.items));
+      const routinesState = useRoutinesStore.getState();
+      setRoutineDraftItems(
+        resolveRoutineItems(
+          routinesState.isInitialized ? routinesState.items : widget.config?.items
+        )
+      );
       setRoutineCompactMode(Boolean(widget.config?.compactMode));
     } else if (widget.type === 'wifi_qr') {
       setWifiSsid('');
@@ -1191,7 +1197,8 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.showGoldenHour = sunShowGoldenHour;
       configUpdates.showMoonDetails = sunShowMoonDetails;
     } else if (effectiveType === 'routines') {
-      configUpdates.items = resolveRoutineItems(routineDraftItems);
+      void useRoutinesStore.getState().setRoutineItems(resolveRoutineItems(routineDraftItems));
+      delete configUpdates.items;
       configUpdates.compactMode = routineCompactMode;
     } else if (effectiveType === 'wifi_qr') {
       delete configUpdates.ssid;

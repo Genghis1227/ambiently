@@ -5,6 +5,17 @@ import { MAX_UPLOAD_BYTES, VAULT_MEDIA_PREFIX } from './mediaOptimization';
 
 const MAX_STATIC_IMAGE_DIMENSION = 1600;
 
+/**
+ * Extracts the `db.vault` storage key from a `vault://local-media:*` URL, or returns null.
+ */
+export function parseVaultMediaKey(rawUrl: unknown): string | null {
+  if (typeof rawUrl !== 'string') return null;
+  const trimmed = rawUrl.trim();
+  if (!trimmed.startsWith(VAULT_MEDIA_PREFIX)) return null;
+  const key = trimmed.slice('vault://'.length);
+  return key || null;
+}
+
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -126,7 +137,8 @@ export function useVaultMediaUrl(rawUrl: string): {
   isMissing: boolean;
 } {
   const trimmed = rawUrl.trim();
-  const isVaultUrl = trimmed.startsWith(VAULT_MEDIA_PREFIX);
+  const vaultKeyParsed = parseVaultMediaKey(trimmed);
+  const isVaultUrl = vaultKeyParsed !== null;
   const [state, setState] = useState<{
     source: string;
     resolvedUrl: string;
@@ -140,16 +152,15 @@ export function useVaultMediaUrl(rawUrl: string): {
   }));
 
   useEffect(() => {
-    if (!isVaultUrl) {
+    if (!vaultKeyParsed) {
       return;
     }
 
     let cancelled = false;
     let createdObjectUrl: string | null = null;
-    const vaultKey = trimmed.slice('vault://'.length);
 
     void db.vault
-      .get(vaultKey)
+      .get(vaultKeyParsed)
       .then((entry) => {
         if (cancelled) return;
         if (!entry?.value) {
@@ -183,7 +194,7 @@ export function useVaultMediaUrl(rawUrl: string): {
         URL.revokeObjectURL(createdObjectUrl);
       }
     };
-  }, [isVaultUrl, trimmed]);
+  }, [vaultKeyParsed, trimmed]);
 
   if (!isVaultUrl) {
     return { resolvedUrl: trimmed, isLoading: false, isMissing: false };
@@ -209,9 +220,8 @@ export async function collectVaultMediaMap(
   const keys = Array.from(
     new Set(
       widgets
-        .map((w) => w.config?.url)
-        .filter((u): u is string => typeof u === 'string' && u.startsWith(VAULT_MEDIA_PREFIX))
-        .map((u) => u.slice('vault://'.length))
+        .map((w) => parseVaultMediaKey(w.config?.url))
+        .filter((k): k is string => Boolean(k))
     )
   );
   if (keys.length === 0) return {};

@@ -36,6 +36,7 @@ import {
   ListChecks,
   Wifi,
   Dices,
+  Archive,
 } from 'lucide-react';
 import type { DashboardTab, DashboardWidget, StickyNoteItem, WidgetThemeMode } from '../../types/dashboard';
 import { categorizeIngredient, parseIngredient } from '../../utils/ingredientAggregator';
@@ -62,9 +63,13 @@ import { WeatherWidget } from '../widgets/WeatherWidget';
 import { CountdownWidget } from '../widgets/CountdownWidget';
 import { inferCuratedCategoryId } from '../../services/photos';
 import { isWidgetStickerMode } from '../../utils/widgetStickerMode';
-import { isSettingsPinRequired } from '../../utils/pinValidation';
+import { isCanvasPinLocked, isSettingsPinRequired } from '../../utils/pinValidation';
 import { QuotesWidget } from '../widgets/QuotesWidget';
 import { MediaEmbedWidget } from '../widgets/MediaEmbedWidget';
+
+const CorkboardTrashModal = React.lazy(() =>
+  import('../layout/CorkboardTrashModal').then((m) => ({ default: m.CorkboardTrashModal }))
+);
 
 const WidgetSettingsModal = React.lazy(() =>
   import('../widgets/WidgetSettingsModal').then((m) => ({ default: m.WidgetSettingsModal }))
@@ -152,7 +157,11 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
   onOpenSettings,
 }) => {
   const settings = useDashboardStore((state) => state.settings);
+  const deletedWidgetCount = useDashboardStore((state) => state.deletedWidgets.length);
+  const permanentlyDeleteNote = useDashboardStore((state) => state.permanentlyDeleteNote);
+  const permanentlyDeleteNotes = useDashboardStore((state) => state.permanentlyDeleteNotes);
   const applyCommonPhotosToAllWidgets = useDashboardStore((state) => state.applyCommonPhotosToAllWidgets);
+  const isCanvasLocked = isCanvasPinLocked(settings);
 
   // Persistent View Option (All Tiles | Widgets | Notes & Tasks)
   const [viewMode, setViewMode] = useState<CompanionViewMode>(() => {
@@ -191,6 +200,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
     isCommon: boolean;
   } | null>(null);
   const [isAddWidgetOpen, setIsAddWidgetOpen] = useState(false);
+  const [isTrashOpen, setIsTrashOpen] = useState(false);
   const handleCloseAddWidget = React.useCallback(() => setIsAddWidgetOpen(false), []);
 
   // Authenticated status
@@ -211,6 +221,12 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
       (!n.expiresAt || new Date(n.expiresAt) > now) &&
       ((n.tabId || 'tab-corkboard') === activeTabId || n.tabId === 'all')
   );
+  const trashNotes = notes.filter(
+    (n) =>
+      ((n.tabId || 'tab-corkboard') === activeTabId || n.tabId === 'all') &&
+      Boolean(n.archivedAt || (n.expiresAt && new Date(n.expiresAt) <= now))
+  );
+  const mobileTrashCount = trashNotes.length + deletedWidgetCount;
 
   // Chronological addition order with independent mobileOrder sorting (does not impact desktop layout)
   const sortedWidgets = [...widgets].sort((a, b) => {
@@ -761,6 +777,19 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5">
+            {!isCanvasLocked && mobileTrashCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setIsTrashOpen(true)}
+                title={`Trash & Recovery (${mobileTrashCount})`}
+                className="relative p-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/30 transition-all cursor-pointer"
+              >
+                <Archive className="w-4 h-4" />
+                <span className="-top-1 -right-1 absolute min-w-[15px] h-[15px] px-0.5 rounded-full bg-amber-500 text-slate-950 font-mono font-bold text-[9px] flex items-center justify-center">
+                  {mobileTrashCount}
+                </span>
+              </button>
+            )}
             <button
               onClick={onToggleDesktopView}
               title="Switch to full kiosk desktop view"
@@ -1377,6 +1406,18 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
               onAddWidget(newWidget);
               handleCloseAddWidget();
             }}
+          />
+        )}
+
+        {/* Trash & Recovery Modal */}
+        {isTrashOpen && (
+          <CorkboardTrashModal
+            trashNotes={trashNotes}
+            tabs={tabs}
+            onClose={() => setIsTrashOpen(false)}
+            onUpdateNote={onUpdateNote}
+            onPermanentlyDeleteNote={permanentlyDeleteNote}
+            onPermanentlyDeleteNotes={permanentlyDeleteNotes}
           />
         )}
       </React.Suspense>

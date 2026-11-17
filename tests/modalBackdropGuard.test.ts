@@ -430,5 +430,11 @@ describe('modalBackdropGuard', () => {
     );
     assert.equal(readerSource.includes('createBackdropDismissHandlers(onClose)'), true);
     assert.equal(readerSource.includes('user-select: text;'), true);
+
+    const parentDrawerSource = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/components/chores/ParentChoreDrawer.tsx'),
+      'utf8'
+    );
+    assert.equal(parentDrawerSource.includes('createBackdropDismissHandlers'), true);
   });
 });

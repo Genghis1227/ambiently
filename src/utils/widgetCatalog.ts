@@ -1,6 +1,5 @@
 import type { DashboardWidget, WidgetType } from '../types/dashboard';
 import { DEFAULT_FINANCE_WATCHLIST } from '../types/finance';
-import { DEFAULT_ROUTINE_ITEMS } from './routinesEngine';
 import { DEFAULT_DECISION_OPTIONS } from './decisionEngine';
 
 export type WidgetCategoryId =
@@ -230,9 +229,7 @@ export const WIDGET_CATALOG_ENTRIES: WidgetCatalogEntry[] = [
         description:
           'Track pet feeding, daily/AM-PM habits, fixed-weekday schedules, alternating recycling weeks, and filter/plant intervals with household avatar check-ins.',
         defaultGridPos: { w: 4, h: 6 },
-        defaultConfig: {
-          items: DEFAULT_ROUTINE_ITEMS,
-        },
+        defaultConfig: {},
         keywords: ['routines', 'weekly', 'pet', 'trash', 'recycling', 'meds', 'filter', 'plants'],
       },
     ],

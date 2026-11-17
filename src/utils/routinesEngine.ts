@@ -173,6 +173,9 @@ export function resolveRoutineItems(raw?: unknown): RoutineItem[] {
       ...(emoji ? { emoji } : {}),
       cadence,
       completions: sanitizeCompletions(item.completions),
+      ...(typeof item.updatedAt === 'string' && item.updatedAt.trim()
+        ? { updatedAt: item.updatedAt.trim() }
+        : {}),
     };
 
     if (cadence === 'weekly') {

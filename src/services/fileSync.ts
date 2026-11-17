@@ -1,14 +1,17 @@
 // Local JSON Backup, File System Access API & Universal Export/Restore helper
 import { useState, useEffect } from 'react';
-import { db } from './db';
+import { db, DEFAULT_ROUTINES_SNAPSHOT } from './db';
 import type { AppSettings, DashboardTab, DashboardWidget, StickyNoteItem } from '../types/dashboard';
 import type { ChoreEngineSnapshot } from '../types/chores';
 import type { HouseholdProfile } from '../types/profiles';
 import type { MealPlannerSnapshot } from '../types/meals';
+import type { RoutinesSnapshot } from '../types/phase2Widgets';
 import { useChoreStore } from '../store/choreStore';
 import { useProfileStore } from '../stores/useProfileStore';
 import { useMealStore } from '../stores/useMealStore';
 import { useKanbanStore } from '../stores/useKanbanStore';
+import { useRoutinesStore, pickMigratableRoutineWidget } from '../stores/useRoutinesStore';
+import { resolveRoutineItems } from '../utils/routinesEngine';
 import type { KanbanEngineSnapshot } from '../types/kanban';
 import { inferCuratedCategoryId } from '../data/curatedScenery';
 import { sanitizeRestoredPhotoWidget } from '../utils/photoSourceIsolation';
@@ -27,6 +30,7 @@ export interface LocalExportPayload {
   chores?: ChoreEngineSnapshot;
   meals?: MealPlannerSnapshot;
   kanban?: KanbanEngineSnapshot;
+  routines?: RoutinesSnapshot;
 }
 
 export type FileSyncStatus = 'connected' | 'needs_permission' | 'unbound' | 'unsupported';
@@ -160,6 +164,7 @@ export async function downloadBackupFile(
     chores: useChoreStore.getState().snapshot,
     meals: useMealStore.getState().snapshot,
     kanban: useKanbanStore.getState().snapshot,
+    routines: useRoutinesStore.getState().snapshot,
   };
 
   const jsonStr = JSON.stringify(payload, null, 2);
@@ -283,6 +288,28 @@ export async function restoreBackupToDatabase(
         await db.kanban.put(snap);
       });
       await useKanbanStore.getState().initKanbanStore();
+    }
+
+    // 9. Restore Household Routines (or migrate legacy per-widget routines snapshot)
+    if (payload.routines && payload.routines.id === 'household_routines') {
+      await db.routines.put(payload.routines);
+      await useRoutinesStore.getState().initRoutinesStore();
+    } else if (Array.isArray(payload.widgets)) {
+      const legacyRoutineWidget = pickMigratableRoutineWidget(payload.widgets);
+      const nextRoutinesSnapshot: RoutinesSnapshot = legacyRoutineWidget
+        ? {
+            id: 'household_routines',
+            items: resolveRoutineItems(legacyRoutineWidget.config?.items),
+            deletedRoutineIds: [],
+            updated_at:
+              legacyRoutineWidget.updated_at &&
+              legacyRoutineWidget.updated_at !== '1970-01-01T00:00:00.000Z'
+                ? legacyRoutineWidget.updated_at
+                : new Date().toISOString(),
+          }
+        : DEFAULT_ROUTINES_SNAPSHOT;
+      await db.routines.put(nextRoutinesSnapshot);
+      await useRoutinesStore.getState().initRoutinesStore();
     }
 
     return { success: true };

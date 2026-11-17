@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.15",
+    date: "November 16, 2026",
+    title: "Parent Drawer Backdrop Dismiss, Widget Trash Recovery & Shared Household Rhythms Store",
+    highlights: [
+      "Parent Command Drawer Backdrop & Escape Dismiss: Clicking outside the Parent Command Drawer (or pressing Escape when PIN-unlocked) closes it directly using createBackdropDismissHandlers drag-selection guards.",
+      "Recently Deleted Widgets in Trash & Recovery: Added soft-deleted widget recovery (restoreWidget, permanentlyDeleteWidget, permanentlyDeleteWidgets) to CorkboardTrashModal across both Desktop Dock and Mobile Companion while wiping device-local Wi-Fi QR credentials immediately on delete.",
+      "Shared Household Store for Check-In & Home Rhythms: Moved routines into Dexie v5 db.routines and useRoutinesStore (synced via JSON backup and Cloud Sync) with automatic first-run migration rescuing active or soft-deleted custom routines so deleting a tile never resets household rhythms.",
+    ],
+  },
+  {
     version: "v0.7.14",
     date: "November 16, 2026",
     title: "Confirm Before Deleting Widgets & Move Widget to Canvas",

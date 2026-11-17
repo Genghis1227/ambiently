@@ -76,6 +76,7 @@ export function App() {
   const tabs = useDashboardStore((s) => s.tabs);
   const activeTabId = useDashboardStore((s) => s.activeTabId);
   const widgets = useDashboardStore((s) => s.widgets);
+  const deletedWidgetCount = useDashboardStore((s) => s.deletedWidgets.length);
   const notes = useDashboardStore((s) => s.notes);
   const setActiveTabId = useDashboardStore((s) => s.setActiveTabId);
   const rotateToTab = useDashboardStore((s) => s.rotateToTab);
@@ -986,9 +987,10 @@ export function App() {
   );
 
   const now = new Date();
-  const trashCount = activeCanvasNotes.filter(
+  const noteTrashCount = activeCanvasNotes.filter(
     (n) => n.archivedAt || (n.expiresAt && new Date(n.expiresAt) <= now)
   ).length;
+  const trashCount = noteTrashCount + deletedWidgetCount;
 
   // Dynamic padding based on Dock position (omitted if dock is hidden for full immersion)
   const dockPaddingClasses = settings.isDockHidden
