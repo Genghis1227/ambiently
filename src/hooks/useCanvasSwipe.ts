@@ -8,6 +8,7 @@ import {
   resolveAdjacentCanvasTab,
   shouldCommitPointerSwipeRelease,
   shouldIgnoreCanvasSwipeTarget,
+  subscribeCancelActiveCanvasSwipe,
   type CanvasSwipeAxis,
   type CanvasSwipeDirection,
   type CanvasSwipePreviewState,
@@ -162,6 +163,33 @@ export function useCanvasSwipe({
       window.removeEventListener('click', handleClickCapture, true);
     };
   }, []);
+
+  useEffect(() => {
+    return subscribeCancelActiveCanvasSwipe(() => {
+      cleanupListenersRef.current?.();
+      cleanupListenersRef.current = null;
+      gestureRef.current = null;
+      setSwipePreviewState(null);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!enabled || isBlocked || tabs.length < 2 || typeof window === 'undefined') return;
+    // Prevent native browser image/link drags (which fire pointercancel on mouse swipes)
+    const handleDragStartCapture = (ev: DragEvent) => {
+      const el = ev.target as Element | null;
+      if (el && typeof el.closest === 'function' && el.closest('[draggable="true"]')) {
+        return;
+      }
+      if (gestureRef.current !== null) {
+        ev.preventDefault();
+      }
+    };
+    window.addEventListener('dragstart', handleDragStartCapture, true);
+    return () => {
+      window.removeEventListener('dragstart', handleDragStartCapture, true);
+    };
+  }, [enabled, isBlocked, tabs.length]);
 
   useEffect(() => {
     return () => {

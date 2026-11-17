@@ -256,6 +256,11 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   const commonPhotoCuratedCategory = useDashboardStore((s) => s.settings.commonPhotoCuratedCategory);
   const commonPhotoShowDateTaken = useDashboardStore((s) => s.settings.commonPhotoShowDateTaken);
   const photoSyncState = useDashboardStore((s) => s.photoSyncState);
+  const isCanvasSwipeActive = useDashboardStore(
+    (s) =>
+      s.settings.canvasSwipeEnabled !== false &&
+      s.tabs.filter((t) => !t.deleted_at && t.enabled !== false).length >= 2
+  );
 
   const isThisWidgetSyncing =
     Boolean(photoSyncState?.isActive) &&
@@ -1034,6 +1039,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (isCanvasSwipeActive) return;
     if (e.touches.length !== 1) return;
     touchStartRef.current = {
       x: e.touches[0].clientX,
@@ -1043,6 +1049,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
+    if (isCanvasSwipeActive) return;
     if (!touchStartRef.current || e.changedTouches.length !== 1) return;
     const start = touchStartRef.current;
     const end = e.changedTouches[0];

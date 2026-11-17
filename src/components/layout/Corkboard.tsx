@@ -100,7 +100,10 @@ import { findOpenCanvasSpot } from '../../utils/autoLayout';
 import { isWidgetStickerMode } from '../../utils/widgetStickerMode';
 import { inferCuratedCategoryId } from '../../services/photos';
 import {
+  CARD_DRAG_HOLD_CANCEL_PX,
+  CARD_DRAG_HOLD_MS,
   isPointInCanvasEdgeSwipeZone,
+  requestCancelActiveCanvasSwipe,
   subscribeCancelActiveCardDrag,
 } from '../../utils/canvasSwipe';
 
@@ -535,9 +538,29 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   const dragTargetInitialPosRef = useRef<NonNullable<DashboardWidget['freeformPos']> | null>(null);
   const isDraggingRef = useRef(false);
   const lastTapRef = useRef<{ id: string; time: number }>({ id: '', time: 0 });
+  const pendingHoldRef = useRef<{
+    timerId: ReturnType<typeof setTimeout>;
+    cleanup: () => void;
+  } | null>(null);
+
+  const isSwipeNavigationActive = canvasSwipeEnabled && tabs.length >= 2;
+
+  const clearPendingHold = useCallback(() => {
+    if (pendingHoldRef.current) {
+      clearTimeout(pendingHoldRef.current.timerId);
+      pendingHoldRef.current.cleanup();
+      pendingHoldRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearPendingHold();
+    };
+  }, [clearPendingHold]);
 
   const shouldYieldToEdgeSwipe = (e: React.PointerEvent): boolean => {
-    if (!canvasSwipeEnabled || tabs.length < 2) return false;
+    if (!isSwipeNavigationActive) return false;
     if ((e.target as HTMLElement | null)?.closest?.('[data-no-canvas-swipe="true"]')) {
       return false;
     }
@@ -1050,6 +1073,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     pos?: NonNullable<DashboardWidget['freeformPos']>
   ) => {
     e.stopPropagation();
+    clearPendingHold();
+    requestCancelActiveCanvasSwipe();
     if (isCanvasLocked) return;
     if (!containerRef.current) return;
 
@@ -1087,6 +1112,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     pos?: NonNullable<DashboardWidget['freeformPos']>
   ) => {
     e.stopPropagation();
+    clearPendingHold();
+    requestCancelActiveCanvasSwipe();
     if (isCanvasLocked) return;
     const cardEl = (e.currentTarget as HTMLElement).closest('[data-canvas-card="true"]');
     if (!cardEl) return;
@@ -1129,33 +1156,111 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     )
       return;
 
-    if (!containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    activeContainerRectRef.current = rect;
-    const containerX = e.clientX - rect.left;
-    const containerY = e.clientY - rect.top;
+    const cardEl = e.currentTarget as HTMLElement;
+    const pointerId = e.pointerId;
+    const startX = e.clientX;
+    const startY = e.clientY;
 
-    const currentX = (pos?.xRatio ?? 0.1) * rect.width;
-    const currentY = (pos?.yRatio ?? 0.1) * rect.height;
+    const activateCardDrag = (clientX: number, clientY: number) => {
+      if (!containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      activeContainerRectRef.current = rect;
+      const containerX = clientX - rect.left;
+      const containerY = clientY - rect.top;
 
-    dragTargetInitialPosRef.current = pos || null;
-    dragStartPointerRef.current = { x: e.clientX, y: e.clientY };
-    isDraggingRef.current = false;
+      const currentX = (pos?.xRatio ?? 0.1) * rect.width;
+      const currentY = (pos?.yRatio ?? 0.1) * rect.height;
 
-    setDraggingId(id);
-    setDraggingType(type);
-    const initialOffset = {
-      x: containerX - currentX,
-      y: containerY - currentY,
+      requestCancelActiveCanvasSwipe();
+
+      if (!pos?.isBackground && (pos?.zIndex || 1) < getTopZIndex()) {
+        handleBringToFront(id, type);
+      }
+
+      dragTargetInitialPosRef.current = pos || null;
+      dragStartPointerRef.current = { x: clientX, y: clientY };
+      isDraggingRef.current = false;
+      lastTapRef.current = { id: '', time: 0 };
+
+      setDraggingId(id);
+      setDraggingType(type);
+      const initialOffset = {
+        x: containerX - currentX,
+        y: containerY - currentY,
+      };
+      setDragOffset(initialOffset);
+      const initialPos = pos ? { xRatio: pos.xRatio, yRatio: pos.yRatio } : null;
+      setDragPos(initialPos);
+      dragPosRef.current = initialPos;
+
+      try {
+        if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+          navigator.vibrate(12);
+        }
+      } catch {}
+
+      try {
+        if (cardEl?.isConnected) {
+          cardEl.setPointerCapture(pointerId);
+        }
+      } catch {}
     };
-    setDragOffset(initialOffset);
-    const initialPos = pos ? { xRatio: pos.xRatio, yRatio: pos.yRatio } : null;
-    setDragPos(initialPos);
-    dragPosRef.current = initialPos;
 
-    try {
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    } catch {}
+    if (!isSwipeNavigationActive) {
+      activateCardDrag(startX, startY);
+      return;
+    }
+
+    clearPendingHold();
+    let lastX = startX;
+    let lastY = startY;
+
+    const detachHoldListeners = () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('pointermove', onHoldMove);
+        window.removeEventListener('pointerup', onHoldUp);
+        window.removeEventListener('pointercancel', onHoldCancel);
+      }
+    };
+
+    const onHoldMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      lastX = ev.clientX;
+      lastY = ev.clientY;
+      if (Math.hypot(ev.clientX - startX, ev.clientY - startY) > CARD_DRAG_HOLD_CANCEL_PX) {
+        lastTapRef.current = { id: '', time: 0 };
+        clearPendingHold();
+      }
+    };
+
+    const onHoldUp = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      const moved = Math.hypot(ev.clientX - startX, ev.clientY - startY);
+      clearPendingHold();
+      if (moved <= 6 && !pos?.isBackground && (pos?.zIndex || 1) < getTopZIndex()) {
+        handleBringToFront(id, type);
+      }
+    };
+
+    const onHoldCancel = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      clearPendingHold();
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('pointermove', onHoldMove, { passive: true });
+      window.addEventListener('pointerup', onHoldUp, { passive: true });
+      window.addEventListener('pointercancel', onHoldCancel, { passive: true });
+    }
+
+    const timerId = setTimeout(() => {
+      if (pendingHoldRef.current?.timerId !== timerId) return;
+      pendingHoldRef.current.cleanup();
+      pendingHoldRef.current = null;
+      activateCardDrag(lastX, lastY);
+    }, CARD_DRAG_HOLD_MS);
+
+    pendingHoldRef.current = { timerId, cleanup: detachHoldListeners };
   };
 
   const scheduleGestureRender = () => {
@@ -1784,6 +1889,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             key={widget.id}
             data-canvas-card="true"
             data-canvas-fullscreen={isFullScreen ? 'true' : undefined}
+            data-canvas-manipulating={isActiveManipulating ? 'true' : undefined}
             onPointerDown={(e) => {
               if (isPortalEvent(e)) return;
               if (shouldYieldToEdgeSwipe(e)) return;
@@ -1791,7 +1897,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             }}
             onPointerDownCapture={(e) => {
               if (isPortalEvent(e)) return;
-              if (shouldYieldToEdgeSwipe(e)) return;
+              if (isSwipeNavigationActive) return;
               if (!isFullScreen && !isCanvasLocked && !pos?.isBackground && (pos?.zIndex || 1) < getTopZIndex()) {
                 handleBringToFront(widget.id, 'widget');
               }
@@ -1840,7 +1946,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                     maxHeight: '100%',
                     transform: `rotate(${displayPos.rotation}deg) ${isDragging ? 'scale(1.02)' : 'scale(1)'}`,
                     '--card-z': isActiveManipulating ? 58 : pos.zIndex,
-                    touchAction: 'none',
+                    touchAction: isActiveManipulating ? 'none' : 'pan-y',
                     WebkitTouchCallout: 'none',
                     userSelect: 'none',
                     WebkitUserSelect: 'none',
@@ -1870,7 +1976,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 : `bg-gray-900/80 ${isActiveManipulating ? '' : 'backdrop-blur-md '}shadow-2xl text-white`
             } ${isFullScreen ? '' : `z-[var(--card-z)] ${!isCanvasLocked && !isActiveManipulating ? 'hover:z-[55] ' : ''}`}${
               isCanvasLocked || isFullScreen ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
-            } ${isFullScreen ? '' : 'touch-none'} select-none transition-shadow ${
+            } ${isFullScreen ? '' : isActiveManipulating ? 'touch-none' : 'touch-pan-y'} select-none transition-shadow ${
               isDragging || isRotating
                 ? 'ring-2 ring-blue-500 shadow-blue-500/20'
                 : isFramelessWidget
@@ -2171,6 +2277,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
           <div
             key={note.id}
             data-canvas-card="true"
+            data-canvas-manipulating={isActiveManipulating ? 'true' : undefined}
             onPointerDown={(e) => {
               if (isPortalEvent(e)) return;
               if (shouldYieldToEdgeSwipe(e)) return;
@@ -2178,7 +2285,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             }}
             onPointerDownCapture={(e) => {
               if (isPortalEvent(e)) return;
-              if (shouldYieldToEdgeSwipe(e)) return;
+              if (isSwipeNavigationActive) return;
               if (!isCanvasLocked && !pos?.isBackground && (pos?.zIndex || 1) < getTopZIndex()) {
                 handleBringToFront(note.id, 'note');
               }
@@ -2230,7 +2337,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               transform: `rotate(${displayPos.rotation}deg) ${isDragging ? 'scale(1.03)' : 'scale(1)'}`,
               backgroundColor: note.bgColor || '#fef08a',
               '--card-z': isActiveManipulating ? 58 : pos.zIndex,
-              touchAction: 'none',
+              touchAction: isActiveManipulating ? 'none' : 'pan-y',
               WebkitTouchCallout: 'none',
               userSelect: 'none',
               WebkitUserSelect: 'none',
@@ -2241,7 +2348,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             } as React.CSSProperties}
             className={`group rounded-2xl p-3.5 shadow-2xl text-gray-900 z-[var(--card-z)] ${!isCanvasLocked && !isActiveManipulating ? 'hover:z-[55] ' : ''}${
               isCanvasLocked ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
-            } border border-black/10 touch-none select-none transition-all ${
+            } border border-black/10 ${isActiveManipulating ? 'touch-none' : 'touch-pan-y'} select-none transition-all ${
               isDragging || isRotating
                 ? 'ring-2 ring-blue-500/70 shadow-2xl'
                 : highlightedNoteId === note.id
