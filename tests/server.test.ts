@@ -18,14 +18,20 @@ describe('Self-hosted LAN feed URL validation (fetchExternal)', () => {
   it('allows RFC1918 LAN & mDNS addresses when AMBIENTLY_ALLOW_PRIVATE_FEEDS=true, while still blocking loopback and metadata IPs', () => {
     process.env.AMBIENTLY_ALLOW_PRIVATE_FEEDS = 'true';
     try {
-      assert.doesNotThrow(() => checkPublicHttpsUrl('http://192.168.1.50:5232/user/cal.ics'));
-      assert.doesNotThrow(() => checkPublicHttpsUrl('http://10.0.0.12:8080/rss.xml'));
-      assert.doesNotThrow(() => checkPublicHttpsUrl('https://nextcloud.local/remote.php/dav/public-calendars/abc?export'));
+      // Only the calendar and RSS functions ask for the home network (allowPrivateNetwork)
+      assert.doesNotThrow(() => checkPublicHttpsUrl('http://192.168.1.50:5232/user/cal.ics', undefined, true));
+      assert.doesNotThrow(() => checkPublicHttpsUrl('http://10.0.0.12:8080/rss.xml', undefined, true));
+      assert.doesNotThrow(() =>
+        checkPublicHttpsUrl('https://nextcloud.local/remote.php/dav/public-calendars/abc?export', undefined, true)
+      );
+      // The web preview, reader and link previews don't, so they stay off the home network
+      assert.throws(() => checkPublicHttpsUrl('http://192.168.1.50:5232/user/cal.ics'), ExternalFetchError);
+      assert.throws(() => checkPublicHttpsUrl('https://nextcloud.local/admin'), ExternalFetchError);
 
       // Loopback & link-local cloud metadata must NEVER be allowed
-      assert.throws(() => checkPublicHttpsUrl('http://127.0.0.1:8080/secret'), ExternalFetchError);
-      assert.throws(() => checkPublicHttpsUrl('http://localhost:8080/secret'), ExternalFetchError);
-      assert.throws(() => checkPublicHttpsUrl('http://169.254.169.254/latest/meta-data/'), ExternalFetchError);
+      assert.throws(() => checkPublicHttpsUrl('http://127.0.0.1:8080/secret', undefined, true), ExternalFetchError);
+      assert.throws(() => checkPublicHttpsUrl('http://localhost:8080/secret', undefined, true), ExternalFetchError);
+      assert.throws(() => checkPublicHttpsUrl('http://169.254.169.254/latest/meta-data/', undefined, true), ExternalFetchError);
 
       // Google-restricted functions (allowedHosts) must still enforce HTTPS on Google hosts
       assert.throws(

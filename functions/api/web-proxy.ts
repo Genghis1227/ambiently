@@ -1,17 +1,60 @@
 // Cloudflare Pages Function: /functions/api/web-proxy.ts
 // Proxies web pages for kiosk iframe viewing, stripping X-Frame-Options & CSP frame-ancestors,
 // injecting <base href="..."> for asset resolution, and securing against frame busting.
+//
+// The page comes back from Ambiently's own address, so it must never run as Ambiently: its scripts
+// could read the board, the saved sign-in and every secret calendar link. Every answer is therefore
+// sandboxed by its own Content-Security-Policy (a separate, anonymous origin, even when the address
+// is opened directly), and only frames may load it, so it can't be sent around as a link that shows
+// any page under Ambiently's name, or loaded as a script.
 
 import {
   fetchExternal,
   externalFetchErrorResponse,
-  refuseOtherSites,
   ExternalFetchError,
   type ExternalFetchResult,
 } from '../_shared/fetchExternal';
 
 interface PagesContext {
   request: Request;
+}
+
+const SANDBOXED_PAGE_HEADERS: Record<string, string> = {
+  // No allow-same-origin: the page gets an anonymous origin with no access to Ambiently's storage
+  'Content-Security-Policy': 'sandbox allow-scripts allow-forms allow-popups',
+  'X-Content-Type-Options': 'nosniff',
+  'Cross-Origin-Resource-Policy': 'same-origin',
+  'Referrer-Policy': 'no-referrer',
+  'X-Robots-Tag': 'noindex, nofollow',
+  // A frame's cached answer must not be reused for a direct visit
+  Vary: 'Sec-Fetch-Dest',
+};
+
+function htmlResponse(html: string, status: number, extra: Record<string, string> = {}): Response {
+  return new Response(html, {
+    status,
+    headers: { 'Content-Type': 'text/html; charset=utf-8', ...SANDBOXED_PAGE_HEADERS, ...extra },
+  });
+}
+
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+}
+
+/**
+ * Browsers say what a request is for (Sec-Fetch-Dest). Only frames may load the proxy: a direct
+ * visit, or a script or style tag pointing at it, is refused. Links clicked inside a proxied page
+ * are frame loads too, and come from its anonymous origin, so they count as cross-site; that's
+ * fine here because the answer is sandboxed either way. Clients that don't send the header (older
+ * browsers, scripts) still get the sandbox.
+ */
+function refuseNonFrameRequests(request: Request): Response | null {
+  const dest = request.headers.get('Sec-Fetch-Dest');
+  if (!dest || dest === 'iframe' || dest === 'frame') return null;
+  return htmlResponse(
+    `<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem;background:#090d16;color:#cbd5e1;">This preview only opens inside Ambiently's web viewer.</body></html>`,
+    403
+  );
 }
 
 const WEB_PROXY_USER_AGENTS = [
@@ -48,16 +91,16 @@ async function fetchPageWithFallback(normalizedUrl: string): Promise<ExternalFet
 }
 
 export async function onRequestGet(context: PagesContext): Promise<Response> {
-  const refused = refuseOtherSites(context.request);
+  const refused = refuseNonFrameRequests(context.request);
   if (refused) return refused;
 
   const urlObj = new URL(context.request.url);
   const targetUrl = urlObj.searchParams.get('url');
 
   if (!targetUrl) {
-    return new Response(
+    return htmlResponse(
       `<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem;background:#090d16;color:#fff;">Missing url parameter</body></html>`,
-      { status: 400, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+      400
     );
   }
 
@@ -70,7 +113,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     const fetchRes = await fetchPageWithFallback(normalizedUrl);
 
     if (!fetchRes.ok) {
-      return new Response(
+      return htmlResponse(
         `<!DOCTYPE html>
 <html>
 <head>
@@ -86,27 +129,25 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
 <body>
   <div class="card">
     <h2>Page Preview Unavailable</h2>
-    <p>The destination server answered ${fetchRes.status} (${fetchRes.statusText || 'Error'}).</p>
+    <p>The destination server answered ${fetchRes.status} (${escapeHtml(fetchRes.statusText || 'Error')}).</p>
     <p>Try switching to <strong>Reader View</strong> using the header toggle above.</p>
   </div>
 </body>
 </html>`,
-        {
-          status: fetchRes.status >= 400 && fetchRes.status < 600 ? fetchRes.status : 502,
-          headers: {
-            'Content-Type': 'text/html; charset=utf-8',
-            'Cache-Control': 'private, no-store',
-          },
-        }
+        fetchRes.status >= 400 && fetchRes.status < 600 ? fetchRes.status : 502,
+        { 'Cache-Control': 'private, no-store' }
       );
     }
 
     let html = fetchRes.text;
     const finalUrl = fetchRes.url || normalizedUrl;
+    // The page's own origin is anonymous in the sandbox, so links are pointed back at the proxy by
+    // the address it was served from
+    const proxyPrefix = JSON.stringify(`${urlObj.origin}/api/web-proxy?url=`).replace(/</g, '\\u003c');
 
     // Prepare injected base tag & anti-frame-buster script
     const injectedCode = `
-  <base href="${finalUrl}">
+  <base href="${escapeHtml(finalUrl)}">
   <script>
     // Guard against frame-busting scripts that attempt to hijack the kiosk window
     try {
@@ -123,7 +164,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       try {
         var abs = new URL(href, document.baseURI).href;
         if (abs.startsWith('http://') || abs.startsWith('https://')) {
-          a.href = window.location.origin + '/api/web-proxy?url=' + encodeURIComponent(abs);
+          a.href = ${proxyPrefix} + encodeURIComponent(abs);
           a.target = '_self';
         }
       } catch (err) {}
@@ -132,7 +173,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
 
     // Inject right after <head> or at top
     if (/<head[^>]*>/i.test(html)) {
-      html = html.replace(/(<head[^>]*>)/i, `$1${injectedCode}`);
+      html = html.replace(/<head[^>]*>/i, (head) => head + injectedCode);
     } else {
       html = injectedCode + html;
     }
@@ -141,27 +182,18 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     html = html.replace(/<meta[^>]*http-equiv=["']X-Frame-Options["'][^>]*>/gi, '');
     html = html.replace(/<meta[^>]*http-equiv=["']Content-Security-Policy["'][^>]*>/gi, '');
 
-    return new Response(html, {
-      headers: {
-        'Content-Type': 'text/html; charset=utf-8',
-        'Cache-Control': 'private, max-age=180',
-        'X-Robots-Tag': 'noindex, nofollow',
-      },
-    });
+    return htmlResponse(html, 200, { 'Cache-Control': 'private, max-age=180' });
   } catch (err) {
     const errorRes = externalFetchErrorResponse(err);
     if (errorRes) {
-      return new Response(
-        `<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem;background:#090d16;color:#f87171;">${err instanceof Error ? err.message : 'Error fetching page'}</body></html>`,
-        {
-          status: (err as any).status || 500,
-          headers: { 'Content-Type': 'text/html; charset=utf-8' },
-        }
+      return htmlResponse(
+        `<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem;background:#090d16;color:#f87171;">${escapeHtml(err instanceof Error ? err.message : 'Error fetching page')}</body></html>`,
+        (err as any).status || 500
       );
     }
-    return new Response(
+    return htmlResponse(
       `<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem;background:#090d16;color:#f87171;">Failed to preview webpage</body></html>`,
-      { status: 500, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+      500
     );
   }
 }

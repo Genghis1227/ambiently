@@ -12,6 +12,7 @@ import { onRequestGet as handleReader } from '../functions/api/reader';
 import { onRequestGet as handleWebProxy } from '../functions/api/web-proxy';
 import { onRequestGet as handleMetadata } from '../functions/api/metadata';
 import { onRequestGet as handleFinance } from '../functions/api/finance';
+import { installAddressGuard } from './addressGuard';
 
 type ApiHandler = (ctx: { request: Request }) => Promise<Response>;
 
@@ -110,7 +111,49 @@ function getCacheControl(urlPathname: string): string {
   return 'public, max-age=3600';
 }
 
-function applySecurityHeaders(res: ServerResponse): void {
+// The response headers Cloudflare Pages sends from public/_headers (Content-Security-Policy,
+// Permissions-Policy, HSTS...), so a self-hosted copy gets the same protection. Read from the build
+// (dist/_headers), or from public/_headers when the build doesn't have it.
+type HeaderRule = { pattern: string; headers: [string, string][] };
+let headerRules: HeaderRule[] | null = null;
+
+function parseHeadersFile(text: string): HeaderRule[] {
+  const rules: HeaderRule[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim() || line.trim().startsWith('#')) continue;
+    if (!/^\s/.test(line)) {
+      rules.push({ pattern: line.trim(), headers: [] });
+    } else if (rules.length > 0) {
+      const idx = line.indexOf(':');
+      if (idx > 0) rules[rules.length - 1].headers.push([line.slice(0, idx).trim(), line.slice(idx + 1).trim()]);
+    }
+  }
+  return rules;
+}
+
+function loadHeaderRules(): HeaderRule[] {
+  if (headerRules) return headerRules;
+  for (const file of [path.join(distRoot, '_headers'), path.join(projectRoot, 'public', '_headers')]) {
+    try {
+      headerRules = parseHeadersFile(fs.readFileSync(file, 'utf8'));
+      return headerRules;
+    } catch {
+      // Try the next place
+    }
+  }
+  console.warn('[ambiently-server] No _headers file found; pages are served without a Content-Security-Policy.');
+  headerRules = [];
+  return headerRules;
+}
+
+function applySecurityHeaders(res: ServerResponse, urlPathname?: string): void {
+  if (urlPathname) {
+    for (const rule of loadHeaderRules()) {
+      const p = rule.pattern;
+      const matches = p === '/*' || p === urlPathname || (p.endsWith('/*') && urlPathname.startsWith(p.slice(0, -1)));
+      if (matches) for (const [name, value] of rule.headers) res.setHeader(name, value);
+    }
+  }
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
 }
@@ -134,7 +177,7 @@ function serveStaticFile(
   const cacheControl = getCacheControl(urlPathname);
   const etag = `W/"${stat.size.toString(16)}-${Math.trunc(stat.mtimeMs).toString(16)}"`;
 
-  applySecurityHeaders(res);
+  applySecurityHeaders(res, urlPathname);
   res.setHeader('Content-Type', contentType);
   res.setHeader('Cache-Control', cacheControl);
   res.setHeader('ETag', etag);
@@ -249,6 +292,7 @@ async function handleApiRoute(
 }
 
 export function createAmbientlyServer(): http.Server {
+  installAddressGuard();
   return http.createServer(async (req, res) => {
     const rawUrl = req.url || '/';
     let pathname = '/';
@@ -281,7 +325,7 @@ export function createAmbientlyServer(): http.Server {
     // 2. Dynamic Runtime Config (/config.js) for zero-rebuild Docker Supabase configuration
     if (pathname === '/config.js') {
       const script = buildRuntimeConfigScript();
-      applySecurityHeaders(res);
+      applySecurityHeaders(res, pathname);
       res.writeHead(200, {
         'Content-Type': 'text/javascript; charset=utf-8',
         'Cache-Control': 'no-store',

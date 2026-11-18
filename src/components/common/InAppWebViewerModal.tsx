@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { X, RotateCw, Globe, BookOpen, Loader2, Calendar, User, Clock, AlertCircle } from 'lucide-react';
 import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
+import { sanitizeReaderHtml } from '../../utils/readerSanitize';
 
 export interface InAppWebViewerModalProps {
   isOpen: boolean;
@@ -36,6 +37,7 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
 
   // Reader Mode state
   const [article, setArticle] = useState<ReaderArticle | null>(null);
+  const safeArticleHtml = useMemo(() => (article?.contentHtml ? sanitizeReaderHtml(article.contentHtml) : ''), [article]);
   const [isReaderLoading, setIsReaderLoading] = useState(false);
   const [readerError, setReaderError] = useState<string | null>(null);
 
@@ -482,7 +484,7 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
                     <div
                       onClick={handleReaderContentClick}
                       className="ambiently-reader-body text-base sm:text-lg"
-                      dangerouslySetInnerHTML={{ __html: article.contentHtml }}
+                      dangerouslySetInnerHTML={{ __html: safeArticleHtml }}
                     />
                   ) : null}
 
@@ -527,7 +529,14 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
                 src={webIframeSrc}
                 title={currentTitle || 'Web Preview'}
                 className="w-full h-full border-0 bg-white"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                // A proxied page is served from Ambiently's own address, so it must not get
+                // allow-same-origin: with it, the page's scripts would run as Ambiently and could read
+                // the board and the saved sign-in. A site loaded directly keeps its own origin.
+                sandbox={
+                  article?.canEmbedDirectly
+                    ? 'allow-scripts allow-same-origin allow-forms allow-popups'
+                    : 'allow-scripts allow-forms allow-popups'
+                }
                 onLoad={() => {
                   try {
                     const doc = iframeRef.current?.contentDocument;

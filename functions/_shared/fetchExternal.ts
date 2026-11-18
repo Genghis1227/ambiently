@@ -43,8 +43,13 @@ function isSelfHostedLanFeedsAllowed(): boolean {
   );
 }
 
-/** Throws unless the address is HTTPS on the public internet (or an opted-in self-hosted LAN address when allowedHosts is unset). */
-export function checkPublicHttpsUrl(raw: string, allowedHosts?: string[]): URL {
+/**
+ * Throws unless the address is HTTPS on the public internet (and, if given, one of allowedHosts).
+ * With allowPrivateNetwork, a self-hosted server that set AMBIENTLY_ALLOW_PRIVATE_FEEDS=true may
+ * also reach home-network calendar and RSS servers. Only the calendar and RSS functions ask for it,
+ * so the web preview, reader and link previews never reach the home network.
+ */
+export function checkPublicHttpsUrl(raw: string, allowedHosts?: string[], allowPrivateNetwork: boolean = false): URL {
   let url: URL;
   try {
     url = new URL(raw);
@@ -52,7 +57,7 @@ export function checkPublicHttpsUrl(raw: string, allowedHosts?: string[]): URL {
     throw new ExternalFetchError('Malformed URL.', 400);
   }
 
-  const allowLan = !allowedHosts && isSelfHostedLanFeedsAllowed();
+  const allowLan = allowPrivateNetwork && !allowedHosts && isSelfHostedLanFeedsAllowed();
   if (url.protocol !== 'https:' && !(allowLan && url.protocol === 'http:')) {
     throw new ExternalFetchError('Only HTTPS addresses are allowed.', 400);
   }
@@ -96,6 +101,8 @@ export interface ExternalFetchOptions {
   timeoutMs?: number;
   maxRedirects?: number;
   allowedHosts?: string[];
+  /** Calendar and RSS feeds only: see checkPublicHttpsUrl */
+  allowPrivateNetwork?: boolean;
   method?: 'GET' | 'POST';
   headers?: Record<string, string>;
   body?: string;
@@ -173,10 +180,36 @@ async function readCapped(res: Response, maxBytes: number, signal: AbortSignal):
   return new TextDecoder().decode(all);
 }
 
+// checkPublicHttpsUrl only sees the name in the address. On Cloudflare that's enough, because a
+// Worker can't reach private addresses. A self-hosted server can, and a public name can point at
+// 127.0.0.1 or a home-network device (127.0.0.1.nip.io does). So the self-hosted server hands in a
+// fetch that checks the address each connection really goes to (server/addressGuard.ts).
+type GuardedFetch = (url: string, init: RequestInit) => Promise<Response>;
+let guardedFetchPublic: GuardedFetch | null = null;
+let guardedFetchPrivateAllowed: GuardedFetch | null = null;
+
+/** Error code a guarded fetch's connection fails with when the address it resolved to isn't allowed. */
+export const BLOCKED_ADDRESS_CODE = 'EAMBIENTLY_BLOCKED_ADDRESS';
+
+export function setGuardedFetch(fetches: { publicOnly: GuardedFetch; privateAllowed: GuardedFetch } | null): void {
+  guardedFetchPublic = fetches?.publicOnly ?? null;
+  guardedFetchPrivateAllowed = fetches?.privateAllowed ?? null;
+}
+
+function isBlockedAddressError(err: unknown): boolean {
+  for (let e: any = err, depth = 0; e && depth < 5; e = e.cause, depth++) {
+    if (e.code === BLOCKED_ADDRESS_CODE) return true;
+  }
+  return false;
+}
+
 /** Fetches an address a user chose, following redirects only to addresses that pass the same check. */
 export async function fetchExternal(rawUrl: string, options: ExternalFetchOptions): Promise<ExternalFetchResult> {
   const { maxBytes, timeoutMs = 10_000, maxRedirects = 5, allowedHosts } = options;
-  let url = checkPublicHttpsUrl(rawUrl, allowedHosts);
+  const allowPrivateNetwork = Boolean(options.allowPrivateNetwork);
+  let url = checkPublicHttpsUrl(rawUrl, allowedHosts, allowPrivateNetwork);
+  const allowLan = allowPrivateNetwork && !allowedHosts && isSelfHostedLanFeedsAllowed();
+  const doFetch: GuardedFetch = (allowLan ? guardedFetchPrivateAllowed : guardedFetchPublic) ?? fetch;
   let method = options.method || 'GET';
   let body = options.body;
 
@@ -184,7 +217,7 @@ export async function fetchExternal(rawUrl: string, options: ExternalFetchOption
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     for (let hop = 0; ; hop++) {
-      const res = await fetch(url.toString(), {
+      const res = await doFetch(url.toString(), {
         method,
         body,
         headers: options.headers,
@@ -199,7 +232,7 @@ export async function fetchExternal(rawUrl: string, options: ExternalFetchOption
           throw new ExternalFetchError('Too many redirects.', 502);
         }
         try {
-          url = checkPublicHttpsUrl(new URL(location, url).toString(), allowedHosts);
+          url = checkPublicHttpsUrl(new URL(location, url).toString(), allowedHosts, allowPrivateNetwork);
         } catch (err) {
           throw new ExternalFetchError(`Redirected to an address that isn't allowed: ${(err as Error).message}`, 502);
         }
@@ -244,6 +277,9 @@ export async function fetchExternal(rawUrl: string, options: ExternalFetchOption
     }
   } catch (err) {
     if (err instanceof ExternalFetchError) throw err;
+    if (isBlockedAddressError(err)) {
+      throw new ExternalFetchError('Private or internal network addresses are not allowed.', 400);
+    }
     if (controller.signal.aborted) {
       throw new ExternalFetchError(`No answer within ${Math.round(timeoutMs / 1000)} seconds.`, 504);
     }
