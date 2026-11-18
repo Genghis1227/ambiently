@@ -11,7 +11,7 @@
     "start": "node dist-server/index.mjs",
     "generate-icons": "node scripts/generate-icons.js",
     "lint": "oxlint",
-    "test": "node --import ./tests/register-ts.mjs --test tests/*.test.ts",
+    "test": "node tests/validate-guardrails.js --self-test && node --import ./tests/register-ts.mjs --test tests/*.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {

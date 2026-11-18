@@ -29,7 +29,7 @@
 * **📌 Pure Freeform Corkboard Multi-Canvas Engine:**
   * **Custom Canvases, Starter Blueprints & Default Home Board:** Create up to 10 dedicated boards using **Blank Canvas** or 1-tap starter blueprints (**Family Command**, **Kitchen & Meals**, **Ambient Photo Gallery**) that automatically inherit your household Weather location and Calendar `.ics` feeds, with 29 Lucide icons, 1-click tab reordering (`▲`/`▼`), and selectable default Home Board indicator.
   * **Categorized Widget Picker & In-Place Mode Switching:** Browse widgets across 4 categories with instant search, `On board` placement counts, consolidated **Clock & Time** and **Text & Quotes** cards, and 1-click mode switching inside **Tile Settings**.
-  * **Compact Toolbar Horizontal Pop-Out Panels & Canvas Swipe:** Keep all canvas buttons accessible even on smaller screens with horizontal pop-out bars for the **`+` Add Menu** (*New Note*, *Add Widget*, *New Canvas*), **Auto-Organize** (*Smart Bento Grid*, *Keep Sizes & Pack*, *Split Zones*), and **Quick Utilities** (*Night Mode*, *Fullscreen*, *Refresh/Update*, *Hide Toolbar*, *Quick Start Tour*), and swipe horizontally across empty canvas space, Mobile Companion, or a trackpad to flip smoothly between canvases (`Settings → Display & Kiosk`).
+  * **Compact Toolbar Horizontal Pop-Out Panels, Canvas Swipe & Layout Undo:** Keep all canvas buttons accessible even on smaller screens with horizontal pop-out bars for the **`+` Add Menu** (*New Note*, *Add Widget*, *New Canvas*, plus soft-deleted **Widget Trash Recovery**), **Auto-Organize** (*Smart Bento Grid*, *Keep Sizes & Pack*, *Split Zones*), and **Quick Utilities** (*Night Mode*, *Fullscreen*, *Refresh/Update*, *Hide Toolbar*, *Quick Start Tour*); swipe horizontally across any widget, edge zone, empty canvas space, Mobile Companion, or trackpad to switch canvases; hold cards (`~230ms`) before dragging to prevent accidental moves; and undo accidental moves, resizes, rotations, or auto-organize layouts with **`Ctrl+Z` / `Cmd+Z`** or the 1-tap Undo toast.
   * **Interactive Freeform Pinboard:** Drag, tilt (`↺`/`↻`), layer (`z-index`), resize via bottom-right corner handles (`↘`), right-click blank canvas space to **Add Single Photo / GIF**, **New Sticky Note**, or **Add Widget Tile**, toggle frameless **Sticker / No Outline Mode** (per-widget or via the global **Default Widget Style** in Settings across compatible ambient, media, and text tiles), or expand any widget to **100% Fullscreen Canvas** with one click.
   * **Smart Pinned Notes (3 Formats):** Create **Text Notes**, **Checklists**, or dedicated **🛒 Shopping List** sticky notes (with automatic store-aisle grouping, inline `+ Add grocery item...`, and 1-tap `Clear (X)`), and pop floating notes onto the canvas with automatic collision avoidance.
 * **🍽️ Family Meal Planner, Recipe Scraper, Smart Grocery List & Cooking Mode:**
@@ -42,13 +42,13 @@
   * **Dual-View Kiosk Experience:** Add the compact Bento **Chores & Rewards** tile to any canvas and click its header **Maximize** button (or enable *Full-Screen Hub on Canvas* in Tile Settings) to open the 3-column **Full-Screen Chore & Reward Hub**.
   * **Flexible Cadences, Parent Auto-Completion & Shared Splits:** Schedule chores as *Daily*, *Weekdays*, *Weekends*, *Weekly — Any Day (1× / Week)*, *Weekly (Specific Days)*, *Interval (Every N Days)*, or *One-Off Bounty*. Assign to individual members or as a *Shared Pool* task with interactive integer point splitting (with parent completions automatically skipping the approval queue).
   * **Same-Day Chore Skip, 24-Hour Overdue Grace Window & Vacation Mode:** Skip same-day chores that don't apply (such as Homework) cleanly with a **Skipped • 0 pts** badge and same-day **Undo** without touching the ledger; unfinished chores roll over for 24 hours with configurable `100%`, `50%`, `0%`, or custom % overdue point policies and pause automatically during **Vacation Mode**.
-  * **Append-Only Audit Ledger, Wishlist Store & Trophy Case:** Every point transaction is recorded in an immutable audit ledger. Kids can propose wishlist rewards (with automatic URL title/image/price scraping via `/api/metadata`), filter and edit/remove unpriced submissions in the **Proposals Tray**, parents price and approve redemptions behind a 4-digit PIN, and fulfilled prizes are archived into each child's **Trophy Case**.
+  * **Append-Only Audit Ledger, Wishlist Store & Trophy Case:** Every point transaction is recorded in an immutable audit ledger. Kids can propose wishlist rewards (with automatic URL title/image/price scraping via `/api/metadata`), edit or remove unpriced submissions in the **Proposals Tray**, reserve points automatically as pending deductions when claiming rewards (preventing over-claiming past available points, with self-service **Cancel Claim** before Parent PIN approval), while parents price/approve redemptions behind a 4-digit PIN and archive fulfilled prizes into each child's **Trophy Case**.
 * **🗂️ Zero-Friction Multi-Board Project Board (Kanban):**
   * **Independent Multi-Board Bento Tiles:** Pin multiple **Project Board (Kanban)** tiles across tabs, each tracking its own selected board (`To Do`, `In Progress`, `Done`), inline `+ Add card` entry, Calm Science palette tags, multi-member `<ProfileAvatar/>` assignees, and sub-checklists with zero PIN gates.
   * **Responsive Kiosk Tile + Full 3-Column View:** Compact tiles default to `To Do` with `←`/`→` column steppers, 1-tap card chevrons, and unified mouse/touch drag reordering with ~350ms **Drag-to-Edge** column flipping; widening a tile automatically adapts it into a side-by-side **3-column swimlane layout** on the canvas, plus a 1-tap fullscreen 3-column view.
   * **Done Auto-Archive & Reusable Archive Drawer:** Configurable per-board `autoArchiveDays` sweeps, **Archive All Done**, confirmation-gated **Clear Done**, and a searchable per-board **Archive Drawer** that restores cards with checklists intact.
 * **📰 In-App Kiosk Reader Mode, Web Preview & 26 Curated RSS Feeds:**
-  * **Distraction-Free Article Reader (`/api/reader`):** Powered by Mozilla Readability and Linkedom to extract clean article text, hero images, and tables without leaving kiosk mode, paired with an edge **Web Preview (`/api/web-proxy`)** fallback and a 26-feed curated directory across 6 categories.
+  * **Distraction-Free Article Reader (`/api/reader`):** Powered by Mozilla Readability and Linkedom with client-side `DOMPurify` HTML sanitization, paired with an anonymous CSP-sandboxed edge **Web Preview (`/api/web-proxy`)** fallback and a 26-feed curated directory across 6 categories.
 * **📈 Live Markets & Watchlist (`/api/finance`):**
   * Track stocks, ETFs, market indices, and crypto with zero API keys required—featuring `1D` / `5D` / `1M` SVG sparklines, adaptive row/grid/ticker-strip layouts, preset bundles, live symbol search, offline quote caching, and Sticker Mode support.
 * **⏲️ Kitchen Multi-Timer:**
@@ -154,7 +154,7 @@ Reboot (`sudo reboot`) to launch directly into fullscreen Chromium Kiosk (suppor
 
 ### Option 4: Local Node.js Development & Production Server
 
-**Prerequisites:** Node.js `20.x+` and npm `10.x+`.
+**Prerequisites:** Node.js `22.x+` and npm `10.x+`.
 
 ```bash
 # 1. Clone and install dependencies
@@ -170,6 +170,19 @@ npm run build
 npm run build:server
 npm start
 ```
+
+### Contributing & Pre-PR Verification
+
+Before opening a Pull Request, follow [`DEVELOPER_WORKFLOW.md`](DEVELOPER_WORKFLOW.md) and confirm all four checks pass locally from a feature branch (never commit directly to `main` or modify `package.json` version / `CHANGELOG.md` without `@Genghis1227` approval):
+
+```bash
+npm run lint
+npm run build
+npm run build:server
+npm test
+```
+
+* `npm test` automatically runs **`tests/validate-guardrails.js --self-test`** (checking for leaked secrets, zero-cost API allowlists, version synchronization, PWA/static asset integrity, `Trinhism` / `Trinhism Labs` attribution, and `noindex` hygiene) followed by the full `node:test` unit and integration suite (`tests/*.test.ts`).
 
 ---
 
