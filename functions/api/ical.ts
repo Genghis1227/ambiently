@@ -339,6 +339,8 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
 
       // Checks the address and every redirect, waits at most 15 seconds and reads at most 15 MB
       const fetchRes = await fetchExternal(normalizedUrl, {
+        // A home-network calendar or feed server is allowed only when the self-hosted server opts in
+        allowPrivateNetwork: true,
         maxBytes: 15 * 1024 * 1024,
         timeoutMs: 15_000,
         headers: conditionalHeaders,

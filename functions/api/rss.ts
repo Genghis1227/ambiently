@@ -58,6 +58,8 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
   try {
     // Checks the address and every redirect, waits at most 10 seconds and reads at most 5 MB
     const fetchRes = await fetchExternal(normalizedUrl, {
+        // A home-network calendar or feed server is allowed only when the self-hosted server opts in
+        allowPrivateNetwork: true,
       maxBytes: 5 * 1024 * 1024,
       headers: {
         'User-Agent': 'Ambiently-Display/1.0 (+https://dashboard.trinhism.com)',

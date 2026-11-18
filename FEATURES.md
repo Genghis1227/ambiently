@@ -238,6 +238,10 @@ Browse and filter all widget tiles across 4 organized categories (**Household & 
   * Pass `SUPABASE_URL` and `SUPABASE_ANON_KEY` at container runtime via `.env` or `compose.yaml` without rebuilding the Docker image—preserving Workbox Service Worker precache integrity while caching credentials in `localStorage` for instant offline cold boots.
 * **Opt-In Private Home LAN Feeds (`AMBIENTLY_ALLOW_PRIVATE_FEEDS=true`):**
   * Enables self-hosted home-lab deployments to subscribe to private RFC1918 LAN / Tailscale / `.local` `.ics` calendars and RSS feeds (e.g., Nextcloud, Radicale, Home Assistant, FreshRSS) while keeping loopback (`127.0.0.1` / `localhost`) and cloud metadata (`169.254.169.254`) strictly blocked.
+  * Applies to calendars and RSS only. The web preview, reader and wishlist/recipe link previews never reach the home network.
+* **Self-Hosted Security Parity (`server/index.ts`, `server/addressGuard.ts`):**
+  * Sends the same `public/_headers` protections as Cloudflare Pages (Content-Security-Policy, Permissions-Policy, HSTS) with every page.
+  * Checks the address every outgoing feed/preview request resolves to, so a public name that points at `127.0.0.1`, the home network or cloud metadata (for example `127.0.0.1.nip.io`) is refused like the address itself.
 * **Automated Raspberry Pi Kiosk & All-in-One Appliance Installer (`scripts/pi-kiosk-setup.sh`, [`RASPBERRY_PI.md`](./RASPBERRY_PI.md)):**
   * 1-command installer for Raspberry Pi OS (Bookworm Wayland `labwc`/`wayfire` & X11) supporting two deployment modes:
     1. **Kiosk Display Mode (`--mode kiosk`):** Auto-boots fullscreen Chromium pointing to `https://dashboard.trinhism.com` or any LAN Docker URL (`http://nas.local:8080`).

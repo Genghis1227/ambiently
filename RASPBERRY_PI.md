@@ -235,7 +235,7 @@ All runtime variables in Docker take effect immediately on `docker compose up -d
 | `TZ` | `America/Chicago` | Container timezone for logs and server-side date fallbacks. |
 | `SUPABASE_URL` | *(empty)* | Optional runtime Supabase project URL injected dynamically via `/config.js` for multi-device Realtime cloud sync. |
 | `SUPABASE_ANON_KEY` | *(empty)* | Optional runtime Supabase publishable `anon` key (never use `service_role`). |
-| `AMBIENTLY_ALLOW_PRIVATE_FEEDS` | `false` | Set to `true` **only on trusted home networks** to allow `http://`, RFC1918 LAN (`192.168.x.x`, `10.x.x.x`, `172.16-31.x.x`), Tailscale (`100.64.0.0/10`), and `.local`/`.lan` calendar & RSS URLs (e.g., Nextcloud, Radicale, FreshRSS, Home Assistant). Loopback (`127.0.0.1` / `localhost`) and cloud metadata (`169.254.169.254`) remain blocked at all times. |
+| `AMBIENTLY_ALLOW_PRIVATE_FEEDS` | `false` | Set to `true` **only on trusted home networks** to allow `http://`, RFC1918 LAN (`192.168.x.x`, `10.x.x.x`, `172.16-31.x.x`), Tailscale (`100.64.0.0/10`), and `.local`/`.lan` calendar & RSS URLs (e.g., Nextcloud, Radicale, FreshRSS, Home Assistant). It applies to calendars and RSS only: the web preview, reader and link previews never reach the home network. Loopback (`127.0.0.1` / `localhost`) and cloud metadata (`169.254.169.254`) remain blocked at all times, including names that resolve to them (the server checks the address each connection really goes to). |
 
 ---
 

@@ -116,7 +116,7 @@ curl http://localhost:8080/api/health
 
 Open **`http://localhost:8080`** (or `http://<your-server-ip>:8080`).
 
-* **Zero-Rebuild Configuration:** Set `SUPABASE_URL` & `SUPABASE_ANON_KEY` (for multi-device Realtime sync) or `AMBIENTLY_ALLOW_PRIVATE_FEEDS=true` (for local `192.168.x.x` / `.local` Nextcloud, Radicale, or Home Assistant `.ics`/RSS feeds) directly in `.env` or `compose.yaml`—no image rebuild needed.
+* **Zero-Rebuild Configuration:** Set `SUPABASE_URL` & `SUPABASE_ANON_KEY` (for multi-device Realtime sync) or `AMBIENTLY_ALLOW_PRIVATE_FEEDS=true` (for local `192.168.x.x` / `.local` Nextcloud, Radicale, or Home Assistant `.ics`/RSS feeds; calendars and RSS only, never the web preview or reader) directly in `.env` or `compose.yaml`—no image rebuild needed. The self-hosted server sends the same security headers as Cloudflare (`public/_headers`) and checks the address every outgoing request really goes to, so a public name that points at your own network is refused too.
 * See **[RASPBERRY_PI.md — Part 2: Docker & Home Server Self-Hosting](RASPBERRY_PI.md#part-2-docker--home-server-self-hosting)** for Portainer/Synology stack templates and HTTPS reverse proxy examples.
 
 ---
@@ -191,7 +191,7 @@ Ambiently is built on an **offline-first local architecture**:
 To enable real-time multi-device WebSocket sync across wall displays, tablets, and phones:
 
 1. Create a free project at [supabase.com](https://supabase.com).
-2. Run [`supabase/schema.sql`](supabase/schema.sql), [`supabase/migrations/phase1_profiles_chores_meals.sql`](supabase/migrations/phase1_profiles_chores_meals.sql), and [`supabase/migrations/kanban_boards_and_cards.sql`](supabase/migrations/kanban_boards_and_cards.sql) in the Supabase SQL Editor, then run [`supabase/security-check.sql`](supabase/security-check.sql) (any returned row indicates a permission setting to review).
+2. Run [`supabase/schema.sql`](supabase/schema.sql), [`supabase/migrations/phase1_profiles_chores_meals.sql`](supabase/migrations/phase1_profiles_chores_meals.sql), [`supabase/migrations/kanban_boards_and_cards.sql`](supabase/migrations/kanban_boards_and_cards.sql), and [`supabase/migrations/20261117_board_limit_counts_every_table.sql`](supabase/migrations/20261117_board_limit_counts_every_table.sql) in the Supabase SQL Editor, then run [`supabase/security-check.sql`](supabase/security-check.sql) (any returned row indicates a permission setting to review).
    * In **Authentication**, keep **Confirm email** and **Secure email change** on, and keep anonymous sign-ins off.
    * Never put the `service_role` key in the app—only use the publishable `anon` key.
 3. Provide your project credentials depending on how you host Ambiently:
