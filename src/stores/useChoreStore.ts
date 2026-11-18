@@ -14,6 +14,8 @@ import {
   calculateEffectiveChorePoints,
   canSelfRevertInstance,
   evaluateChoreRollover,
+  getPendingRedemptionPointsByProfile,
+  getProfilePointSummary,
   mergeChoreSnapshotsAuthoritative,
   recalculateProfilesFromLedger,
   selectProfilePointsFromLedger,
@@ -206,6 +208,8 @@ export interface ChoreStoreState {
 
   // Append-Only Ledger Selectors
   getProfileBalance: (profileId: string) => number;
+  getProfilePendingPoints: (profileId: string) => number;
+  getProfileAvailableBalance: (profileId: string) => number;
   getProfileLifetimePoints: (profileId: string) => number;
 
   // UI Navigation Actions
@@ -261,6 +265,7 @@ export interface ChoreStoreState {
     rewardId: string
   ) => Promise<{ success: boolean; error?: string }>;
   claimUnlockedReward: (rewardId: string) => Promise<{ success: boolean; error?: string }>;
+  unclaimPendingReward: (rewardId: string) => Promise<{ success: boolean; error?: string }>;
 
   // PIN-Authenticated Parent Actions
   approveChoreInstance: (
@@ -322,6 +327,16 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => {
 
     getProfileBalance: (profileId) =>
       selectProfilePointsFromLedger(get().snapshot.ledger, profileId).balance,
+
+    getProfilePendingPoints: (profileId) =>
+      getPendingRedemptionPointsByProfile(get().snapshot.rewards).get(profileId) ?? 0,
+
+    getProfileAvailableBalance: (profileId) => {
+      const bank = selectProfilePointsFromLedger(get().snapshot.ledger, profileId).balance;
+      const pending =
+        getPendingRedemptionPointsByProfile(get().snapshot.rewards).get(profileId) ?? 0;
+      return Math.max(0, bank - pending);
+    },
 
     getProfileLifetimePoints: (profileId) =>
       selectProfilePointsFromLedger(get().snapshot.ledger, profileId).lifetimePoints,
@@ -786,19 +801,73 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => {
       const current = get().snapshot;
       const reward = current.rewards.find((r) => r.id === rewardId);
       if (!reward) return { success: false, error: 'Reward not found' };
+      if (reward.status === 'pending_fulfillment') {
+        return { success: false, error: 'Reward is already pending redemption' };
+      }
       if (reward.status !== 'unlocked') {
         return { success: false, error: 'Reward is not unlocked yet' };
       }
 
       const profile = current.profiles.find((p) => p.id === reward.profileId);
-      if (!profile || profile.balance < reward.pointsCost) {
-        return { success: false, error: 'Not enough points in balance' };
+      const { availableBalance, pendingPoints } = getProfilePointSummary(
+        reward.profileId,
+        current.profiles,
+        current.rewards
+      );
+      if (!profile || availableBalance < reward.pointsCost) {
+        return {
+          success: false,
+          error:
+            pendingPoints > 0
+              ? 'Not enough available points after pending redemptions'
+              : 'Not enough points in balance',
+        };
       }
 
       const nowIso = new Date().toISOString();
-      const nextRewards = current.rewards.map((r) =>
-        r.id === rewardId ? { ...r, status: 'pending_fulfillment' as const } : r
+      const draftRewards = current.rewards.map((r) =>
+        r.id === rewardId
+          ? {
+              ...r,
+              status: 'pending_fulfillment' as const,
+              claimedAt: nowIso,
+              updatedAt: nowIso,
+            }
+          : r
       );
+      const nextRewards = syncRewardUnlockStates(draftRewards, current.profiles);
+
+      const nextSnapshot: ChoreEngineSnapshot = {
+        ...current,
+        rewards: nextRewards,
+        updated_at: nowIso,
+      };
+
+      commitSnapshotState(nextSnapshot);
+      await persistSnapshot(nextSnapshot);
+      return { success: true };
+    },
+
+    unclaimPendingReward: async (rewardId) => {
+      const current = get().snapshot;
+      const reward = current.rewards.find((r) => r.id === rewardId);
+      if (!reward) return { success: false, error: 'Reward not found' };
+      if (reward.status !== 'pending_fulfillment') {
+        return { success: false, error: 'Reward is not pending redemption' };
+      }
+
+      const nowIso = new Date().toISOString();
+      const draftRewards = current.rewards.map((r) =>
+        r.id === rewardId
+          ? {
+              ...r,
+              status: 'unlocked' as const,
+              claimedAt: undefined,
+              updatedAt: nowIso,
+            }
+          : r
+      );
+      const nextRewards = syncRewardUnlockStates(draftRewards, current.profiles);
 
       const nextSnapshot: ChoreEngineSnapshot = {
         ...current,
@@ -1207,7 +1276,13 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => {
       const nextProfiles = recalculateProfilesFromLedger(current.profiles, nextLedger);
       const updatedRewards = current.rewards.map((r) =>
         r.id === rewardId
-          ? { ...r, status: 'fulfilled' as const, fulfilledAt: nowIso }
+          ? {
+              ...r,
+              status: 'fulfilled' as const,
+              claimedAt: undefined,
+              fulfilledAt: nowIso,
+              updatedAt: nowIso,
+            }
           : r
       );
       const nextRewards = syncRewardUnlockStates(updatedRewards, nextProfiles);
@@ -1231,7 +1306,14 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => {
       const current = get().snapshot;
       const nowIso = new Date().toISOString();
       const updatedRewards = current.rewards.map((r) =>
-        r.id === rewardId ? { ...r, status: 'unlocked' as const } : r
+        r.id === rewardId
+          ? {
+              ...r,
+              status: 'unlocked' as const,
+              claimedAt: undefined,
+              updatedAt: nowIso,
+            }
+          : r
       );
       const nextRewards = syncRewardUnlockStates(updatedRewards, current.profiles);
 
@@ -1332,7 +1414,13 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => {
       } else if (target.type === 'reward_redemption') {
         nextRewards = current.rewards.map((r) =>
           r.id === target.refId
-            ? { ...r, status: 'unlocked' as const, fulfilledAt: undefined }
+            ? {
+                ...r,
+                status: 'unlocked' as const,
+                claimedAt: undefined,
+                fulfilledAt: undefined,
+                updatedAt: nowIso,
+              }
             : r
         );
         nextTrophies = current.trophies.filter(

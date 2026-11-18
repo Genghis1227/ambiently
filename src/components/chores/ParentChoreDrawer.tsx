@@ -35,7 +35,10 @@ import type {
   WishlistReward,
 } from '../../types/chores';
 import type { HouseholdProfile } from '../../types/profiles';
-import { calculateEffectiveChorePoints } from '../../utils/choreEngine';
+import {
+  calculateEffectiveChorePoints,
+  getPendingRedemptionPointsByProfile,
+} from '../../utils/choreEngine';
 import { HouseholdAvatar } from '../common/HouseholdAvatar';
 import { HouseholdProfileManager } from '../common/HouseholdProfileManager';
 import { PinOverlay } from '../kiosk/PinOverlay';
@@ -246,6 +249,8 @@ export const ParentChoreDrawer: React.FC = () => {
       />
     );
   }
+
+  const pendingByProfile = getPendingRedemptionPointsByProfile(rewards);
 
   // Helpers for Tab 1: Approvals & Split Rebalancing
   const startSplitEdit = (instance: ActiveChoreInstance, template?: ChoreTemplate) => {
@@ -1205,7 +1210,8 @@ export const ParentChoreDrawer: React.FC = () => {
                                   {kid?.name || 'Child'}
                                 </span>
                                 <span className="text-[11px] text-slate-400 font-mono">
-                                  (Wallet: {kid?.balance ?? 0} pts)
+                                  (Bank: {kid?.balance ?? 0} pts • Pending: -
+                                  {pendingByProfile.get(reward.profileId) ?? reward.pointsCost} pts)
                                 </span>
                               </div>
                               <h4 className="text-sm font-bold text-white mt-0.5">

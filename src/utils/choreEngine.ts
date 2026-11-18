@@ -291,25 +291,125 @@ export function validateChoreSplits(
 }
 
 /**
- * Synchronizes WishlistReward statuses with each profile's current spendable balance:
- * - 'active_goal' -> 'unlocked' when profile.balance >= reward.pointsCost
- * - 'unlocked' -> 'active_goal' if profile.balance drops below reward.pointsCost before claiming
+ * Sums points currently reserved by `pending_fulfillment` rewards for each profileId.
+ */
+export function getPendingRedemptionPointsByProfile(
+  rewards: WishlistReward[]
+): Map<string, number> {
+  const pendingByProfile = new Map<string, number>();
+  for (const reward of rewards) {
+    if (reward.status !== 'pending_fulfillment') continue;
+    const cost = Math.max(0, Math.round(reward.pointsCost));
+    if (cost <= 0) continue;
+    pendingByProfile.set(
+      reward.profileId,
+      (pendingByProfile.get(reward.profileId) ?? 0) + cost
+    );
+  }
+  return pendingByProfile;
+}
+
+/**
+ * Computes a profile's bank balance, pending reward deductions, spendable available balance,
+ * and cumulative lifetime points.
+ */
+export function getProfilePointSummary(
+  profileId: string,
+  profiles: Profile[],
+  rewards: WishlistReward[]
+): {
+  bankBalance: number;
+  pendingPoints: number;
+  availableBalance: number;
+  lifetimePoints: number;
+} {
+  const profile = profiles.find((p) => p.id === profileId);
+  const bankBalance = profile?.balance ?? 0;
+  const lifetimePoints = profile?.lifetimePoints ?? 0;
+  let pendingPoints = 0;
+  for (const reward of rewards) {
+    if (reward.profileId === profileId && reward.status === 'pending_fulfillment') {
+      pendingPoints += Math.max(0, Math.round(reward.pointsCost));
+    }
+  }
+  return {
+    bankBalance,
+    pendingPoints,
+    availableBalance: Math.max(0, bankBalance - pendingPoints),
+    lifetimePoints,
+  };
+}
+
+/**
+ * Synchronizes WishlistReward statuses with each profile's available balance (bank minus pending claims):
+ * - Reserves points chronologically for `'pending_fulfillment'` claims, demoting excess claims if
+ *   balance drops (e.g. same-day undo, manual deduction, or concurrent claims) below required cost.
+ * - `'active_goal'` -> `'unlocked'` when `availableBalance >= reward.pointsCost`
+ * - `'unlocked'` -> `'active_goal'` when `availableBalance < reward.pointsCost`
  */
 export function syncRewardUnlockStates(
   rewards: WishlistReward[],
   profiles: Profile[]
 ): WishlistReward[] {
-  const balanceByProfile = new Map(profiles.map((p) => [p.id, p.balance]));
+  const bankByProfile = new Map(profiles.map((p) => [p.id, p.balance]));
+  const pendingByProfile = new Map<string, { reward: WishlistReward; index: number }[]>();
+
+  rewards.forEach((reward, index) => {
+    if (reward.status !== 'pending_fulfillment') return;
+    const list = pendingByProfile.get(reward.profileId) || [];
+    list.push({ reward, index });
+    pendingByProfile.set(reward.profileId, list);
+  });
+
+  const reservedByProfile = new Map<string, number>();
+  const demotedPendingIds = new Set<string>();
+
+  for (const [profileId, entries] of pendingByProfile) {
+    entries.sort((a, b) => {
+      const timeA =
+        Date.parse(a.reward.claimedAt || a.reward.updatedAt || a.reward.createdAt || '') || 0;
+      const timeB =
+        Date.parse(b.reward.claimedAt || b.reward.updatedAt || b.reward.createdAt || '') || 0;
+      return timeA !== timeB ? timeA - timeB : a.index - b.index;
+    });
+
+    const bank = bankByProfile.get(profileId) ?? 0;
+    let reserved = 0;
+    for (const { reward } of entries) {
+      const cost = Math.max(0, Math.round(reward.pointsCost));
+      if (cost > 0 && bank - reserved >= cost) {
+        reserved += cost;
+      } else {
+        demotedPendingIds.add(reward.id);
+      }
+    }
+    if (reserved > 0) {
+      reservedByProfile.set(profileId, reserved);
+    }
+  }
 
   return rewards.map((reward) => {
-    if (reward.status !== 'active_goal' && reward.status !== 'unlocked') {
+    const isDemotedPending = demotedPendingIds.has(reward.id);
+    if (reward.status === 'pending_fulfillment' && !isDemotedPending) {
       return reward;
     }
-    const balance = balanceByProfile.get(reward.profileId) ?? 0;
-    const isUnlocked = reward.pointsCost > 0 && balance >= reward.pointsCost;
+    if (reward.status !== 'active_goal' && reward.status !== 'unlocked' && !isDemotedPending) {
+      return reward;
+    }
+
+    const bank = bankByProfile.get(reward.profileId) ?? 0;
+    const reserved = reservedByProfile.get(reward.profileId) ?? 0;
+    const available = Math.max(0, bank - reserved);
+    const isUnlocked = reward.pointsCost > 0 && available >= reward.pointsCost;
     const nextStatus = isUnlocked ? 'unlocked' : 'active_goal';
-    if (reward.status === nextStatus) return reward;
-    return { ...reward, status: nextStatus };
+    if (reward.status === nextStatus && reward.claimedAt === undefined) {
+      return reward;
+    }
+    return {
+      ...reward,
+      status: nextStatus,
+      claimedAt: undefined,
+    };
   });
 }
 
@@ -928,9 +1028,16 @@ export function mergeChoreSnapshotsAuthoritative(
       rewardMap.set(r.id, r);
     }
   }
+  const baseParentTime = Date.parse(baseSource.lastParentActionAt || '') || 0;
+  const STORE_CLAIM_STATES = new Set<WishlistReward['status']>([
+    'active_goal',
+    'unlocked',
+    'pending_fulfillment',
+  ]);
   for (const r of otherSource.rewards) {
     if (deletedRewardSet.has(r.id)) continue;
     const rTimestamp = Math.max(
+      Date.parse(r.claimedAt || '') || 0,
       Date.parse(r.updatedAt || '') || 0,
       Date.parse(r.createdAt || '') || 0
     );
@@ -941,14 +1048,24 @@ export function mergeChoreSnapshotsAuthoritative(
       }
       continue;
     }
+    const existingTimestamp = Math.max(
+      Date.parse(existing.claimedAt || '') || 0,
+      Date.parse(existing.updatedAt || '') || 0,
+      Date.parse(existing.createdAt || '') || 0
+    );
     if (existing.status === 'needs_pricing' && r.status === 'needs_pricing') {
-      const existingTimestamp = Math.max(
-        Date.parse(existing.updatedAt || '') || 0,
-        Date.parse(existing.createdAt || '') || 0
-      );
       if (rTimestamp > existingTimestamp) {
         rewardMap.set(r.id, r);
       }
+    } else if (
+      STORE_CLAIM_STATES.has(existing.status) &&
+      STORE_CLAIM_STATES.has(r.status) &&
+      existing.pointsCost === r.pointsCost &&
+      existing.pricedAt === r.pricedAt &&
+      rTimestamp > baseParentTime &&
+      rTimestamp > existingTimestamp
+    ) {
+      rewardMap.set(r.id, r);
     }
   }
 

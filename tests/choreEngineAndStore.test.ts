@@ -4,10 +4,13 @@ import {
   calculateEffectiveChorePoints,
   canSelfRevertInstance,
   evaluateChoreRollover,
+  getPendingRedemptionPointsByProfile,
+  getProfilePointSummary,
   mergeChoreSnapshotsAuthoritative,
   prunePriorYearTrophies,
   recalculateProfilesFromLedger,
   selectProfilePointsFromLedger,
+  syncRewardUnlockStates,
   validateChoreSplits,
 } from '../src/utils/choreEngine';
 import {
@@ -880,6 +883,278 @@ describe('Chore Engine & useChoreStore', () => {
     assert.equal(
       mergedAllowsNewerUndo.instances.find((i) => i.instanceId === 'tpl_daily_auto_2026-11-10')?.status,
       'pending'
+    );
+  });
+
+  it('reserves pending reward deductions, prevents over-claiming, and supports self-service unclaim before PIN', async () => {
+    const store = useChoreStore.getState();
+    await store.addManualAdjustment('kid_1', 100, 'Starting bank balance');
+
+    const base = useChoreStore.getState().snapshot;
+    const rewards = [
+      {
+        id: 'rew_60_a',
+        profileId: 'kid_1',
+        title: 'Board Game',
+        pointsCost: 60,
+        status: 'active_goal' as const,
+        createdAt: '2026-11-01T00:00:00.000Z',
+      },
+      {
+        id: 'rew_60_b',
+        profileId: 'kid_1',
+        title: 'Puzzle Box',
+        pointsCost: 60,
+        status: 'active_goal' as const,
+        createdAt: '2026-11-02T00:00:00.000Z',
+      },
+    ];
+    useChoreStore.setState({
+      snapshot: {
+        ...base,
+        rewards: syncRewardUnlockStates(rewards, base.profiles),
+      },
+      pendingParentActionsCount: selectPendingParentActionsCount({
+        ...base,
+        rewards,
+      }),
+    });
+
+    // Both 60-pt items start unlocked when bank = 100
+    assert.equal(
+      useChoreStore.getState().snapshot.rewards.find((r) => r.id === 'rew_60_a')?.status,
+      'unlocked'
+    );
+    assert.equal(
+      useChoreStore.getState().snapshot.rewards.find((r) => r.id === 'rew_60_b')?.status,
+      'unlocked'
+    );
+
+    // 1. Claiming first 60-pt reward holds 60 pending pts -> available = 40 -> locks second 60-pt reward
+    const firstClaim = await useChoreStore.getState().claimUnlockedReward('rew_60_a');
+    assert.deepEqual(firstClaim, { success: true });
+    assert.equal(useChoreStore.getState().getProfileBalance('kid_1'), 100);
+    assert.equal(useChoreStore.getState().getProfilePendingPoints('kid_1'), 60);
+    assert.equal(useChoreStore.getState().getProfileAvailableBalance('kid_1'), 40);
+    assert.equal(
+      useChoreStore.getState().snapshot.rewards.find((r) => r.id === 'rew_60_a')?.status,
+      'pending_fulfillment'
+    );
+    assert.equal(
+      useChoreStore.getState().snapshot.rewards.find((r) => r.id === 'rew_60_b')?.status,
+      'active_goal'
+    );
+
+    const overClaim = await useChoreStore.getState().claimUnlockedReward('rew_60_b');
+    assert.equal(overClaim.success, false);
+
+    // 2. Unclaiming before Parent PIN releases points & lets user pick the other reward instead
+    const unclaimBad = await useChoreStore.getState().unclaimPendingReward('rew_60_b');
+    assert.equal(unclaimBad.success, false);
+
+    const unclaimOk = await useChoreStore.getState().unclaimPendingReward('rew_60_a');
+    assert.deepEqual(unclaimOk, { success: true });
+    assert.equal(useChoreStore.getState().getProfilePendingPoints('kid_1'), 0);
+    assert.equal(useChoreStore.getState().getProfileAvailableBalance('kid_1'), 100);
+    assert.equal(
+      useChoreStore.getState().snapshot.rewards.find((r) => r.id === 'rew_60_a')?.status,
+      'unlocked'
+    );
+    assert.equal(
+      useChoreStore.getState().snapshot.rewards.find((r) => r.id === 'rew_60_b')?.status,
+      'unlocked'
+    );
+
+    const secondClaim = await useChoreStore.getState().claimUnlockedReward('rew_60_b');
+    assert.deepEqual(secondClaim, { success: true });
+    assert.equal(useChoreStore.getState().getProfileAvailableBalance('kid_1'), 40);
+
+    // Parent fulfillment turns rew_60_b into fulfilled -> cannot be unclaimed afterward
+    await useChoreStore.getState().fulfillRewardRedemption('rew_60_b');
+    const unclaimFulfilled = await useChoreStore.getState().unclaimPendingReward('rew_60_b');
+    assert.equal(unclaimFulfilled.success, false);
+    assert.equal(useChoreStore.getState().getProfileBalance('kid_1'), 40);
+    assert.equal(useChoreStore.getState().getProfilePendingPoints('kid_1'), 0);
+    assert.equal(useChoreStore.getState().getProfileAvailableBalance('kid_1'), 40);
+  });
+
+  it('allows multiple pending claims when remaining available points cover them and reconciles drops or offline conflicts', async () => {
+    await useChoreStore.getState().addManualAdjustment('kid_1', 90, 'Bonus allowance');
+    await useChoreStore
+      .getState()
+      .completeChore('tpl_daily_auto_2026-11-10', undefined, new Date(2026, 10, 10, 12, 0, 0));
+    assert.equal(useChoreStore.getState().getProfileBalance('kid_1'), 100);
+
+    const base = useChoreStore.getState().snapshot;
+    const multiRewards = [
+      {
+        id: 'rew_40',
+        profileId: 'kid_1',
+        title: 'Comic Book',
+        pointsCost: 40,
+        status: 'active_goal' as const,
+        createdAt: '2026-11-01T00:00:00.000Z',
+      },
+      {
+        id: 'rew_50',
+        profileId: 'kid_1',
+        title: 'Science Kit',
+        pointsCost: 50,
+        status: 'active_goal' as const,
+        createdAt: '2026-11-02T00:00:00.000Z',
+      },
+      {
+        id: 'rew_30',
+        profileId: 'kid_1',
+        title: 'Card Game',
+        pointsCost: 30,
+        status: 'active_goal' as const,
+        createdAt: '2026-11-03T00:00:00.000Z',
+      },
+    ];
+    useChoreStore.setState({
+      snapshot: {
+        ...base,
+        rewards: syncRewardUnlockStates(multiRewards, base.profiles),
+      },
+    });
+
+    // Claiming 40 + 50 leaves 10 available -> rew_30 drops from unlocked to active_goal
+    assert.deepEqual(await useChoreStore.getState().claimUnlockedReward('rew_40'), {
+      success: true,
+    });
+    assert.equal(useChoreStore.getState().getProfileAvailableBalance('kid_1'), 60);
+    assert.equal(
+      useChoreStore.getState().snapshot.rewards.find((r) => r.id === 'rew_50')?.status,
+      'unlocked'
+    );
+    assert.equal(
+      useChoreStore.getState().snapshot.rewards.find((r) => r.id === 'rew_30')?.status,
+      'unlocked'
+    );
+
+    assert.deepEqual(await useChoreStore.getState().claimUnlockedReward('rew_50'), {
+      success: true,
+    });
+    assert.equal(useChoreStore.getState().getProfilePendingPoints('kid_1'), 90);
+    assert.equal(useChoreStore.getState().getProfileAvailableBalance('kid_1'), 10);
+    assert.equal(
+      useChoreStore.getState().snapshot.rewards.find((r) => r.id === 'rew_30')?.status,
+      'active_goal'
+    );
+    assert.equal((await useChoreStore.getState().claimUnlockedReward('rew_30')).success, false);
+
+    // Fulfilling rew_40 (bank 100 -> 60) keeps rew_50 pending (50 <= 60, available = 10)
+    assert.deepEqual(await useChoreStore.getState().fulfillRewardRedemption('rew_40'), {
+      success: true,
+    });
+    assert.equal(useChoreStore.getState().getProfileBalance('kid_1'), 60);
+    assert.equal(useChoreStore.getState().getProfilePendingPoints('kid_1'), 50);
+    assert.equal(useChoreStore.getState().getProfileAvailableBalance('kid_1'), 10);
+    assert.equal(
+      useChoreStore.getState().snapshot.rewards.find((r) => r.id === 'rew_50')?.status,
+      'pending_fulfillment'
+    );
+    assert.equal(useChoreStore.getState().pendingParentActionsCount, 1);
+
+    // Re-claim 10-pt + deduct? Wait: revert today's 10-pt chore leaves bank = 50 -> rew_50 stays valid (50 <= 50)
+    // Manual deduction of 5 drops bank to 45 < 50 -> rew_50 automatically demotes back to active_goal
+    await useChoreStore.getState().addManualAdjustment('kid_1', -15, 'Early bedtime deduction');
+    assert.equal(useChoreStore.getState().getProfileBalance('kid_1'), 45);
+    assert.equal(useChoreStore.getState().getProfilePendingPoints('kid_1'), 0);
+    assert.equal(
+      useChoreStore.getState().snapshot.rewards.find((r) => r.id === 'rew_50')?.status,
+      'active_goal'
+    );
+
+    // Same-day chore self-revert check + getProfilePointSummary helper
+    await useChoreStore
+      .getState()
+      .revertChoreSameDay('tpl_daily_auto_2026-11-10', new Date(2026, 10, 10, 14, 0, 0));
+    const postRevertSnap = useChoreStore.getState().snapshot;
+    const summary = getProfilePointSummary(
+      'kid_1',
+      postRevertSnap.profiles,
+      postRevertSnap.rewards
+    );
+    assert.equal(summary.bankBalance, 35);
+    assert.equal(summary.pendingPoints, 0);
+    assert.equal(summary.availableBalance, 35);
+
+    // Concurrent offline claims on two devices exceeding bank resolve chronologically via sync merge
+    const syncBase = createBaseSnapshot();
+    syncBase.ledger = [
+      {
+        id: 'led_80',
+        timestamp: '2026-11-10T10:00:00.000Z',
+        type: 'manual_adjustment',
+        refId: 'adj_80',
+        profileId: 'kid_1',
+        pointsDelta: 80,
+        approvedBy: 'pin',
+        canRevert: true,
+      },
+    ];
+    syncBase.profiles = recalculateProfilesFromLedger(syncBase.profiles, syncBase.ledger);
+    syncBase.rewards = [
+      {
+        id: 'rew_sync_a',
+        profileId: 'kid_1',
+        title: 'Headphones',
+        pointsCost: 60,
+        status: 'unlocked',
+        createdAt: '2026-11-01T00:00:00.000Z',
+        pricedAt: '2026-11-02T00:00:00.000Z',
+      },
+      {
+        id: 'rew_sync_b',
+        profileId: 'kid_1',
+        title: 'Backpack',
+        pointsCost: 60,
+        status: 'unlocked',
+        createdAt: '2026-11-01T00:00:00.000Z',
+        pricedAt: '2026-11-02T00:00:00.000Z',
+      },
+    ];
+    const deviceAClaim: ChoreEngineSnapshot = {
+      ...syncBase,
+      rewards: syncBase.rewards.map((r) =>
+        r.id === 'rew_sync_a'
+          ? {
+              ...r,
+              status: 'pending_fulfillment' as const,
+              claimedAt: '2026-11-10T12:00:00.000Z',
+              updatedAt: '2026-11-10T12:00:00.000Z',
+            }
+          : r
+      ),
+      updated_at: '2026-11-10T12:00:00.000Z',
+    };
+    const deviceBClaim: ChoreEngineSnapshot = {
+      ...syncBase,
+      rewards: syncBase.rewards.map((r) =>
+        r.id === 'rew_sync_b'
+          ? {
+              ...r,
+              status: 'pending_fulfillment' as const,
+              claimedAt: '2026-11-10T12:05:00.000Z',
+              updatedAt: '2026-11-10T12:05:00.000Z',
+            }
+          : r
+      ),
+      updated_at: '2026-11-10T12:05:00.000Z',
+    };
+
+    const merged = mergeChoreSnapshotsAuthoritative(deviceAClaim, deviceBClaim);
+    const mergedPending = getPendingRedemptionPointsByProfile(merged.rewards).get('kid_1') ?? 0;
+    assert.equal(mergedPending, 60);
+    assert.equal(
+      merged.rewards.find((r) => r.id === 'rew_sync_a')?.status,
+      'pending_fulfillment'
+    );
+    assert.equal(
+      merged.rewards.find((r) => r.id === 'rew_sync_b')?.status,
+      'active_goal'
     );
   });
 });
