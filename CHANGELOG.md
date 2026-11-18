@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.19] - 2026-11-17
+
+### Fixed & Added
+- **Pending Reward Point Deductions & Over-Claim Prevention (`src/types/chores.ts`, `src/utils/choreEngine.ts`, `src/stores/useChoreStore.ts`):**
+  - Claimed rewards awaiting Parent PIN (`pending_fulfillment`) now reserve their `pointsCost` chronologically as a pending deduction against spendable available balance (`availableBalance = Math.max(0, bankBalance - pendingPoints)`), leaving the append-only ledger unchanged until fulfillment.
+  - Other rewards remain `'unlocked'` only when remaining `availableBalance` covers their cost, preventing over-claiming multiple rewards past a child's points balance while still allowing multiple claims if leftover available points cover them, and automatically demoting excess pending claims if points drop or offline syncs conflict.
+- **Self-Service Claim Cancellation & Pending UI Badges (`RewardStorePanel.tsx`, `ChoreDashboardView.tsx`, `ChoreWidget.tsx`, `ParentChoreDrawer.tsx`, `FEATURES.md`, `tests/choreEngineAndStore.test.ts`):**
+  - Added `unclaimPendingReward` and a **Cancel Claim** button on `pending_fulfillment` reward cards so users can release reserved points and choose a different reward prior to Parent PIN confirmation, alongside clear pending-deduction and available-balance readouts across the Hub, Reward Store, Widget, and Parent Fulfillment tab.
+
 ## [0.7.18] - 2026-11-17
 
 ### Fixed & Changed
