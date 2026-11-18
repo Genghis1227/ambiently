@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.20] - 2026-11-17
+
+### Security
+- **Sandboxed Web Preview Proxy (`functions/api/web-proxy.ts`, `src/components/common/InAppWebViewerModal.tsx`):**
+  - Every `/api/web-proxy` response now carries `Content-Security-Policy: sandbox allow-scripts allow-forms allow-popups`, `X-Content-Type-Options: nosniff`, `Cross-Origin-Resource-Policy: same-origin`, and `Vary: Sec-Fetch-Dest`, isolating proxied pages in an opaque anonymous origin with no access to Ambiently's `localStorage` or IndexedDB, refusing non-frame (`Sec-Fetch-Dest`) requests with `403`, removing `allow-same-origin` on proxied viewer iframes, and HTML-escaping `<base href>` and error responses.
+- **Browser-Side Reader View HTML Sanitization (`src/utils/readerSanitize.ts`, `src/components/common/InAppWebViewerModal.tsx`):**
+  - Added client-side `DOMPurify` (`USE_PROFILES: { html: true }`) sanitization right before rendering Reader View HTML, blocking parser-differential mXSS, forms, frames, embedded objects, and inline styles.
+- **Self-Hosted Server Security Headers & DNS/IP Address Guard (`server/index.ts`, `server/addressGuard.ts`, `functions/_shared/fetchExternal.ts`, `functions/api/ical.ts`, `functions/api/rss.ts`):**
+  - Self-hosted Node/Docker deployments now serve the full `public/_headers` security policy (`Content-Security-Policy`, `Permissions-Policy`, `Strict-Transport-Security`), validate every resolved IPv4/IPv6/IPv4-mapped/NAT64/6to4 address via an `undici` lookup guard against loopback/link-local/metadata/private ranges (preventing DNS rebinding), and scope `AMBIENTLY_ALLOW_PRIVATE_FEEDS=true` strictly to `/api/ical` and `/api/rss`.
+- **Unified 19-Table Board Size Accounting (`supabase/schema.sql`, `supabase/migrations/20261117_board_limit_counts_every_table.sql`, `phase1_profiles_chores_meals.sql`, `kanban_boards_and_cards.sql`):**
+  - Unified `private.board_usage` across `schema.sql` and all migrations so re-running any SQL file in any order keeps all 19 board tables counted toward the 100 MB board limit, plus added `tests/securityHardening.test.ts`.
+
 ## [0.7.19] - 2026-11-17
 
 ### Fixed & Added

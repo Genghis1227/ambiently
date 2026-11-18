@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.20",
+    date: "November 17, 2026",
+    title: "Web Preview Sandbox Isolation, Reader Sanitization & Self-Hosted Security Hardening",
+    highlights: [
+      "Sandboxed Web Preview Proxy: Isolated /api/web-proxy responses in an anonymous CSP sandbox (dropping allow-same-origin on proxied iframes and refusing non-frame requests) so external pages can never access local board storage or cloud sessions.",
+      "Client-Side Reader View Sanitization: Added browser-side DOMPurify sanitization (plain HTML profile without forms, frames, SVG/MathML, or inline styles) right before rendering extracted articles.",
+      "Self-Hosted Security Parity & Board Size Accounting: Added full public/_headers CSP/Permissions-Policy parity and resolved-IP SSRF/DNS-rebinding guards (server/addressGuard.ts) to the Docker/Pi server, scoped AMBIENTLY_ALLOW_PRIVATE_FEEDS strictly to calendars and RSS, and unified all 19 board tables in private.board_usage.",
+    ],
+  },
+  {
     version: "v0.7.19",
     date: "November 17, 2026",
     title: "Pending Reward Point Deductions & Self-Service Claim Cancellation",
