@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.21] - 2026-11-18
+
+### Security & Database Hygiene
+- **Full-Schema Supabase Audit (`supabase/security-check.sql`, `README.md`, `ARCHITECTURE.md`):**
+  - Replaced the hardcoded 5-table `app_tables` list with dynamic `pg_class` discovery across every non-extension `public` table (covering all 19 core, Phase 1 profiles/chores/meals, and Kanban tables plus any future additions).
+  - Expanded read-only checks to verify RLS policies exist on every RLS-enabled table, `private.board_usage(text)` accounts for every table, statement-level `touch_dashboard_on_<table>_{insert,update,delete}` revision triggers are enabled, `private.touch_dashboard_updated_at()` uses transition tables (`new_rows`), and no legacy duplicate revision triggers remain attached.
+- **Legacy Revision Trigger Cleanup & Automated SQL Tests (`supabase/schema.sql`, `supabase/migrations/20261109_touch_board_once_per_save.sql`, `tests/securityHardening.test.ts`):**
+  - Updated `schema.sql` and `20261109_touch_board_once_per_save.sql` to drop legacy `touch_dashboard_{insert,update,delete}` triggers and `private.touch_dashboard_from_transition()`.
+  - Added automated coverage tests verifying every `public` table in `schema.sql` and `supabase/migrations/*.sql` is included in `private.board_usage(text)` and dynamically checked by `supabase/security-check.sql`.
+
 ## [0.7.20] - 2026-11-17
 
 ### Security

@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.21",
+    date: "November 18, 2026",
+    title: "Full-Schema Supabase Security Audit & Trigger Hygiene",
+    highlights: [
+      "Full-Schema Audit (supabase/security-check.sql): Replaced the hardcoded 5-table check with dynamic pg_class discovery across every public table, auditing RLS policies, grants, composite keys, 100 MB private.board_usage(text) coverage, and statement-level revision triggers.",
+      "Legacy Revision Trigger Cleanup: Updated supabase/schema.sql and 20261109_touch_board_once_per_save.sql to drop legacy touch_dashboard_{insert,update,delete} triggers and private.touch_dashboard_from_transition().",
+      "Automated SQL Coverage Tests: Added tests in tests/securityHardening.test.ts verifying every table across schema.sql and migrations is counted in private.board_usage and audited by security-check.sql.",
+    ],
+  },
+  {
     version: "v0.7.20",
     date: "November 17, 2026",
     title: "Web Preview Sandbox Isolation, Reader Sanitization & Self-Hosted Security Hardening",
