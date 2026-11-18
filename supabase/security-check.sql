@@ -1,14 +1,33 @@
--- Read-only audit of the database's access rules. Run it in the Supabase SQL Editor after schema.sql.
--- It changes nothing. Every row returned is a problem, and no rows means every check passed.
+-- Read-only audit of the database's access rules, board limits, and revision triggers.
+-- Run it in the Supabase SQL Editor after schema.sql and migrations. It changes nothing.
+-- Every row returned is a problem, and no rows means every check passed.
 
-with app_tables(name) as (
-  values ('dashboards'), ('dashboard_members'), ('tabs'), ('widgets'), ('notes')
+with app_tables as (
+  -- Every non-extension table in public (covers schema.sql, Phase 1 profiles/chores/meals, Kanban,
+  -- and any future table, while running cleanly even before optional migrations are applied).
+  select c.relname::text as name, c.oid as relid, c.relrowsecurity
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public'
+  and c.relkind in ('r', 'p')
+  and not exists (
+    select 1 from pg_depend d
+    where d.classid = 'pg_class'::regclass and d.objid = c.oid and d.deptype = 'e'
+  )
 )
 
-select 'RLS is off' as problem, c.relname::text as detail
-from pg_class c
-join pg_namespace n on n.oid = c.relnamespace
-where n.nspname = 'public' and c.relkind in ('r', 'p') and not c.relrowsecurity
+select 'RLS is off' as problem, t.name as detail
+from app_tables t
+where not t.relrowsecurity
+
+union all
+select 'RLS is on without any policy', t.name
+from app_tables t
+where t.relrowsecurity
+and not exists (
+  select 1 from pg_policies p
+  where p.schemaname = 'public' and p.tablename = t.name
+)
 
 union all
 select 'Policy applies to anonymous or all roles', tablename || ': ' || policyname
@@ -73,12 +92,12 @@ and tablename in ('dashboards', 'dashboard_members')
 union all
 select 'Rows are not identified by board and id', t.name
 from app_tables t
-where t.name in ('tabs', 'widgets', 'notes')
+where t.name not in ('dashboards', 'dashboard_members')
 and not exists (
   select 1
   from pg_index i
   join pg_attribute a on a.attrelid = i.indrelid and a.attnum = any (i.indkey)
-  where i.indrelid = format('public.%I', t.name)::regclass
+  where i.indrelid = t.relid
   and i.indisprimary
   and a.attname = 'dashboard_id'
 )
@@ -90,9 +109,42 @@ cross join (values ('insert'), ('update')) as e(event)
 where not exists (
   select 1
   from pg_trigger tr
-  where tr.tgrelid = format('public.%I', t.name)::regclass
+  where tr.tgrelid = t.relid
   and tr.tgname = 'check_board_limits_' || e.event
   and tr.tgenabled <> 'D'
+)
+
+union all
+select 'Board size function does not count table', t.name
+from app_tables t
+where coalesce(pg_get_functiondef(to_regprocedure('private.board_usage(text)')), '') not like '%' || quote_literal(t.name) || '%'
+
+union all
+select 'Board revision touch trigger is missing or turned off', t.name || ': ' || e.event
+from app_tables t
+cross join (values ('insert'), ('update'), ('delete')) as e(event)
+where t.name not in ('dashboards', 'dashboard_members')
+and not exists (
+  select 1
+  from pg_trigger tr
+  where tr.tgrelid = t.relid
+  and tr.tgname = 'touch_dashboard_on_' || t.name || '_' || e.event
+  and tr.tgenabled <> 'D'
+)
+
+union all
+select 'Board revision touch function uses per-row state instead of transition tables', 'private.touch_dashboard_updated_at'
+where coalesce(pg_get_functiondef(to_regprocedure('private.touch_dashboard_updated_at()')), '') not like '%new_rows%'
+
+union all
+select 'Legacy duplicate board revision trigger is still attached', t.name || ': ' || tr.tgname
+from app_tables t
+join pg_trigger tr on tr.tgrelid = t.relid and not tr.tgisinternal
+where tr.tgname in (
+  'touch_dashboard_on_' || t.name || '_change',
+  'touch_dashboard_insert',
+  'touch_dashboard_update',
+  'touch_dashboard_delete'
 )
 
 union all
@@ -106,7 +158,7 @@ from (values ('dashboards'), ('widgets')) as t(name)
 where not exists (
   select 1
   from pg_trigger tr
-  where tr.tgrelid = format('public.%I', t.name)::regclass
+  where tr.tgrelid = to_regclass(format('public.%I', t.name))
   and tr.tgname = 'strip_plex_tokens'
   and tr.tgenabled <> 'D'
 )

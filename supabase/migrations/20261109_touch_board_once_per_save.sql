@@ -33,6 +33,9 @@ declare
 begin
   foreach t in array array['tabs', 'widgets', 'notes'] loop
     execute format('drop trigger if exists touch_dashboard_on_%1$I_change on public.%1$I', t);
+    execute format('drop trigger if exists touch_dashboard_insert on public.%1$I', t);
+    execute format('drop trigger if exists touch_dashboard_update on public.%1$I', t);
+    execute format('drop trigger if exists touch_dashboard_delete on public.%1$I', t);
     execute format('drop trigger if exists touch_dashboard_on_%1$I_insert on public.%1$I', t);
     execute format('drop trigger if exists touch_dashboard_on_%1$I_update on public.%1$I', t);
     execute format('drop trigger if exists touch_dashboard_on_%1$I_delete on public.%1$I', t);
@@ -50,3 +53,5 @@ begin
        for each statement execute function private.touch_dashboard_updated_at()', t);
   end loop;
 end $$;
+
+drop function if exists private.touch_dashboard_from_transition();

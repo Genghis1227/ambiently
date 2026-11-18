@@ -66,6 +66,8 @@ Ambiently uses **Dexie.js** over browser `IndexedDB` (`AmbientlyDB` schema versi
 
 Workbox (`vite.config.ts`) and `mediaOptimization.ts` also maintain bounded `CacheFirst` runtime caches for static GIPHY/Wikimedia CDN media assets (`ambiently-media-cache-v1`, max 120 entries / 14-day expiry) and lazy-excluded hashed chunks (`ambiently-lazy-chunks-v1` for `ChangelogModal` and `vendor-heif`) alongside `ambiently-photo-cache-v1` offline photo caching, without ever caching tokenized Plex URLs.
 
+On the Supabase PostgreSQL side (`supabase/schema.sql` and `supabase/migrations/`), every board table enforces `authenticated`-only RLS via `private.*` `SECURITY DEFINER` helpers (`set search_path = ''`), composite `(dashboard_id, id)` primary keys on child tables, statement-level 100 MB board-size enforcement via `private.board_usage(text)` across all 19 tables, and statement-level `private.touch_dashboard_updated_at()` revision triggers. The read-only [`supabase/security-check.sql`](supabase/security-check.sql) query dynamically inspects every non-extension table in `public` against all of those invariants.
+
 ---
 
 ## 3. Responsive Proportional Canvas & Performance Architecture (`src/App.tsx`, `src/components/layout/Corkboard.tsx`)

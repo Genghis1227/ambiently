@@ -191,7 +191,7 @@ Ambiently is built on an **offline-first local architecture**:
 To enable real-time multi-device WebSocket sync across wall displays, tablets, and phones:
 
 1. Create a free project at [supabase.com](https://supabase.com).
-2. Run [`supabase/schema.sql`](supabase/schema.sql), [`supabase/migrations/phase1_profiles_chores_meals.sql`](supabase/migrations/phase1_profiles_chores_meals.sql), [`supabase/migrations/kanban_boards_and_cards.sql`](supabase/migrations/kanban_boards_and_cards.sql), and [`supabase/migrations/20261117_board_limit_counts_every_table.sql`](supabase/migrations/20261117_board_limit_counts_every_table.sql) in the Supabase SQL Editor, then run [`supabase/security-check.sql`](supabase/security-check.sql) (any returned row indicates a permission setting to review).
+2. Run [`supabase/schema.sql`](supabase/schema.sql), [`supabase/migrations/phase1_profiles_chores_meals.sql`](supabase/migrations/phase1_profiles_chores_meals.sql), [`supabase/migrations/kanban_boards_and_cards.sql`](supabase/migrations/kanban_boards_and_cards.sql), and [`supabase/migrations/20261117_board_limit_counts_every_table.sql`](supabase/migrations/20261117_board_limit_counts_every_table.sql) in the Supabase SQL Editor, then run [`supabase/security-check.sql`](supabase/security-check.sql) (audits RLS, grants, composite keys, 100 MB board-size limits, and revision triggers across every `public` table; any returned row indicates a setting to review).
    * In **Authentication**, keep **Confirm email** and **Secure email change** on, and keep anonymous sign-ins off.
    * Never put the `service_role` key in the app—only use the publishable `anon` key.
 3. Provide your project credentials depending on how you host Ambiently:

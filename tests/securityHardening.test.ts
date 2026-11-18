@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { AddressInfo } from 'node:net';
 import { ExternalFetchError, fetchExternal, setGuardedFetch } from '../functions/_shared/fetchExternal';
 import { installAddressGuard, isBlockedAddress } from '../server/addressGuard';
@@ -124,5 +125,71 @@ describe('Self-hosted server security headers', () => {
     assert.match(csp, /object-src 'none'/);
     assert.ok(res.headers.get('permissions-policy'));
     assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+  });
+});
+
+describe('Database security audit & board usage coverage (supabase/)', () => {
+  const supabaseDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'supabase');
+
+  function collectPublicTables(): string[] {
+    const sqlFiles = [
+      path.join(supabaseDir, 'schema.sql'),
+      ...fs
+        .readdirSync(path.join(supabaseDir, 'migrations'))
+        .filter((f) => f.endsWith('.sql'))
+        .map((f) => path.join(supabaseDir, 'migrations', f)),
+    ];
+    const tables = new Set<string>();
+    for (const file of sqlFiles) {
+      const content = fs.readFileSync(file, 'utf8');
+      for (const match of content.matchAll(/create\s+table\s+if\s+not\s+exists\s+public\.([a-z0-9_]+)/gi)) {
+        tables.add(match[1]);
+      }
+    }
+    return Array.from(tables).sort();
+  }
+
+  function extractBoardUsageBody(sqlText: string): string {
+    const match = sqlText.match(/create\s+or\s+replace\s+function\s+private\.board_usage\([\s\S]*?end\s+\$\$;/i);
+    assert.ok(match, 'expected private.board_usage definition');
+    return match[0];
+  }
+
+  it('counts every public table from schema.sql and migrations inside private.board_usage', () => {
+    const allTables = collectPublicTables();
+    assert.ok(allTables.length >= 19, `expected at least 19 tables, found ${allTables.length}`);
+
+    const schemaBoardUsage = extractBoardUsageBody(fs.readFileSync(path.join(supabaseDir, 'schema.sql'), 'utf8'));
+    const migrationBoardUsage = extractBoardUsageBody(
+      fs.readFileSync(path.join(supabaseDir, 'migrations', '20261117_board_limit_counts_every_table.sql'), 'utf8')
+    );
+
+    for (const table of allTables) {
+      assert.ok(schemaBoardUsage.includes(`'${table}'`), `schema.sql private.board_usage is missing ${table}`);
+      assert.ok(
+        migrationBoardUsage.includes(`'${table}'`),
+        `20261117_board_limit_counts_every_table.sql private.board_usage is missing ${table}`
+      );
+    }
+  });
+
+  it('discovers public tables dynamically in security-check.sql and audits limits and revision triggers', () => {
+    const checkSql = fs.readFileSync(path.join(supabaseDir, 'security-check.sql'), 'utf8');
+    assert.match(checkSql, /from\s+pg_class\s+c/i);
+    assert.match(checkSql, /n\.nspname\s*=\s*'public'/i);
+    assert.ok(
+      !/values\s*\('dashboards'\),\s*\('dashboard_members'\),\s*\('tabs'\),\s*\('widgets'\),\s*\('notes'\)/i.test(
+        checkSql
+      ),
+      'security-check.sql must not hardcode only the original 5 tables'
+    );
+    for (const expectedCheck of [
+      'private.board_usage(text)',
+      'check_board_limits_',
+      'touch_dashboard_on_',
+      'strip_plex_tokens',
+    ]) {
+      assert.ok(checkSql.includes(expectedCheck), `security-check.sql must check ${expectedCheck}`);
+    }
   });
 });
