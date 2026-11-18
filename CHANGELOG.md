@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.18] - 2026-11-17
+
+### Fixed & Changed
+- **Universal Canvas Swiping Across Widgets**: Starting a slow or fast horizontal swipe anywhere on a widget (including full-screen widgets, buttons, links, images, and Kanban boards, except interactive Kanban card drags, inputs/sliders/modals, and mobile horizontal scrollers) smoothly switches dashboard tabs (`canvasSwipe.ts`, `useCanvasSwipe.ts`, `index.css`, `CalendarWidget.tsx`, `PhotoFrameWidget.tsx`).
+- **Press-and-Hold (~230ms) Widget Dragging**: Moving widgets on the canvas now requires a ~230ms press-and-hold (cancels cleanly if movement exceeds 12px before pickup), preventing accidental drags during canvas swipes while keeping instant resize/rotate handles (`Corkboard.tsx`).
+
+### Added
+- **Multi-Step Layout Undo (`Ctrl+Z` / `Cmd+Z`) & 1-Tap Undo Toast**: Moving, resizing, or rotating widgets/sticky notes or running Smart Auto-Organize pushes onto a 20-step per-tab undo stack with keyboard undo (`Ctrl+Z` / `Cmd+Z`), a 5-second dismissible Undo toast, and Navigation Dock undo support (`dashboardStore.ts`, `LayoutUndoToast.tsx`, `App.tsx`, `FEATURES.md`, `ARCHITECTURE.md`, `tests/canvasSwipe.test.ts`, `tests/layoutUndo.test.ts`).
+
 ## [0.7.17] - 2026-11-16
 
 ### Fullscreen, Screen-Edge & Long-Swipe Canvas Switching

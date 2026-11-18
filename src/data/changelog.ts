@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.18",
+    date: "November 17, 2026",
+    title: "Universal Canvas Swiping, Press-and-Hold Widget Drag & Multi-Step Layout Undo",
+    highlights: [
+      "Universal Canvas Swiping Across Widgets: Starting a slow or fast horizontal swipe anywhere on a widget (including fullscreen widgets, buttons, links, images, and Kanban boards, except interactive Kanban card drags, inputs/sliders/modals, and mobile horizontal scrollers) smoothly switches dashboard tabs.",
+      "Press-and-Hold (~230ms) Widget Dragging: Moving widgets on the canvas now requires a ~230ms press-and-hold (cancels cleanly if movement exceeds 12px before pickup), preventing accidental drags during canvas swipes while keeping instant resize and rotate handles.",
+      "Multi-Step Layout Undo (Ctrl+Z / Cmd+Z) & 1-Tap Toast: Moving, resizing, or rotating widgets/sticky notes or running Smart Auto-Organize pushes onto a 20-step per-tab undo stack with keyboard undo, a 5-second dismissible Undo toast, and Navigation Dock undo support.",
+    ],
+  },
+  {
     version: "v0.7.17",
     date: "November 16, 2026",
     title: "Fullscreen, Screen-Edge & Long-Swipe Canvas Switching",
