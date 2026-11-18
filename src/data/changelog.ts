@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.19",
+    date: "November 17, 2026",
+    title: "Pending Reward Point Deductions & Self-Service Claim Cancellation",
+    highlights: [
+      "Pending Reward Point Reservation: Claiming a reward now holds its points as a pending deduction against available spendable points while awaiting Parent PIN confirmation, automatically locking other goals that exceed the remaining available balance.",
+      "Available-Balance Multi-Claim Guard: Prevents claiming multiple rewards beyond what remaining available points can cover (including across offline sync conflicts and point reductions) while still allowing multiple claims when enough leftover points remain.",
+      "Self-Service Cancel Claim: Added a Cancel Claim action directly on claimed reward cards so kids can release pending points and pick a different reward anytime before a parent confirms fulfillment.",
+    ],
+  },
+  {
     version: "v0.7.18",
     date: "November 17, 2026",
     title: "Universal Canvas Swiping, Press-and-Hold Widget Drag & Multi-Step Layout Undo",

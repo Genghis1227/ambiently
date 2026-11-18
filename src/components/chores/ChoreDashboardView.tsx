@@ -32,6 +32,7 @@ import {
   calculateEffectiveChorePoints,
   canSelfRevertInstance,
   daysBetweenDateKeys,
+  getPendingRedemptionPointsByProfile,
   getWeekEndDateKey,
   getWeekStartDateKey,
   isDateMatchingTemplateCadence,
@@ -89,6 +90,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
   const updateWishlistProposal = useChoreStore((s) => s.updateWishlistProposal);
   const withdrawWishlistProposal = useChoreStore((s) => s.withdrawWishlistProposal);
   const claimUnlockedReward = useChoreStore((s) => s.claimUnlockedReward);
+  const unclaimPendingReward = useChoreStore((s) => s.unclaimPendingReward);
   const setParentDrawerOpen = useChoreStore((s) => s.setParentDrawerOpen);
 
   const [activeScope, setActiveScope] = useState<string>(config?.scope || 'household');
@@ -391,6 +393,16 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
   ]);
 
   if (!isOpen) return null;
+
+  const pendingByProfile = getPendingRedemptionPointsByProfile(snapshot.rewards);
+  const totalHouseholdPending = Array.from(pendingByProfile.values()).reduce(
+    (sum, pts) => sum + pts,
+    0
+  );
+  const totalHouseholdAvailable = snapshot.profiles.reduce(
+    (sum, p) => sum + Math.max(0, p.balance - (pendingByProfile.get(p.id) || 0)),
+    0
+  );
 
   const toggleSection = (section: AccordionSectionId) => {
     setExpandedSections((prev) => ({
@@ -717,6 +729,8 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
 
           const subKey = `${section}_${profile.id}`;
           const isCollapsed = Boolean(collapsedChildKeys[subKey]);
+          const pendingPts = pendingByProfile.get(profile.id) || 0;
+          const availablePts = Math.max(0, profile.balance - pendingPts);
 
           return (
             <div
@@ -761,7 +775,12 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
                     className="text-xs font-medium tabular-nums"
                     style={{ color: profile.color || '#8FA89B' }}
                   >
-                    {profile.balance} pts
+                    {availablePts} pts
+                    {pendingPts > 0 && (
+                      <span className="ml-1 text-[10px] text-amber-400">
+                        • {pendingPts} pending
+                      </span>
+                    )}
                   </span>
                   {isCollapsed ? (
                     <ChevronRight className="w-4 h-4 text-slate-400" />
@@ -889,7 +908,6 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
     day: 'numeric',
   });
 
-  const totalHouseholdBank = snapshot.profiles.reduce((sum, p) => sum + p.balance, 0);
   const resolvedHeaderTitle =
     title && title.trim() && title.trim() !== 'Family Chores'
       ? title.trim()
@@ -1075,7 +1093,8 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
                 Point Banks
               </span>
               <span className={`text-[11px] tabular-nums ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                Total: {totalHouseholdBank} pts
+                Total: {totalHouseholdAvailable} pts
+                {totalHouseholdPending > 0 ? ` • ${totalHouseholdPending} pending` : ''}
               </span>
             </div>
 
@@ -1114,6 +1133,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
                     </div>
                     <div className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                       {snapshot.profiles.length} active profiles
+                      {totalHouseholdPending > 0 ? ` • ${totalHouseholdPending} pts pending` : ''}
                     </div>
                   </div>
                 </div>
@@ -1122,13 +1142,15 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
                     isLight ? 'text-emerald-700' : 'text-emerald-300'
                   }`}
                 >
-                  {totalHouseholdBank} pts
+                  {totalHouseholdAvailable} pts
                 </span>
               </button>
 
               {/* Individual Child Profile Cards */}
               {snapshot.profiles.map((profile) => {
                 const isSelected = effectiveScope === profile.id;
+                const pendingPts = pendingByProfile.get(profile.id) || 0;
+                const availablePts = Math.max(0, profile.balance - pendingPts);
                 return (
                   <button
                     key={profile.id}
@@ -1178,6 +1200,15 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
                         >
                           Lifetime: {profile.lifetimePoints} pts
                         </div>
+                        {pendingPts > 0 && (
+                          <div
+                            className={`text-[10px] font-medium tabular-nums ${
+                              isLight ? 'text-amber-700' : 'text-amber-300'
+                            }`}
+                          >
+                            -{pendingPts} pts pending (Bank: {profile.balance})
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -1186,10 +1217,10 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
                         className="text-sm font-bold tabular-nums"
                         style={{ color: profile.color || '#8FA89B' }}
                       >
-                        {profile.balance}
+                        {availablePts}
                       </div>
                       <div className={`text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                        spendable
+                        {pendingPts > 0 ? 'available' : 'spendable'}
                       </div>
                     </div>
                   </button>
@@ -1410,6 +1441,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
             activeScope={effectiveScope}
             isLight={isLight}
             onClaimReward={claimUnlockedReward}
+            onUnclaimReward={unclaimPendingReward}
             onOpenProposeModal={() => {
               setEditingProposal(null);
               setIsProposeModalOpen(true);

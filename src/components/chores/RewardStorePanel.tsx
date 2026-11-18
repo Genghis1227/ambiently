@@ -6,10 +6,12 @@ import {
   Trophy,
   Sparkles,
   ExternalLink,
+  RotateCcw,
   Shield,
   Clock,
 } from 'lucide-react';
 import type { Profile, TrophyItem, WishlistReward } from '../../types/chores';
+import { getPendingRedemptionPointsByProfile } from '../../utils/choreEngine';
 import { HouseholdAvatar } from '../common/HouseholdAvatar';
 import { openInAppWebViewer } from '../../utils/webViewer';
 import { triggerChoreCelebration } from '../../utils/confetti';
@@ -21,6 +23,7 @@ interface RewardStorePanelProps {
   activeScope?: string; // 'household' or profileId
   isLight?: boolean;
   onClaimReward: (rewardId: string) => Promise<{ success: boolean; error?: string }>;
+  onUnclaimReward?: (rewardId: string) => Promise<{ success: boolean; error?: string }>;
   onOpenProposeModal: () => void;
   onOpenProposalsTray: () => void;
   onOpenTrophyCase: () => void;
@@ -34,12 +37,14 @@ export const RewardStorePanel: React.FC<RewardStorePanelProps> = ({
   activeScope = 'household',
   isLight = false,
   onClaimReward,
+  onUnclaimReward,
   onOpenProposeModal,
   onOpenProposalsTray,
   onOpenTrophyCase,
   onOpenParentFulfillment,
 }) => {
   const profileMap = new Map(profiles.map((p) => [p.id, p]));
+  const pendingByProfile = getPendingRedemptionPointsByProfile(rewards);
 
   const visibleRewards = rewards.filter(
     (r) =>
@@ -54,8 +59,14 @@ export const RewardStorePanel: React.FC<RewardStorePanelProps> = ({
     const rank = (r: WishlistReward) =>
       r.status === 'pending_fulfillment' ? 0 : r.status === 'unlocked' ? 1 : 2;
     if (rank(a) !== rank(b)) return rank(a) - rank(b);
-    const balA = profileMap.get(a.profileId)?.balance || 0;
-    const balB = profileMap.get(b.profileId)?.balance || 0;
+    const balA = Math.max(
+      0,
+      (profileMap.get(a.profileId)?.balance || 0) - (pendingByProfile.get(a.profileId) || 0)
+    );
+    const balB = Math.max(
+      0,
+      (profileMap.get(b.profileId)?.balance || 0) - (pendingByProfile.get(b.profileId) || 0)
+    );
     const pctA = a.pointsCost > 0 ? balA / a.pointsCost : 0;
     const pctB = b.pointsCost > 0 ? balB / b.pointsCost : 0;
     return pctB - pctA;
@@ -196,13 +207,18 @@ export const RewardStorePanel: React.FC<RewardStorePanelProps> = ({
         ) : (
           sortedRewards.map((reward) => {
             const child = profileMap.get(reward.profileId);
-            const balance = child?.balance ?? 0;
+            const bankBalance = child?.balance ?? 0;
+            const pendingPoints = pendingByProfile.get(reward.profileId) ?? 0;
+            const availableBalance = Math.max(0, bankBalance - pendingPoints);
             const cost = Math.max(1, reward.pointsCost);
-            const progressPct = Math.min(100, Math.round((balance / cost) * 100));
-            const isUnlocked =
-              reward.status === 'unlocked' ||
-              (reward.status === 'active_goal' && balance >= cost);
             const isPendingFulfillment = reward.status === 'pending_fulfillment';
+            const isUnlocked =
+              !isPendingFulfillment &&
+              (reward.status === 'unlocked' ||
+                (reward.status === 'active_goal' && availableBalance >= cost));
+            const progressPct = isPendingFulfillment
+              ? 100
+              : Math.min(100, Math.round((availableBalance / cost) * 100));
 
             return (
               <div
@@ -234,10 +250,17 @@ export const RewardStorePanel: React.FC<RewardStorePanelProps> = ({
 
                 {/* Pending Fulfillment Banner */}
                 {isPendingFulfillment && (
-                  <div className="px-3.5 py-1.5 bg-amber-500/20 border-b border-amber-500/30 flex items-center justify-between text-[11px] font-semibold text-amber-200">
+                  <div
+                    className={`px-3.5 py-1.5 bg-amber-500/20 border-b border-amber-500/30 flex items-center justify-between gap-2 text-[11px] font-semibold ${
+                      isLight ? 'text-amber-900' : 'text-amber-200'
+                    }`}
+                  >
                     <span className="inline-flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-amber-300" />
+                      <Clock className={`w-3.5 h-3.5 ${isLight ? 'text-amber-700' : 'text-amber-300'}`} />
                       <span>Claimed — Awaiting Parent PIN</span>
+                    </span>
+                    <span className={`tabular-nums ${isLight ? 'text-amber-800' : 'text-amber-300'}`}>
+                      -{reward.pointsCost} pts pending
                     </span>
                   </div>
                 )}
@@ -307,11 +330,17 @@ export const RewardStorePanel: React.FC<RewardStorePanelProps> = ({
 
                   {/* Global Wallet Progress Bar */}
                   <div className="space-y-1">
-                    <div className="flex items-center justify-between text-[11px] tabular-nums">
+                    <div className="flex items-center justify-between gap-2 text-[11px] tabular-nums">
                       <span className={isLight ? 'text-slate-500' : 'text-slate-400'}>
-                        Wallet: {balance} / {reward.pointsCost} pts
+                        {isPendingFulfillment
+                          ? `Pending deduction: -${reward.pointsCost} pts (Bank: ${bankBalance} pts)`
+                          : pendingPoints > 0
+                            ? `Available: ${availableBalance} / ${reward.pointsCost} pts (${pendingPoints} pending)`
+                            : `Wallet: ${availableBalance} / ${reward.pointsCost} pts`}
                       </span>
-                      <span className="font-semibold">{progressPct}%</span>
+                      <span className="font-semibold shrink-0">
+                        {isPendingFulfillment ? 'Reserved' : `${progressPct}%`}
+                      </span>
                     </div>
                     <div
                       className={`w-full h-2 rounded-full overflow-hidden ${
@@ -322,9 +351,11 @@ export const RewardStorePanel: React.FC<RewardStorePanelProps> = ({
                         className="h-full rounded-full transition-all duration-500"
                         style={{
                           width: `${progressPct}%`,
-                          backgroundColor: isUnlocked
-                            ? '#5B9A7D'
-                            : child?.color || '#648296',
+                          backgroundColor: isPendingFulfillment
+                            ? '#D97706'
+                            : isUnlocked
+                              ? '#5B9A7D'
+                              : child?.color || '#648296',
                         }}
                       />
                     </div>
@@ -332,14 +363,32 @@ export const RewardStorePanel: React.FC<RewardStorePanelProps> = ({
 
                   {/* Action Button */}
                   {isPendingFulfillment ? (
-                    <button
-                      type="button"
-                      onClick={onOpenParentFulfillment}
-                      className="w-full py-2 px-3 rounded-xl text-xs font-semibold bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/40 inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                    >
-                      <Shield className="w-3.5 h-3.5 text-amber-300" />
-                      <span>Parent Confirm Redemption (PIN)</span>
-                    </button>
+                    <div className="flex flex-col sm:flex-row items-stretch gap-2">
+                      <button
+                        type="button"
+                        onClick={onOpenParentFulfillment}
+                        className={`flex-1 py-2 px-3 rounded-xl text-xs font-semibold bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+                          isLight ? 'text-amber-900' : 'text-amber-200'
+                        }`}
+                      >
+                        <Shield className={`w-3.5 h-3.5 ${isLight ? 'text-amber-700' : 'text-amber-300'}`} />
+                        <span>Parent Confirm (PIN)</span>
+                      </button>
+                      {onUnclaimReward && (
+                        <button
+                          type="button"
+                          onClick={() => void onUnclaimReward(reward.id)}
+                          className={`py-2 px-3 rounded-xl text-xs font-semibold border inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
+                            isLight
+                              ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                              : 'bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 border-slate-700'
+                          }`}
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Cancel Claim</span>
+                        </button>
+                      )}
+                    </div>
                   ) : isUnlocked ? (
                     <button
                       type="button"

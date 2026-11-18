@@ -32,6 +32,7 @@ import {
   calculateEffectiveChorePoints,
   canSelfRevertInstance,
   daysBetweenDateKeys,
+  getPendingRedemptionPointsByProfile,
   getWeekEndDateKey,
   getWeekStartDateKey,
   isDateMatchingTemplateCadence,
@@ -262,6 +263,11 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
   const pendingCounts = useMemo(
     () => getPendingParentActionCounts(snapshot),
     [snapshot]
+  );
+
+  const pendingByProfile = useMemo(
+    () => getPendingRedemptionPointsByProfile(snapshot.rewards),
+    [snapshot.rewards]
   );
 
   // Partition active instances into the 3 accordion buckets
@@ -840,6 +846,8 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
           const subKey = `${section}_${child.id}`;
           const isCollapsed = Boolean(collapsedChildKeys[subKey]);
           const accentHex = resolveProfileColorHex(child.color);
+          const pendingPts = pendingByProfile.get(child.id) || 0;
+          const availablePts = Math.max(0, child.balance - pendingPts);
 
           return (
             <div
@@ -887,7 +895,12 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
                     className="text-[11px] font-medium tabular-nums"
                     style={{ color: accentHex }}
                   >
-                    {child.balance} pts
+                    {availablePts} pts
+                    {pendingPts > 0 && (
+                      <span className="ml-1 text-[10px] text-amber-400">
+                        ({pendingPts} pending)
+                      </span>
+                    )}
                   </span>
                   {isCollapsed ? (
                     <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
@@ -1112,6 +1125,10 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
               </button>
               {scopeProfiles.map((profile) => {
                 const isSelected = activeScope === profile.id;
+                const availablePts = Math.max(
+                  0,
+                  profile.balance - (pendingByProfile.get(profile.id) || 0)
+                );
                 return (
                   <button
                     key={profile.id}
@@ -1129,7 +1146,7 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
                   >
                     <ProfileAvatar profile={profile} size="xs" showRing={false} />
                     <span>{profile.name}</span>
-                    <span className="opacity-75 tabular-nums">({profile.balance})</span>
+                    <span className="opacity-75 tabular-nums">({availablePts})</span>
                   </button>
                 );
               })}

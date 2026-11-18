@@ -79,6 +79,7 @@ export interface WishlistReward {
   createdAt: string;
   updatedAt?: string;
   pricedAt?: string;
+  claimedAt?: string;
   fulfilledAt?: string;
 }
 
