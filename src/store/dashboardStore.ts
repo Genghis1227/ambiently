@@ -191,6 +191,67 @@ async function markCanvasLooksChanged(get: () => DashboardState, set: (partial: 
   set({ settings });
 }
 
+export const MAX_LAYOUT_UNDO_STACK = 20;
+
+export interface LayoutHistoryEntry {
+  id: string;
+  tabId: string;
+  label: string;
+  createdAtMs: number;
+  widgetPositions: Record<string, FreeformPosition>;
+  notePositions: Record<string, FreeformPosition>;
+}
+
+export interface LayoutUndoToastState {
+  entryId: string;
+  tabId: string;
+  label: string;
+  nonce: number;
+}
+
+export type LayoutChangeVerb = 'Moved' | 'Resized' | 'Rotated' | 'Maximized' | 'Restored';
+
+export function classifyLayoutGeometryChange(
+  prev: FreeformPosition | undefined,
+  next: FreeformPosition | undefined
+): LayoutChangeVerb | null {
+  if (!next) return null;
+  const p: FreeformPosition = prev ?? {
+    xRatio: 0.1,
+    yRatio: 0.1,
+    wRatio: 0.35,
+    hRatio: 0.45,
+    zIndex: 1,
+    rotation: 0,
+  };
+  if (Boolean(p.isFullScreen) !== Boolean(next.isFullScreen)) {
+    return next.isFullScreen ? 'Maximized' : 'Restored';
+  }
+  if (
+    Math.abs((p.wRatio ?? 0.35) - (next.wRatio ?? 0.35)) >= 1e-4 ||
+    Math.abs((p.hRatio ?? 0.45) - (next.hRatio ?? 0.45)) >= 1e-4
+  ) {
+    return 'Resized';
+  }
+  if (Math.round(p.rotation ?? 0) !== Math.round(next.rotation ?? 0)) {
+    return 'Rotated';
+  }
+  if (
+    Math.abs((p.xRatio ?? 0.1) - (next.xRatio ?? 0.1)) >= 1e-4 ||
+    Math.abs((p.yRatio ?? 0.1) - (next.yRatio ?? 0.1)) >= 1e-4
+  ) {
+    return 'Moved';
+  }
+  return null;
+}
+
+function appendLayoutHistoryEntry(
+  stack: readonly LayoutHistoryEntry[],
+  entry: LayoutHistoryEntry
+): LayoutHistoryEntry[] {
+  return [...stack, entry].slice(-MAX_LAYOUT_UNDO_STACK);
+}
+
 export interface MovedWidgetToastState {
   widgetId: string;
   widgetTitle: string;
@@ -234,6 +295,8 @@ interface DashboardState {
   needsFileReconnect: boolean;
   isUnlocked: boolean; // runtime unlock state when pinLockEnabled is on
   lastLayoutSnapshot: LayoutSnapshot | null;
+  layoutUndoStack: LayoutHistoryEntry[];
+  layoutUndoToast: LayoutUndoToastState | null;
   movedWidgetToast: MovedWidgetToastState | null;
   photoSyncState: PhotoSyncState | null;
   photoSyncMeta: Record<string, PhotoTargetSyncMeta>;
@@ -311,9 +374,11 @@ interface DashboardState {
   syncRemoteWidgetChange: (widget: DashboardWidget, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void;
   syncRemoteTabChange: (tab: DashboardTab, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void;
 
-  // Auto-Organize / Auto-Tile Actions
+  // Auto-Organize & Layout Undo Actions
   autoOrganizeCanvas: (tabId: string, mode?: AutoOrganizeMode) => Promise<void>;
   undoAutoOrganize: () => Promise<void>;
+  undoLayoutChange: (tabId?: string) => Promise<boolean>;
+  dismissLayoutUndoToast: () => void;
 
   // Widget / Note operations
   addWidget: (widget: Partial<DashboardWidget>) => Promise<void>;
@@ -451,6 +516,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   needsFileReconnect: false,
   isUnlocked: true,
   lastLayoutSnapshot: null,
+  layoutUndoStack: [],
+  layoutUndoToast: null,
   movedWidgetToast: null,
   photoSyncState: null,
   photoSyncMeta: {},
@@ -1242,57 +1309,118 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     if (updatedWidgets.length > 0) await db.widgets.bulkPut(updatedWidgets).catch(() => {});
     if (updatedNotes.length > 0) await db.notes.bulkPut(updatedNotes).catch(() => {});
 
+    const autoEntry: LayoutHistoryEntry = {
+      id: `undo-${nowMs}-auto`,
+      tabId,
+      label: 'Auto-organized canvas',
+      createdAtMs: nowMs,
+      widgetPositions: prevWidgetPositions,
+      notePositions: prevNotePositions,
+    };
+    const nextStack = appendLayoutHistoryEntry(get().layoutUndoStack, autoEntry);
+
     set({
       widgets: nextWidgets,
       notes: nextNotes,
-      lastLayoutSnapshot:
-        state.lastLayoutSnapshot?.tabId === tabId
-          ? state.lastLayoutSnapshot
-          : {
-              tabId,
-              widgetPositions: prevWidgetPositions,
-              notePositions: prevNotePositions,
-            },
+      layoutUndoStack: nextStack,
+      lastLayoutSnapshot: autoEntry,
+      layoutUndoToast: {
+        entryId: autoEntry.id,
+        tabId,
+        label: autoEntry.label,
+        nonce: nowMs,
+      },
+      movedWidgetToast: null,
     });
     get().saveLocalBackup();
   },
 
   undoAutoOrganize: async () => {
-    const snapshot = get().lastLayoutSnapshot;
-    if (!snapshot) return;
+    await get().undoLayoutChange(get().activeTabId);
+  },
 
+  dismissLayoutUndoToast: () => set({ layoutUndoToast: null }),
+
+  undoLayoutChange: async (tabId) => {
+    const state = get();
+    const visibleTabs = state.tabs.filter((t) =>
+      t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false
+    );
+    const homeTab = visibleTabs.find((t) => t.isHome) || visibleTabs[0] || state.tabs[0];
+    const resolvedActiveTabId =
+      (visibleTabs.find((t) => t.id === state.activeTabId) || homeTab)?.id || 'tab-corkboard';
+    const targetTabId = tabId || resolvedActiveTabId;
+    const workingStack = [...state.layoutUndoStack];
     const nowMs = Date.now();
-    const updatedWidgets: DashboardWidget[] = [];
-    const nextWidgets = get().widgets.map((w) => {
-      const prevPos = snapshot.widgetPositions[w.id];
-      if (!prevPos) return w;
-      const updated = { ...w, freeformPos: prevPos, updated_at: nextMonotonicIso(w.updated_at, nowMs) };
-      updatedWidgets.push(updated);
-      return updated;
-    });
 
-    const updatedNotes: StickyNoteItem[] = [];
-    const nextNotes = get().notes.map((n) => {
-      const prevPos = snapshot.notePositions[n.id];
-      if (!prevPos) return n;
-      const updated = {
-        ...n,
-        freeformPos: buildNoteFreeformPos(n, prevPos),
-        updated_at: nextMonotonicIso(n.updated_at, nowMs),
-      };
-      updatedNotes.push(updated);
-      return updated;
-    });
+    while (workingStack.length > 0) {
+      let matchIdx = -1;
+      for (let i = workingStack.length - 1; i >= 0; i -= 1) {
+        if (workingStack[i].tabId === targetTabId) {
+          matchIdx = i;
+          break;
+        }
+      }
+      if (matchIdx === -1) break;
 
-    if (updatedWidgets.length > 0) await db.widgets.bulkPut(updatedWidgets).catch(() => {});
-    if (updatedNotes.length > 0) await db.notes.bulkPut(updatedNotes).catch(() => {});
+      const [entry] = workingStack.splice(matchIdx, 1);
+      const updatedWidgets: DashboardWidget[] = [];
+      const nextWidgets = state.widgets.map((w) => {
+        if (w.deleted_at) return w;
+        const prevPos = entry.widgetPositions[w.id];
+        if (!prevPos) return w;
+        const updated: DashboardWidget = {
+          ...w,
+          freeformPos: { ...prevPos },
+          updated_at: nextMonotonicIso(w.updated_at, nowMs),
+        };
+        updatedWidgets.push(updated);
+        return updated;
+      });
 
-    set({
-      widgets: nextWidgets,
-      notes: nextNotes,
-      lastLayoutSnapshot: null,
-    });
-    get().saveLocalBackup();
+      const updatedNotes: StickyNoteItem[] = [];
+      const nextNotes = state.notes.map((n) => {
+        if (n.deleted_at) return n;
+        const prevPos = entry.notePositions[n.id];
+        if (!prevPos) return n;
+        const updated: StickyNoteItem = {
+          ...n,
+          freeformPos: buildNoteFreeformPos(n, prevPos),
+          updated_at: nextMonotonicIso(n.updated_at, nowMs),
+        };
+        updatedNotes.push(updated);
+        return updated;
+      });
+
+      if (updatedWidgets.length === 0 && updatedNotes.length === 0) {
+        continue;
+      }
+
+      if (updatedWidgets.length > 0) await db.widgets.bulkPut(updatedWidgets).catch(() => {});
+      if (updatedNotes.length > 0) await db.notes.bulkPut(updatedNotes).catch(() => {});
+
+      const nextLastSnapshot =
+        [...workingStack].reverse().find((item) => item.tabId === targetTabId) || null;
+      set({
+        widgets: nextWidgets,
+        notes: nextNotes,
+        layoutUndoStack: workingStack,
+        lastLayoutSnapshot: nextLastSnapshot,
+        layoutUndoToast: null,
+      });
+      get().saveLocalBackup();
+      return true;
+    }
+
+    if (workingStack.length !== state.layoutUndoStack.length) {
+      set({
+        layoutUndoStack: workingStack,
+        lastLayoutSnapshot:
+          [...workingStack].reverse().find((item) => item.tabId === targetTabId) || null,
+        layoutUndoToast: null,
+      });
+    }
+    return false;
   },
 
   addNote: async (newNote) => {
@@ -1853,6 +1981,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
               targetTabName: resolvedTab.name,
               nonce: nowMs,
             },
+            layoutUndoToast: null,
           }
         : {}),
     });
@@ -2019,6 +2148,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         targetTabName: targetTab.name,
         nonce: nowMs,
       },
+      layoutUndoToast: null,
     });
     void get().saveLocalBackup();
     return true;
@@ -2090,6 +2220,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         targetTabName: cleanName,
         nonce: nowMs,
       },
+      layoutUndoToast: null,
     });
     await markCanvasLooksChanged(get, set);
     void get().saveLocalBackup();
@@ -2101,15 +2232,57 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   updateWidgetPosition: async (widgetId, gridPos, freeformPos) => {
     const widget = get().widgets.find((w) => w.id === widgetId);
     if (!widget) return;
+
+    const nowMs = Date.now();
+    const prevPos: FreeformPosition = widget.freeformPos
+      ? { ...widget.freeformPos }
+      : {
+          xRatio: 0.1,
+          yRatio: 0.1,
+          wRatio: 0.35,
+          hRatio: 0.45,
+          zIndex: 5,
+          rotation: 0,
+        };
+    const verb = classifyLayoutGeometryChange(prevPos, freeformPos);
+    const undoEntry: LayoutHistoryEntry | null = verb
+      ? {
+          id: `undo-${nowMs}-${Math.random().toString(36).slice(2, 7)}`,
+          tabId: widget.tabId || get().activeTabId,
+          label: `${verb} "${widget.title || 'Widget'}"`,
+          createdAtMs: nowMs,
+          widgetPositions: { [widgetId]: prevPos },
+          notePositions: {},
+        }
+      : null;
+
     const updated: DashboardWidget = {
       ...widget,
       ...(gridPos ? { gridPos } : {}),
       ...(freeformPos ? { freeformPos } : {}),
-      updated_at: nextMonotonicIso(widget.updated_at),
+      updated_at: nextMonotonicIso(widget.updated_at, nowMs),
     };
     await db.widgets.put(updated).catch(() => {});
+
+    const latest = get();
+    const nextStack = undoEntry
+      ? appendLayoutHistoryEntry(latest.layoutUndoStack, undoEntry)
+      : latest.layoutUndoStack;
     set({
-      widgets: get().widgets.map((w) => (w.id === widgetId ? updated : w)),
+      widgets: latest.widgets.map((w) => (w.id === widgetId ? updated : w)),
+      ...(undoEntry
+        ? {
+            layoutUndoStack: nextStack,
+            lastLayoutSnapshot: undoEntry,
+            layoutUndoToast: {
+              entryId: undoEntry.id,
+              tabId: undoEntry.tabId,
+              label: undoEntry.label,
+              nonce: nowMs,
+            },
+            movedWidgetToast: null,
+          }
+        : {}),
     });
     get().saveLocalBackup();
   },
@@ -2117,18 +2290,64 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   updateNotePosition: async (noteId, freeformPos) => {
     const note = get().notes.find((n) => n.id === noteId);
     if (!note) return;
+
+    const nowMs = Date.now();
     const isShoppingList = Boolean(note.isShoppingList || note.freeformPos?.isShoppingList);
+    const prevPos: FreeformPosition = note.freeformPos
+      ? { ...note.freeformPos }
+      : {
+          xRatio: 0.15,
+          yRatio: 0.15,
+          wRatio: 0.26,
+          hRatio: 0.3,
+          zIndex: 1,
+          rotation: 0,
+        };
+    const verb = classifyLayoutGeometryChange(prevPos, freeformPos);
+    const resolvedTabId =
+      !note.tabId || note.tabId === 'all' ? get().activeTabId : note.tabId;
+    const noteTitle =
+      note.title?.trim() || (isShoppingList ? 'Shopping List' : 'Sticky Note');
+    const undoEntry: LayoutHistoryEntry | null = verb
+      ? {
+          id: `undo-${nowMs}-${Math.random().toString(36).slice(2, 7)}`,
+          tabId: resolvedTabId,
+          label: `${verb} "${noteTitle}"`,
+          createdAtMs: nowMs,
+          widgetPositions: {},
+          notePositions: { [noteId]: prevPos },
+        }
+      : null;
+
     const updated: StickyNoteItem = {
       ...note,
       isShoppingList,
       freeformPos: freeformPos
         ? buildNoteFreeformPos({ ...note, isShoppingList }, freeformPos)
         : freeformPos,
-      updated_at: nextMonotonicIso(note.updated_at),
+      updated_at: nextMonotonicIso(note.updated_at, nowMs),
     };
     await db.notes.put(updated).catch(() => {});
+
+    const latest = get();
+    const nextStack = undoEntry
+      ? appendLayoutHistoryEntry(latest.layoutUndoStack, undoEntry)
+      : latest.layoutUndoStack;
     set({
-      notes: get().notes.map((n) => (n.id === noteId ? updated : n)),
+      notes: latest.notes.map((n) => (n.id === noteId ? updated : n)),
+      ...(undoEntry
+        ? {
+            layoutUndoStack: nextStack,
+            lastLayoutSnapshot: undoEntry,
+            layoutUndoToast: {
+              entryId: undoEntry.id,
+              tabId: undoEntry.tabId,
+              label: undoEntry.label,
+              nonce: nowMs,
+            },
+            movedWidgetToast: null,
+          }
+        : {}),
     });
     get().saveLocalBackup();
   },

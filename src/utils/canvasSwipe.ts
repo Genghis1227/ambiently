@@ -7,6 +7,8 @@ export type CanvasSwipeStartClassification = CanvasSwipeTriggerTier | 'ignore';
 
 export const EDGE_SWIPE_ZONE_PX = 36;
 export const DESKTOP_SIDE_DOCK_WIDTH_PX = 80;
+export const CARD_DRAG_HOLD_MS = 230;
+export const CARD_DRAG_HOLD_CANCEL_PX = 12;
 
 export interface CanvasSwipePreviewState {
   direction: CanvasSwipeDirection;
@@ -17,7 +19,7 @@ export interface CanvasSwipePreviewState {
 }
 
 const INTERACTIVE_SWIPE_BLOCKER_SELECTOR =
-  '[role="dialog"], [aria-modal="true"], nav, [data-no-canvas-swipe="true"], input, textarea, select, option, [contenteditable="true"], [role="slider"], [data-kanban-card-id]';
+  '[role="dialog"], [aria-modal="true"], nav, [data-no-canvas-swipe="true"], input, textarea, select, option, [contenteditable="true"], [role="slider"], [data-kanban-card-id], [draggable="true"]';
 
 export function isCanvasSwipeEnabled(
   settings?: Pick<AppSettings, 'canvasSwipeEnabled'> | null
@@ -298,7 +300,7 @@ export function evaluateWheelHorizontalSwipe(params: {
 
 export function classifyCanvasSwipeStartTarget(
   target: EventTarget | null,
-  options: {
+  _options: {
     mode: 'desktop' | 'mobile' | 'wheel';
     isCanvasLocked: boolean;
     clientX?: number;
@@ -333,30 +335,8 @@ export function classifyCanvasSwipeStartTarget(
     cur = cur.parentElement;
   }
 
-  if (options.mode !== 'desktop' || options.isCanvasLocked) {
-    return 'standard';
-  }
-
-  if (
-    typeof options.clientX === 'number' &&
-    isPointInCanvasEdgeSwipeZone({
-      clientX: options.clientX,
-      viewportWidth: options.viewportWidth ?? 1024,
-      dockPosition: options.dockPosition,
-      isDockHidden: options.isDockHidden,
-    })
-  ) {
-    return 'standard';
-  }
-
-  if (el.closest('[data-canvas-fullscreen="true"]')) {
-    return 'standard';
-  }
-
-  if (el.closest('[data-canvas-card="true"]')) {
-    return 'long_card';
-  }
-
+  // Press-and-hold (~230ms) gates widget dragging in Corkboard, so immediate horizontal
+  // swipes across unlocked cards, fullscreen widgets, and empty space all classify as 'standard'.
   return 'standard';
 }
 
@@ -371,8 +351,7 @@ export function shouldIgnoreCanvasSwipeTarget(
     isDockHidden?: boolean;
   }
 ): boolean {
-  const classification = classifyCanvasSwipeStartTarget(target, options);
-  return classification === 'ignore' || classification === 'long_card';
+  return classifyCanvasSwipeStartTarget(target, options) === 'ignore';
 }
 
 const cancelCardDragListeners = new Set<() => void>();
@@ -386,6 +365,21 @@ export function subscribeCancelActiveCardDrag(listener: () => void): () => void 
 
 export function requestCancelActiveCardDrag(): void {
   cancelCardDragListeners.forEach((listener) => {
+    listener();
+  });
+}
+
+const cancelCanvasSwipeListeners = new Set<() => void>();
+
+export function subscribeCancelActiveCanvasSwipe(listener: () => void): () => void {
+  cancelCanvasSwipeListeners.add(listener);
+  return () => {
+    cancelCanvasSwipeListeners.delete(listener);
+  };
+}
+
+export function requestCancelActiveCanvasSwipe(): void {
+  cancelCanvasSwipeListeners.forEach((listener) => {
     listener();
   });
 }

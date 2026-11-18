@@ -151,3 +151,23 @@ html.idle-cursor-hidden body,
   }
 }
 
+/* Keep vertical scroll & horizontal canvas swipes uninterrupted inside scrollable widget bodies */
+[data-canvas-card="true"],
+[data-canvas-card="true"] *,
+.mobile-companion-scroll * {
+  touch-action: pan-y pinch-zoom;
+}
+
+[data-canvas-card="true"][data-canvas-manipulating="true"],
+[data-canvas-card="true"][data-canvas-manipulating="true"] *,
+[data-kanban-card-id],
+[data-kanban-card-id] *,
+[data-no-canvas-swipe="true"] {
+  touch-action: none;
+}
+
+.no-scrollbar.overflow-x-auto,
+.no-scrollbar.overflow-x-auto * {
+  touch-action: pan-x pan-y;
+}
+

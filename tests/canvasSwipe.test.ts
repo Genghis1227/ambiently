@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 
 import { DEFAULT_SETTINGS } from '../src/services/db.ts';
 import {
+  CARD_DRAG_HOLD_CANCEL_PX,
+  CARD_DRAG_HOLD_MS,
   classifyCanvasSwipeStartTarget,
   computeLongSwipeCommitThresholdPx,
   computeLongSwipeFastFlickMinPx,
@@ -11,10 +13,12 @@ import {
   evaluateWheelHorizontalSwipe,
   isCanvasSwipeEnabled,
   isPointInCanvasEdgeSwipeZone,
+  requestCancelActiveCanvasSwipe,
   requestCancelActiveCardDrag,
   resolveAdjacentCanvasTab,
   shouldCommitPointerSwipeRelease,
   shouldIgnoreCanvasSwipeTarget,
+  subscribeCancelActiveCanvasSwipe,
   subscribeCancelActiveCardDrag,
 } from '../src/utils/canvasSwipe.ts';
 
@@ -321,6 +325,17 @@ describe('shouldIgnoreCanvasSwipeTarget', () => {
       parentElement: makeMockElement('DIV', { attributes: { 'data-no-canvas-swipe': 'true' } }),
     });
 
+    const explicitDraggableItem = makeMockElement('DIV', {
+      attributes: { draggable: 'true' },
+      parentElement: unlockedCardChild,
+    });
+    const linkInsideCard = makeMockElement('A', {
+      parentElement: unlockedCardChild,
+    });
+    const imgInsideCard = makeMockElement('IMG', {
+      parentElement: unlockedCardChild,
+    });
+
     assert.equal(
       shouldIgnoreCanvasSwipeTarget(emptyCanvas as unknown as EventTarget, {
         mode: 'desktop',
@@ -328,12 +343,13 @@ describe('shouldIgnoreCanvasSwipeTarget', () => {
       }),
       false
     );
+    // Unlocked cards use press-and-hold (230ms) for drag, so immediate horizontal swipes work anywhere
     assert.equal(
       shouldIgnoreCanvasSwipeTarget(unlockedCardChild as unknown as EventTarget, {
         mode: 'desktop',
         isCanvasLocked: false,
       }),
-      true
+      false
     );
     assert.equal(
       shouldIgnoreCanvasSwipeTarget(unlockedCardChild as unknown as EventTarget, {
@@ -342,7 +358,28 @@ describe('shouldIgnoreCanvasSwipeTarget', () => {
       }),
       false
     );
-    // Non-input tappable buttons remain swipeable; inputs stay blocked
+    // Non-input links, images, and tappable buttons remain swipeable; inputs and explicit [draggable] stay blocked
+    assert.equal(
+      shouldIgnoreCanvasSwipeTarget(linkInsideCard as unknown as EventTarget, {
+        mode: 'desktop',
+        isCanvasLocked: false,
+      }),
+      false
+    );
+    assert.equal(
+      shouldIgnoreCanvasSwipeTarget(imgInsideCard as unknown as EventTarget, {
+        mode: 'desktop',
+        isCanvasLocked: false,
+      }),
+      false
+    );
+    assert.equal(
+      shouldIgnoreCanvasSwipeTarget(explicitDraggableItem as unknown as EventTarget, {
+        mode: 'desktop',
+        isCanvasLocked: false,
+      }),
+      true
+    );
     assert.equal(
       shouldIgnoreCanvasSwipeTarget(buttonInsideLockedCard as unknown as EventTarget, {
         mode: 'desktop',
@@ -494,7 +531,10 @@ describe('dock-aware edge zones, fullscreen classification, and long-swipe overr
     );
   });
 
-  it('classifies fullscreen tiles and edge zones as standard while keeping unlocked center cards on long_card', () => {
+  it('classifies fullscreen tiles, edge zones, and press-and-hold cards as standard while blocking handles', () => {
+    assert.equal(CARD_DRAG_HOLD_MS, 230);
+    assert.equal(CARD_DRAG_HOLD_CANCEL_PX, 12);
+
     const fullscreenButtonChild = makeMockElement('BUTTON', {
       parentElement: makeMockElement('DIV', {
         attributes: { 'data-canvas-card': 'true', 'data-canvas-fullscreen': 'true' },
@@ -529,10 +569,10 @@ describe('dock-aware edge zones, fullscreen classification, and long-swipe overr
         clientX: 600,
         viewportWidth: 1280,
       }),
-      'long_card'
+      'standard'
     );
 
-    // Same unlocked card inside the 36px screen edge elevates to standard swipe
+    // Same unlocked card inside the 36px screen edge stays standard
     assert.equal(
       classifyCanvasSwipeStartTarget(unlockedCardButtonChild as unknown as EventTarget, {
         mode: 'desktop',
@@ -543,6 +583,22 @@ describe('dock-aware edge zones, fullscreen classification, and long-swipe overr
         isDockHidden: false,
       }),
       'standard'
+    );
+
+    // Full-screen-wide slow horizontal swipe with pause at release still commits under standard tier
+    assert.equal(
+      shouldCommitPointerSwipeRelease({
+        startX: 1100,
+        startY: 400,
+        endX: 150,
+        endY: 420,
+        elapsedMs: 1200,
+        viewportWidth: 1920,
+        lockedAxis: 'x',
+        tier: 'standard',
+        recentVelocityPxPerMs: 0,
+      }),
+      'next'
     );
 
     // Resize/rotate handles stay ignored everywhere
@@ -676,15 +732,25 @@ describe('dock-aware edge zones, fullscreen classification, and long-swipe overr
     );
   });
 
-  it('notifies and unsubscribes drag cancellation listeners synchronously', () => {
-    let calls = 0;
-    const unsubscribe = subscribeCancelActiveCardDrag(() => {
-      calls += 1;
+  it('notifies and unsubscribes drag and swipe cancellation listeners synchronously', () => {
+    let dragCalls = 0;
+    const unsubscribeDrag = subscribeCancelActiveCardDrag(() => {
+      dragCalls += 1;
     });
     requestCancelActiveCardDrag();
-    assert.equal(calls, 1);
-    unsubscribe();
+    assert.equal(dragCalls, 1);
+    unsubscribeDrag();
     requestCancelActiveCardDrag();
-    assert.equal(calls, 1);
+    assert.equal(dragCalls, 1);
+
+    let swipeCalls = 0;
+    const unsubscribeSwipe = subscribeCancelActiveCanvasSwipe(() => {
+      swipeCalls += 1;
+    });
+    requestCancelActiveCanvasSwipe();
+    assert.equal(swipeCalls, 1);
+    unsubscribeSwipe();
+    requestCancelActiveCanvasSwipe();
+    assert.equal(swipeCalls, 1);
   });
 });

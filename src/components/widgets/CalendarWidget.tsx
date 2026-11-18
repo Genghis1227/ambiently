@@ -1141,7 +1141,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
           />
         ) : (
           /* Weekly View (Card-based Day Columns) */
-          <div className="grid grid-cols-7 gap-1.5 flex-1 min-h-0 overflow-x-auto min-w-[560px] md:min-w-0">
+          <div className="grid grid-cols-7 gap-1.5 flex-1 min-h-0 overflow-x-auto md:overflow-x-hidden min-w-[560px] md:min-w-0">
             {weekDays.map((col, idx) => {
               const sortedEvents = sortDayEvents(col.events);
               return (
