@@ -11,3 +11,37 @@
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
+
+# Keep test files, API routes, and internal repo documentation out of search engine indexes
+/api/*
+  X-Robots-Tag: noindex, nofollow
+
+/tests/*
+  X-Robots-Tag: noindex, nofollow
+
+/AGENTS.md
+  X-Robots-Tag: noindex, nofollow
+
+/CLAUDE.md
+  X-Robots-Tag: noindex, nofollow
+
+/DEVELOPER_WORKFLOW.md
+  X-Robots-Tag: noindex, nofollow
+
+/CHANGELOG.md
+  X-Robots-Tag: noindex, nofollow
+
+/README.md
+  X-Robots-Tag: noindex, nofollow
+
+/FEATURES.md
+  X-Robots-Tag: noindex, nofollow
+
+/ARCHITECTURE.md
+  X-Robots-Tag: noindex, nofollow
+
+/RASPBERRY_PI.md
+  X-Robots-Tag: noindex, nofollow
+
+/package.json
+  X-Robots-Tag: noindex, nofollow

@@ -23,12 +23,20 @@ To ensure consistency, safety, and clear alignment, all contributors must strict
 ---
 
 ## 3. Implementation & Pushing
-* **Verify Changes:** Complete code changes across all bundled updates for the session and ensure all local static files, scripts, and validation checks (`npm run lint`, `npm run build`, `npm run build:server`, and `npm test`) pass successfully.
+* **Verify Changes (Required Pre-PR Gates):** Complete code changes across all bundled updates for the session and verify all local validation gates pass cleanly:
+  * `npm run lint` — `0` errors (no new `oxlint` / React Compiler warnings)
+  * `npm run build` — generates PWA icons/metadata, runs `tsc -b`, and builds the client PWA + Workbox `sw.js`
+  * `npm run build:server` — compiles the standalone Node production server (`dist-server/index.mjs`)
+  * `npm test` — runs `node tests/validate-guardrails.js --self-test` (automated secrets, zero-cost APIs, version sync, PWA assets, branding, and indexing hygiene guardrails) **and** all unit/integration suites (`tests/*.test.ts`)
+* **Zero-Cost & External API Safety Guardrail (HARD BLOCK):**
+  > [!CAUTION]
+  > Never introduce paid APIs, metered third-party SDKs, analytics/tracking scripts, leaked credentials, hardcoded machine paths, or unapproved external hosts/dependencies without explicit approval from the project owner (`@Genghis1227`). Any violation fails `tests/validate-guardrails.js` and `npm test`.
+* **Branding, Attribution & Support Protection (HARD BLOCK):**
+  * Preserve all `Trinhism` / `Trinhism Labs` attribution (`https://trinhism.com`), AGPLv3 source notices (`AmbientQuickMenu.tsx`, `SettingsModal.tsx`, `ChangelogModal.tsx`), companion Trinhism feed/app links (`tony.trinhism.com`), and support/donation elements (`SupportPanel.tsx` — Venmo, PayPal, Zelle) unless explicitly instructed otherwise by `@Genghis1227`.
 * **PWA & Asset Synchronization Protocol:** Whenever brand assets, icons, or logos are added or modified:
-  * Automatically regenerate and synchronize the entire PWA icon suite across all densities and formats (`logo.png`, `icon-512.png`, `icon-192.png`, `icon-maskable-512.png`, `icon-maskable-192.png`, `apple-touch-icon.png`, `favicon.png`).
-  * Ensure maskable icons (`icon-maskable-*.png`) are calibrated within the 80% safe zone to prevent Android launcher clipping.
-  * Ensure splash icons (`purpose: any`) are properly configured with breathing room on the matching background canvas.
-  * Update `manifest.json` and the pre-cache list in `sw.js` to ensure the installed PWA never serves stale assets.
+  * Run `npm run generate-icons` (`scripts/generate-icons.js`) to regenerate and synchronize the entire PWA icon suite (`public/logo.png`, `public/pwa-512x512.png`, `public/pwa-192x192.png`, `public/icon-maskable-512.png`, `public/icon-maskable-192.png`, `public/apple-touch-icon.png`, `public/favicon.png`, `public/og-banner.png`).
+  * Ensure maskable icons (`public/icon-maskable-*.png`) remain calibrated within the 80% safe zone to prevent Android launcher clipping.
+  * Ensure `VitePWA` `includeAssets`, `manifest.icons`, and Workbox precache exclusions in `vite.config.ts` stay aligned so the installed PWA never references missing assets or serves stale files.
 * **Documentation Review (Mandatory Before Every PR):** Before finalizing any branch or opening a Pull Request, inspect and update project documentation whenever user-facing capabilities, settings, architecture, APIs, or deployment workflows change:
   * `FEATURES.md` — Detailed capability & widget/engine reference.
   * `README.md` — Top-level feature highlights, setup, and configuration overview.

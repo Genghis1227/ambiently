@@ -1,6 +1,16 @@
 User-agent: *
 Allow: /
 Disallow: /api/
+Disallow: /tests/
 Disallow: /*?join=
+Disallow: /AGENTS.md
+Disallow: /CLAUDE.md
+Disallow: /DEVELOPER_WORKFLOW.md
+Disallow: /CHANGELOG.md
+Disallow: /README.md
+Disallow: /FEATURES.md
+Disallow: /ARCHITECTURE.md
+Disallow: /RASPBERRY_PI.md
+Disallow: /package.json
 
 Sitemap: https://dashboard.trinhism.com/sitemap.xml
