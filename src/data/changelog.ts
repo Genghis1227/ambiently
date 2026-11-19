@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.23",
+    date: "November 19, 2026",
+    title: "Phase 3: Live Sports Scoreboard, Daily Discovery & Kiosk Tooltip Polish",
+    highlights: [
+      "Live Sports Scoreboard (SportsWidget & /api/sports): Tracks live scores, game clocks, TV broadcast channels, records, and favorite teams across NFL, NBA, MLB, NHL, MLS, Premier League, and NCAA with adaptive Single-Team Card, Scoreboard Grid, and Ticker Strip layouts.",
+      "Daily Discovery & Trivia (DailyDiscoveryWidget & /api/discovery): Combines tap-to-reveal Trivia & Riddles across 5 topics, daily Word of the Day vocabulary cards, and Wikimedia On This Day history milestones backed by a curated 12-month offline fallback pack.",
+      "Idle-Cursor Kiosk Polish: Suppresses native browser hover tooltips (such as Photo Frame Ken Burns focus tooltips) whenever the cursor is auto-hidden or Night Mode is active, restoring them automatically when the pointer wakes.",
+    ],
+  },
+  {
     version: "v0.7.22",
     date: "November 18, 2026",
     title: "Multi-Device Routines Merge, Weekly Chore Rollover & Countdown/Grocery Fixes",
