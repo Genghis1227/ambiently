@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.22] - 2026-11-18
+
+### Fixed
+- **Weekly — Any Day Chore Rollover After Late Approval (`src/utils/choreEngine.ts`, `tests/choreEngineAndStore.test.ts`):**
+  - `isWeeklyChoreCompletedInWeek` now attributes `chore_completion` ledger entries containing a `<choreId>_<YYYY-MM-DD>` suffix strictly to the week of that scheduled date instead of falling back to the approval timestamp, preventing a prior-week chore approved after week rollover from expiring the new week's pending instance.
+- **Multi-Device Household Routines Merge & Uncheck Sync (`src/stores/useRoutinesStore.ts`, `src/utils/routinesEngine.ts`, `src/types/phase2Widgets.ts`, `tests/trashAndRoutinesStore.test.ts`):**
+  - `mergeRoutinesSnapshots` now preserves routines added offline on an older snapshot unless listed in `deletedRoutineIds`, merges `completions` across devices with deterministic tie-breaking, tracks bounded `uncheckedSlots` (max 14 entries, monotonic against skewed device clocks) across `toggleRoutineCheckIn`, `clearAllCompletions`, and `setRoutineItems`, and advances `updated_at` in `applyRemoteRoutinesSnapshot` only when merged content differs so all devices converge cleanly.
+- **Countdown Local-Midnight Default Target Date (`src/utils/countdownTarget.ts`, `src/components/widgets/CountdownWidget.tsx`, `src/components/widgets/WidgetSettingsModal.tsx`, `src/services/db.ts`, `src/utils/widgetCatalog.ts`, `tests/widgetCatalogAndBlueprints.test.ts`):**
+  - Removed the hardcoded `'2026-12-25T00:00:00Z'` UTC default from new and starter countdowns; unset or legacy default values now resolve to the next Dec 25 at local midnight (`nextChristmasLocal`) while preserving any user-chosen date saved in Settings.
+- **Shopping List Singularization & Bracketed Package Sizes (`src/utils/ingredientAggregator.ts`, `tests/ingredientAggregator.test.ts`):**
+  - Replaced the blanket `-ves` → `-f` rule with explicit irregulars (`leaf`, `loaf`, `half`, `knife`, `shelf`, `calf`, `wolf`, `scarf`) so *olives*, *chives*, *cloves*, and *endives* keep their names and grocery aisles, added `-sses` → `-ss` singularization (*glasses* → *glass*), and updated `parseIngredient` to extract units following a leading bracketed package size (e.g., `1 (14 oz) can diced tomatoes` → unit `can`, note `14 oz`).
+
+### Maintenance
+- **Contributor Guardrails & Indexing Hygiene (`tests/validate-guardrails.js`, `.github/workflows/guardrails.yml`, `.github/CODEOWNERS`, `.github/pull_request_template.md`, `public/_headers`, `public/robots.txt`):**
+  - Added automated repository security/zero-cost/version/asset/attribution guardrails, CI enforcement, `CODEOWNERS`, contributor PR checklist, and `noindex` rules for internal repository metadata.
+
 ## [0.7.21] - 2026-11-18
 
 ### Security & Database Hygiene

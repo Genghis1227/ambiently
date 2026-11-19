@@ -11,6 +11,17 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.22",
+    date: "November 18, 2026",
+    title: "Multi-Device Routines Merge, Weekly Chore Rollover & Countdown/Grocery Fixes",
+    highlights: [
+      "Weekly — Any Day Chore Rollover Fix: Prior-week chores approved by a parent after the week rolls over stay credited to their scheduled week so the new week's pending chore remains available.",
+      "Multi-Device Household Routines Sync: Preserves offline-added routines across devices, combines check-ins instead of dropping older device stamps, and records unchecks (uncheckedSlots) plus Clear history across sync.",
+      "Countdown Default Target & Shopping List Parsing: Unconfigured and starter countdowns now target the next Dec 25 at local midnight, plural grocery items like olives/chives/glasses keep their proper names and aisles, and bracketed package sizes like 1 (14 oz) can diced tomatoes aggregate cleanly.",
+      "Contributor Guardrails & Indexing Hygiene: Added automated secret, API allowlist, version-sync, PWA asset, and attribution guardrails in CI alongside CODEOWNERS and noindex search hygiene.",
+    ],
+  },
+  {
     version: "v0.7.21",
     date: "November 18, 2026",
     title: "Full-Schema Supabase Security Audit & Trigger Hygiene",
