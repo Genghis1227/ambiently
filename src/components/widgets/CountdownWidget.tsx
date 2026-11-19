@@ -2,17 +2,18 @@ import React, { useMemo } from 'react';
 import { Calendar, Sparkles } from 'lucide-react';
 import { useSharedClock } from '../../utils/sharedClock';
 import { useDisplayActivity } from '../../utils/displayActivity';
+import { resolveCountdownTarget } from '../../utils/countdownTarget';
 
 interface CountdownWidgetProps {
   eventName?: string;
-  targetDate?: string; // ISO string
+  targetDate?: string; // ISO string; without one, counts down to the next 25 December
   isLight?: boolean;
   transparentBg?: boolean;
 }
 
 export const CountdownWidget: React.FC<CountdownWidgetProps> = ({
   eventName = 'Upcoming Milestone',
-  targetDate = '2026-12-25T00:00:00Z',
+  targetDate,
   isLight = false,
   transparentBg = false,
 }) => {
@@ -20,9 +21,10 @@ export const CountdownWidget: React.FC<CountdownWidgetProps> = ({
   const nowDate = useSharedClock('second', !isOledNightClock);
   const nowMs = nowDate.getTime();
 
+  const targetMs = resolveCountdownTarget(targetDate, nowDate).getTime();
+
   const timeLeft = useMemo(() => {
-    const target = new Date(targetDate).getTime();
-    const diff = target - nowMs;
+    const diff = targetMs - nowMs;
 
     if (diff <= 0) {
       return { days: 0, hours: 0, minutes: 0, seconds: 0, isPast: true };
@@ -34,16 +36,16 @@ export const CountdownWidget: React.FC<CountdownWidgetProps> = ({
     const seconds = Math.floor((diff % (1000 * 60)) / 1000);
 
     return { days, hours, minutes, seconds, isPast: false };
-  }, [targetDate, nowMs]);
+  }, [targetMs, nowMs]);
 
   const targetDateFormatted = useMemo(
     () =>
-      new Date(targetDate).toLocaleDateString([], {
+      new Date(targetMs).toLocaleDateString([], {
         month: 'short',
         day: 'numeric',
         year: 'numeric',
       }),
-    [targetDate]
+    [targetMs]
   );
 
   const stickerShadow = transparentBg && !isLight ? 'drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]' : '';

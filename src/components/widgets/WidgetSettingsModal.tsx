@@ -138,6 +138,7 @@ import {
   saveWifiCredentialsToVault,
 } from '../../utils/wifiQr';
 import { resolveDecisionOptions } from '../../utils/decisionEngine';
+import { resolveCountdownTarget } from '../../utils/countdownTarget';
 
 interface WidgetSettingsModalProps {
   isOpen: boolean;
@@ -421,20 +422,14 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     const inheritedWeather = extractHouseholdInheritedDefaults(useDashboardStore.getState().widgets).weather;
 
     if (widget.type === 'countdown') {
-      const targetStr = widget.config?.targetDate || '2026-12-25T00:00:00Z';
-      try {
-        const d = new Date(targetStr);
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        const hh = String(d.getHours()).padStart(2, '0');
-        const min = String(d.getMinutes()).padStart(2, '0');
-        setCountdownDate(`${yyyy}-${mm}-${dd}`);
-        setCountdownTime(`${hh}:${min}`);
-      } catch {
-        setCountdownDate('2026-12-25');
-        setCountdownTime('00:00');
-      }
+      const d = resolveCountdownTarget(widget.config?.targetDate);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const hh = String(d.getHours()).padStart(2, '0');
+      const min = String(d.getMinutes()).padStart(2, '0');
+      setCountdownDate(`${yyyy}-${mm}-${dd}`);
+      setCountdownTime(`${hh}:${min}`);
     } else if (widget.type === 'photo_frame') {
       const explicitCommon = widget.config?.useCommonSource;
       if (explicitCommon !== undefined) {
@@ -954,10 +949,13 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     }
 
     if (effectiveType === 'countdown') {
-      const dtString = `${countdownDate || '2026-12-25'}T${countdownTime || '00:00'}:00`;
-      const iso = new Date(dtString).toISOString();
+      const chosen = countdownDate
+        ? new Date(`${countdownDate}T${countdownTime || '00:00'}:00`)
+        : null;
       configUpdates.eventName = title.trim() || 'Upcoming Milestone';
-      configUpdates.targetDate = iso;
+      // No date chosen: leave it unset so the countdown follows the next 25 December
+      configUpdates.targetDate =
+        chosen && !Number.isNaN(chosen.getTime()) ? chosen.toISOString() : undefined;
     } else if (effectiveType === 'photo_frame') {
       if (useCommonSource) {
         configUpdates.useCommonSource = true;

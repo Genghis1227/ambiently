@@ -555,7 +555,8 @@ export const WIDGET_CATALOG_ENTRIES: WidgetCatalogEntry[] = [
         description:
           'Real-time countdown timer to upcoming family vacations, birthdays, or holidays.',
         defaultGridPos: { w: 4, h: 4 },
-        defaultConfig: { eventName: 'Family Vacation', targetDate: '2026-12-25T00:00:00Z' },
+        // No targetDate: counts down to the next 25 December until a date is chosen
+        defaultConfig: { eventName: 'Family Vacation' },
         keywords: ['countdown', 'milestone', 'vacation', 'birthday'],
       },
     ],

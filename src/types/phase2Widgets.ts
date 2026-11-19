@@ -34,7 +34,15 @@ export interface RoutineItem {
   weekBLabel?: string; // e.g. 'Trash Only'
   // Bounded completion log (most recent 14 entries retained)
   completions?: RoutineCompletionStamp[];
+  // Check-ins someone took back (most recent 14 retained), so another device's copy of the
+  // same check-in doesn't bring it back when the two devices sync
+  uncheckedSlots?: RoutineUncheckMark[];
   updatedAt?: string;
+}
+
+export interface RoutineUncheckMark {
+  slotKey: string;
+  uncheckedAt: string; // ISO timestamp
 }
 
 export interface RoutinesSnapshot {

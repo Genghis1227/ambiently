@@ -6,6 +6,7 @@ import {
   formatShoppingListForGoogleKeep,
   mergeIngredientsIntoShoppingList,
   parseIngredient,
+  singularizeWord,
 } from '../src/utils/ingredientAggregator';
 import { useMealStore } from '../src/stores/useMealStore';
 
@@ -159,5 +160,63 @@ describe('Smart Ingredient Parser & Aggregator', () => {
       customOut,
       '=== BAKERY ===\n1 sourdough bread\n\n=== PRODUCE ===\n2 avocados'
     );
+  });
+
+  it('keeps words like olives and chives intact on the shopping list', () => {
+    assert.equal(singularizeWord('olives'), 'olive');
+    assert.equal(singularizeWord('chives'), 'chive');
+    assert.equal(singularizeWord('cloves'), 'clove');
+    assert.equal(singularizeWord('endives'), 'endive');
+    assert.equal(singularizeWord('glasses'), 'glass');
+    // Real "-f" plurals still work
+    assert.equal(singularizeWord('leaves'), 'leaf');
+    assert.equal(singularizeWord('loaves'), 'loaf');
+    assert.equal(singularizeWord('halves'), 'half');
+    assert.equal(singularizeWord('knives'), 'knife');
+
+    const list = aggregateIngredients([
+      '1 cup kalamata olives',
+      '1/2 cup kalamata olives',
+      '2 tbsp chives',
+      '10 basil leaves',
+    ]);
+    const labels = list.map((i) => i.displayLabel);
+    assert.ok(labels.includes('1.5 cups kalamata olive'), labels.join(' | '));
+    assert.ok(labels.includes('2 tbsp chive'), labels.join(' | '));
+    assert.ok(labels.includes('10 basil leaves'), labels.join(' | '));
+    assert.equal(list.find((i) => i.normalizedKey === 'kalamata olive')?.category, 'Pantry & Dry Goods');
+    assert.equal(list.find((i) => i.normalizedKey === 'chive')?.category, 'Produce');
+    assert.equal(labels.some((l) => /olif|chif/i.test(l)), false);
+  });
+
+  it('reads a package size in brackets before the unit', () => {
+    const canned = parseIngredient('1 (14 oz) can diced tomatoes');
+    assert.equal(canned.quantity, 1);
+    assert.equal(canned.unit, 'can');
+    assert.equal(canned.itemName, 'tomato');
+    assert.equal(canned.notes, '14 oz, diced');
+
+    const creamCheese = parseIngredient('1 (8 oz) package cream cheese, softened');
+    assert.equal(creamCheese.unit, 'pkg');
+    assert.equal(creamCheese.itemName, 'cream cheese');
+    assert.equal(creamCheese.notes, '8 oz, softened');
+
+    // Brackets not followed by a unit keep working as before
+    const tortillas = parseIngredient('2 (6 inch) tortillas');
+    assert.equal(tortillas.unit, null);
+    assert.equal(tortillas.itemName, 'tortilla');
+    assert.equal(tortillas.notes, '6 inch');
+
+    const list = aggregateIngredients([
+      '1 (15 oz) can black beans, drained',
+      '1 can black beans',
+      '1 (14 oz) can diced tomatoes',
+      '2 cans diced tomatoes',
+    ]);
+    assert.equal(list.length, 2);
+    const beans = list.find((i) => i.normalizedKey === 'black bean');
+    const tomatoes = list.find((i) => i.normalizedKey === 'tomato');
+    assert.equal(beans?.displayLabel, '2 cans black bean (15 oz, drained)');
+    assert.equal(tomatoes?.displayLabel, '3 cans tomato (14 oz, diced)');
   });
 });

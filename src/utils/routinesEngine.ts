@@ -5,6 +5,7 @@ import {
   type RoutineCadenceType,
   type RoutineCompletionStamp,
   type RoutineItem,
+  type RoutineUncheckMark,
 } from '../types/phase2Widgets';
 
 export const WEEKDAY_SHORT_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
@@ -138,8 +139,45 @@ function sanitizeCompletions(raw: unknown): RoutineCompletionStamp[] {
       profileId: typeof pid === 'string' && pid.trim() ? pid.trim() : null,
     });
   }
-  valid.sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
+  valid.sort(newestCompletionFirst);
   return valid.slice(0, MAX_ROUTINE_COMPLETIONS);
+}
+
+function isoMs(iso: string | undefined): number {
+  return Date.parse(iso || '') || 0;
+}
+
+// Newest first, then by slot, so every device orders the same stamps the same way
+function newestCompletionFirst(a: RoutineCompletionStamp, b: RoutineCompletionStamp): number {
+  return isoMs(b.completedAt) - isoMs(a.completedAt) || a.slotKey.localeCompare(b.slotKey);
+}
+
+function newestUncheckFirst(a: RoutineUncheckMark, b: RoutineUncheckMark): number {
+  return isoMs(b.uncheckedAt) - isoMs(a.uncheckedAt) || a.slotKey.localeCompare(b.slotKey);
+}
+
+// An uncheck must count as newer than the check-in it removes, even when that check-in came from a
+// device whose clock runs ahead of this one
+function uncheckTimeFor(stamp: RoutineCompletionStamp | undefined, nowIso: string): string {
+  const stampMs = isoMs(stamp?.completedAt);
+  return stampMs >= isoMs(nowIso) ? new Date(stampMs + 1).toISOString() : nowIso;
+}
+
+function sanitizeUnchecks(raw: unknown): RoutineUncheckMark[] {
+  if (!Array.isArray(raw)) return [];
+  const latestBySlot = new Map<string, RoutineUncheckMark>();
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const candidate = item as Partial<RoutineUncheckMark>;
+    const slotKey = typeof candidate.slotKey === 'string' ? candidate.slotKey.trim() : '';
+    const uncheckedAt = typeof candidate.uncheckedAt === 'string' ? candidate.uncheckedAt.trim() : '';
+    if (!slotKey || !uncheckedAt) continue;
+    const existing = latestBySlot.get(slotKey);
+    if (!existing || isoMs(uncheckedAt) > isoMs(existing.uncheckedAt)) {
+      latestBySlot.set(slotKey, { slotKey, uncheckedAt });
+    }
+  }
+  return [...latestBySlot.values()].sort(newestUncheckFirst).slice(0, MAX_ROUTINE_COMPLETIONS);
 }
 
 export function resolveRoutineItems(raw?: unknown): RoutineItem[] {
@@ -173,6 +211,10 @@ export function resolveRoutineItems(raw?: unknown): RoutineItem[] {
       ...(emoji ? { emoji } : {}),
       cadence,
       completions: sanitizeCompletions(item.completions),
+      ...(() => {
+        const unchecks = sanitizeUnchecks(item.uncheckedSlots);
+        return unchecks.length > 0 ? { uncheckedSlots: unchecks } : {};
+      })(),
       ...(typeof item.updatedAt === 'string' && item.updatedAt.trim()
         ? { updatedAt: item.updatedAt.trim() }
         : {}),
@@ -417,11 +459,16 @@ export function toggleRoutineCheckIn(
   nowIso: string
 ): RoutineItem {
   const existing = item.completions || [];
-  const alreadyStamped = existing.some((c) => c.slotKey === slotKey);
-  if (alreadyStamped) {
+  const otherUnchecks = (item.uncheckedSlots || []).filter((u) => u.slotKey !== slotKey);
+  const stamp = existing.find((c) => c.slotKey === slotKey);
+  if (stamp) {
     return {
       ...item,
       completions: existing.filter((c) => c.slotKey !== slotKey),
+      uncheckedSlots: sanitizeUnchecks([
+        { slotKey, uncheckedAt: uncheckTimeFor(stamp, nowIso) },
+        ...otherUnchecks,
+      ]),
     };
   }
 
@@ -431,9 +478,70 @@ export function toggleRoutineCheckIn(
     profileId: profileId || null,
   };
   const nextList = [nextStamp, ...existing].slice(0, MAX_ROUTINE_COMPLETIONS);
+  const checked: RoutineItem = { ...item, completions: nextList };
+  if (otherUnchecks.length > 0) {
+    checked.uncheckedSlots = otherUnchecks;
+  } else {
+    delete checked.uncheckedSlots;
+  }
+  return checked;
+}
+
+/**
+ * Records an uncheck for every check-in `previous` had that `next` no longer has (for example after
+ * "Clear history"), so the other devices' copies of those check-ins don't come back on sync.
+ */
+export function recordRemovedCheckIns(
+  previous: RoutineItem | undefined,
+  next: RoutineItem,
+  nowIso: string
+): RoutineItem {
+  if (!previous) return next;
+  const keptSlots = new Set((next.completions || []).map((c) => c.slotKey));
+  const removed = (previous.completions || [])
+    .filter((c) => !keptSlots.has(c.slotKey))
+    .map((c) => ({ slotKey: c.slotKey, uncheckedAt: uncheckTimeFor(c, nowIso) }));
+  if (removed.length === 0) return next;
   return {
-    ...item,
-    completions: nextList,
+    ...next,
+    uncheckedSlots: sanitizeUnchecks([
+      ...removed,
+      ...(previous.uncheckedSlots || []),
+      ...(next.uncheckedSlots || []),
+    ]),
+  };
+}
+
+/**
+ * Combines two devices' check-ins for the same routine: every check-in from either side is kept,
+ * unless someone took it back after it was made. When both sides checked the same slot, the earlier
+ * check-in is kept, so both devices settle on the same one.
+ */
+export function mergeRoutineCheckIns(
+  a: RoutineItem,
+  b: RoutineItem
+): { completions: RoutineCompletionStamp[]; uncheckedSlots: RoutineUncheckMark[] } {
+  const uncheckedSlots = sanitizeUnchecks([...(a.uncheckedSlots || []), ...(b.uncheckedSlots || [])]);
+  const uncheckedAtBySlot = new Map(uncheckedSlots.map((u) => [u.slotKey, isoMs(u.uncheckedAt)]));
+
+  const earliestBySlot = new Map<string, RoutineCompletionStamp>();
+  for (const stamp of [...(a.completions || []), ...(b.completions || [])]) {
+    const takenBackAt = uncheckedAtBySlot.get(stamp.slotKey);
+    if (takenBackAt !== undefined && takenBackAt >= isoMs(stamp.completedAt)) continue;
+    const existing = earliestBySlot.get(stamp.slotKey);
+    if (
+      !existing ||
+      isoMs(stamp.completedAt) < isoMs(existing.completedAt) ||
+      (isoMs(stamp.completedAt) === isoMs(existing.completedAt) &&
+        String(stamp.profileId ?? '') < String(existing.profileId ?? ''))
+    ) {
+      earliestBySlot.set(stamp.slotKey, stamp);
+    }
+  }
+
+  return {
+    completions: sanitizeCompletions([...earliestBySlot.values()]),
+    uncheckedSlots,
   };
 }
 

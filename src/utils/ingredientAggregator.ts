@@ -240,9 +240,16 @@ const IRREGULAR_SINGULAR_TO_PLURAL: Record<string, string> = {
   tomato: 'tomatoes',
   potato: 'potatoes',
   avocado: 'avocados',
+  // Words whose plural ends in "-ves". Others ending in "-ves" (olives, chives, cloves, endives)
+  // only add an "s", so the general rule below handles them.
   leaf: 'leaves',
   loaf: 'loaves',
   half: 'halves',
+  knife: 'knives',
+  shelf: 'shelves',
+  calf: 'calves',
+  wolf: 'wolves',
+  scarf: 'scarves',
   berry: 'berries',
   strawberry: 'strawberries',
   blueberry: 'blueberries',
@@ -433,11 +440,9 @@ export function singularizeWord(word: string): string {
   if (lower.endsWith('ies') && lower.length > 4) {
     return `${lower.slice(0, -3)}y`;
   }
-  if (lower.endsWith('ves') && lower.length > 4) {
-    return `${lower.slice(0, -3)}f`;
-  }
   if (
-    (lower.endsWith('ches') ||
+    (lower.endsWith('sses') ||
+      lower.endsWith('ches') ||
       lower.endsWith('shes') ||
       lower.endsWith('xes') ||
       lower.endsWith('zes')) &&
@@ -695,8 +700,22 @@ export function parseIngredient(rawLine: string, scaleFactor = 1): ParsedIngredi
 
   const effectiveScale = Number.isFinite(scaleFactor) && scaleFactor > 0 ? scaleFactor : 1;
   const { quantity: baseQty, rest: afterQty } = extractLeadingQuantity(rawTrimmed);
-  const { unit, rest: afterUnit } = extractLeadingUnit(afterQty);
-  const { itemName, notes } = extractItemAndPrepNotes(afterUnit);
+
+  // A package size in brackets before the unit: "1 (14 oz) can diced tomatoes". The unit is "can"
+  // and the size becomes a note, so the line combines with "2 cans diced tomatoes".
+  let unitSearchText = afterQty;
+  let packageSizeNote = '';
+  const sizeFirst = afterQty.match(/^\(([^)]+)\)\s*(.+)$/);
+  if (sizeFirst && extractLeadingUnit(sizeFirst[2]).unit) {
+    packageSizeNote = sizeFirst[1].trim().toLowerCase();
+    unitSearchText = sizeFirst[2];
+  }
+
+  const { unit, rest: afterUnit } = extractLeadingUnit(unitSearchText);
+  const { itemName, notes: prepNotes } = extractItemAndPrepNotes(afterUnit);
+  const notes = Array.from(
+    new Set([packageSizeNote, ...prepNotes.split(', ')].filter(Boolean))
+  ).join(', ');
 
   const scaledQty =
     baseQty !== null ? Number((baseQty * effectiveScale).toFixed(6)) : null;

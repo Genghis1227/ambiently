@@ -534,6 +534,98 @@ describe('Chore Engine & useChoreStore', () => {
     assert.equal(sunPending[0]?.dateScheduled, '2026-11-15');
   });
 
+  it('keeps this week\'s weeklyAnyDay chore when a parent approves last week\'s one after the week turns over', () => {
+    const base = createBaseSnapshot();
+    const trashTpl: ChoreTemplate = {
+      id: 'tpl_trash',
+      title: 'Take Out Trash',
+      points: 15,
+      assignedTo: 'kid_1',
+      cadence: 'weekly',
+      weeklyAnyDay: true,
+      requiresApproval: true,
+      rolloverUntilDone: false,
+      overduePolicy: 'full',
+    };
+
+    // Saturday 2026-11-14 (last day of a Sunday-start week): done and waiting for a parent
+    const saturdayDone: ChoreEngineSnapshot = {
+      ...base,
+      templates: [trashTpl],
+      instances: [
+        {
+          instanceId: 'tpl_trash_2026-11-14',
+          choreId: 'tpl_trash',
+          dateScheduled: '2026-11-14',
+          status: 'awaiting_approval',
+          completedBy: [{ profileId: 'kid_1', pointsAwarded: 15 }],
+          completedAt: new Date(2026, 10, 14, 16, 0, 0).toISOString(),
+          isOverdue: false,
+        },
+      ],
+      rewards: [],
+      householdSettings: {
+        ...base.householdSettings,
+        weekStartsOn: 'sunday',
+        lastRolloverDate: '2026-11-14',
+      },
+    };
+
+    // Sunday 07:00: the new week's chore appears
+    const { snapshot: sundayMorning } = evaluateChoreRollover(
+      saturdayDone,
+      new Date(2026, 10, 15, 7, 0, 0)
+    );
+    const pendingSunday = sundayMorning.instances.filter(
+      (i) => i.choreId === 'tpl_trash' && i.status === 'pending'
+    );
+    assert.equal(pendingSunday.length, 1);
+    assert.equal(pendingSunday[0]?.dateScheduled, '2026-11-15');
+
+    // Sunday 09:00: a parent approves Saturday's chore (as approveChoreInstance records it)
+    const approved: ChoreEngineSnapshot = {
+      ...sundayMorning,
+      instances: sundayMorning.instances.map((i) =>
+        i.instanceId === 'tpl_trash_2026-11-14' ? { ...i, status: 'completed' as const } : i
+      ),
+      ledger: [
+        ...sundayMorning.ledger,
+        {
+          id: 'ledger_trash_sat',
+          timestamp: new Date(2026, 10, 15, 9, 0, 0).toISOString(),
+          type: 'chore_completion',
+          refId: 'tpl_trash_2026-11-14',
+          profileId: 'kid_1',
+          pointsDelta: 15,
+          approvedBy: 'pin',
+          canRevert: true,
+        },
+      ],
+    };
+
+    // The next check (window focus, a sync, or Monday) must keep this week's chore
+    const { snapshot: afterApproval } = evaluateChoreRollover(
+      approved,
+      new Date(2026, 10, 15, 9, 5, 0)
+    );
+    const { snapshot: monday } = evaluateChoreRollover(
+      afterApproval,
+      new Date(2026, 10, 16, 7, 0, 0)
+    );
+    for (const snap of [afterApproval, monday]) {
+      const pending = snap.instances.filter(
+        (i) => i.choreId === 'tpl_trash' && i.status === 'pending'
+      );
+      assert.equal(pending.length, 1);
+    }
+    assert.equal(
+      monday.instances.find((i) => i.choreId === 'tpl_trash' && i.status === 'pending')
+        ?.dateScheduled,
+      '2026-11-16'
+    );
+    assert.equal(monday.profiles.find((p) => p.id === 'kid_1')?.balance, 15);
+  });
+
   it('allows kids to edit or withdraw unpriced proposals while locking priced rewards and preventing sync resurrection', async () => {
     // 1. Propose two pending rewards for kid_1 and kid_2
     const first = await useChoreStore.getState().proposeWishlistReward({
