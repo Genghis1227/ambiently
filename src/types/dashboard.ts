@@ -23,20 +23,39 @@ export type {
   SunMoonWidgetConfig,
 } from './phase1Widgets';
 export type {
-  RoutineCadenceType,
-  RoutinePeriodSlot,
-  RoutineCompletionStamp,
-  RoutineItem,
-  RoutinesWidgetConfig,
-  WifiSecurityType,
-  WifiLocalVaultCredentials,
-  WifiCardDisplayView,
-  HouseSitterContact,
-  WifiQrWidgetConfig,
   DecisionMakerMode,
   DecisionOption,
   DecisionMakerWidgetConfig,
+  HouseSitterContact,
+  RoutineCadenceType,
+  RoutineCompletionStamp,
+  RoutineItem,
+  RoutinePeriodSlot,
+  RoutinesWidgetConfig,
+  WifiCardDisplayView,
+  WifiLocalVaultCredentials,
+  WifiQrWidgetConfig,
+  WifiSecurityType,
 } from './phase2Widgets';
+export type {
+  DailyDiscoveryApiPayload,
+  DailyDiscoveryWidgetConfig,
+  DiscoveryActiveSection,
+  DiscoveryHistoryEvent,
+  DiscoveryTabMode,
+  DiscoveryTriviaCategory,
+  DiscoveryTriviaItem,
+  DiscoveryWordItem,
+  SportsDisplayMode,
+  SportsFollowedTeam,
+  SportsGame,
+  SportsGameState,
+  SportsLeagueId,
+  SportsLeagueMeta,
+  SportsTeamOption,
+  SportsTeamSummary,
+  SportsWidgetConfig,
+} from './phase3Widgets';
 export type { PhotoAutoSyncInterval, PlexPhotoSyncConfig, PhotoTargetSyncMeta };
 
 export type DockPosition = 'left' | 'top' | 'right' | 'bottom';
@@ -81,7 +100,9 @@ export type WidgetType =
   | 'sun_moon'
   | 'routines'
   | 'wifi_qr'
-  | 'decision_maker';
+  | 'decision_maker'
+  | 'sports'
+  | 'daily_discovery';
 
 export interface RssWidgetConfig {
   feedUrl?: string;

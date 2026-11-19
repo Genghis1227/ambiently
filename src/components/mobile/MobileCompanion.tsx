@@ -37,6 +37,8 @@ import {
   Wifi,
   Dices,
   Archive,
+  Trophy,
+  Lightbulb,
 } from 'lucide-react';
 import type { DashboardTab, DashboardWidget, StickyNoteItem, WidgetThemeMode } from '../../types/dashboard';
 import { categorizeIngredient, parseIngredient } from '../../utils/ingredientAggregator';
@@ -121,6 +123,12 @@ const WifiQrWidget = React.lazy(() =>
 );
 const DecisionMakerWidget = React.lazy(() =>
   import('../widgets/DecisionMakerWidget').then((m) => ({ default: m.DecisionMakerWidget }))
+);
+const SportsWidget = React.lazy(() =>
+  import('../widgets/SportsWidget').then((m) => ({ default: m.SportsWidget }))
+);
+const DailyDiscoveryWidget = React.lazy(() =>
+  import('../widgets/DailyDiscoveryWidget').then((m) => ({ default: m.DailyDiscoveryWidget }))
 );
 
 interface MobileCompanionProps {
@@ -389,6 +397,10 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return Wifi;
       case 'decision_maker':
         return Dices;
+      case 'sports':
+        return Trophy;
+      case 'daily_discovery':
+        return Lightbulb;
       default:
         return LayoutGrid;
     }
@@ -440,6 +452,10 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return 'Guest Wi-Fi & House-Sitter';
       case 'decision_maker':
         return 'Decision Wheel & Poll';
+      case 'sports':
+        return 'Live Sports Scoreboard';
+      case 'daily_discovery':
+        return 'Daily Discovery & Trivia';
       default:
         return 'Widget';
     }
@@ -728,6 +744,34 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return (
           <div className="h-[24rem] overflow-hidden">
             <DecisionMakerWidget
+              title={widget.title}
+              config={widget.config}
+              isLight={isLight}
+              transparentBg={false}
+              onUpdateConfig={(updates) =>
+                onUpdateWidget?.(widget.id, { config: { ...widget.config, ...updates } })
+              }
+            />
+          </div>
+        );
+      case 'sports':
+        return (
+          <div className="max-h-96 overflow-y-auto">
+            <SportsWidget
+              title={widget.title}
+              config={widget.config}
+              isLight={isLight}
+              transparentBg={false}
+              onUpdateConfig={(updates) =>
+                onUpdateWidget?.(widget.id, { config: { ...widget.config, ...updates } })
+              }
+            />
+          </div>
+        );
+      case 'daily_discovery':
+        return (
+          <div className="max-h-96 overflow-y-auto">
+            <DailyDiscoveryWidget
               title={widget.title}
               config={widget.config}
               isLight={isLight}

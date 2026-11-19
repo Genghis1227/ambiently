@@ -24,6 +24,8 @@ import {
   ListChecks,
   Wifi,
   Dices,
+  Trophy,
+  Lightbulb,
 } from 'lucide-react';
 import type { DashboardWidget } from '../../types/dashboard';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -67,6 +69,8 @@ const CATALOG_ICONS: Record<WidgetCatalogIconKey, React.ComponentType<{ classNam
   routines: ListChecks,
   wifi_qr: Wifi,
   decision_maker: Dices,
+  sports: Trophy,
+  daily_discovery: Lightbulb,
 };
 
 export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({

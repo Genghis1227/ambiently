@@ -1,6 +1,7 @@
 import type { DashboardWidget, WidgetType } from '../types/dashboard';
 import { DEFAULT_FINANCE_WATCHLIST } from '../types/finance';
 import { DEFAULT_DECISION_OPTIONS } from './decisionEngine';
+import { DEFAULT_SPORTS_LEAGUES } from '../types/phase3Widgets';
 
 export type WidgetCategoryId =
   | 'all'
@@ -29,7 +30,9 @@ export type WidgetCatalogIconKey =
   | 'sun_moon'
   | 'routines'
   | 'wifi_qr'
-  | 'decision_maker';
+  | 'decision_maker'
+  | 'sports'
+  | 'daily_discovery';
 
 export interface WidgetCategoryMeta {
   id: WidgetCategoryId;
@@ -738,6 +741,110 @@ export const WIDGET_CATALOG_ENTRIES: WidgetCatalogEntry[] = [
           'etf',
           'watchlist',
           'watch list',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'sports',
+    category: 'text_feeds',
+    title: 'Live Sports Scoreboard',
+    description:
+      'Live scores, game clocks, TV broadcast channels, and favorite teams across NFL, NBA, MLB, NHL, MLS, Premier League, and NCAA.',
+    iconKey: 'sports',
+    color: 'from-amber-500/20 to-orange-500/20 text-amber-400 border-amber-500/30',
+    keywords: [
+      'sports',
+      'scoreboard',
+      'scores',
+      'nfl',
+      'nba',
+      'mlb',
+      'nhl',
+      'mls',
+      'soccer',
+      'epl',
+      'premier league',
+      'ncaa',
+      'football',
+      'basketball',
+      'baseball',
+      'hockey',
+    ],
+    variants: [
+      {
+        type: 'sports',
+        pillLabel: 'Live Sports Scoreboard',
+        title: 'Live Sports Scoreboard',
+        description:
+          'Zero-key live scoreboard and team schedule across pro and college leagues with adaptive card, grid, and ticker layouts.',
+        defaultGridPos: { w: 4, h: 4 },
+        defaultConfig: {
+          leagues: DEFAULT_SPORTS_LEAGUES,
+          followedTeams: [],
+          showOnlyFollowedTeams: false,
+          displayMode: 'auto',
+          showRecords: true,
+          showBroadcast: true,
+          refreshIntervalMin: 5,
+        },
+        keywords: [
+          'sports',
+          'scoreboard',
+          'scores',
+          'nfl',
+          'nba',
+          'mlb',
+          'nhl',
+          'mls',
+          'epl',
+          'ncaa',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'daily_discovery',
+    category: 'text_feeds',
+    title: 'Daily Discovery & Trivia',
+    description:
+      'Tap-to-reveal family trivia and riddles, daily vocabulary word, and "On This Day" history cards with built-in offline pack.',
+    iconKey: 'daily_discovery',
+    color: 'from-yellow-500/20 to-amber-500/20 text-yellow-400 border-yellow-500/30',
+    keywords: [
+      'trivia',
+      'riddle',
+      'riddles',
+      'word of the day',
+      'vocabulary',
+      'on this day',
+      'history',
+      'discovery',
+      'facts',
+      'quiz',
+    ],
+    variants: [
+      {
+        type: 'daily_discovery',
+        pillLabel: 'Daily Discovery & Trivia',
+        title: 'Daily Discovery',
+        description:
+          'Daily trivia, riddles, vocabulary word, and Wikimedia "On This Day" history cards for table talk.',
+        defaultGridPos: { w: 4, h: 4 },
+        defaultConfig: {
+          mode: 'rotate',
+          triviaCategory: 'all',
+          autoRotateSec: 30,
+          autoRevealAnswer: false,
+        },
+        keywords: [
+          'trivia',
+          'riddle',
+          'riddles',
+          'word of the day',
+          'on this day',
+          'history',
+          'discovery',
         ],
       },
     ],

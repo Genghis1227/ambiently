@@ -12,6 +12,8 @@ import { onRequestGet as handleReader } from '../functions/api/reader';
 import { onRequestGet as handleWebProxy } from '../functions/api/web-proxy';
 import { onRequestGet as handleMetadata } from '../functions/api/metadata';
 import { onRequestGet as handleFinance } from '../functions/api/finance';
+import { onRequestGet as handleSports } from '../functions/api/sports';
+import { onRequestGet as handleDiscovery } from '../functions/api/discovery';
 import { installAddressGuard } from './addressGuard';
 
 type ApiHandler = (ctx: { request: Request }) => Promise<Response>;
@@ -25,6 +27,8 @@ const API_ROUTES: Record<string, ApiHandler> = {
   'web-proxy': handleWebProxy,
   metadata: handleMetadata,
   finance: handleFinance,
+  sports: handleSports,
+  discovery: handleDiscovery,
 };
 
 const MIME_TYPES: Record<string, string> = {

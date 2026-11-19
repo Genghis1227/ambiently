@@ -47,6 +47,8 @@ const ALL_WIDGET_TYPES: WidgetType[] = [
   'timer',
   'air_quality',
   'sun_moon',
+  'sports',
+  'daily_discovery',
 ];
 
 function makeWidget(
@@ -75,8 +77,8 @@ function boxesOverlap(a: FreeformPosition, b: FreeformPosition): boolean {
 }
 
 describe('widgetCatalog', () => {
-  it('covers all 23 WidgetTypes cleanly across 20 entries and 4 categories', () => {
-    assert.equal(WIDGET_CATALOG_ENTRIES.length, 20);
+  it('covers all 25 WidgetTypes cleanly across 22 entries and 4 categories', () => {
+    assert.equal(WIDGET_CATALOG_ENTRIES.length, 22);
     assert.deepEqual(
       WIDGET_CATEGORIES.map((c) => c.id),
       ['all', 'household', 'time_weather', 'media_ambient', 'text_feeds']
@@ -173,6 +175,29 @@ describe('widgetCatalog', () => {
     assert.equal(financePayload.title, 'Markets & Watchlist');
     assert.ok(Array.isArray(financePayload.config?.watchlist));
     assert.ok((financePayload.config?.watchlist?.length || 0) >= 5);
+
+    const sportsSearch = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'text_feeds', 'scoreboard');
+    assert.equal(sportsSearch.some((r) => r.entry.id === 'sports'), true);
+    const nflSearch = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'all', 'nfl');
+    assert.equal(nflSearch[0]?.entry.id, 'sports');
+    const sportsPayload = buildWidgetPayloadFromVariant(nflSearch[0].entry.variants[0], 'tab-home', []);
+    assert.equal(sportsPayload.type, 'sports');
+    assert.equal(sportsPayload.title, 'Live Sports Scoreboard');
+    assert.deepEqual(sportsPayload.config?.leagues, ['nfl', 'nba']);
+
+    for (const term of ['trivia', 'riddle', 'on this day']) {
+      const discoverySearch = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'all', term);
+      assert.equal(discoverySearch[0]?.entry.id, 'daily_discovery');
+    }
+    const discoveryEntry = WIDGET_CATALOG_ENTRIES.find((e) => e.id === 'daily_discovery')!;
+    const discoveryPayload = buildWidgetPayloadFromVariant(
+      discoveryEntry.variants[0],
+      'tab-home',
+      []
+    );
+    assert.equal(discoveryPayload.type, 'daily_discovery');
+    assert.equal(discoveryPayload.title, 'Daily Discovery');
+    assert.equal(discoveryPayload.config?.mode, 'rotate');
 
     assert.equal(getDefaultTitleForWidgetType('kanban'), 'Project Board (Kanban)');
     const projectBoardSearch = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'all', 'project board');

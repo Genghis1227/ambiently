@@ -94,6 +94,12 @@ const WifiQrWidget = React.lazy(() =>
 const DecisionMakerWidget = React.lazy(() =>
   import('../widgets/DecisionMakerWidget').then((m) => ({ default: m.DecisionMakerWidget }))
 );
+const SportsWidget = React.lazy(() =>
+  import('../widgets/SportsWidget').then((m) => ({ default: m.SportsWidget }))
+);
+const DailyDiscoveryWidget = React.lazy(() =>
+  import('../widgets/DailyDiscoveryWidget').then((m) => ({ default: m.DailyDiscoveryWidget }))
+);
 import { useDashboardStore } from '../../store/dashboardStore';
 import { CANVAS_THEMES, isCanvasThemeLight } from '../../data/canvasThemes';
 import { findOpenCanvasSpot } from '../../utils/autoLayout';
@@ -482,6 +488,22 @@ const MemoizedCanvasWidgetBody: React.FC<CanvasWidgetBodyProps> = React.memo(({
         />
       ) : widget.type === 'decision_maker' ? (
         <DecisionMakerWidget
+          title={widget.title}
+          config={widget.config}
+          isLight={isWidgetLight}
+          transparentBg={isFramelessWidget}
+          onUpdateConfig={handleConfigUpdate}
+        />
+      ) : widget.type === 'sports' ? (
+        <SportsWidget
+          title={widget.title}
+          config={widget.config}
+          isLight={isWidgetLight}
+          transparentBg={isFramelessWidget}
+          onUpdateConfig={handleConfigUpdate}
+        />
+      ) : widget.type === 'daily_discovery' ? (
+        <DailyDiscoveryWidget
           title={widget.title}
           config={widget.config}
           isLight={isWidgetLight}
