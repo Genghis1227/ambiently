@@ -16,6 +16,7 @@ import { getPlexToken } from '../../services/plex';
 import { addPlexToken } from '../../services/plexLinks';
 import { usePlexServerTokens } from '../../hooks/usePlexServerTokens';
 import { useDisplayActivity } from '../../utils/displayActivity';
+import { useIsCursorHidden } from '../../hooks/useIdleCursor';
 
 
 export type PolaroidDensity = 6 | 12 | 18 | 24 | 32;
@@ -325,6 +326,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
   const topZIndexRef = useRef(30);
   const prevPhotoOrderRef = useRef(photoOrder);
   const { shouldPauseAnimations } = useDisplayActivity();
+  const isCursorHidden = useIsCursorHidden();
 
   const [hasLocalPlexAuth, setHasLocalPlexAuth] = useState(true);
   const isPlexSource = isUsingCommonSource
@@ -1150,7 +1152,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   handleKenBurnsPrev();
                 }}
                 className="absolute left-5 top-1/2 -translate-y-1/2 z-[35] p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
-                title="Previous photo (Go back)"
+                title={isCursorHidden ? undefined : 'Previous photo (Go back)'}
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
@@ -1163,7 +1165,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   handleKenBurnsNext();
                 }}
                 className="absolute right-5 top-1/2 -translate-y-1/2 z-[35] p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
-                title="Next photo"
+                title={isCursorHidden ? undefined : 'Next photo'}
               >
                 <ChevronRight className="w-5 h-5" />
               </button>
@@ -1187,11 +1189,13 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                     : 'hover:ring-1 hover:ring-white/20'
                 }`}
                 title={
-                  mosaicKenBurns
-                    ? isFocused
-                      ? 'Currently in focus (Click to advance photo)'
-                      : 'Click to focus this photo with Ken Burns'
-                    : 'Click to advance this photo'
+                  isCursorHidden
+                    ? undefined
+                    : mosaicKenBurns
+                      ? isFocused
+                        ? 'Currently in focus (Click to advance photo)'
+                        : 'Click to focus this photo with Ken Burns'
+                      : 'Click to advance this photo'
                 }
               >
                 <AnimatePresence>
@@ -1272,7 +1276,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   handleMosaicPrev();
                 }}
                 className="absolute left-5 top-1/2 -translate-y-1/2 z-[35] p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
-                title="Previous photo collage (Go back)"
+                title={isCursorHidden ? undefined : 'Previous photo collage (Go back)'}
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
@@ -1285,7 +1289,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   handleMosaicNext();
                 }}
                 className="absolute right-5 top-1/2 -translate-y-1/2 z-[35] p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
-                title="Next photo collage"
+                title={isCursorHidden ? undefined : 'Next photo collage'}
               >
                 <ChevronRight className="w-5 h-5" />
               </button>
@@ -1333,7 +1337,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                 }}
                 whileTap={{ scale: 0.96 }}
                 onClick={() => handleShufflePolaroid(idx)}
-                title="Click to randomly shuffle this polaroid"
+                title={isCursorHidden ? undefined : 'Click to randomly shuffle this polaroid'}
                 style={{
                   position: 'absolute',
                   top: slotDef.top,
@@ -1438,7 +1442,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   handleFilmstripPrev();
                 }}
                 className="absolute left-5 top-1/2 -translate-y-1/2 z-[35] p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
-                title="Previous photo (Go back)"
+                title={isCursorHidden ? undefined : 'Previous photo (Go back)'}
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
@@ -1451,7 +1455,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   handleFilmstripNext();
                 }}
                 className="absolute right-5 top-1/2 -translate-y-1/2 z-[35] p-2 rounded-full bg-black/70 hover:bg-black/90 text-white/80 hover:text-white border border-white/20 opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md shadow-xl hover:scale-110 active:scale-95"
-                title="Next photo"
+                title={isCursorHidden ? undefined : 'Next photo'}
               >
                 <ChevronRight className="w-5 h-5" />
               </button>
@@ -1491,7 +1495,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                     ? 'ring-2 ring-blue-500/90 shadow-[0_25px_60px_rgba(0,0,0,0.95)]'
                     : 'border border-white/10 hover:opacity-75'
                 }`}
-                title={isCenter ? p.caption : 'Click to center this photo'}
+                title={isCursorHidden ? undefined : isCenter ? p.caption : 'Click to center this photo'}
               >
                 <img
                   src={getPhotoDisplayUrl(p, 800)}
@@ -1548,7 +1552,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   else handleKenBurnsPrev();
                 }}
                 className="p-0.5 -ml-1 rounded-full hover:bg-white/20 text-gray-300 hover:text-white transition-all cursor-pointer"
-                title="Previous photo (Go back)"
+                title={isCursorHidden ? undefined : 'Previous photo (Go back)'}
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>
@@ -1575,7 +1579,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
             {isPlexSource && !hasLocalPlexAuth && (
               <span
                 className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[9px] font-semibold border border-amber-500/40"
-                title="Plex credentials needed on this screen to stream or sync library."
+                title={isCursorHidden ? undefined : 'Plex credentials needed on this screen to stream or sync library.'}
               >
                 <Tv className="w-2.5 h-2.5 text-amber-400" />
                 <span>Pairing Needed</span>
@@ -1593,7 +1597,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   else handleKenBurnsNext();
                 }}
                 className="p-0.5 -mr-1 rounded-full hover:bg-white/20 text-gray-300 hover:text-white transition-all cursor-pointer"
-                title="Next photo"
+                title={isCursorHidden ? undefined : 'Next photo'}
               >
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>

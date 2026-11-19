@@ -1,10 +1,72 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 
 interface UseIdleCursorOptions {
   enabled?: boolean;
   timeoutMs?: number;
   nightModeTimeoutMs?: number;
   isNightMode?: boolean;
+}
+
+const SUPPRESSED_TITLE_ATTR = 'data-idle-suppressed-title';
+
+let isIdleCursorHidden = false;
+const idleCursorListeners = new Set<() => void>();
+
+function subscribeIdleCursorHidden(callback: () => void): () => void {
+  idleCursorListeners.add(callback);
+  return () => {
+    idleCursorListeners.delete(callback);
+  };
+}
+
+function setIdleCursorHiddenStore(next: boolean): void {
+  if (isIdleCursorHidden === next) return;
+  isIdleCursorHidden = next;
+  for (const listener of idleCursorListeners) {
+    listener();
+  }
+}
+
+/**
+ * Reactive boolean reflecting whether the idle-cursor auto-hide layer is currently hiding the pointer.
+ */
+export function useIsCursorHidden(): boolean {
+  return useSyncExternalStore(
+    subscribeIdleCursorHidden,
+    () => isIdleCursorHidden,
+    () => false
+  );
+}
+
+/**
+ * Stashes an element's native `title` attribute into `data-idle-suppressed-title` and removes
+ * `title` so Chromium cannot paint or retain a native hover tooltip while the cursor is hidden.
+ */
+export function suppressElementTooltip(el: Element): void {
+  if (!el.hasAttribute('title')) return;
+  const val = el.getAttribute('title');
+  if (val !== null) {
+    el.setAttribute(SUPPRESSED_TITLE_ATTR, val);
+    el.removeAttribute('title');
+  }
+}
+
+export function suppressDocumentTooltips(root: ParentNode): void {
+  const targets = root.querySelectorAll('[title]');
+  for (const el of targets) {
+    suppressElementTooltip(el);
+  }
+}
+
+export function restoreDocumentTooltips(root: ParentNode): void {
+  const targets = root.querySelectorAll(`[${SUPPRESSED_TITLE_ATTR}]`);
+  for (const el of targets) {
+    const saved = el.getAttribute(SUPPRESSED_TITLE_ATTR);
+    if (saved !== null && !el.hasAttribute('title')) {
+      el.setAttribute('title', saved);
+    }
+    el.removeAttribute(SUPPRESSED_TITLE_ATTR);
+  }
 }
 
 /**
@@ -17,6 +79,8 @@ interface UseIdleCursorOptions {
  *   or background widget DOM refreshes.
  * - Filters out synthetic Chromium `mousemove`/`pointermove` events where the pointer coordinates
  *   have not physically moved (preventing clock ticks or layout updates from waking the cursor).
+ * - Suppresses native browser `[title]` hover tooltips while hidden so rotating tiles or layout
+ *   refreshes underneath a parked invisible pointer never pop up OS tooltips on kiosk screens.
  */
 export function useIdleCursor({
   enabled = true,
@@ -31,27 +95,76 @@ export function useIdleCursor({
     const active = enabled || isNightMode;
     if (!active) {
       document.documentElement.classList.remove('idle-cursor-hidden');
+      restoreDocumentTooltips(document);
+      setIdleCursorHiddenStore(false);
       return;
     }
 
     const currentTimeout = isNightMode ? nightModeTimeoutMs : timeoutMs;
+    let observer: MutationObserver | null = null;
+
+    const attachTooltipObserver = () => {
+      if (observer || typeof MutationObserver === 'undefined') return;
+      observer = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+          if (mutation.type === 'attributes' && mutation.attributeName === 'title') {
+            const target = mutation.target as Element;
+            if (target.nodeType === 1 && target.hasAttribute('title')) {
+              suppressElementTooltip(target);
+            }
+          } else if (mutation.type === 'childList') {
+            for (const node of mutation.addedNodes) {
+              if (node.nodeType !== 1) continue;
+              const el = node as Element;
+              suppressElementTooltip(el);
+              if (typeof el.querySelectorAll === 'function') {
+                suppressDocumentTooltips(el);
+              }
+            }
+          }
+        }
+      });
+      observer.observe(document.documentElement, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        attributeFilter: ['title'],
+      });
+    };
+
+    const hideCursor = () => {
+      document.documentElement.classList.add('idle-cursor-hidden');
+      suppressDocumentTooltips(document);
+      attachTooltipObserver();
+      setIdleCursorHiddenStore(true);
+    };
+
+    const showCursor = () => {
+      if (observer) {
+        observer.disconnect();
+        observer = null;
+      }
+      document.documentElement.classList.remove('idle-cursor-hidden');
+      restoreDocumentTooltips(document);
+      setIdleCursorHiddenStore(false);
+    };
 
     const resetTimer = () => {
-      document.documentElement.classList.remove('idle-cursor-hidden');
+      showCursor();
 
       if (timerRef.current) {
         clearTimeout(timerRef.current);
       }
 
       timerRef.current = setTimeout(() => {
-        document.documentElement.classList.add('idle-cursor-hidden');
+        hideCursor();
       }, currentTimeout);
     };
 
     // When Night Mode engages, hide cursor immediately without waiting for mouse movement
     if (isNightMode) {
       if (timerRef.current) clearTimeout(timerRef.current);
-      document.documentElement.classList.add('idle-cursor-hidden');
+      hideCursor();
     } else {
       resetTimer();
     }
@@ -92,7 +205,7 @@ export function useIdleCursor({
       window.removeEventListener('touchstart', handleDiscreteActivity);
       window.removeEventListener('wheel', handleDiscreteActivity);
       window.removeEventListener('keydown', handleDiscreteActivity);
-      document.documentElement.classList.remove('idle-cursor-hidden');
+      showCursor();
     };
   }, [enabled, timeoutMs, nightModeTimeoutMs, isNightMode]);
 }

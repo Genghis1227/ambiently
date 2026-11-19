@@ -139,6 +139,19 @@ import {
 } from '../../utils/wifiQr';
 import { resolveDecisionOptions } from '../../utils/decisionEngine';
 import { resolveCountdownTarget } from '../../utils/countdownTarget';
+import {
+  DailyDiscoverySettingsPanel,
+  SportsSettingsPanel,
+} from './Phase3WidgetSettingsPanels';
+import {
+  DEFAULT_SPORTS_LEAGUES,
+  type DiscoveryTabMode,
+  type DiscoveryTriviaCategory,
+  type SportsDisplayMode,
+  type SportsFollowedTeam,
+  type SportsLeagueId,
+} from '../../types/phase3Widgets';
+import { resolveFollowedTeams, resolveSportsLeagues } from '../../services/sports';
 
 interface WidgetSettingsModalProps {
   isOpen: boolean;
@@ -383,6 +396,21 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const [decisionAllowMultiVote, setDecisionAllowMultiVote] = useState<boolean>(false);
   const [decisionRemoveWinnerOnSpin, setDecisionRemoveWinnerOnSpin] = useState<boolean>(false);
   const [decisionResetRequested, setDecisionResetRequested] = useState<boolean>(false);
+
+  // Phase 3: Live Sports Scoreboard
+  const [sportsLeagues, setSportsLeagues] = useState<SportsLeagueId[]>(DEFAULT_SPORTS_LEAGUES);
+  const [sportsFollowedTeams, setSportsFollowedTeams] = useState<SportsFollowedTeam[]>([]);
+  const [sportsOnlyFollowed, setSportsOnlyFollowed] = useState<boolean>(false);
+  const [sportsDisplayMode, setSportsDisplayMode] = useState<SportsDisplayMode>('auto');
+  const [sportsShowRecords, setSportsShowRecords] = useState<boolean>(true);
+  const [sportsShowBroadcast, setSportsShowBroadcast] = useState<boolean>(true);
+  const [sportsRefreshMin, setSportsRefreshMin] = useState<1 | 2 | 5 | 15>(5);
+
+  // Phase 3: Daily Discovery & Trivia
+  const [discoveryMode, setDiscoveryMode] = useState<DiscoveryTabMode>('rotate');
+  const [discoveryCategory, setDiscoveryCategory] = useState<DiscoveryTriviaCategory>('all');
+  const [discoveryAutoRotateSec, setDiscoveryAutoRotateSec] = useState<0 | 15 | 30 | 60>(30);
+  const [discoveryAutoReveal, setDiscoveryAutoReveal] = useState<boolean>(false);
 
   const [rssCategoryFilter, setRssCategoryFilter] = useState<'All' | RssFeedCategory>('All');
   const [rssSearchQuery, setRssSearchQuery] = useState('');
@@ -699,6 +727,27 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setDecisionAllowMultiVote(Boolean(widget.config?.allowMultiVote));
       setDecisionRemoveWinnerOnSpin(Boolean(widget.config?.removeWinnerOnSpin));
       setDecisionResetRequested(false);
+    } else if (widget.type === 'sports') {
+      setSportsLeagues(resolveSportsLeagues(widget.config?.leagues));
+      setSportsFollowedTeams(resolveFollowedTeams(widget.config?.followedTeams));
+      setSportsOnlyFollowed(Boolean(widget.config?.showOnlyFollowedTeams));
+      const mode = widget.config?.displayMode;
+      setSportsDisplayMode(
+        mode === 'single' || mode === 'grid' || mode === 'ticker' ? mode : 'auto'
+      );
+      setSportsShowRecords(widget.config?.showRecords !== false);
+      setSportsShowBroadcast(widget.config?.showBroadcast !== false);
+      const refMin = widget.config?.refreshIntervalMin;
+      setSportsRefreshMin(refMin === 1 || refMin === 2 || refMin === 15 ? refMin : 5);
+    } else if (widget.type === 'daily_discovery') {
+      const mode = widget.config?.mode;
+      setDiscoveryMode(
+        mode === 'trivia' || mode === 'word' || mode === 'on_this_day' ? mode : 'rotate'
+      );
+      setDiscoveryCategory(widget.config?.triviaCategory || 'all');
+      const sec = widget.config?.autoRotateSec;
+      setDiscoveryAutoRotateSec(sec === 0 || sec === 15 || sec === 60 ? sec : 30);
+      setDiscoveryAutoReveal(Boolean(widget.config?.autoRevealAnswer));
     }
   }, [widget, isOpen, settings.commonPhotos, settings.defaultWidgetStyle]);
 
@@ -943,6 +992,8 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
         'routines',
         'wifi_qr',
         'decision_maker',
+        'sports',
+        'daily_discovery',
       ].includes(effectiveType)
     ) {
       configUpdates.transparentBg = widgetTransparentBg;
@@ -1235,6 +1286,19 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
         configUpdates.eliminatedOptionIds = [];
         configUpdates.lastWinnerOptionId = null;
       }
+    } else if (effectiveType === 'sports') {
+      configUpdates.leagues = resolveSportsLeagues(sportsLeagues);
+      configUpdates.followedTeams = resolveFollowedTeams(sportsFollowedTeams);
+      configUpdates.showOnlyFollowedTeams = sportsOnlyFollowed;
+      configUpdates.displayMode = sportsDisplayMode;
+      configUpdates.showRecords = sportsShowRecords;
+      configUpdates.showBroadcast = sportsShowBroadcast;
+      configUpdates.refreshIntervalMin = sportsRefreshMin;
+    } else if (effectiveType === 'daily_discovery') {
+      configUpdates.mode = discoveryMode;
+      configUpdates.triviaCategory = discoveryCategory;
+      configUpdates.autoRotateSec = discoveryAutoRotateSec;
+      configUpdates.autoRevealAnswer = discoveryAutoReveal;
     }
 
     const pendingUpdates = {
@@ -1482,6 +1546,8 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
               'routines',
               'wifi_qr',
               'decision_maker',
+              'sports',
+              'daily_discovery',
             ].includes(effectiveType) && (
               <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-800/60">
                 <div>
@@ -4953,6 +5019,40 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                 removeWinnerOnSpin={decisionRemoveWinnerOnSpin}
                 setRemoveWinnerOnSpin={setDecisionRemoveWinnerOnSpin}
                 onClearVotesAndEliminated={() => setDecisionResetRequested(true)}
+              />
+            )}
+
+            {/* LIVE SPORTS SCOREBOARD SETTINGS */}
+            {effectiveType === 'sports' && (
+              <SportsSettingsPanel
+                leagues={sportsLeagues}
+                setLeagues={setSportsLeagues}
+                followedTeams={sportsFollowedTeams}
+                setFollowedTeams={setSportsFollowedTeams}
+                showOnlyFollowedTeams={sportsOnlyFollowed}
+                setShowOnlyFollowedTeams={setSportsOnlyFollowed}
+                displayMode={sportsDisplayMode}
+                setDisplayMode={setSportsDisplayMode}
+                showRecords={sportsShowRecords}
+                setShowRecords={setSportsShowRecords}
+                showBroadcast={sportsShowBroadcast}
+                setShowBroadcast={setSportsShowBroadcast}
+                refreshMin={sportsRefreshMin}
+                setRefreshMin={setSportsRefreshMin}
+              />
+            )}
+
+            {/* DAILY DISCOVERY & TRIVIA SETTINGS */}
+            {effectiveType === 'daily_discovery' && (
+              <DailyDiscoverySettingsPanel
+                mode={discoveryMode}
+                setMode={setDiscoveryMode}
+                triviaCategory={discoveryCategory}
+                setTriviaCategory={setDiscoveryCategory}
+                autoRotateSec={discoveryAutoRotateSec}
+                setAutoRotateSec={setDiscoveryAutoRotateSec}
+                autoRevealAnswer={discoveryAutoReveal}
+                setAutoRevealAnswer={setDiscoveryAutoReveal}
               />
             )}
         </div>

@@ -121,6 +121,17 @@ describe('Standalone Ambiently HTTP Server (server/index.ts)', () => {
     const rssRes = await fetch(`${baseUrl}/api/rss`);
     assert.equal(rssRes.status, 400);
 
+    const sportsMissingRes = await fetch(`${baseUrl}/api/sports`);
+    assert.equal(sportsMissingRes.status, 400);
+
+    const sportsCrossSiteRes = await fetch(`${baseUrl}/api/sports?leagues=nfl`, {
+      headers: { 'Sec-Fetch-Site': 'cross-site' },
+    });
+    assert.equal(sportsCrossSiteRes.status, 403);
+
+    const discoveryBadMonthRes = await fetch(`${baseUrl}/api/discovery?month=13&day=1`);
+    assert.equal(discoveryBadMonthRes.status, 400);
+
     const unknownApiRes = await fetch(`${baseUrl}/api/does-not-exist`);
     assert.equal(unknownApiRes.status, 404);
   });

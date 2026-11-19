@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.23] - 2026-11-19
+
+### Added
+- **Live Sports Scoreboard (`SportsWidget.tsx`, `/api/sports`, `src/services/sports.ts`):**
+  - Added a zero-API-key live sports scoreboard supporting NFL, NBA, MLB, NHL, MLS, Premier League (EPL), NCAA Football, and NCAA Basketball (`site.api.espn.com` allowlist with `a.espncdn.com` logo sanitization, 45s scoreboard / 6h teams bounded edge cache, and offline `localStorage` fallback).
+  - Supports favorite teams search and pinning (`MAX_FOLLOWED_TEAMS`), *Show Only Favorites* filtering, league filter pills, team season records and TV broadcast tags, adaptive **Single-Team Card**, **Scoreboard Grid**, and **Ticker Strip** layouts, Night Mode polling suspension, **Sticker / No Outline Mode**, and Mobile Companion parity.
+- **Daily Discovery: Trivia, Word of the Day & "On This Day" (`DailyDiscoveryWidget.tsx`, `/api/discovery`, `src/utils/dailyDiscoveryData.ts`, `src/services/dailyDiscovery.ts`):**
+  - Added an interactive table-talk card featuring tap-to-reveal **Trivia & Riddles** across Science, History, Nature, Geography, and Wordplay categories, a daily **Vocabulary Word of the Day** card (phonetic guide, example, etymology), and Wikimedia **"On This Day"** history milestones (`api.wikimedia.org` / `en.wikipedia.org` with `upload.wikimedia.org` thumbnails) backed by a curated 12-month offline fallback pack so cold offline boots never render empty.
+  - Supports configurable auto-rotation intervals (`Off`, `15s`, `30s`, `60s`), interaction/Night Mode rotation suspension, **Sticker / No Outline Mode**, and Mobile Companion parity.
+
+### Fixed
+- **Idle-Cursor Native Tooltip Suppression (`src/hooks/useIdleCursor.ts`, `src/components/widgets/PhotoFrameWidget.tsx`, `tests/idleCursorTooltips.test.ts`):**
+  - Suppressed native Chromium hover tooltips while the idle cursor or Night Mode hides the pointer (`idle-cursor-hidden`) by stashing `[title]` attributes into `data-idle-suppressed-title`, monitoring dynamic updates via an idle-only `MutationObserver`, restoring all titles cleanly on wake, and gating photo/navigation tooltips directly via `useIsCursorHidden()`.
+
 ## [0.7.22] - 2026-11-18
 
 ### Fixed
