@@ -134,13 +134,15 @@ export function isWeeklyChoreCompletedInWeek(
     if (!entry.refId.startsWith(refPrefix)) continue;
 
     const scheduledSuffix = entry.refId.slice(refPrefix.length);
-    if (
-      /^\d{4}-\d{2}-\d{2}$/.test(scheduledSuffix) &&
-      scheduledSuffix >= weekStartKey &&
-      scheduledSuffix <= weekEndKey
-    ) {
-      return true;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(scheduledSuffix)) {
+      // The chore's own day decides its week. A parent approving last Saturday's chore on Sunday
+      // must not count as this week's completion, or this week's chore disappears.
+      if (scheduledSuffix >= weekStartKey && scheduledSuffix <= weekEndKey) {
+        return true;
+      }
+      continue;
     }
+    // Entries without a scheduled day in their reference fall back to when they were recorded
     if (entry.timestamp) {
       const entryDateKey = localDateKey(new Date(entry.timestamp));
       if (entryDateKey >= weekStartKey && entryDateKey <= weekEndKey) {

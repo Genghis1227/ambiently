@@ -12,7 +12,7 @@ import {
 } from '../src/stores/useRoutinesStore.ts';
 import type { DashboardTab, DashboardWidget, StickyNoteItem } from '../src/types/dashboard.ts';
 import type { RoutineItem, RoutinesSnapshot } from '../src/types/phase2Widgets.ts';
-import { DEFAULT_ROUTINE_ITEMS } from '../src/utils/routinesEngine.ts';
+import { DEFAULT_ROUTINE_ITEMS, toggleRoutineCheckIn } from '../src/utils/routinesEngine.ts';
 
 function makeTab(overrides: Partial<DashboardTab> = {}): DashboardTab {
   return {
@@ -320,6 +320,162 @@ describe('useRoutinesStore shared household persistence & migration', () => {
     const untouchedMerge = mergeRoutinesSnapshots(stampedLocally, untouchedOnRemote);
     assert.equal(untouchedMerge.items[0]?.completions?.length, 1);
     assert.equal(untouchedMerge.items[0]?.completions?.[0].profileId, 'p1');
+  });
+
+  it('keeps a routine added on another device when the two devices sync', () => {
+    const feedPets: RoutineItem = {
+      id: 'r-pets',
+      label: 'Feed Pets',
+      cadence: 'am_pm',
+      completions: [],
+      updatedAt: '2026-11-18T07:00:00.000Z',
+    };
+    // The phone (offline) adds "Walk Dog" at 07:10; the kiosk checks Feed Pets at 07:20
+    const phone: RoutinesSnapshot = {
+      id: 'household_routines',
+      updated_at: '2026-11-18T07:10:00.000Z',
+      deletedRoutineIds: [],
+      items: [
+        feedPets,
+        { id: 'r-walk', label: 'Walk Dog', cadence: 'daily', completions: [], updatedAt: '2026-11-18T07:10:00.000Z' },
+      ],
+    };
+    const kiosk: RoutinesSnapshot = {
+      id: 'household_routines',
+      updated_at: '2026-11-18T07:20:00.000Z',
+      deletedRoutineIds: [],
+      items: [
+        {
+          ...feedPets,
+          completions: [{ slotKey: '2026-11-18:AM', completedAt: '2026-11-18T07:20:00.000Z', profileId: null }],
+          updatedAt: '2026-11-18T07:20:00.000Z',
+        },
+      ],
+    };
+
+    for (const merged of [mergeRoutinesSnapshots(phone, kiosk), mergeRoutinesSnapshots(kiosk, phone)]) {
+      assert.deepEqual(merged.items.map((it) => it.id).sort(), ['r-pets', 'r-walk']);
+      assert.deepEqual(
+        merged.items.find((it) => it.id === 'r-pets')?.completions?.map((c) => c.slotKey),
+        ['2026-11-18:AM']
+      );
+    }
+
+    // A routine the other device deleted stays deleted
+    const kioskDeletedWalk: RoutinesSnapshot = { ...kiosk, deletedRoutineIds: ['r-walk'] };
+    assert.equal(
+      mergeRoutinesSnapshots(phone, kioskDeletedWalk).items.some((it) => it.id === 'r-walk'),
+      false
+    );
+  });
+
+  it('combines check-ins made on two devices and lets a later uncheck win', () => {
+    const base = (completions: RoutineItem['completions'], updatedAt: string, extra: Partial<RoutineItem> = {}): RoutinesSnapshot => ({
+      id: 'household_routines',
+      updated_at: updatedAt,
+      deletedRoutineIds: [],
+      items: [{ id: 'r-pets', label: 'Feed Pets', cadence: 'am_pm', completions, updatedAt, ...extra }],
+    });
+    const mom = base(
+      [{ slotKey: '2026-11-18:AM', completedAt: '2026-11-18T07:20:00.000Z', profileId: 'mom' }],
+      '2026-11-18T07:20:00.000Z'
+    );
+    const dad = base(
+      [{ slotKey: '2026-11-17:PM', completedAt: '2026-11-18T07:25:00.000Z', profileId: 'dad' }],
+      '2026-11-18T07:25:00.000Z'
+    );
+    const both = mergeRoutinesSnapshots(mom, dad);
+    assert.deepEqual(
+      both.items[0]?.completions?.map((c) => `${c.slotKey}:${c.profileId}`),
+      ['2026-11-17:PM:dad', '2026-11-18:AM:mom']
+    );
+    assert.deepEqual(mergeRoutinesSnapshots(dad, mom).items, both.items);
+
+    // Mom takes her check-in back at 07:30; Dad's device still has its 07:20 copy
+    const momUnchecked = base([], '2026-11-18T07:30:00.000Z', {
+      uncheckedSlots: [{ slotKey: '2026-11-18:AM', uncheckedAt: '2026-11-18T07:30:00.000Z' }],
+    });
+    const dadWithOldCopy = base(
+      [
+        { slotKey: '2026-11-18:AM', completedAt: '2026-11-18T07:20:00.000Z', profileId: 'mom' },
+        { slotKey: '2026-11-17:PM', completedAt: '2026-11-18T07:25:00.000Z', profileId: 'dad' },
+      ],
+      '2026-11-18T07:25:00.000Z'
+    );
+    for (const merged of [
+      mergeRoutinesSnapshots(momUnchecked, dadWithOldCopy),
+      mergeRoutinesSnapshots(dadWithOldCopy, momUnchecked),
+    ]) {
+      assert.deepEqual(merged.items[0]?.completions?.map((c) => c.slotKey), ['2026-11-17:PM']);
+    }
+
+    // A check-in made after the uncheck is a new one and is kept
+    const dadChecksAgain = base(
+      [{ slotKey: '2026-11-18:AM', completedAt: '2026-11-18T07:35:00.000Z', profileId: 'dad' }],
+      '2026-11-18T07:35:00.000Z'
+    );
+    assert.deepEqual(
+      mergeRoutinesSnapshots(momUnchecked, dadChecksAgain).items[0]?.completions?.map((c) => c.profileId),
+      ['dad']
+    );
+
+    // Dad's tablet clock runs 5 minutes fast: his check-in says 07:45 though Mom unticks it at 07:42
+    const fastClockCheckIn: RoutineItem = {
+      id: 'r-pets',
+      label: 'Feed Pets',
+      cadence: 'am_pm',
+      completions: [{ slotKey: '2026-11-18:AM', completedAt: '2026-11-18T07:45:00.000Z', profileId: 'dad' }],
+      updatedAt: '2026-11-18T07:45:00.000Z',
+    };
+    const unticked = toggleRoutineCheckIn(fastClockCheckIn, '2026-11-18:AM', 'mom', '2026-11-18T07:42:00.000Z');
+    const momCopy = base(unticked.completions, '2026-11-18T07:46:00.000Z', { uncheckedSlots: unticked.uncheckedSlots });
+    const dadCopy = base(fastClockCheckIn.completions, '2026-11-18T07:45:00.000Z');
+    assert.equal(mergeRoutinesSnapshots(momCopy, dadCopy).items[0]?.completions?.length, 0);
+    assert.equal(mergeRoutinesSnapshots(dadCopy, momCopy).items[0]?.completions?.length, 0);
+  });
+
+  it('keeps cleared check-ins cleared and shares check-ins the cloud copy lacks', async () => {
+    useRoutinesStore.setState({ isInitialized: true });
+    await useRoutinesStore.getState().setRoutineItems([
+      { id: 'r-bins', label: 'Bins', cadence: 'daily', completions: [] },
+    ]);
+    await useRoutinesStore
+      .getState()
+      .toggleCheckIn('r-bins', '2026-11-18', 'p_kid', '2026-11-18T08:00:00.000Z');
+    const staleCopy = useRoutinesStore.getState().snapshot;
+
+    // Clearing history must not be undone by another device that still has the old check-in
+    await useRoutinesStore.getState().clearAllCompletions();
+    const cleared = useRoutinesStore.getState().snapshot;
+    assert.equal(
+      mergeRoutinesSnapshots(cleared, staleCopy).items[0]?.completions?.length,
+      0
+    );
+    assert.equal(
+      mergeRoutinesSnapshots(staleCopy, cleared).items[0]?.completions?.length,
+      0
+    );
+
+    // A newer cloud copy without this device's check-in: keep the check-in and date the result
+    // after the cloud copy, so the next push shares it
+    await useRoutinesStore
+      .getState()
+      .toggleCheckIn('r-bins', '2026-11-19', 'p_kid', '2026-11-19T08:00:00.000Z');
+    const local = useRoutinesStore.getState().snapshot;
+    const cloud: RoutinesSnapshot = {
+      ...local,
+      items: local.items.map((it) => ({ ...it, completions: [], label: 'Bins & Recycling', updatedAt: '2026-11-19T09:00:00.000Z' })),
+      updated_at: '2026-11-19T09:00:00.000Z',
+    };
+    await useRoutinesStore.getState().applyRemoteRoutinesSnapshot(cloud);
+    const afterPull = useRoutinesStore.getState().snapshot;
+    assert.equal(afterPull.items[0]?.label, 'Bins & Recycling');
+    assert.deepEqual(afterPull.items[0]?.completions?.map((c) => c.slotKey), ['2026-11-19']);
+    assert.ok(Date.parse(afterPull.updated_at) > Date.parse(cloud.updated_at));
+
+    // Pulling a copy that already has everything changes nothing and isn't re-dated
+    await useRoutinesStore.getState().applyRemoteRoutinesSnapshot(afterPull);
+    assert.equal(useRoutinesStore.getState().snapshot.updated_at, afterPull.updated_at);
   });
 });
 

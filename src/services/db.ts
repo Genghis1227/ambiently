@@ -182,7 +182,8 @@ export const DEFAULT_WIDGETS: DashboardWidget[] = [
     title: 'Upcoming Milestone',
     gridPos: { x: 0, y: 4, w: 4, h: 4 },
     freeformPos: { xRatio: 0.05, yRatio: 0.55, wRatio: 0.35, hRatio: 0.4, zIndex: 1, rotation: 0 },
-    config: { eventName: 'Family Vacation', targetDate: '2026-12-25T00:00:00Z' },
+    // No targetDate: the countdown counts down to the next 25 December until a date is chosen
+    config: { eventName: 'Family Vacation' },
     updated_at: '1970-01-01T00:00:00.000Z',
   },
 ];

@@ -9,6 +9,8 @@ import {
 } from '../types/phase2Widgets';
 import {
   DEFAULT_ROUTINE_ITEMS,
+  mergeRoutineCheckIns,
+  recordRemovedCheckIns,
   resolveRoutineItems,
   toggleRoutineCheckIn,
 } from '../utils/routinesEngine';
@@ -109,18 +111,35 @@ function sanitizeRoutinesSnapshot(snapshot: RoutinesSnapshot): RoutinesSnapshot 
   };
 }
 
-function pickNewerRoutineItem(
-  winnerItem: RoutineItem,
-  otherItem: RoutineItem | undefined
-): RoutineItem {
+/**
+ * The same routine from two devices: its settings (name, schedule) come from whichever copy was
+ * changed last, and its check-ins are combined so neither device's check-ins are lost.
+ */
+function mergeRoutineItem(winnerItem: RoutineItem, otherItem: RoutineItem | undefined): RoutineItem {
   if (!otherItem) return winnerItem;
   const winnerTime = Date.parse(winnerItem.updatedAt || '') || 0;
   const otherTime = Date.parse(otherItem.updatedAt || '') || 0;
-  return otherTime > winnerTime ? otherItem : winnerItem;
+  const newer = otherTime > winnerTime ? otherItem : winnerItem;
+  const { completions, uncheckedSlots } = mergeRoutineCheckIns(winnerItem, otherItem);
+  const merged: RoutineItem = { ...newer, completions };
+  if (uncheckedSlots.length > 0) {
+    merged.uncheckedSlots = uncheckedSlots;
+  } else {
+    delete merged.uncheckedSlots;
+  }
+  return merged;
+}
+
+function itemsOf(snapshot: RoutinesSnapshot): RoutineItem[] {
+  // A snapshot without an items list has no routines; resolveRoutineItems(undefined) would
+  // return the starter routines instead
+  return Array.isArray(snapshot.items) ? resolveRoutineItems(snapshot.items) : [];
 }
 
 /**
  * Merges two household routines snapshots using per-item timestamps and deletion tombstones.
+ * A routine only one side has is kept unless the other side deleted it, and check-ins from both
+ * sides are combined.
  */
 export function mergeRoutinesSnapshots(
   local: RoutinesSnapshot,
@@ -139,37 +158,31 @@ export function mergeRoutinesSnapshots(
   const incomingWins = remoteTime >= localTime;
   const winner = incomingWins ? incoming : local;
   const loser = incomingWins ? local : incoming;
-  const winnerTime = Math.max(localTime, remoteTime);
   const loserTime = Date.parse(loser.updated_at || '') || 0;
 
   const winnerDeletedSet = new Set(winner.deletedRoutineIds || []);
   const loserDeletedSet = new Set(loser.deletedRoutineIds || []);
 
-  const loserById = new Map<string, RoutineItem>();
-  for (const item of resolveRoutineItems(loser.items)) {
-    loserById.set(item.id, item);
-  }
+  const loserItems = itemsOf(loser);
+  const loserById = new Map<string, RoutineItem>(loserItems.map((item) => [item.id, item]));
 
   const mergedItems: RoutineItem[] = [];
   const seenIds = new Set<string>();
 
-  for (const item of resolveRoutineItems(winner.items)) {
+  for (const item of itemsOf(winner)) {
     const itemTime = Date.parse(item.updatedAt || winner.updated_at || '') || 0;
     if (loserDeletedSet.has(item.id) && itemTime < loserTime) {
       continue;
     }
-    const chosen = pickNewerRoutineItem(item, loserById.get(item.id));
-    mergedItems.push(chosen);
-    seenIds.add(chosen.id);
+    mergedItems.push(mergeRoutineItem(item, loserById.get(item.id)));
+    seenIds.add(item.id);
   }
 
-  for (const item of resolveRoutineItems(loser.items)) {
+  // A routine only the other device has was added there (deletions leave a tombstone), so keep it
+  for (const item of loserItems) {
     if (seenIds.has(item.id) || winnerDeletedSet.has(item.id)) continue;
-    const itemTime = Date.parse(item.updatedAt || '') || 0;
-    if (itemTime > winnerTime) {
-      mergedItems.push(item);
-      seenIds.add(item.id);
-    }
+    mergedItems.push(item);
+    seenIds.add(item.id);
   }
 
   const resolvedItems = resolveRoutineItems(mergedItems);
@@ -186,6 +199,16 @@ export function mergeRoutinesSnapshots(
     deletedRoutineIds: mergedDeletedIds,
     updated_at: incomingWins ? incoming.updated_at : local.updated_at,
   };
+}
+
+/** True when `a` and `b` hold the same routines, check-ins and deletions. */
+export function routinesContentEqual(a: RoutinesSnapshot, b: RoutinesSnapshot): boolean {
+  const content = (snap: RoutinesSnapshot) =>
+    JSON.stringify({
+      items: itemsOf(snap),
+      deleted: [...new Set(snap.deletedRoutineIds || [])].sort(),
+    });
+  return content(a) === content(b);
 }
 
 interface RoutinesStoreState {
@@ -280,8 +303,9 @@ export const useRoutinesStore = create<RoutinesStoreState>((set, get) => {
 
       const stampedItems = resolvedNext.map((item) => {
         const prev = prevById.get(item.id);
-        const changed = !prev || JSON.stringify(prev) !== JSON.stringify(item);
-        return changed ? { ...item, updatedAt: nowIso } : item;
+        const withUnchecks = recordRemovedCheckIns(prev, item, nowIso);
+        const changed = !prev || JSON.stringify(prev) !== JSON.stringify(withUnchecks);
+        return changed ? { ...withUnchecks, updatedAt: nowIso } : withUnchecks;
       });
 
       const nextSnapshot: RoutinesSnapshot = {
@@ -366,8 +390,7 @@ export const useRoutinesStore = create<RoutinesStoreState>((set, get) => {
       const current = get().snapshot;
       const nowIso = nextMonotonicIso(current.updated_at);
       const nextItems = current.items.map((it) => ({
-        ...it,
-        completions: [],
+        ...recordRemovedCheckIns(it, { ...it, completions: [] }, nowIso),
         updatedAt: nowIso,
       }));
       const nextSnapshot: RoutinesSnapshot = {
@@ -388,6 +411,20 @@ export const useRoutinesStore = create<RoutinesStoreState>((set, get) => {
           : undefined;
       const local = storedLocal || incoming;
       const merged = mergeRoutinesSnapshots(local, incoming);
+
+      // This device kept something the cloud copy lacks (a routine or check-in made here before the
+      // sync). Date the merged copy after both so the next push sends it up for the other devices.
+      if (!routinesContentEqual(merged, incoming)) {
+        const latestKnown =
+          (Date.parse(local.updated_at || '') || 0) > (Date.parse(incoming.updated_at || '') || 0)
+            ? local.updated_at
+            : incoming.updated_at;
+        const toShare: RoutinesSnapshot = { ...merged, updated_at: nextMonotonicIso(latestKnown) };
+        commitRoutinesState(toShare, { isInitialized: true });
+        await persistRoutinesSnapshot(toShare);
+        return;
+      }
+
       commitRoutinesState(merged, { isInitialized: true });
       if (typeof indexedDB !== 'undefined') {
         try {

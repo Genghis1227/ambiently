@@ -16,6 +16,12 @@ import {
   isTextFamilyType,
 } from '../src/utils/widgetCatalog';
 import { CANVAS_BLUEPRINTS, materializeCanvasBlueprint } from '../src/utils/canvasBlueprints';
+import {
+  LEGACY_DEFAULT_COUNTDOWN_TARGET,
+  nextChristmasLocal,
+  resolveCountdownTarget,
+} from '../src/utils/countdownTarget';
+import { DEFAULT_WIDGETS } from '../src/services/db';
 
 const ALL_WIDGET_TYPES: WidgetType[] = [
   'clock_weather',
@@ -431,5 +437,40 @@ describe('canvasBlueprints', () => {
     assert.equal(gallery.widgets[1].type, 'clock_weather');
     assert.equal(gallery.widgets[1].config.transparentBg, true);
     assert.equal(gallery.widgets[1].config.locationName, 'Denver, CO');
+  });
+});
+
+describe('Countdown default date', () => {
+  const ymd = (d: Date) => [d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours()].join('-');
+
+  it('counts down to the next 25 December at local midnight when no date is chosen', () => {
+    assert.equal(ymd(nextChristmasLocal(new Date(2026, 10, 18, 12))), '2026-12-25-0');
+    // On the day itself it stays on that day, then moves to next year
+    assert.equal(ymd(nextChristmasLocal(new Date(2026, 11, 25, 23, 59))), '2026-12-25-0');
+    assert.equal(ymd(nextChristmasLocal(new Date(2026, 11, 26, 0, 1))), '2027-12-25-0');
+
+    for (const raw of [undefined, '', LEGACY_DEFAULT_COUNTDOWN_TARGET, 'not a date']) {
+      assert.equal(ymd(resolveCountdownTarget(raw, new Date(2027, 0, 5))), '2027-12-25-0');
+    }
+  });
+
+  it('keeps a date chosen in the countdown settings', () => {
+    const chosen = new Date(2027, 6, 4, 9, 30).toISOString();
+    assert.equal(resolveCountdownTarget(chosen, new Date(2027, 0, 5)).toISOString(), chosen);
+    // Midnight UTC on 25 December saved from the settings (with milliseconds) is a real choice
+    assert.equal(
+      resolveCountdownTarget('2026-12-25T00:00:00.000Z').toISOString(),
+      '2026-12-25T00:00:00.000Z'
+    );
+  });
+
+  it('no longer stores a fixed date in new or starter countdowns', () => {
+    const entry = WIDGET_CATALOG_ENTRIES.find((e) => e.variants.some((v) => v.type === 'countdown'));
+    const variant = entry?.variants.find((v) => v.type === 'countdown');
+    assert.ok(variant);
+    assert.equal(variant.defaultConfig.targetDate, undefined);
+    const starter = DEFAULT_WIDGETS.find((w) => w.type === 'countdown');
+    assert.ok(starter);
+    assert.equal(starter.config?.targetDate, undefined);
   });
 });
