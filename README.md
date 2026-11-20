@@ -64,7 +64,7 @@
   * **Family Chalkboard / Doodle Pad:** Touch- and stylus-smoothed chalk/marker sketchpad with undo, surface themes (*Slate Chalkboard*, *Warm Cork*, *Whiteboard*), transparent **Sticker Mode**, and lightweight normalized RDP vector stroke sync between **Mobile Companion** and the wall display.
   * **Offline Ambient Soundscape Mixer:** 100% offline procedural Web Audio synthesizer blending **Rain**, **Fireplace Crackle**, **Brown Noise**, **Ocean Waves**, and **Forest Wind** with 1-tap scene presets, Sleep Timer, and automatic **Scheduled Night Mode** fade-out.
 * **🖥️ Self-Hosted Home Lab Uptime & Home Assistant Glance (`/api/homelab`):**
-  * **Service Latency & Smart Home Glance:** Track self-hosted LAN/cloud services (*Plex*, *NAS*, *Pi-hole*, *Immich*, *Uptime Kuma*, *Proxmox*, *Jellyfin*) and read-only Home Assistant entity badges (temperature, garage/entry doors, solar power) with device-local `db.vault` token isolation, `AMBIENTLY_ALLOW_PRIVATE_FEEDS=true` LAN gating, Night Mode polling suspension, and **Sticker Mode**.
+  * **Service Latency & Smart Home Glance:** Track self-hosted LAN/cloud services (*Plex*, *NAS*, *Pi-hole*, *Immich*, *Uptime Kuma*, *Proxmox*, *Jellyfin*) and read-only Home Assistant entity badges (temperature, garage/entry doors, solar power) with origin-bound device-local `db.vault` token isolation, `AMBIENTLY_ALLOW_PRIVATE_FEEDS=true` LAN gating, Night Mode polling suspension, and **Sticker Mode**.
 * **📱 Mobile Companion Remote & Vertical Tile Stream:**
   * **Full Canvas Live Stream:** Seamless single-column vertical feed rendering live preview cards for all widgets (Clock, Weather, Air Quality, Sun & Moon, Countdown, Kitchen Timer, Check-In & Home Rhythms, Guest Wi-Fi & House-Sitter, Decision Wheel & Poll, Photos, RSS, Markets & Watchlist, Live Sports Scoreboard, Daily Discovery, Family Chalkboard, Ambient Soundscape Mixer, Home Lab & Home Assistant, Quotes, Media, Notes, Chores, Meal Planner, Project Board (Kanban)) with independent mobile reordering (`▲` / `▼`) and `100dvh` momentum touch scrolling.
 * **🖼️ Multi-Source Ambient Photo Frame, Hardware-Accelerated GIFs & Power Saving:**
@@ -72,7 +72,7 @@
   * Pin dense boards of GIPHY GIFs and transparent stickers smoothly: opaque GIFs play as GPU-decoded MP4 loops, transparent stickers use animated WebP with zero per-frame shadow thrashing, CDN assets are locally cached up to bounded quotas, and animations/photo timers automatically suspend during Night Mode or hidden browser tabs.
 * **📅 Multi-Calendar Feeds & Family Meals Overlay:** Unified agenda, 3-day, weekly, and monthly views combining multiple `webcal://` and `.ics` feeds with an optional **Show Planned Family Meals** overlay, per-calendar color tags, smart rate-limit protection, and a built-in US Holidays fallback.
 * **🔒 Kiosk Security & Hardware Polish:**
-  * Screen Wake Lock API, Fullscreen Mode, **Reduce Blur & GPU Effects** low-power mode (`reduceVisualEffects`) for smooth 60fps rendering on Raspberry Pi and 4K displays, idle-cursor tooltip/edit-chrome auto-hiding, Scheduled Night Mode with pixel-shifting OLED clock, Kid-Proof 4-digit PIN lock with double-entry confirmation on setup/change (and email recovery when signed in), and Display Density scaling (`75%` to `150%`).
+  * Screen Wake Lock API, Fullscreen Mode, **Reduce Blur & GPU Effects** low-power mode (`reduceVisualEffects`) for smooth 60fps rendering on Raspberry Pi and 4K displays, idle-cursor tooltip/edit-chrome auto-hiding, Scheduled Night Mode with pixel-shifting OLED clock, Kid-Proof 4-digit PIN lock with salted PBKDF2 hashing, exponential failed-attempt lockout, and double-entry confirmation on setup/change (plus email recovery when signed in), and Display Density scaling (`75%` to `150%`).
 
 ---
 
@@ -124,7 +124,7 @@ curl http://localhost:8080/api/health
 
 Open **`http://localhost:8080`** (or `http://<your-server-ip>:8080`).
 
-* **Zero-Rebuild Configuration:** Set `SUPABASE_URL` & `SUPABASE_ANON_KEY` (for multi-device Realtime sync) or `AMBIENTLY_ALLOW_PRIVATE_FEEDS=true` (for local `192.168.x.x` / `.local` Nextcloud, Radicale, or Home Assistant `.ics`/RSS feeds; calendars and RSS only, never the web preview or reader) directly in `.env` or `compose.yaml`—no image rebuild needed. The self-hosted server sends the same security headers as Cloudflare (`public/_headers`) and checks the address every outgoing request really goes to, so a public name that points at your own network is refused too.
+* **Zero-Rebuild Configuration:** Set `SUPABASE_URL` & `SUPABASE_ANON_KEY` (for multi-device Realtime sync), `AMBIENTLY_ALLOW_PRIVATE_FEEDS=true` (for local `192.168.x.x` / `.local` Nextcloud, Radicale, or Home Assistant `.ics`/RSS/Home Lab requests), or optional `AMBIENTLY_API_KEY` directly in `.env` or `compose.yaml`—no image rebuild needed. The self-hosted server sends the same security headers as Cloudflare (`public/_headers`, with HTTPS-conditional HSTS and `no-referrer`), enforces per-IP API rate limiting and bounded HTTP timeouts, and checks the address every outgoing request really goes to, so a public name that points at your own network is refused too.
 * See **[RASPBERRY_PI.md — Part 2: Docker & Home Server Self-Hosting](RASPBERRY_PI.md#part-2-docker--home-server-self-hosting)** for Portainer/Synology stack templates and HTTPS reverse proxy examples.
 
 ---

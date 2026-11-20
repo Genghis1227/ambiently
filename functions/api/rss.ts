@@ -3,6 +3,7 @@
 
 import { XMLParser } from 'fast-xml-parser';
 import { fetchExternal, externalFetchErrorResponse, refuseOtherSites } from '../_shared/fetchExternal';
+import { sanitizeExternalHttpUrl } from '../../src/utils/urlSecurity';
 
 interface PagesContext {
   request: Request;
@@ -124,7 +125,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       return {
         id: item.guid?.['#text'] || item.id || `item-${idx}`,
         title,
-        link,
+        link: sanitizeExternalHttpUrl(link) || '',
         pubDate,
         description,
       };

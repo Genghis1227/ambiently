@@ -70,6 +70,7 @@ export type HomelabDisplayMode = 'auto' | 'split' | 'compact';
 
 export interface HomelabLocalVaultCredentials {
   haAccessToken: string;
+  boundOrigin?: string;
 }
 
 export interface HomelabWidgetConfig {

@@ -16,13 +16,46 @@ function notifyHomelabVaultUpdated(widgetId: string): void {
   }
 }
 
+export function extractHomelabOrigin(rawUrl: string | undefined | null): string | null {
+  if (typeof rawUrl !== 'string') return null;
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+    return parsed.origin.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
 function normalizeHomelabCredentials(raw: unknown): HomelabLocalVaultCredentials | null {
   if (!raw || typeof raw !== 'object') return null;
   const candidate = raw as Partial<HomelabLocalVaultCredentials>;
   const haAccessToken =
     typeof candidate.haAccessToken === 'string' ? candidate.haAccessToken.trim() : '';
   if (!haAccessToken) return null;
-  return { haAccessToken };
+  const boundOrigin = extractHomelabOrigin(candidate.boundOrigin);
+  return boundOrigin ? { haAccessToken, boundOrigin } : { haAccessToken };
+}
+
+export function resolveBoundHomelabToken(
+  creds: HomelabLocalVaultCredentials | null,
+  currentBaseUrl: string | undefined | null
+): { token: string; originMismatch: boolean } {
+  if (!creds?.haAccessToken) {
+    return { token: '', originMismatch: false };
+  }
+  const targetOrigin = extractHomelabOrigin(currentBaseUrl);
+  if (!targetOrigin) {
+    return { token: '', originMismatch: false };
+  }
+  if (!creds.boundOrigin || creds.boundOrigin !== targetOrigin) {
+    return { token: '', originMismatch: true };
+  }
+  return { token: creds.haAccessToken, originMismatch: false };
 }
 
 export function getHomelabVaultKey(widgetId: string): string {

@@ -32,6 +32,7 @@ import { TileErrorBoundary } from '../common/TileErrorBoundary';
 import type { CorkboardContextMenuState } from './CorkboardContextMenu';
 import { computeCardDragLayout } from '../../utils/cardDragTransform';
 import { useSharedClock } from '../../utils/sharedClock';
+import { safeCssBackgroundUrl } from '../../utils/urlSecurity';
 
 const WorldClockWidget = React.lazy(() =>
   import('../widgets/WorldClockWidget').then((m) => ({ default: m.WorldClockWidget }))
@@ -2886,6 +2887,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   const isCanvasLight = isCanvasThemeLight(backgroundTheme);
 
   const dimAlpha = Math.max(0, Math.min(0.92, (backgroundDimLevel ?? 45) / 100));
+  const safeCustomWallpaperCss =
+    backgroundTheme === 'custom' ? safeCssBackgroundUrl(customWallpaperUrl) : null;
 
   return (
     <div
@@ -2926,14 +2929,12 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       style={{
         touchAction: 'none',
         WebkitTouchCallout: 'none',
-        ...(backgroundTheme === 'custom' && customWallpaperUrl
-          ? { backgroundImage: `url("${customWallpaperUrl}")` }
-          : {}),
+        ...(safeCustomWallpaperCss ? { backgroundImage: safeCustomWallpaperCss } : {}),
       }}
       className={`relative w-full h-screen overflow-hidden select-none touch-none ${activeThemeObj.canvasClass} ${dockPaddingClass}`}
     >
       {/* Dynamic Dim Overlay for Custom Picture Backgrounds */}
-      {backgroundTheme === 'custom' && customWallpaperUrl && (
+      {safeCustomWallpaperCss && (
         <div
           className="absolute inset-0 pointer-events-none transition-opacity duration-200"
           style={{

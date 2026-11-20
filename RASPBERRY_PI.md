@@ -107,7 +107,7 @@ sudo reboot
 #### What the Installer Configures Under the Hood
 * **Wayland & X11 Support:** Configures autostart for Raspberry Pi OS Bookworm's **Wayland (`labwc` and `wayfire`)** as well as **X11 (`LXDE-pi` / XDG `~/.config/autostart`)**.
 * **Power-Cut Recovery:** Automatically resets Chromium's `exited_cleanly` and `exit_type` flags before every boot so power outages never display the yellow *"Chromium didn't shut down correctly — Restore pages?"* banner.
-* **Touchscreen Lockout Protection:** Launches Chromium with `--kiosk --disable-pinch --overscroll-history-navigation=0 --autoplay-policy=no-user-gesture-required` so family members tapping chores or recipes cannot accidentally pinch-zoom or swipe-back out of the dashboard.
+* **Touchscreen Lockout Protection:** Launches Chromium with `--kiosk --disable-pinch --overscroll-history-navigation=0 --autoplay-policy=no-user-gesture-required` so family members tapping chores or recipes cannot accidentally pinch-zoom or swipe-back out of the dashboard, while strictly validating `--port`/`--url` inputs and shell-quoting the generated launcher script.
 * **Burn-In Safe Night Mode:** Disables OS screen blanking (`raspi-config nonint do_blanking 1` / `xset -dpms`) so Ambiently's own **Scheduled Night Mode & Pixel-Shifting OLED Clock** manages night dimming and morning wake-up cleanly.
 
 ---
@@ -235,7 +235,8 @@ All runtime variables in Docker take effect immediately on `docker compose up -d
 | `TZ` | `America/Chicago` | Container timezone for logs and server-side date fallbacks. |
 | `SUPABASE_URL` | *(empty)* | Optional runtime Supabase project URL injected dynamically via `/config.js` for multi-device Realtime cloud sync. |
 | `SUPABASE_ANON_KEY` | *(empty)* | Optional runtime Supabase publishable `anon` key (never use `service_role`). |
-| `AMBIENTLY_ALLOW_PRIVATE_FEEDS` | `false` | Set to `true` **only on trusted home networks** to allow `http://`, RFC1918 LAN (`192.168.x.x`, `10.x.x.x`, `172.16-31.x.x`), Tailscale (`100.64.0.0/10`), and `.local`/`.lan` URLs for **calendar (`.ics`), RSS feeds, and Home Lab / Home Assistant (`/api/homelab`) probes** (e.g., Plex, Pi-hole, Immich, Nextcloud, Home Assistant). The web preview, reader, and link previews never reach the home network, and Home Assistant Long-Lived Access Tokens remain isolated strictly inside your browser's device-local `db.vault` (never synced to cloud). Loopback (`127.0.0.1` / `localhost`) and cloud metadata (`169.254.169.254`) remain blocked at all times, including names that resolve to them (`server/addressGuard.ts`). |
+| `AMBIENTLY_ALLOW_PRIVATE_FEEDS` | `false` | Set to `true` **only on trusted home networks** to allow `http://`, RFC1918 LAN (`192.168.x.x`, `10.x.x.x`, `172.16-31.x.x`), Tailscale (`100.64.0.0/10`), and `.local`/`.lan` URLs for **calendar (`.ics`), RSS feeds, and Home Lab / Home Assistant (`/api/homelab`) probes** (e.g., Plex, Pi-hole, Immich, Nextcloud, Home Assistant). The web preview, reader, and link previews never reach the home network, and Home Assistant Long-Lived Access Tokens remain isolated strictly inside your browser's device-local `db.vault` bound to their exact server origin (never synced to cloud or exported to JSON backups). Loopback (`127.0.0.1` / `localhost`) and cloud metadata (`169.254.169.254`) remain blocked at all times, including names that resolve to them (`server/addressGuard.ts`). |
+| `AMBIENTLY_API_KEY` | *(empty)* | Optional shared secret required on `/api/*` requests (`X-Ambiently-Key`, `Authorization: Bearer <key>`, or `ambiently_api_key` cookie) when exposing a self-hosted instance with `AMBIENTLY_ALLOW_PRIVATE_FEEDS=true` behind a reverse proxy. |
 
 ---
 

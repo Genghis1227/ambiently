@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.1] - 2026-11-20
+
+### Security
+- **Origin-Bound Home Assistant Vault Tokens (`homelabVault.ts`, `HomelabWidget.tsx`, `WidgetSettingsModal.tsx`):**
+  - Bound stored `homelab-cred:<widgetId>` access tokens to the normalized `boundOrigin` (`http:` / `https:`) saved in `db.vault` (`extractHomelabOrigin` + `resolveBoundHomelabToken`), refusing automatic Bearer token attachment and surfacing an in-tile re-save warning whenever `widget.config.haBaseUrl` changes origin via Cloud Sync or backup restore.
+- **Edge & Self-Hosted Proxy Hardening (`fetchExternal.ts`, `homelab.ts`, `web-proxy.ts`, `server/index.ts`, `public/_headers`):**
+  - Added `frame-ancestors 'self'` to `/api/web-proxy` CSP headers alongside stricter `Sec-Fetch-Dest: iframe|frame`, same-origin `Origin`/`Referer` validation (preserving anonymous sandboxed child link navigation), and upstream `<base>` tag stripping.
+  - Added sliding-window per-IP API rate limiting (`checkApiRateLimit`, `60/min` on `/api/homelab` & `/api/web-proxy`, `120/min` default on other `/api/*` routes), `Origin` verification on state-changing requests, and optional shared-secret `AMBIENTLY_API_KEY` authentication (`X-Ambiently-Key`, `Authorization: Bearer`, or `ambiently_api_key` cookie).
+  - Hardened `server/index.ts` with bounded HTTP server timeouts (`headersTimeout = 15s`, `requestTimeout = 30s`, `keepAliveTimeout = 5s`), API security headers (`X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Robots-Tag: noindex, nofollow`) across all `/api/*` routes, HTTPS-conditional `Strict-Transport-Security` (`X-Forwarded-Proto: https`), and `Referrer-Policy: no-referrer` in `public/_headers`.
+- **Salted PBKDF2 PIN Hashing, Brute-Force Lockout & Shared-Board Guidance (`pinSecurity.ts`, `dashboardStore.ts`, `PinOverlay.tsx`, `ShareBoardModal.tsx`):**
+  - Upgraded Kiosk Parent PIN storage from unsalted SHA-256 to salted `PBKDF2-SHA-256` (`120,000` iterations, WebCrypto with FIPS 180-4 fallback for plain HTTP LAN displays and transparent upgrade on unlock for legacy hashes) plus persisted exponential cooldowns starting after 5 failed attempts (`30s` -> `60s` -> `120s` -> `300s`).
+  - Added role-boundary guidance in **Household Sharing** clarifying that invited emails receive full **Board Editor** access.
+- **URL/CSS Sanitization, Redacted Local Backups, Vault Media Validation & Pi Installer Hardening (`urlSecurity.ts`, `fileSync.ts`, `localMediaVault.ts`, `scripts/pi-kiosk-setup.sh`):**
+  - Enforced strict `http:` / `https:` URL validation on external `<a href>` sinks (`ImageWidget`, `RssWidget`, `WidgetSettingsModal`, `/api/rss`) and strict scheme + CSS character escaping (`safeCssBackgroundUrl`) on wallpaper/slideshow `backgroundImage` sinks (`Corkboard`, `PhotoFrameWidget`).
+  - Added `sanitizePayloadForBackupExport` to strip `pinHash`, lock flags, Plex tokens, Wi-Fi QR secrets, and Homelab tokens from exported and auto-synced JSON backups, and restricted `db.vault` local media uploads/restores to bounded raster image data URLs (rejecting SVG/HTML payloads).
+  - Added `--port` (`1`–`65535`) and `--url` (`http(s)://`) validation and quoted `printf '%q'` + `<<'EOF'` heredoc emission in `scripts/pi-kiosk-setup.sh`.
+
 ## [0.8.0] - 2026-11-20
 
 ### Added & Improved

@@ -25,6 +25,7 @@ import {
   getSharedSaliencyContext,
   setCachedPhotoFocal,
 } from '../../utils/photoFocal';
+import { safeCssBackgroundUrl } from '../../utils/urlSecurity';
 
 
 export type PolaroidDensity = 6 | 12 | 18 | 24 | 32;
@@ -1100,7 +1101,8 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                 opacity: { duration: 1.2 },
               }}
               style={{
-                backgroundImage: `url(${getPhotoDisplayUrl(currentPhoto, 1920)})`,
+                backgroundImage:
+                  safeCssBackgroundUrl(getPhotoDisplayUrl(currentPhoto, 1920)) || undefined,
                 backgroundSize: 'cover',
                 backgroundPosition: photoFocals[currentPhoto.id] || getCachedPhotoFocal(currentPhoto.id) || 'center',
               }}

@@ -3,6 +3,7 @@ import { Rss, ExternalLink, RefreshCw } from 'lucide-react';
 import { fetchRssFeed, type RssArticle } from '../../services/feeds';
 import { CURATED_RSS_FEEDS } from '../../data/curatedFeeds';
 import { useDisplayActivity } from '../../utils/displayActivity';
+import { sanitizeExternalHttpUrl } from '../../utils/urlSecurity';
 
 interface RssWidgetProps {
   feedUrl?: string;
@@ -253,42 +254,57 @@ export const RssWidget: React.FC<RssWidgetProps> = ({
           </div>
         ) : (
           <div className={layoutClass}>
-            {articles.map((item) => (
-              <a
-                key={item.id}
-                href={item.link || '#'}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`group block ${sizeStyles.card} border transition-all shadow-xs ${
-                  isLight
-                    ? 'bg-slate-100/80 border-slate-200/90 hover:border-orange-500/70 hover:bg-slate-100'
-                    : 'bg-gray-950/40 border-gray-800/60 hover:border-orange-500/50 hover:bg-gray-900/40'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <span className={`${sizeStyles.title} transition-colors ${
-                    isLight ? 'text-slate-900 group-hover:text-orange-600' : 'text-gray-200 group-hover:text-orange-400'
-                  }`}>
-                    {item.title}
-                  </span>
-                  <ExternalLink className={`${sizeStyles.icon} shrink-0 mt-0.5 transition-colors ${
-                    isLight ? 'text-slate-400 group-hover:text-orange-600' : 'text-gray-600 group-hover:text-orange-400'
-                  }`} />
-                </div>
-                {showSnippet && item.description && (
-                  <p className={`${sizeStyles.desc} ${isLight ? 'text-slate-600' : ''}`}>
-                    {item.description}
-                  </p>
-                )}
-                {item.pubDate && (
-                  <div className="flex items-center gap-1.5 mt-2">
-                    <span className={`${sizeStyles.date} font-mono tracking-wide ${isLight ? 'text-slate-500' : ''}`}>
-                      {formatArticleDate(item.pubDate)}
+            {articles.map((item) => {
+              const safeLink = sanitizeExternalHttpUrl(item.link);
+              const cardClassName = `group block ${sizeStyles.card} border transition-all shadow-xs ${
+                isLight
+                  ? 'bg-slate-100/80 border-slate-200/90 hover:border-orange-500/70 hover:bg-slate-100'
+                  : 'bg-gray-950/40 border-gray-800/60 hover:border-orange-500/50 hover:bg-gray-900/40'
+              }`;
+              const cardBody = (
+                <>
+                  <div className="flex items-start justify-between gap-2">
+                    <span className={`${sizeStyles.title} transition-colors ${
+                      isLight ? 'text-slate-900 group-hover:text-orange-600' : 'text-gray-200 group-hover:text-orange-400'
+                    }`}>
+                      {item.title}
                     </span>
+                    {safeLink && (
+                      <ExternalLink className={`${sizeStyles.icon} shrink-0 mt-0.5 transition-colors ${
+                        isLight ? 'text-slate-400 group-hover:text-orange-600' : 'text-gray-600 group-hover:text-orange-400'
+                      }`} />
+                    )}
                   </div>
-                )}
-              </a>
-            ))}
+                  {showSnippet && item.description && (
+                    <p className={`${sizeStyles.desc} ${isLight ? 'text-slate-600' : ''}`}>
+                      {item.description}
+                    </p>
+                  )}
+                  {item.pubDate && (
+                    <div className="flex items-center gap-1.5 mt-2">
+                      <span className={`${sizeStyles.date} font-mono tracking-wide ${isLight ? 'text-slate-500' : ''}`}>
+                        {formatArticleDate(item.pubDate)}
+                      </span>
+                    </div>
+                  )}
+                </>
+              );
+              return safeLink ? (
+                <a
+                  key={item.id}
+                  href={safeLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cardClassName}
+                >
+                  {cardBody}
+                </a>
+              ) : (
+                <div key={item.id} className={cardClassName}>
+                  {cardBody}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

@@ -31,7 +31,9 @@ import {
 import {
   HOMELAB_VAULT_UPDATED_EVENT,
   loadHomelabCredentialsFromVault,
+  resolveBoundHomelabToken,
 } from '../../utils/homelabVault';
+import type { HomelabLocalVaultCredentials } from '../../types/phase5Widgets';
 import {
   fetchHomelabStatus,
   readCachedHomelabStatus,
@@ -137,7 +139,7 @@ export const HomelabWidget: React.FC<HomelabWidgetProps> = ({
       ? config.refreshIntervalSec
       : 60;
 
-  const [haToken, setHaToken] = useState<string>('');
+  const [vaultCreds, setVaultCreds] = useState<HomelabLocalVaultCredentials | null>(null);
   const [vaultReady, setVaultReady] = useState(false);
   const [statusData, setStatusData] = useState<HomelabApiCheckResponse | null>(() =>
     readCachedHomelabStatus(widgetId)
@@ -161,6 +163,11 @@ export const HomelabWidget: React.FC<HomelabWidgetProps> = ({
     return () => observer.disconnect();
   }, []);
 
+  const { token: haToken, originMismatch } = useMemo(
+    () => resolveBoundHomelabToken(vaultCreds, haBaseUrl),
+    [vaultCreds, haBaseUrl]
+  );
+
   // Load device-local Home Assistant token strictly from db.vault
   useEffect(() => {
     let active = true;
@@ -168,12 +175,12 @@ export const HomelabWidget: React.FC<HomelabWidgetProps> = ({
       void loadHomelabCredentialsFromVault(widgetId)
         .then((creds) => {
           if (!active) return;
-          setHaToken(creds?.haAccessToken || '');
+          setVaultCreds(creds);
           setVaultReady(true);
         })
         .catch(() => {
           if (!active) return;
-          setHaToken('');
+          setVaultCreds(null);
           setVaultReady(true);
         });
     };
@@ -435,15 +442,25 @@ export const HomelabWidget: React.FC<HomelabWidgetProps> = ({
           {haBaseUrl && haEntities.length > 0 && vaultReady && !haToken && (
             <div
               className={`px-2.5 py-1.5 rounded-xl border text-[10px] flex items-center justify-between gap-2 shrink-0 ${
-                isLight
-                  ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-800'
-                  : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200'
+                originMismatch
+                  ? isLight
+                    ? 'border-amber-500/35 bg-amber-500/10 text-amber-800'
+                    : 'border-amber-500/35 bg-amber-500/12 text-amber-200'
+                  : isLight
+                    ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-800'
+                    : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200'
               }`}
             >
               <span className="flex items-center gap-1.5 min-w-0">
                 <KeyRound className="w-3 h-3 shrink-0" />
                 <span className="truncate">
-                  Add your Home Assistant token on this device (<code className="font-mono">db.vault</code>).
+                  {originMismatch ? (
+                    'Home Assistant URL changed — re-save access token in Settings for this address.'
+                  ) : (
+                    <>
+                      Add your Home Assistant token on this device (<code className="font-mono">db.vault</code>).
+                    </>
+                  )}
                 </span>
               </span>
               {onOpenSettings && (

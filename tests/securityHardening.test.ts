@@ -7,9 +7,19 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { AddressInfo } from 'node:net';
-import { ExternalFetchError, fetchExternal, setGuardedFetch } from '../functions/_shared/fetchExternal';
+import {
+  ExternalFetchError,
+  checkApiRateLimit,
+  fetchExternal,
+  refuseOtherSites,
+  resetApiRateLimitsForTests,
+  setGuardedFetch,
+} from '../functions/_shared/fetchExternal';
 import { installAddressGuard, isBlockedAddress } from '../server/addressGuard';
 import { onRequestGet as webProxy } from '../functions/api/web-proxy';
+import { safeCssBackgroundUrl, sanitizeExternalHttpUrl } from '../src/utils/urlSecurity';
+import { isSafeVaultMediaDataUrl } from '../src/utils/localMediaVault';
+import { sanitizePayloadForBackupExport } from '../src/services/fileSync';
 
 describe('Self-hosted address guard (server/addressGuard.ts)', () => {
   it('blocks loopback, metadata and reserved addresses in every form, and home networks unless allowed', () => {
@@ -76,20 +86,116 @@ describe('Web preview proxy (functions/api/web-proxy.ts)', () => {
       }),
     });
 
-  it('sandboxes every answer so a proxied page never runs as Ambiently', async () => {
+  it('sandboxes every answer with frame-ancestors self so a proxied page never runs as Ambiently', async () => {
     const res = await call('iframe');
     assert.equal(res.status, 400);
     const csp = res.headers.get('content-security-policy') || '';
     assert.match(csp, /^sandbox\b/);
+    assert.match(csp, /frame-ancestors 'self'/);
     assert.ok(!/allow-same-origin/.test(csp), 'the sandbox must not allow the same origin');
     assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
   });
 
-  it('only answers frames: a direct visit or a script tag is refused', async () => {
-    for (const dest of ['document', 'script', 'style', 'image']) {
+  it('only answers frames from same-origin or anonymous sandboxed frames and refuses missing Sec-Fetch-Dest or foreign referers', async () => {
+    for (const dest of ['document', 'script', 'style', 'image', undefined]) {
       const res = await call(dest, '?url=' + encodeURIComponent('https://example.org/'));
-      assert.equal(res.status, 403, `Sec-Fetch-Dest: ${dest}`);
+      assert.equal(res.status, 403, `Sec-Fetch-Dest: ${String(dest)}`);
       assert.match(res.headers.get('content-security-policy') || '', /^sandbox\b/);
+    }
+
+    const crossOriginFrame = await webProxy({
+      request: new Request('https://ambiently.example/api/web-proxy?url=' + encodeURIComponent('https://example.org/'), {
+        headers: {
+          'Sec-Fetch-Dest': 'iframe',
+          'Sec-Fetch-Site': 'cross-site',
+          Referer: 'https://evil.example/embed',
+        },
+      }),
+    });
+    assert.equal(crossOriginFrame.status, 403);
+
+    setGuardedFetch({
+      publicOnly: async () =>
+        new Response('<html><head><base href="https://evil.example/"><title>Ok</title></head><body>Hi</body></html>', {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        }),
+      privateAllowed: async () => new Response('unused', { status: 500 }),
+    });
+    try {
+      const childLinkRes = await webProxy({
+        request: new Request('https://ambiently.example/api/web-proxy?url=' + encodeURIComponent('https://example.org/article'), {
+          headers: {
+            'Sec-Fetch-Dest': 'iframe',
+            'Sec-Fetch-Site': 'cross-site',
+          },
+        }),
+      });
+      assert.equal(childLinkRes.status, 200);
+      const html = await childLinkRes.text();
+      assert.ok(!html.includes('https://evil.example/'), 'upstream <base> tag must be stripped');
+      assert.ok(html.includes('<base href="https://example.org/article">'));
+    } finally {
+      setGuardedFetch(null);
+      resetApiRateLimitsForTests();
+    }
+  });
+});
+
+describe('API origin checks, optional AMBIENTLY_API_KEY, and rate limits', () => {
+  it('enforces Origin validation on POST, optional AMBIENTLY_API_KEY, and sliding-window rate limits', () => {
+    resetApiRateLimitsForTests();
+    const prevKey = process.env.AMBIENTLY_API_KEY;
+    try {
+      const crossOriginPost = refuseOtherSites(
+        new Request('https://ambiently.example/api/homelab', {
+          method: 'POST',
+          headers: { Origin: 'https://evil.example' },
+        })
+      );
+      assert.equal(crossOriginPost?.status, 403);
+
+      process.env.AMBIENTLY_API_KEY = 'test-server-api-key-081';
+      const unauthRes = refuseOtherSites(
+        new Request('https://ambiently.example/api/homelab', {
+          headers: { 'Sec-Fetch-Site': 'same-origin' },
+        })
+      );
+      assert.equal(unauthRes?.status, 401);
+
+      const authRes = refuseOtherSites(
+        new Request('https://ambiently.example/api/homelab', {
+          headers: {
+            'Sec-Fetch-Site': 'same-origin',
+            'X-Ambiently-Key': 'test-server-api-key-081',
+          },
+        })
+      );
+      assert.equal(authRes, null);
+      delete process.env.AMBIENTLY_API_KEY;
+
+      for (let i = 0; i < 3; i += 1) {
+        assert.equal(
+          checkApiRateLimit(
+            new Request('https://ambiently.example/api/test', { headers: { 'X-Forwarded-For': '203.0.113.5' } }),
+            '/api/test',
+            3,
+            60_000
+          ),
+          null
+        );
+      }
+      const rateLimited = checkApiRateLimit(
+        new Request('https://ambiently.example/api/test', { headers: { 'X-Forwarded-For': '203.0.113.5' } }),
+        '/api/test',
+        3,
+        60_000
+      );
+      assert.equal(rateLimited?.status, 429);
+    } finally {
+      if (prevKey === undefined) delete process.env.AMBIENTLY_API_KEY;
+      else process.env.AMBIENTLY_API_KEY = prevKey;
+      resetApiRateLimitsForTests();
     }
   });
 });
@@ -98,6 +204,7 @@ describe('Self-hosted server security headers', () => {
   let baseUrl = '';
   let close: () => Promise<void>;
   let tmpDist = '';
+  let serverRef: http.Server;
 
   before(async () => {
     tmpDist = fs.mkdtempSync(path.join(os.tmpdir(), 'ambiently-headers-test-'));
@@ -105,6 +212,7 @@ describe('Self-hosted server security headers', () => {
     process.env.AMBIENTLY_DIST_DIR = tmpDist;
     const { createAmbientlyServer } = await import('../server/index');
     const server = createAmbientlyServer();
+    serverRef = server;
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
     baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     close = () => new Promise<void>((resolve) => server.close(() => resolve()));
@@ -117,7 +225,11 @@ describe('Self-hosted server security headers', () => {
     fs.rmSync(tmpDist, { recursive: true, force: true });
   });
 
-  it('sends the Content-Security-Policy from public/_headers with the app page', async () => {
+  it('sends Content-Security-Policy, conditional HSTS, API hardening headers, and configures bounded timeouts', async () => {
+    assert.equal(serverRef.headersTimeout, 15_000);
+    assert.equal(serverRef.requestTimeout, 30_000);
+    assert.equal(serverRef.keepAliveTimeout, 5_000);
+
     const res = await fetch(`${baseUrl}/`);
     assert.equal(res.status, 200);
     const csp = res.headers.get('content-security-policy') || '';
@@ -125,6 +237,129 @@ describe('Self-hosted server security headers', () => {
     assert.match(csp, /object-src 'none'/);
     assert.ok(res.headers.get('permissions-policy'));
     assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+    assert.equal(res.headers.get('referrer-policy'), 'no-referrer');
+    assert.equal(res.headers.get('strict-transport-security'), null, 'plain HTTP must not emit HSTS');
+
+    const httpsProxiedRes = await fetch(`${baseUrl}/`, {
+      headers: { 'X-Forwarded-Proto': 'https' },
+    });
+    assert.equal(httpsProxiedRes.status, 200);
+    assert.match(httpsProxiedRes.headers.get('strict-transport-security') || '', /max-age=31536000/);
+
+    const apiRes = await fetch(`${baseUrl}/api/health`);
+    assert.equal(apiRes.status, 200);
+    assert.equal(apiRes.headers.get('x-content-type-options'), 'nosniff');
+    assert.equal(apiRes.headers.get('x-robots-tag'), 'noindex, nofollow');
+    assert.equal(apiRes.headers.get('referrer-policy'), 'no-referrer');
+
+    const unknownApiRes = await fetch(`${baseUrl}/api/unknown-route`);
+    assert.equal(unknownApiRes.status, 404);
+    assert.equal(unknownApiRes.headers.get('x-content-type-options'), 'nosniff');
+    assert.equal(unknownApiRes.headers.get('x-robots-tag'), 'noindex, nofollow');
+  });
+});
+
+describe('URL/CSS sanitizers, backup secret redaction, vault validation & Pi installer hardening', () => {
+  it('blocks unsafe link schemes and escapes/restricts CSS background URLs', () => {
+    assert.equal(sanitizeExternalHttpUrl('https://example.org/news?a=1'), 'https://example.org/news?a=1');
+    assert.equal(sanitizeExternalHttpUrl('http://nas.local:8080/feed'), 'http://nas.local:8080/feed');
+    assert.equal(sanitizeExternalHttpUrl('javascript:alert(1)'), null);
+    assert.equal(sanitizeExternalHttpUrl('data:text/html,<script>alert(1)</script>'), null);
+    assert.equal(sanitizeExternalHttpUrl('file:///etc/passwd'), null);
+
+    assert.equal(safeCssBackgroundUrl('https://example.com/bg(1).jpg'), 'url("https://example.com/bg\\(1\\).jpg")');
+    assert.equal(safeCssBackgroundUrl('data:image/png;base64,iVBORw0KGgo='), 'url("data:image/png;base64,iVBORw0KGgo=")');
+    assert.equal(safeCssBackgroundUrl('data:image/svg+xml;base64,PHN2Zz4='), null);
+    assert.equal(safeCssBackgroundUrl('javascript:alert(1)'), null);
+  });
+
+  it('rejects SVG data URLs in localMediaVault and strips secrets from backup exports', () => {
+    assert.equal(isSafeVaultMediaDataUrl('data:image/webp;base64,UklGRh4='), true);
+    assert.equal(isSafeVaultMediaDataUrl('data:image/svg+xml;base64,PHN2Zz4='), false);
+    assert.equal(isSafeVaultMediaDataUrl('data:text/html;base64,PGI+'), false);
+
+    const scrubbed = sanitizePayloadForBackupExport({
+      version: 1,
+      exportedAt: '2026-11-20T00:00:00.000Z',
+      settings: {
+        id: 'global',
+        dashboardTitle: 'Family Board',
+        dockPosition: 'left',
+        carouselEnabled: false,
+        defaultRotateDurationSec: 30,
+        displayDensity: 1,
+        wakeLockEnabled: true,
+        nightModeEnabled: false,
+        nightModeStart: '22:00',
+        nightModeEnd: '07:00',
+        nightModeStyle: 'dim',
+        nightDimOpacity: 0.85,
+        nightModeWakeTimeoutMin: 2,
+        nightScheduleEnabled: true,
+        snapToGrid: false,
+        defaultWidgetStyle: 'auto',
+        isDockHidden: false,
+        autoHideCursor: true,
+        cursorIdleTimeoutSec: 3,
+        commonPhotos: [],
+        commonPhotoSourceUrl: 'https://plex.local:32400/library/sections/1/all?X-Plex-Token=plex-secret-123',
+        photoAutoSyncInterval: 'daily',
+        pinLockEnabled: true,
+        pinHash: 'pbkdf2$120000$00112233445566778899aabbccddeeff$0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+        isLocked: false,
+        lockFullscreenKiosk: true,
+        lockCanvasEditing: true,
+        lockSettingsAccess: true,
+        updated_at: '2026-11-20T00:00:00.000Z',
+      },
+      tabs: [],
+      widgets: [
+        {
+          id: 'w-wifi',
+          tabId: 'tab-1',
+          type: 'wifi_qr',
+          title: 'Guest Wi-Fi',
+          config: { ssid: 'HomeNet', password: 'secret-wifi-password', homeAddress: '123 Main' },
+          freeformPos: { xRatio: 0, yRatio: 0, wRatio: 0.3, hRatio: 0.3 },
+          updated_at: '2026-11-20T00:00:00.000Z',
+        },
+        {
+          id: 'w-ha',
+          tabId: 'tab-1',
+          type: 'homelab',
+          title: 'Homelab',
+          config: {
+            haBaseUrl: 'http://homeassistant.local:8123',
+            haAccessToken: 'ha-token-must-strip',
+            url: 'https://plex.local:32400/photo.jpg?X-Plex-Token=plex-secret-xyz',
+          },
+          freeformPos: { xRatio: 0.3, yRatio: 0, wRatio: 0.3, hRatio: 0.3 },
+          updated_at: '2026-11-20T00:00:00.000Z',
+        },
+      ],
+      notes: [],
+    });
+
+    assert.equal(scrubbed.settings.pinHash, null);
+    assert.equal(scrubbed.settings.pinLockEnabled, false);
+    assert.ok(!String(scrubbed.settings.commonPhotoSourceUrl).includes('plex-secret-123'));
+    assert.equal('password' in scrubbed.widgets[0].config, false);
+    assert.equal('ssid' in scrubbed.widgets[0].config, false);
+    assert.equal(scrubbed.widgets[0].config.homeAddress, '123 Main');
+    assert.equal('haAccessToken' in scrubbed.widgets[1].config, false);
+    assert.ok(!String(scrubbed.widgets[1].config.url).includes('plex-secret-xyz'));
+  });
+
+  it('validates --port and --url and uses printf %q + quoted <<\'EOF\' heredoc in pi-kiosk-setup.sh', () => {
+    const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+    const script = fs.readFileSync(path.join(repoRoot, 'scripts', 'pi-kiosk-setup.sh'), 'utf8');
+    assert.match(script, /printf 'TARGET_URL=%q\\n'/);
+    assert.match(script, /printf 'PORT=%q\\n'/);
+    assert.match(script, /cat >> "\$\{LAUNCHER_SCRIPT\}" <<'EOF'/);
+    assert.match(script, /Invalid --port/);
+    assert.match(script, /Invalid --url/);
+    assert.ok(!script.includes('--no-sandbox'));
+    assert.ok(!script.includes('--disable-web-security'));
   });
 });
 

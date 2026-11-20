@@ -3,6 +3,7 @@ import { ShieldAlert, Mail, X } from 'lucide-react';
 import { getCurrentUser, sendPinResetCode, verifyOtpCode } from '../../services/supabase';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
+import { getPinLockoutStatus, resetPinLockout } from '../../utils/pinSecurity';
 
 interface PinOverlayProps {
   onUnlock: (pin: string) => boolean | Promise<boolean>;
@@ -38,6 +39,9 @@ export const PinOverlay: React.FC<PinOverlayProps> = ({
   const [pin, setPin] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [lockoutSeconds, setLockoutSeconds] = useState<number>(
+    () => getPinLockoutStatus().remainingSeconds
+  );
   const [recovery, setRecovery] = useState<Recovery>({ step: 'closed' });
   const [resetCode, setResetCode] = useState('');
   const [recoveryMessage, setRecoveryMessage] = useState('');
@@ -55,14 +59,42 @@ export const PinOverlay: React.FC<PinOverlayProps> = ({
     dialogRef.current?.focus();
   }, []);
 
+  useEffect(() => {
+    if (lockoutSeconds <= 0) return;
+    const timer = window.setInterval(() => {
+      const next = getPinLockoutStatus().remainingSeconds;
+      setLockoutSeconds(next);
+      if (next <= 0) {
+        setErrorMsg('');
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [lockoutSeconds]);
+
   const checkPin = useCallback(async (currentPin: string) => {
+    const initialLockout = getPinLockoutStatus();
+    if (initialLockout.isLockedOut) {
+      setLockoutSeconds(initialLockout.remainingSeconds);
+      setErrorMsg(`Too many attempts. Try again in ${initialLockout.remainingSeconds}s.`);
+      setPin('');
+      return;
+    }
+
     setIsVerifying(true);
     setErrorMsg('');
     try {
       const success = await onUnlockRef.current(currentPin);
       if (!success) {
-        setErrorMsg('Incorrect PIN. Try again.');
+        const afterLockout = getPinLockoutStatus();
+        if (afterLockout.isLockedOut) {
+          setLockoutSeconds(afterLockout.remainingSeconds);
+          setErrorMsg(`Too many attempts. Try again in ${afterLockout.remainingSeconds}s.`);
+        } else {
+          setErrorMsg('Incorrect PIN. Try again.');
+        }
         setPin('');
+      } else {
+        setLockoutSeconds(0);
       }
     } catch {
       setErrorMsg('Verification error');
@@ -72,8 +104,10 @@ export const PinOverlay: React.FC<PinOverlayProps> = ({
     }
   }, []);
 
+  const isKeypadDisabled = isVerifying || lockoutSeconds > 0;
+
   const handleDigit = useCallback((digit: string) => {
-    if (isVerifying) return;
+    if (isVerifying || getPinLockoutStatus().isLockedOut) return;
     setErrorMsg('');
     setPin((prev) => {
       if (prev.length >= 6) return prev;
@@ -86,16 +120,16 @@ export const PinOverlay: React.FC<PinOverlayProps> = ({
   }, [isVerifying, checkPin]);
 
   const handleBackspace = useCallback(() => {
-    if (isVerifying) return;
+    if (isVerifying || lockoutSeconds > 0) return;
     setErrorMsg('');
     setPin((prev) => prev.slice(0, -1));
-  }, [isVerifying]);
+  }, [isVerifying, lockoutSeconds]);
 
   const handleClear = useCallback(() => {
-    if (isVerifying) return;
+    if (isVerifying || lockoutSeconds > 0) return;
     setErrorMsg('');
     setPin('');
-  }, [isVerifying]);
+  }, [isVerifying, lockoutSeconds]);
 
   // Keyboard number listener for desktop / connected keyboards
   useEffect(() => {
@@ -171,6 +205,8 @@ export const PinOverlay: React.FC<PinOverlayProps> = ({
     }
     // Removes the PIN and the kiosk locks; a new PIN can be set in Settings
     await useDashboardStore.getState().setPinLock(null);
+    resetPinLockout();
+    setLockoutSeconds(0);
     setIsRecoveryBusy(false);
     onPinRemoved();
   };
@@ -224,7 +260,11 @@ export const PinOverlay: React.FC<PinOverlayProps> = ({
 
         {/* Error message */}
         <div className="h-5 mb-3 flex items-center justify-center">
-          {errorMsg ? (
+          {lockoutSeconds > 0 ? (
+            <span className="text-xs text-red-400 font-medium">
+              Too many attempts. Try again in {lockoutSeconds}s.
+            </span>
+          ) : errorMsg ? (
             <span className="text-xs text-red-400 font-medium">{errorMsg}</span>
           ) : isVerifying ? (
             <span className="text-xs text-blue-400 font-medium animate-pulse">Verifying PIN...</span>
@@ -237,7 +277,7 @@ export const PinOverlay: React.FC<PinOverlayProps> = ({
             <button
               key={num}
               type="button"
-              disabled={isVerifying}
+              disabled={isKeypadDisabled}
               onClick={() => handleDigit(num)}
               className="h-14 rounded-xl bg-gray-800/80 hover:bg-gray-700 active:scale-95 text-xl font-semibold text-white transition-all shadow-inner disabled:opacity-50 cursor-pointer"
             >
@@ -246,7 +286,7 @@ export const PinOverlay: React.FC<PinOverlayProps> = ({
           ))}
           <button
             type="button"
-            disabled={isVerifying}
+            disabled={isKeypadDisabled}
             onClick={handleClear}
             className="h-14 rounded-xl bg-gray-800/40 hover:bg-gray-800 active:scale-95 text-sm font-medium text-gray-400 hover:text-white transition-all disabled:opacity-50 cursor-pointer"
           >
@@ -254,7 +294,7 @@ export const PinOverlay: React.FC<PinOverlayProps> = ({
           </button>
           <button
             type="button"
-            disabled={isVerifying}
+            disabled={isKeypadDisabled}
             onClick={() => handleDigit('0')}
             className="h-14 rounded-xl bg-gray-800/80 hover:bg-gray-700 active:scale-95 text-xl font-semibold text-white transition-all shadow-inner disabled:opacity-50 cursor-pointer"
           >
@@ -262,7 +302,7 @@ export const PinOverlay: React.FC<PinOverlayProps> = ({
           </button>
           <button
             type="button"
-            disabled={isVerifying}
+            disabled={isKeypadDisabled}
             onClick={handleBackspace}
             className="h-14 rounded-xl bg-gray-800/40 hover:bg-gray-800 active:scale-95 text-sm font-medium text-gray-400 hover:text-white transition-all disabled:opacity-50 cursor-pointer"
           >

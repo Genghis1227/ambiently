@@ -17,6 +17,55 @@ import { inferCuratedCategoryId } from '../data/curatedScenery';
 import { sanitizeRestoredPhotoWidget } from '../utils/photoSourceIsolation';
 import { normalizePinLockSettings } from '../utils/pinValidation';
 import { collectVaultMediaMap, restoreVaultMediaMap } from '../utils/localMediaVault';
+import { stripPlexTokens } from './plexLinks';
+import {
+  stripHomelabCredentialsFromConfig,
+  stripWifiCredentialsFromConfig,
+} from '../utils/mediaOptimization';
+
+function stripWidgetConfigSecrets(config: Record<string, any> | undefined): Record<string, any> {
+  return stripPlexTokens(
+    stripHomelabCredentialsFromConfig(stripWifiCredentialsFromConfig(config || {}))
+  );
+}
+
+function isRecordWithId<T extends { id?: unknown }>(item: unknown): item is T & { id: string } {
+  return (
+    Boolean(item) &&
+    typeof item === 'object' &&
+    typeof (item as { id?: unknown }).id === 'string' &&
+    (item as { id: string }).id.trim().length > 0
+  );
+}
+
+/**
+ * Strips device-local secrets (`pinHash`, lock flags, Plex tokens, Wi-Fi QR credentials,
+ * and Home Assistant tokens) before serializing a backup payload to disk or download.
+ */
+export function sanitizePayloadForBackupExport(payload: LocalExportPayload): LocalExportPayload {
+  const safeSettings: AppSettings = {
+    ...stripPlexTokens(payload.settings),
+    pinLockEnabled: false,
+    pinHash: null,
+    lockCanvasEditing: false,
+    lockFullscreenKiosk: false,
+    lockSettingsAccess: true,
+    settingsPinOptOut: false,
+  };
+
+  const safeWidgets = Array.isArray(payload.widgets)
+    ? payload.widgets.map((widget) => ({
+        ...widget,
+        config: stripWidgetConfigSecrets(widget.config),
+      }))
+    : [];
+
+  return {
+    ...payload,
+    settings: safeSettings,
+    widgets: safeWidgets,
+  };
+}
 
 export interface LocalExportPayload {
   version: 1;
@@ -152,7 +201,7 @@ export async function downloadBackupFile(
   notes: StickyNoteItem[]
 ): Promise<void> {
   const localMedia = await collectVaultMediaMap(widgets).catch(() => ({}));
-  const payload: LocalExportPayload = {
+  const payload = sanitizePayloadForBackupExport({
     version: 1,
     exportedAt: new Date().toISOString(),
     settings,
@@ -165,7 +214,7 @@ export async function downloadBackupFile(
     meals: useMealStore.getState().snapshot,
     kanban: useKanbanStore.getState().snapshot,
     routines: useRoutinesStore.getState().snapshot,
-  };
+  });
 
   const jsonStr = JSON.stringify(payload, null, 2);
   const blob = new Blob([jsonStr], { type: 'application/json' });
@@ -214,7 +263,7 @@ export async function restoreBackupToDatabase(
   try {
     // 1. Restore Settings
     if (payload.settings) {
-      let settingsToSave: AppSettings = { ...payload.settings };
+      let settingsToSave: AppSettings = stripPlexTokens({ ...payload.settings });
       // If clearPinLock is enabled or if PIN was not active in backup, purge all PIN lock residue
       if (options?.clearPinLock || !settingsToSave.pinLockEnabled || !settingsToSave.pinHash) {
         settingsToSave.pinLockEnabled = false;
@@ -234,15 +283,24 @@ export async function restoreBackupToDatabase(
     }
 
     // 2. Replace Tabs
+    const validTabs = payload.tabs.filter((t): t is DashboardTab => isRecordWithId<DashboardTab>(t));
     await db.tabs.clear();
-    if (payload.tabs.length > 0) {
-      await db.tabs.bulkAdd(payload.tabs);
+    if (validTabs.length > 0) {
+      await db.tabs.bulkAdd(validTabs);
     }
 
     // 3. Replace Widgets
+    const validWidgets = payload.widgets.filter((w): w is DashboardWidget =>
+      isRecordWithId<DashboardWidget>(w)
+    );
     await db.widgets.clear();
-    if (payload.widgets.length > 0) {
-      const sanitizedWidgets = payload.widgets.map((w) => sanitizeRestoredPhotoWidget(w).widget);
+    if (validWidgets.length > 0) {
+      const sanitizedWidgets = validWidgets.map((w) =>
+        sanitizeRestoredPhotoWidget({
+          ...w,
+          config: stripWidgetConfigSecrets(w.config),
+        }).widget
+      );
       await db.widgets.bulkAdd(sanitizedWidgets);
     }
 
@@ -250,9 +308,12 @@ export async function restoreBackupToDatabase(
     await restoreVaultMediaMap(payload.localMedia);
 
     // 4. Replace Notes
+    const validNotes = payload.notes.filter((n): n is StickyNoteItem =>
+      isRecordWithId<StickyNoteItem>(n)
+    );
     await db.notes.clear();
-    if (payload.notes.length > 0) {
-      await db.notes.bulkAdd(payload.notes);
+    if (validNotes.length > 0) {
+      await db.notes.bulkAdd(validNotes);
     }
 
     // 5. Restore Global Household Profiles if present
@@ -433,8 +494,9 @@ export async function saveSnapshotToFile(
 
   isWriting = true;
   try {
+    const sanitizedPayload = sanitizePayloadForBackupExport(payload);
     const writable = await (activeFileHandle as any).createWritable();
-    await writable.write(JSON.stringify(payload, null, 2));
+    await writable.write(JSON.stringify(sanitizedPayload, null, 2));
     await writable.close();
     const now = new Date().toISOString();
     updateFileSyncState({ lastSyncedAt: now, error: undefined });
