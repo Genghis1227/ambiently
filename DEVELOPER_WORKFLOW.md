@@ -67,7 +67,8 @@ To ensure consistency, safety, and clear alignment, all contributors must strict
   * **Environment Variable Fix:** If authentication or execution issues occur with `gh` (such as conflicting tokens), ensure conflicting token environment variables (e.g., `GITHUB_TOKEN` or `GH_TOKEN`) are set to `null` or cleared in the session shell.
 * **Execution Commands:**
   * `gh pr create --title "<Title>" --body "Summary of changes. Closes #<IssueNumber>"`
-  * `gh pr merge --squash --delete-branch` *(Execute ONLY after explicit owner command)*
+  * Wait for all required GitHub Actions status checks (`Lint, Build & Test` and `Repository Guardrails` via `gh pr checks --watch`) to pass before merging.
+  * `gh pr merge --squash --delete-branch --admin` *(Execute ONLY after explicit owner command and green CI checks; `--admin` exercises `@Genghis1227`'s Repository Admin `Protect main` ruleset privilege since GitHub disallows self-approving self-authored PRs)*
 
 ---
 
