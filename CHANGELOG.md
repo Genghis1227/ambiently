@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.24] - 2026-11-19
+
+### Fixed
+- **Non-Overlapping Floating Widget Action Bar (`src/utils/widgetToolbarPlacement.ts`, `src/components/layout/Corkboard.tsx`, `tests/widgetToolbarPlacement.test.ts`, `FEATURES.md`):**
+  - Updated `Corkboard` to float every widget's 5-icon hover toolbar (`Rotate`, `Settings`, `Layers`, `Maximize`, `Remove`) strictly **outside** the card bounds by default (`outside-top` with a transparent pointer hover bridge) and flip strictly outside below (`outside-bottom`, clearing the bottom-right resize grip) when a tile sits near the top screen edge (including Smart Bento Grid top rows), preventing overlap with Sticker Mode headers and internal top-right widget controls across all 25 widget types.
+  - Added a collapsible top-center `⋯` (`MoreHorizontal`) trigger pill (`compact-pill`) for fullscreen tiles and full-height Bento columns spanning both viewport edges, offset narrow-card rotate handles cleanly (`left-3`), and hid hover toolbars, rotate handles, and resize dots whenever `useIsCursorHidden()` is active.
+
 ## [0.7.23] - 2026-11-19
 
 ### Added

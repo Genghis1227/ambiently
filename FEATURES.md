@@ -14,9 +14,10 @@
     2. **Keep Sizes & Pack (`pack`):** 2D shelf-packing that preserves each card's user-chosen dimensions and aspect ratio without overlapping.
     3. **Split Zones (`split`):** Tiles all Live Widgets on the left (`63%`) and organizes Sticky Notes into a clean corkboard column on the right (`31%`).
   * Includes **1-Click Undo (`RotateCcw`)** to restore your previous manual layout, plus **Smart Open-Space Spawning** so newly created tiles and notes automatically place themselves in unoccupied areas of the board.
-* **Interactive Corner Drag Resizing (`↘`), Grab-and-Rotate Handle (`↻`), & 1-Click Fullscreen (`⛶`):**
+* **Interactive Corner Drag Resizing (`↘`), Grab-and-Rotate Handle (`↻`), Non-Overlapping Floating Tile Controls & 1-Click Fullscreen (`⛶`):**
   * Drag any widget or sticky note's bottom-right grip handle to resize it smoothly (with sticky notes scaling from compact `110px × 90px` mini post-it tags up to `100%` full-board posters).
   * Grab the **top-center Rotate Handle (`↻`)** next to any pushpin to spin notes or widgets smoothly to any angle with a live degree indicator (`14°`), magnetic snap to `0°` within `±2.5°`, and double-click to straighten.
+  * Each widget's hover action bar (`Rotate`, `Settings`, `Layers`, `Maximize`, `Remove`) floats strictly **outside the tile bounds** (`outside-top`, or flipped to `outside-bottom` when near the top screen edge, or collapsed to a top-center `⋯` pill when fullscreen / full-height) so internal top-right widget buttons remain unobstructed across all cards, and automatically hides whenever the idle cursor or Night Mode hides the pointer.
   * Click the Maximize (`Maximize2`) button to expand any widget (such as a Photo Frame or Calendar) to fill 100% of the canvas.
 * **Per-Canvas Background Themes, 4K Local Picture Upload & Dim Level Control (`canvasThemes.ts`, `imageUpload.ts`):**
   * Customize each canvas independently during creation (`CreateCanvasModal.tsx`) or in Settings (`SettingsModal.tsx`) with **Midnight Slate Dots**, **Warm Tactile Cork**, **OLED Pitch Black**, **Nordic Aurora**, **Architect Blueprint Grid**, or **Custom Picture Wallpaper**.

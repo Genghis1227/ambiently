@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.24",
+    date: "November 19, 2026",
+    title: "Non-Overlapping Floating Widget Action Bar & Idle-Cursor Edit Chrome Polish",
+    highlights: [
+      "Non-Overlapping Widget Action Bar (Corkboard & widgetToolbarPlacement): Floats every widget's hover toolbar strictly outside the tile above its border by default (with a seamless pointer hover bridge), or cleanly outside below for top-row Bento Grid tiles so top-right widget controls stay completely unobstructed.",
+      "Fullscreen Compact Trigger Pill: Fullscreen tiles and full-height columns use a compact top-center ··· pill that expands on hover or tap and collapses automatically after each action.",
+      "Idle-Cursor Edit Chrome Hiding: Hover toolbars, rotate handles, and resize dots automatically fade out whenever the idle kiosk cursor or Night Mode hides the pointer.",
+    ],
+  },
+  {
     version: "v0.7.23",
     date: "November 19, 2026",
     title: "Phase 3: Live Sports Scoreboard, Daily Discovery & Kiosk Tooltip Polish",

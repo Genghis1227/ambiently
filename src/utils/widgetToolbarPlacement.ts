@@ -1,0 +1,34 @@
+export const TOP_EDGE_CLEARANCE_RATIO = 0.055;
+export const BOTTOM_EDGE_CLEARANCE_RATIO = 0.945;
+
+export type WidgetToolbarPlacement = 'outside-top' | 'outside-bottom' | 'compact-pill';
+
+export interface WidgetToolbarPlacementInput {
+  isFullScreen: boolean;
+  yRatio: number;
+  hRatio: number;
+}
+
+/**
+ * Resolves where a widget tile's floating action bar renders so it never covers widget headers or
+ * top-right controls inside the tile:
+ * - `'outside-top'` above the card when there is top clearance
+ * - `'outside-bottom'` below the card when the card sits near the top edge (e.g. Bento Grid top rows)
+ * - `'compact-pill'` when fullscreen or spanning both top and bottom edges
+ */
+export function resolveWidgetToolbarPlacement({
+  isFullScreen,
+  yRatio,
+  hRatio,
+}: WidgetToolbarPlacementInput): WidgetToolbarPlacement {
+  if (isFullScreen) return 'compact-pill';
+
+  const y = Number.isFinite(yRatio) ? yRatio : 0.1;
+  const h = Number.isFinite(hRatio) ? hRatio : 0.45;
+
+  if (y < TOP_EDGE_CLEARANCE_RATIO) {
+    return y + h <= BOTTOM_EDGE_CLEARANCE_RATIO ? 'outside-bottom' : 'compact-pill';
+  }
+
+  return 'outside-top';
+}
