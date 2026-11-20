@@ -22,6 +22,7 @@ import {
   RotateCw,
   Edit2,
   Layers,
+  MoreHorizontal,
 } from 'lucide-react';
 import { ClockWeatherWidget } from '../widgets/ClockWeatherWidget';
 import { ClockWidget } from '../widgets/ClockWidget';
@@ -103,6 +104,8 @@ const DailyDiscoveryWidget = React.lazy(() =>
 import { useDashboardStore } from '../../store/dashboardStore';
 import { CANVAS_THEMES, isCanvasThemeLight } from '../../data/canvasThemes';
 import { findOpenCanvasSpot } from '../../utils/autoLayout';
+import { useIsCursorHidden } from '../../hooks/useIdleCursor';
+import { resolveWidgetToolbarPlacement } from '../../utils/widgetToolbarPlacement';
 import { isWidgetStickerMode } from '../../utils/widgetStickerMode';
 import { inferCuratedCategoryId } from '../../services/photos';
 import {
@@ -551,6 +554,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   const canvasSwipeEnabled = useDashboardStore((s) => s.settings.canvasSwipeEnabled !== false);
   const dockPosition = useDashboardStore((s) => s.settings.dockPosition);
   const isDockHidden = useDashboardStore((s) => Boolean(s.settings.isDockHidden));
+  const isCursorHidden = useIsCursorHidden();
+  const [expandedCompactToolbarId, setExpandedCompactToolbarId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [draggingType, setDraggingType] = useState<'note' | 'widget'>('note');
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -1904,7 +1909,14 @@ export const Corkboard: React.FC<CorkboardProps> = ({
           rotation: isRotating && rotateAngle !== null ? rotateAngle : pos.rotation,
         };
 
-        const isNearTopEdge = !isFullScreen && (displayPos.yRatio ?? 0) < 0.04;
+        const toolbarPlacement = resolveWidgetToolbarPlacement({
+          isFullScreen,
+          yRatio: displayPos.yRatio ?? 0,
+          hRatio: displayPos.hRatio ?? 0.45,
+        });
+        const isNarrowCardForToolbar = (displayPos.wRatio ?? 0.35) < 0.3;
+        const isCompactToolbar = toolbarPlacement === 'compact-pill';
+        const isCompactExpanded = !isCompactToolbar || expandedCompactToolbarId === widget.id;
 
         return (
           <div
@@ -2007,7 +2019,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             } flex flex-col justify-between`}
           >
             {/* Elevated Grab-to-Rotate Handle (Prominent, impossible to obscure) */}
-            {!isFullScreen && !isCanvasLocked && onUpdateWidgetPos && (
+            {!isFullScreen && !isCanvasLocked && onUpdateWidgetPos && !isCompactToolbar && (
               <div
                 data-no-drag="true"
                 data-no-canvas-swipe="true"
@@ -2016,11 +2028,23 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                   e.stopPropagation();
                   onUpdateWidgetPos(widget.id, widget.gridPos, { ...pos, rotation: 0 });
                 }}
-                title="Grab and drag in a circle to rotate tile (double-click to reset to 0°)"
-                className={`absolute left-1/2 -translate-x-1/2 z-50 flex flex-col items-center transition-opacity pointer-events-auto cursor-grab active:cursor-grabbing px-3 ${
-                  isRotating ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                title={
+                  isCursorHidden
+                    ? undefined
+                    : 'Grab and drag in a circle to rotate tile (double-click to reset to 0°)'
+                }
+                className={`absolute ${
+                  isNarrowCardForToolbar ? 'left-3' : 'left-1/2 -translate-x-1/2'
+                } z-50 flex flex-col items-center transition-opacity pointer-events-auto cursor-grab active:cursor-grabbing px-3 ${
+                  isRotating
+                    ? 'opacity-100'
+                    : isCursorHidden
+                      ? 'opacity-0 pointer-events-none'
+                      : 'opacity-0 group-hover:opacity-100'
                 } ${
-                  isNearTopEdge ? '-bottom-8 pt-2 flex-col-reverse' : '-top-7.5 pb-2'
+                  toolbarPlacement === 'outside-bottom'
+                    ? '-bottom-8 pt-2 flex-col-reverse'
+                    : '-top-7.5 pb-2'
                 }`}
               >
                 <div
@@ -2040,180 +2064,231 @@ export const Corkboard: React.FC<CorkboardProps> = ({
               </div>
             )}
 
-            {/* Top Right Widget Controls: Reset Rotation (if tilted), Settings, Layer Order, Maximize/Restore & Remove */}
+            {/* Floating Widget Controls: Outside-top, flipped outside-bottom near top edge, or compact pill */}
             <div
               data-no-drag="true"
-              className={`absolute z-50 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-md px-1.5 py-1 rounded-xl shadow-xl ${
-                isWidgetLight
-                  ? 'bg-white/95 border border-slate-300/90 text-slate-700'
-                  : 'bg-gray-950/90 border border-gray-700/80 shadow-2xl text-gray-300'
+              onPointerEnter={(e) => {
+                if (e.pointerType === 'mouse' && isCompactToolbar) {
+                  setExpandedCompactToolbarId(widget.id);
+                }
+              }}
+              onPointerLeave={(e) => {
+                if (e.pointerType === 'mouse' && isCompactToolbar) {
+                  setExpandedCompactToolbarId((prev) => (prev === widget.id ? null : prev));
+                }
+              }}
+              className={`absolute z-50 transition-opacity ${
+                isCursorHidden ? 'opacity-0 pointer-events-none' : 'opacity-0 group-hover:opacity-100'
               } ${
-                isFullScreen
-                  ? dockPaddingClass === 'pr-20'
-                    ? 'top-3.5 right-24'
-                    : dockPaddingClass === 'pt-20'
-                      ? 'top-24 right-4'
-                      : 'top-3.5 right-4'
-                  : isNearTopEdge
-                  ? 'top-2 right-2'
-                  : '-top-3.5 right-3'
+                toolbarPlacement === 'outside-top'
+                  ? 'bottom-full right-2 pb-1.5'
+                  : toolbarPlacement === 'outside-bottom'
+                    ? 'top-full right-6 pt-1.5'
+                    : `left-1/2 -translate-x-1/2 ${
+                        isFullScreen && dockPaddingClass === 'pt-20' ? 'top-20' : 'top-1.5'
+                      }`
               }`}
             >
-              {!isFullScreen && !isCanvasLocked && onUpdateWidgetPos && (
+              {!isCompactExpanded ? (
                 <button
                   type="button"
-                  data-no-canvas-swipe="true"
-                  onPointerDown={(e) => handleRotatePointerDown(e, widget.id, 'widget', pos)}
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    onUpdateWidgetPos(widget.id, widget.gridPos, { ...pos, rotation: 0 });
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (!isRotating && pos.rotation !== 0) {
-                      onUpdateWidgetPos(widget.id, widget.gridPos, { ...pos, rotation: 0 });
-                    }
-                  }}
-                  title={
-                    pos.rotation !== 0
-                      ? `Rotated ${pos.rotation}° — drag to rotate or click to reset to 0°`
-                      : 'Drag in a circle to rotate tile'
-                  }
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold flex items-center gap-0.5 transition-all cursor-grab active:cursor-grabbing ${
-                    pos.rotation !== 0
-                      ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-600 hover:text-white'
-                      : isWidgetLight
-                      ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
-                      : 'hover:bg-gray-800 text-gray-300 hover:text-white'
-                  }`}
-                >
-                  <RotateCw className="w-3 h-3" />
-                  {pos.rotation !== 0 && <span>{pos.rotation}°</span>}
-                </button>
-              )}
-              {!isCanvasLocked && onUpdateWidget && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEditingWidget(widget);
-                  }}
+                  data-no-drag="true"
                   onPointerDown={(e) => e.stopPropagation()}
-                  title="Configure tile title and settings"
-                  className={`p-1 rounded-lg transition-all cursor-pointer ${
-                    isWidgetLight
-                      ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
-                      : 'hover:bg-gray-800 text-gray-300 hover:text-white'
-                  }`}
-                >
-                  <Settings className="w-3.5 h-3.5" />
-                </button>
-              )}
-              {!isCanvasLocked && onUpdateWidgetPos && !isFullScreen && (
-                <button
-                  type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    setContextMenu({
-                      x: rect.left,
-                      y: rect.bottom + 6,
-                      id: widget.id,
-                      type: 'widget',
-                      title: widget.title,
-                      currentZ: pos.zIndex || 1,
-                      isBackground: Boolean(pos.isBackground),
-                      rotation: pos.rotation,
-                    });
+                    setExpandedCompactToolbarId(widget.id);
                   }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  title="Layer order & appearance"
-                  className={`p-1 rounded-lg transition-all cursor-pointer ${
+                  title={isCursorHidden ? undefined : 'Tile actions'}
+                  className={`flex items-center justify-center px-2 py-0.5 rounded-full backdrop-blur-md shadow-lg transition-colors cursor-pointer ${
                     isWidgetLight
-                      ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
-                      : 'hover:bg-gray-800 text-gray-300 hover:text-white'
+                      ? 'bg-white/95 border border-slate-300/90 text-slate-600 hover:text-slate-900'
+                      : 'bg-gray-950/90 border border-gray-700/80 text-gray-300 hover:text-white'
                   }`}
                 >
-                  <Layers className="w-3.5 h-3.5" />
+                  <MoreHorizontal className="w-3.5 h-3.5" />
                 </button>
-              )}
-              {onUpdateWidgetPos && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (isFullScreen) {
-                      const nextPos = {
-                        ...pos,
-                        xRatio: 0.1,
-                        yRatio: 0.1,
-                        wRatio: 0.45,
-                        hRatio: 0.5,
-                        rotation: 0,
-                        isFullScreen: false,
-                      };
-                      if (widget.type === 'chores' && onUpdateWidget) {
-                        onUpdateWidget(widget.id, {
-                          freeformPos: nextPos,
-                          config: { ...widget.config, displayMode: 'tile' },
-                        });
-                      } else if (widget.type === 'kanban' && onUpdateWidget) {
-                        onUpdateWidget(widget.id, {
-                          freeformPos: nextPos,
-                          config: { ...widget.config, displayMode: 'tile' },
-                        });
-                      } else {
-                        onUpdateWidgetPos(widget.id, widget.gridPos, nextPos);
+              ) : (
+                <div
+                  className={`flex items-center gap-1 backdrop-blur-md px-1.5 py-1 rounded-xl shadow-xl ${
+                    isWidgetLight
+                      ? 'bg-white/95 border border-slate-300/90 text-slate-700'
+                      : 'bg-gray-950/90 border border-gray-700/80 shadow-2xl text-gray-300'
+                  }`}
+                >
+                  {!isFullScreen && !isCanvasLocked && onUpdateWidgetPos && (
+                    <button
+                      type="button"
+                      data-no-canvas-swipe="true"
+                      onPointerDown={(e) => handleRotatePointerDown(e, widget.id, 'widget', pos)}
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        onUpdateWidgetPos(widget.id, widget.gridPos, { ...pos, rotation: 0 });
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!isRotating && pos.rotation !== 0) {
+                          onUpdateWidgetPos(widget.id, widget.gridPos, { ...pos, rotation: 0 });
+                        }
+                      }}
+                      title={
+                        isCursorHidden
+                          ? undefined
+                          : pos.rotation !== 0
+                            ? `Rotated ${pos.rotation}° — drag to rotate or click to reset to 0°`
+                            : 'Drag in a circle to rotate tile'
                       }
-                    } else {
-                      const nextPos = {
-                        ...pos,
-                        xRatio: 0,
-                        yRatio: 0,
-                        wRatio: 1,
-                        hRatio: 1,
-                        rotation: 0,
-                        isFullScreen: true,
-                      };
-                      if (widget.type === 'chores' && onUpdateWidget) {
-                        onUpdateWidget(widget.id, {
-                          freeformPos: nextPos,
-                          config: { ...widget.config, displayMode: 'hub' },
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold flex items-center gap-0.5 transition-all cursor-grab active:cursor-grabbing ${
+                        pos.rotation !== 0
+                          ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-600 hover:text-white'
+                          : isWidgetLight
+                            ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
+                            : 'hover:bg-gray-800 text-gray-300 hover:text-white'
+                      }`}
+                    >
+                      <RotateCw className="w-3 h-3" />
+                      {pos.rotation !== 0 && <span>{pos.rotation}°</span>}
+                    </button>
+                  )}
+                  {!isCanvasLocked && onUpdateWidget && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (isCompactToolbar) setExpandedCompactToolbarId(null);
+                        setEditingWidget(widget);
+                      }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      title={isCursorHidden ? undefined : 'Configure tile title and settings'}
+                      className={`p-1 rounded-lg transition-all cursor-pointer ${
+                        isWidgetLight
+                          ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
+                          : 'hover:bg-gray-800 text-gray-300 hover:text-white'
+                      }`}
+                    >
+                      <Settings className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {!isCanvasLocked && onUpdateWidgetPos && !isFullScreen && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (isCompactToolbar) setExpandedCompactToolbarId(null);
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setContextMenu({
+                          x: rect.left,
+                          y: rect.bottom + 6,
+                          id: widget.id,
+                          type: 'widget',
+                          title: widget.title,
+                          currentZ: pos.zIndex || 1,
+                          isBackground: Boolean(pos.isBackground),
+                          rotation: pos.rotation,
                         });
-                      } else if (widget.type === 'kanban' && onUpdateWidget) {
-                        onUpdateWidget(widget.id, {
-                          freeformPos: nextPos,
-                          config: { ...widget.config, displayMode: 'view' },
-                        });
-                      } else {
-                        onUpdateWidgetPos(widget.id, widget.gridPos, nextPos);
+                      }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      title={isCursorHidden ? undefined : 'Layer order & appearance'}
+                      className={`p-1 rounded-lg transition-all cursor-pointer ${
+                        isWidgetLight
+                          ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
+                          : 'hover:bg-gray-800 text-gray-300 hover:text-white'
+                      }`}
+                    >
+                      <Layers className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {onUpdateWidgetPos && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (isCompactToolbar) setExpandedCompactToolbarId(null);
+                        if (isFullScreen) {
+                          const nextPos = {
+                            ...pos,
+                            xRatio: 0.1,
+                            yRatio: 0.1,
+                            wRatio: 0.45,
+                            hRatio: 0.5,
+                            rotation: 0,
+                            isFullScreen: false,
+                          };
+                          if (widget.type === 'chores' && onUpdateWidget) {
+                            onUpdateWidget(widget.id, {
+                              freeformPos: nextPos,
+                              config: { ...widget.config, displayMode: 'tile' },
+                            });
+                          } else if (widget.type === 'kanban' && onUpdateWidget) {
+                            onUpdateWidget(widget.id, {
+                              freeformPos: nextPos,
+                              config: { ...widget.config, displayMode: 'tile' },
+                            });
+                          } else {
+                            onUpdateWidgetPos(widget.id, widget.gridPos, nextPos);
+                          }
+                        } else {
+                          const nextPos = {
+                            ...pos,
+                            xRatio: 0,
+                            yRatio: 0,
+                            wRatio: 1,
+                            hRatio: 1,
+                            rotation: 0,
+                            isFullScreen: true,
+                          };
+                          if (widget.type === 'chores' && onUpdateWidget) {
+                            onUpdateWidget(widget.id, {
+                              freeformPos: nextPos,
+                              config: { ...widget.config, displayMode: 'hub' },
+                            });
+                          } else if (widget.type === 'kanban' && onUpdateWidget) {
+                            onUpdateWidget(widget.id, {
+                              freeformPos: nextPos,
+                              config: { ...widget.config, displayMode: 'view' },
+                            });
+                          } else {
+                            onUpdateWidgetPos(widget.id, widget.gridPos, nextPos);
+                          }
+                        }
+                      }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      title={
+                        isCursorHidden
+                          ? undefined
+                          : isFullScreen
+                            ? 'Restore card size'
+                            : 'Fill full screen / canvas'
                       }
-                    }
-                  }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  title={isFullScreen ? 'Restore card size' : 'Fill full screen / canvas'}
-                  className={`p-1 rounded-lg transition-all cursor-pointer ${
-                    isWidgetLight
-                      ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
-                      : 'hover:bg-gray-800 text-gray-300 hover:text-white'
-                  }`}
-                >
-                  {isFullScreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-                </button>
-              )}
+                      className={`p-1 rounded-lg transition-all cursor-pointer ${
+                        isWidgetLight
+                          ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
+                          : 'hover:bg-gray-800 text-gray-300 hover:text-white'
+                      }`}
+                    >
+                      {isFullScreen ? (
+                        <Minimize2 className="w-3.5 h-3.5" />
+                      ) : (
+                        <Maximize2 className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  )}
 
-              {!isCanvasLocked && onRemoveWidget && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRemoveWidget(widget.id);
-                  }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  title="Remove widget"
-                  className="p-1 rounded-lg hover:bg-red-500/80 text-gray-400 hover:text-white transition-all cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                  {!isCanvasLocked && onRemoveWidget && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (isCompactToolbar) setExpandedCompactToolbarId(null);
+                        onRemoveWidget(widget.id);
+                      }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      title={isCursorHidden ? undefined : 'Remove widget'}
+                      className="p-1 rounded-lg hover:bg-red-500/80 text-gray-400 hover:text-white transition-all cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
               )}
             </div>
 
@@ -2223,8 +2298,14 @@ export const Corkboard: React.FC<CorkboardProps> = ({
                 data-no-drag="true"
                 data-no-canvas-swipe="true"
                 onPointerDown={(e) => handleResizePointerDown(e, widget.id, 'widget', pos)}
-                title="Drag to resize tile"
-                className={`absolute bottom-1 right-1 p-1.5 cursor-nwse-resize z-40 opacity-40 group-hover:opacity-100 hover:opacity-100 touch-none transition-opacity ${
+                title={isCursorHidden ? undefined : 'Drag to resize tile'}
+                className={`absolute bottom-1 right-1 p-1.5 cursor-nwse-resize z-40 touch-none transition-opacity ${
+                  isResizing
+                    ? 'opacity-100'
+                    : isCursorHidden
+                      ? 'opacity-0 pointer-events-none'
+                      : 'opacity-40 group-hover:opacity-100 hover:opacity-100'
+                } ${
                   isWidgetLight ? 'text-slate-400 hover:text-slate-800' : 'text-gray-400 hover:text-white'
                 }`}
               >
