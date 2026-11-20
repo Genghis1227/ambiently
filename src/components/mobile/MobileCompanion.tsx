@@ -39,6 +39,8 @@ import {
   Archive,
   Trophy,
   Lightbulb,
+  Pencil,
+  Volume2,
 } from 'lucide-react';
 import type { DashboardTab, DashboardWidget, StickyNoteItem, WidgetThemeMode } from '../../types/dashboard';
 import { categorizeIngredient, parseIngredient } from '../../utils/ingredientAggregator';
@@ -129,6 +131,12 @@ const SportsWidget = React.lazy(() =>
 );
 const DailyDiscoveryWidget = React.lazy(() =>
   import('../widgets/DailyDiscoveryWidget').then((m) => ({ default: m.DailyDiscoveryWidget }))
+);
+const ChalkboardWidget = React.lazy(() =>
+  import('../widgets/ChalkboardWidget').then((m) => ({ default: m.ChalkboardWidget }))
+);
+const SoundscapeWidget = React.lazy(() =>
+  import('../widgets/SoundscapeWidget').then((m) => ({ default: m.SoundscapeWidget }))
 );
 
 interface MobileCompanionProps {
@@ -401,6 +409,10 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return Trophy;
       case 'daily_discovery':
         return Lightbulb;
+      case 'chalkboard':
+        return Pencil;
+      case 'soundscape':
+        return Volume2;
       default:
         return LayoutGrid;
     }
@@ -456,6 +468,10 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return 'Live Sports Scoreboard';
       case 'daily_discovery':
         return 'Daily Discovery & Trivia';
+      case 'chalkboard':
+        return 'Family Chalkboard';
+      case 'soundscape':
+        return 'Ambient Soundscape Mixer';
       default:
         return 'Widget';
     }
@@ -772,6 +788,35 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return (
           <div className="max-h-96 overflow-y-auto">
             <DailyDiscoveryWidget
+              title={widget.title}
+              config={widget.config}
+              isLight={isLight}
+              transparentBg={false}
+              onUpdateConfig={(updates) =>
+                onUpdateWidget?.(widget.id, { config: { ...widget.config, ...updates } })
+              }
+            />
+          </div>
+        );
+      case 'chalkboard':
+        return (
+          <div className="h-80 w-full overflow-hidden rounded-xl">
+            <ChalkboardWidget
+              title={widget.title}
+              config={widget.config}
+              isLight={isLight}
+              transparentBg={false}
+              isCanvasLocked={isCanvasLocked}
+              onUpdateConfig={(updates) =>
+                onUpdateWidget?.(widget.id, { config: { ...widget.config, ...updates } })
+              }
+            />
+          </div>
+        );
+      case 'soundscape':
+        return (
+          <div className="max-h-[26rem] overflow-y-auto">
+            <SoundscapeWidget
               title={widget.title}
               config={widget.config}
               isLight={isLight}

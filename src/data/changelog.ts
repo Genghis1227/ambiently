@@ -11,6 +11,15 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.25",
+    date: "November 19, 2026",
+    title: "Phase 4: Family Chalkboard Doodle Pad & Offline Ambient Soundscape Mixer",
+    highlights: [
+      "Family Chalkboard & Doodle Pad (ChalkboardWidget & chalkboardEngine): Touch-, stylus-, and mouse-smoothed sketchpad with Chalk, Marker, and Eraser tools, 8 colors, undo/clear controls, Slate/Warm Cork/Whiteboard surfaces, Sticker Mode floating art, and compact normalized vector sync between Mobile Companion and the wall display.",
+      "Offline Ambient Soundscape Mixer (SoundscapeWidget & soundscapeEngine): 100% offline procedural Web Audio mixer blending Rain, Fireplace Crackle, Brown Noise, Ocean Waves, and Forest Wind with scene presets, optional Sleep Timer, and automatic smooth fade-out when Scheduled Night Mode activates.",
+    ],
+  },
+  {
     version: "v0.7.24",
     date: "November 19, 2026",
     title: "Non-Overlapping Floating Widget Action Bar & Idle-Cursor Edit Chrome Polish",

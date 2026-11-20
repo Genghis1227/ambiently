@@ -26,6 +26,8 @@ import {
   Dices,
   Trophy,
   Lightbulb,
+  Pencil,
+  Volume2,
 } from 'lucide-react';
 import type { DashboardWidget } from '../../types/dashboard';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -71,6 +73,8 @@ const CATALOG_ICONS: Record<WidgetCatalogIconKey, React.ComponentType<{ classNam
   decision_maker: Dices,
   sports: Trophy,
   daily_discovery: Lightbulb,
+  chalkboard: Pencil,
+  soundscape: Volume2,
 };
 
 export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({

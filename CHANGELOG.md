@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.25] - 2026-11-19
+
+### Added
+- **Phase 4 — Family Chalkboard & Doodle Pad (`ChalkboardWidget.tsx`, `chalkboardEngine.ts`):**
+  - Added an interactive touch-, stylus-, and mouse-smoothed drawing canvas with soft **Chalk**, crisp **Ink Marker**, and transparent `destination-out` **Eraser** tools, 8 chalk/ink colors, brush thickness presets, multi-step **Undo**, optional two-tap **Clear** confirmation, and Kiosk PIN lock drawing overrides.
+  - Supports **Slate Chalkboard**, **Warm Cork**, **Whiteboard**, and frameless **Sticker / No Outline Mode** surfaces, persisting strokes as compact RDP-simplified `0..1000` normalized vector paths for instant **Mobile Companion** <-> wall display sync.
+- **Phase 4 — Offline Ambient Soundscape Mixer (`SoundscapeWidget.tsx`, `soundscapeEngine.ts`):**
+  - Added a 100% offline, zero-API procedural Web Audio mixer blending **Rain**, **Fireplace Crackle**, **Brown Noise**, **Ocean Waves**, and **Forest Wind** with per-channel volume sliders/mutes, master volume, 1-tap scene presets (*Cozy Hearth*, *Rainy Study*, *Coastal Breeze*, *Forest Morning*, *Deep Slumber*), optional Sleep Timer (`15m`–`90m`), **Sticker / No Outline Mode**, and **automatic fade-out when Scheduled Night Mode activates**.
+
 ## [0.7.24] - 2026-11-19
 
 ### Fixed

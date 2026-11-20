@@ -101,6 +101,12 @@ const SportsWidget = React.lazy(() =>
 const DailyDiscoveryWidget = React.lazy(() =>
   import('../widgets/DailyDiscoveryWidget').then((m) => ({ default: m.DailyDiscoveryWidget }))
 );
+const ChalkboardWidget = React.lazy(() =>
+  import('../widgets/ChalkboardWidget').then((m) => ({ default: m.ChalkboardWidget }))
+);
+const SoundscapeWidget = React.lazy(() =>
+  import('../widgets/SoundscapeWidget').then((m) => ({ default: m.SoundscapeWidget }))
+);
 import { useDashboardStore } from '../../store/dashboardStore';
 import { CANVAS_THEMES, isCanvasThemeLight } from '../../data/canvasThemes';
 import { findOpenCanvasSpot } from '../../utils/autoLayout';
@@ -507,6 +513,23 @@ const MemoizedCanvasWidgetBody: React.FC<CanvasWidgetBodyProps> = React.memo(({
         />
       ) : widget.type === 'daily_discovery' ? (
         <DailyDiscoveryWidget
+          title={widget.title}
+          config={widget.config}
+          isLight={isWidgetLight}
+          transparentBg={isFramelessWidget}
+          onUpdateConfig={handleConfigUpdate}
+        />
+      ) : widget.type === 'chalkboard' ? (
+        <ChalkboardWidget
+          title={widget.title}
+          config={widget.config}
+          isLight={isWidgetLight}
+          transparentBg={isFramelessWidget}
+          isCanvasLocked={isCanvasLocked}
+          onUpdateConfig={handleConfigUpdate}
+        />
+      ) : widget.type === 'soundscape' ? (
+        <SoundscapeWidget
           title={widget.title}
           config={widget.config}
           isLight={isWidgetLight}

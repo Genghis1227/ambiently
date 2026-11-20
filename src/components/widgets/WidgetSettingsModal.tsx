@@ -152,6 +152,24 @@ import {
   type SportsLeagueId,
 } from '../../types/phase3Widgets';
 import { resolveFollowedTeams, resolveSportsLeagues } from '../../services/sports';
+import {
+  ChalkboardSettingsPanel,
+  SoundscapeSettingsPanel,
+} from './Phase4WidgetSettingsPanels';
+import type {
+  ChalkBrushSize,
+  ChalkboardSurface,
+  SoundscapeChannelLevels,
+  SoundscapeSleepTimerMin,
+} from '../../types/phase4Widgets';
+import { sanitizeChalkStrokes } from '../../utils/chalkboardEngine';
+import {
+  DEFAULT_SOUNDSCAPE_CHANNELS,
+  DEFAULT_SOUNDSCAPE_MASTER_VOLUME,
+  detectMatchingSoundscapePreset,
+  resolveMasterVolume,
+  resolveSoundscapeChannels,
+} from '../../utils/soundscapeEngine';
 
 interface WidgetSettingsModalProps {
   isOpen: boolean;
@@ -411,6 +429,26 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const [discoveryCategory, setDiscoveryCategory] = useState<DiscoveryTriviaCategory>('all');
   const [discoveryAutoRotateSec, setDiscoveryAutoRotateSec] = useState<0 | 15 | 30 | 60>(30);
   const [discoveryAutoReveal, setDiscoveryAutoReveal] = useState<boolean>(false);
+
+  // Phase 4: Family Chalkboard & Doodle Pad
+  const [chalkSurface, setChalkSurface] = useState<ChalkboardSurface>('slate');
+  const [chalkDefaultTool, setChalkDefaultTool] = useState<'chalk' | 'marker'>('chalk');
+  const [chalkDefaultSize, setChalkDefaultSize] = useState<ChalkBrushSize>('medium');
+  const [chalkShowToolbar, setChalkShowToolbar] = useState<boolean>(true);
+  const [chalkConfirmBeforeClear, setChalkConfirmBeforeClear] = useState<boolean>(true);
+  const [chalkAllowDrawingWhenLocked, setChalkAllowDrawingWhenLocked] = useState<boolean>(true);
+  const [chalkClearRequested, setChalkClearRequested] = useState<boolean>(false);
+
+  // Phase 4: Offline Ambient Soundscape Mixer
+  const [soundscapeChannels, setSoundscapeChannels] = useState<SoundscapeChannelLevels>(() => ({
+    ...DEFAULT_SOUNDSCAPE_CHANNELS,
+  }));
+  const [soundscapeMasterVolume, setSoundscapeMasterVolume] = useState<number>(
+    DEFAULT_SOUNDSCAPE_MASTER_VOLUME
+  );
+  const [soundscapeDefaultSleepMin, setSoundscapeDefaultSleepMin] =
+    useState<SoundscapeSleepTimerMin>(0);
+  const [soundscapeFadeOutOnNightMode, setSoundscapeFadeOutOnNightMode] = useState<boolean>(true);
 
   const [rssCategoryFilter, setRssCategoryFilter] = useState<'All' | RssFeedCategory>('All');
   const [rssSearchQuery, setRssSearchQuery] = useState('');
@@ -748,6 +786,24 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       const sec = widget.config?.autoRotateSec;
       setDiscoveryAutoRotateSec(sec === 0 || sec === 15 || sec === 60 ? sec : 30);
       setDiscoveryAutoReveal(Boolean(widget.config?.autoRevealAnswer));
+    } else if (widget.type === 'chalkboard') {
+      const surface = widget.config?.surface;
+      setChalkSurface(surface === 'cork' || surface === 'whiteboard' ? surface : 'slate');
+      setChalkDefaultTool(widget.config?.defaultTool === 'marker' ? 'marker' : 'chalk');
+      const sz = widget.config?.defaultSize;
+      setChalkDefaultSize(sz === 'fine' || sz === 'bold' ? sz : 'medium');
+      setChalkShowToolbar(widget.config?.showToolbar !== false);
+      setChalkConfirmBeforeClear(widget.config?.confirmBeforeClear !== false);
+      setChalkAllowDrawingWhenLocked(widget.config?.allowDrawingWhenLocked !== false);
+      setChalkClearRequested(false);
+    } else if (widget.type === 'soundscape') {
+      setSoundscapeChannels(resolveSoundscapeChannels(widget.config?.channels));
+      setSoundscapeMasterVolume(resolveMasterVolume(widget.config?.masterVolume));
+      const sleep = widget.config?.defaultSleepTimerMin;
+      setSoundscapeDefaultSleepMin(
+        sleep === 15 || sleep === 30 || sleep === 60 || sleep === 90 ? sleep : 0
+      );
+      setSoundscapeFadeOutOnNightMode(widget.config?.fadeOutOnNightMode !== false);
     }
   }, [widget, isOpen, settings.commonPhotos, settings.defaultWidgetStyle]);
 
@@ -1299,6 +1355,24 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.triviaCategory = discoveryCategory;
       configUpdates.autoRotateSec = discoveryAutoRotateSec;
       configUpdates.autoRevealAnswer = discoveryAutoReveal;
+    } else if (effectiveType === 'chalkboard') {
+      configUpdates.surface = chalkSurface;
+      configUpdates.defaultTool = chalkDefaultTool;
+      configUpdates.defaultSize = chalkDefaultSize;
+      configUpdates.showToolbar = chalkShowToolbar;
+      configUpdates.confirmBeforeClear = chalkConfirmBeforeClear;
+      configUpdates.allowDrawingWhenLocked = chalkAllowDrawingWhenLocked;
+      if (chalkClearRequested) {
+        configUpdates.strokes = [];
+      }
+    } else if (effectiveType === 'soundscape') {
+      configUpdates.channels = resolveSoundscapeChannels(soundscapeChannels);
+      configUpdates.masterVolume = resolveMasterVolume(soundscapeMasterVolume);
+      configUpdates.activePreset = detectMatchingSoundscapePreset(
+        configUpdates.channels as SoundscapeChannelLevels
+      );
+      configUpdates.defaultSleepTimerMin = soundscapeDefaultSleepMin;
+      configUpdates.fadeOutOnNightMode = soundscapeFadeOutOnNightMode;
     }
 
     const pendingUpdates = {
@@ -1548,6 +1622,8 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
               'decision_maker',
               'sports',
               'daily_discovery',
+              'chalkboard',
+              'soundscape',
             ].includes(effectiveType) && (
               <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-800/60">
                 <div>
@@ -5053,6 +5129,41 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                 setAutoRotateSec={setDiscoveryAutoRotateSec}
                 autoRevealAnswer={discoveryAutoReveal}
                 setAutoRevealAnswer={setDiscoveryAutoReveal}
+              />
+            )}
+
+            {/* FAMILY CHALKBOARD & DOODLE PAD SETTINGS */}
+            {effectiveType === 'chalkboard' && (
+              <ChalkboardSettingsPanel
+                surface={chalkSurface}
+                setSurface={setChalkSurface}
+                defaultTool={chalkDefaultTool}
+                setDefaultTool={setChalkDefaultTool}
+                defaultSize={chalkDefaultSize}
+                setDefaultSize={setChalkDefaultSize}
+                showToolbar={chalkShowToolbar}
+                setShowToolbar={setChalkShowToolbar}
+                confirmBeforeClear={chalkConfirmBeforeClear}
+                setConfirmBeforeClear={setChalkConfirmBeforeClear}
+                allowDrawingWhenLocked={chalkAllowDrawingWhenLocked}
+                setAllowDrawingWhenLocked={setChalkAllowDrawingWhenLocked}
+                strokeCount={sanitizeChalkStrokes(widget.config?.strokes).length}
+                clearRequested={chalkClearRequested}
+                onRequestClearBoard={() => setChalkClearRequested(true)}
+              />
+            )}
+
+            {/* AMBIENT SOUNDSCAPE MIXER SETTINGS */}
+            {effectiveType === 'soundscape' && (
+              <SoundscapeSettingsPanel
+                channels={soundscapeChannels}
+                setChannels={setSoundscapeChannels}
+                masterVolume={soundscapeMasterVolume}
+                setMasterVolume={setSoundscapeMasterVolume}
+                defaultSleepTimerMin={soundscapeDefaultSleepMin}
+                setDefaultSleepTimerMin={setSoundscapeDefaultSleepMin}
+                fadeOutOnNightMode={soundscapeFadeOutOnNightMode}
+                setFadeOutOnNightMode={setSoundscapeFadeOutOnNightMode}
               />
             )}
         </div>

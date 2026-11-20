@@ -49,6 +49,8 @@ const ALL_WIDGET_TYPES: WidgetType[] = [
   'sun_moon',
   'sports',
   'daily_discovery',
+  'chalkboard',
+  'soundscape',
 ];
 
 function makeWidget(
@@ -77,8 +79,8 @@ function boxesOverlap(a: FreeformPosition, b: FreeformPosition): boolean {
 }
 
 describe('widgetCatalog', () => {
-  it('covers all 25 WidgetTypes cleanly across 22 entries and 4 categories', () => {
-    assert.equal(WIDGET_CATALOG_ENTRIES.length, 22);
+  it('covers all 27 WidgetTypes cleanly across 24 entries and 4 categories', () => {
+    assert.equal(WIDGET_CATALOG_ENTRIES.length, 24);
     assert.deepEqual(
       WIDGET_CATEGORIES.map((c) => c.id),
       ['all', 'household', 'time_weather', 'media_ambient', 'text_feeds']
@@ -198,6 +200,32 @@ describe('widgetCatalog', () => {
     assert.equal(discoveryPayload.type, 'daily_discovery');
     assert.equal(discoveryPayload.title, 'Daily Discovery');
     assert.equal(discoveryPayload.config?.mode, 'rotate');
+
+    for (const term of ['sketchpad', 'doodle', 'chalkboard']) {
+      const chalkSearch = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'media_ambient', term);
+      assert.equal(chalkSearch[0]?.entry.id, 'chalkboard');
+    }
+    const chalkEntry = WIDGET_CATALOG_ENTRIES.find((e) => e.id === 'chalkboard')!;
+    const chalkPayload = buildWidgetPayloadFromVariant(chalkEntry.variants[0], 'tab-home', []);
+    assert.equal(chalkPayload.type, 'chalkboard');
+    assert.equal(chalkPayload.title, 'Family Chalkboard & Doodle Pad');
+    assert.deepEqual(chalkPayload.config?.strokes, []);
+
+    for (const term of ['soundscape', 'brown noise', 'ocean waves']) {
+      const soundSearch = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'media_ambient', term);
+      assert.equal(soundSearch[0]?.entry.id, 'soundscape');
+    }
+    assert.equal(
+      filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'media_ambient', 'fireplace').some(
+        (r) => r.entry.id === 'soundscape'
+      ),
+      true
+    );
+    const soundEntry = WIDGET_CATALOG_ENTRIES.find((e) => e.id === 'soundscape')!;
+    const soundPayload = buildWidgetPayloadFromVariant(soundEntry.variants[0], 'tab-home', []);
+    assert.equal(soundPayload.type, 'soundscape');
+    assert.equal(soundPayload.title, 'Ambient Soundscape Mixer');
+    assert.equal(soundPayload.config?.fadeOutOnNightMode, true);
 
     assert.equal(getDefaultTitleForWidgetType('kanban'), 'Project Board (Kanban)');
     const projectBoardSearch = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'all', 'project board');
