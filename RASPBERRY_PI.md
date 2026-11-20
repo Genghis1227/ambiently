@@ -235,7 +235,7 @@ All runtime variables in Docker take effect immediately on `docker compose up -d
 | `TZ` | `America/Chicago` | Container timezone for logs and server-side date fallbacks. |
 | `SUPABASE_URL` | *(empty)* | Optional runtime Supabase project URL injected dynamically via `/config.js` for multi-device Realtime cloud sync. |
 | `SUPABASE_ANON_KEY` | *(empty)* | Optional runtime Supabase publishable `anon` key (never use `service_role`). |
-| `AMBIENTLY_ALLOW_PRIVATE_FEEDS` | `false` | Set to `true` **only on trusted home networks** to allow `http://`, RFC1918 LAN (`192.168.x.x`, `10.x.x.x`, `172.16-31.x.x`), Tailscale (`100.64.0.0/10`), and `.local`/`.lan` calendar & RSS URLs (e.g., Nextcloud, Radicale, FreshRSS, Home Assistant). It applies to calendars and RSS only: the web preview, reader and link previews never reach the home network. Loopback (`127.0.0.1` / `localhost`) and cloud metadata (`169.254.169.254`) remain blocked at all times, including names that resolve to them (the server checks the address each connection really goes to). |
+| `AMBIENTLY_ALLOW_PRIVATE_FEEDS` | `false` | Set to `true` **only on trusted home networks** to allow `http://`, RFC1918 LAN (`192.168.x.x`, `10.x.x.x`, `172.16-31.x.x`), Tailscale (`100.64.0.0/10`), and `.local`/`.lan` URLs for **calendar (`.ics`), RSS feeds, and Home Lab / Home Assistant (`/api/homelab`) probes** (e.g., Plex, Pi-hole, Immich, Nextcloud, Home Assistant). The web preview, reader, and link previews never reach the home network, and Home Assistant Long-Lived Access Tokens remain isolated strictly inside your browser's device-local `db.vault` (never synced to cloud). Loopback (`127.0.0.1` / `localhost`) and cloud metadata (`169.254.169.254`) remain blocked at all times, including names that resolve to them (`server/addressGuard.ts`). |
 
 ---
 
@@ -259,8 +259,8 @@ dashboard.yourdomain.com {
 
 * **Why did my Google Calendar stop showing `HTTP 429` errors after switching to Docker?**
   * Public serverless platforms share egress IP addresses across thousands of tenants, which Google occasionally throttles. Self-hosting in Docker fetches `.ics` feeds directly from your residential ISP IP (combined with Ambiently's 15-minute SHA-256 server cache and `ETag` `304` revalidation).
-* **How do I connect a local Nextcloud, Radicale, or Home Assistant `.ics` calendar on my LAN?**
-  * Set `AMBIENTLY_ALLOW_PRIVATE_FEEDS=true` in `.env` (or `compose.yaml`) and run `docker compose up -d`.
+* **How do I connect a local Nextcloud, Radicale, Home Assistant, Plex, or Pi-hole instance on my LAN?**
+  * Set `AMBIENTLY_ALLOW_PRIVATE_FEEDS=true` in `.env` (or `compose.yaml`) and run `docker compose up -d`. When configuring Home Assistant inside a **Home Lab & Home Assistant** tile, your Long-Lived Access Token is stored strictly inside device-local `db.vault` and is never included in Supabase Cloud Sync payloads.
 * **My Raspberry Pi screen still turns black after 10 minutes on Wayland.**
   * Verify `raspi-config` screen blanking is disabled (`sudo raspi-config` -> **2 Display Options** -> **D4 Screen Blanking** -> **No**) and reboot.
 * **How do I check server logs in Docker?**

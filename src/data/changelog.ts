@@ -11,6 +11,15 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.7.26",
+    date: "November 20, 2026",
+    title: "Phase 5: Home Lab Uptime & Home Assistant Glance Tile",
+    highlights: [
+      "Home Lab Uptime Grid (HomelabWidget & /api/homelab): Track response status and latency across self-hosted services (Plex, NAS, Pi-hole, Immich, Uptime Kuma, Jellyfin, Proxmox) with 1-click presets, Night Mode polling suspension, and Sticker / No Outline Mode.",
+      "Read-Only Home Assistant Glance & Local db.vault Security: Display indoor sensors, doors, solar wattage, and entity states via REST /api/states with Long-Lived Access Tokens isolated strictly inside local db.vault (never synced to Cloud Sync) and LAN probes gated behind AMBIENTLY_ALLOW_PRIVATE_FEEDS=true with loopback/metadata SSRF blocks intact.",
+    ],
+  },
+  {
     version: "v0.7.25",
     date: "November 19, 2026",
     title: "Phase 4: Family Chalkboard Doodle Pad & Offline Ambient Soundscape Mixer",

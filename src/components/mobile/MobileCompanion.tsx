@@ -41,6 +41,7 @@ import {
   Lightbulb,
   Pencil,
   Volume2,
+  Server,
 } from 'lucide-react';
 import type { DashboardTab, DashboardWidget, StickyNoteItem, WidgetThemeMode } from '../../types/dashboard';
 import { categorizeIngredient, parseIngredient } from '../../utils/ingredientAggregator';
@@ -137,6 +138,9 @@ const ChalkboardWidget = React.lazy(() =>
 );
 const SoundscapeWidget = React.lazy(() =>
   import('../widgets/SoundscapeWidget').then((m) => ({ default: m.SoundscapeWidget }))
+);
+const HomelabWidget = React.lazy(() =>
+  import('../widgets/HomelabWidget').then((m) => ({ default: m.HomelabWidget }))
 );
 
 interface MobileCompanionProps {
@@ -413,6 +417,8 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return Pencil;
       case 'soundscape':
         return Volume2;
+      case 'homelab':
+        return Server;
       default:
         return LayoutGrid;
     }
@@ -472,6 +478,8 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return 'Family Chalkboard';
       case 'soundscape':
         return 'Ambient Soundscape Mixer';
+      case 'homelab':
+        return 'Home Lab & Home Assistant';
       default:
         return 'Widget';
     }
@@ -824,6 +832,19 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
               onUpdateConfig={(updates) =>
                 onUpdateWidget?.(widget.id, { config: { ...widget.config, ...updates } })
               }
+            />
+          </div>
+        );
+      case 'homelab':
+        return (
+          <div className="max-h-[28rem] overflow-y-auto">
+            <HomelabWidget
+              widgetId={widget.id}
+              title={widget.title}
+              config={widget.config}
+              isLight={isLight}
+              transparentBg={false}
+              onOpenSettings={() => setEditingWidget(widget)}
             />
           </div>
         );

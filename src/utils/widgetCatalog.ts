@@ -38,7 +38,8 @@ export type WidgetCatalogIconKey =
   | 'sports'
   | 'daily_discovery'
   | 'chalkboard'
-  | 'soundscape';
+  | 'soundscape'
+  | 'homelab';
 
 export interface WidgetCategoryMeta {
   id: WidgetCategoryId;
@@ -935,6 +936,52 @@ export const WIDGET_CATALOG_ENTRIES: WidgetCatalogEntry[] = [
           'history',
           'discovery',
         ],
+      },
+    ],
+  },
+  {
+    id: 'homelab',
+    category: 'text_feeds',
+    title: 'Home Lab & Home Assistant',
+    description:
+      'Self-hosted service uptime grid (Plex, NAS, Pi-hole, Immich, Uptime Kuma) and read-only Home Assistant entity badges with local db.vault tokens.',
+    iconKey: 'homelab',
+    color: 'from-cyan-500/20 to-emerald-500/20 text-cyan-300 border-cyan-500/30',
+    keywords: [
+      'homelab',
+      'home lab',
+      'uptime',
+      'uptime kuma',
+      'home assistant',
+      'pihole',
+      'pi-hole',
+      'immich',
+      'proxmox',
+      'jellyfin',
+      'nas',
+      'synology',
+      'truenas',
+      'server',
+      'smart home',
+      'latency',
+    ],
+    variants: [
+      {
+        type: 'homelab',
+        pillLabel: 'Home Lab & HA',
+        title: 'Home Lab & Home Assistant',
+        description:
+          'LAN service health checks and read-only Home Assistant entity badges with device-local db.vault token storage.',
+        defaultGridPos: { w: 4, h: 5 },
+        defaultConfig: {
+          services: [],
+          haBaseUrl: '',
+          haEntities: [],
+          displayMode: 'auto',
+          showLatency: true,
+          refreshIntervalSec: 60,
+        },
+        keywords: ['homelab', 'uptime kuma', 'home assistant', 'pihole', 'nas', 'immich', 'proxmox'],
       },
     ],
   },

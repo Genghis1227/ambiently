@@ -170,6 +170,23 @@ import {
   resolveMasterVolume,
   resolveSoundscapeChannels,
 } from '../../utils/soundscapeEngine';
+import { HomelabSettingsPanel } from './Phase5WidgetSettingsPanel';
+import type {
+  HomeAssistantEntityTarget,
+  HomelabDisplayMode,
+  HomelabServiceTarget,
+} from '../../types/phase5Widgets';
+import {
+  normalizeHomelabBaseUrl,
+  resolveHomeAssistantEntities,
+  resolveHomelabServices,
+} from '../../utils/homelabEngine';
+import {
+  deleteHomelabCredentialsFromVault,
+  loadHomelabCredentialsFromVault,
+  saveHomelabCredentialsToVault,
+} from '../../utils/homelabVault';
+import { stripHomelabCredentialsFromConfig } from '../../utils/mediaOptimization';
 
 interface WidgetSettingsModalProps {
   isOpen: boolean;
@@ -449,6 +466,15 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const [soundscapeDefaultSleepMin, setSoundscapeDefaultSleepMin] =
     useState<SoundscapeSleepTimerMin>(0);
   const [soundscapeFadeOutOnNightMode, setSoundscapeFadeOutOnNightMode] = useState<boolean>(true);
+
+  // Phase 5: Home Lab & Home Assistant
+  const [homelabServices, setHomelabServices] = useState<HomelabServiceTarget[]>([]);
+  const [homelabHaBaseUrl, setHomelabHaBaseUrl] = useState<string>('');
+  const [homelabHaToken, setHomelabHaToken] = useState<string>('');
+  const [homelabHaEntities, setHomelabHaEntities] = useState<HomeAssistantEntityTarget[]>([]);
+  const [homelabDisplayMode, setHomelabDisplayMode] = useState<HomelabDisplayMode>('auto');
+  const [homelabShowLatency, setHomelabShowLatency] = useState<boolean>(true);
+  const [homelabRefreshSec, setHomelabRefreshSec] = useState<30 | 60 | 120 | 300>(60);
 
   const [rssCategoryFilter, setRssCategoryFilter] = useState<'All' | RssFeedCategory>('All');
   const [rssSearchQuery, setRssSearchQuery] = useState('');
@@ -804,6 +830,23 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
         sleep === 15 || sleep === 30 || sleep === 60 || sleep === 90 ? sleep : 0
       );
       setSoundscapeFadeOutOnNightMode(widget.config?.fadeOutOnNightMode !== false);
+    } else if (widget.type === 'homelab') {
+      setHomelabServices(resolveHomelabServices(widget.config?.services));
+      setHomelabHaBaseUrl(widget.config?.haBaseUrl || '');
+      setHomelabHaToken('');
+      setHomelabHaEntities(resolveHomeAssistantEntities(widget.config?.haEntities));
+      const mode = widget.config?.displayMode;
+      setHomelabDisplayMode(mode === 'split' || mode === 'compact' ? mode : 'auto');
+      setHomelabShowLatency(widget.config?.showLatency !== false);
+      const sec = widget.config?.refreshIntervalSec;
+      setHomelabRefreshSec(sec === 30 || sec === 120 || sec === 300 ? sec : 60);
+
+      const targetId = widget.id;
+      void loadHomelabCredentialsFromVault(targetId).then((creds) => {
+        if (lastOpenedWidgetIdRef.current === targetId && creds) {
+          setHomelabHaToken(creds.haAccessToken);
+        }
+      });
     }
   }, [widget, isOpen, settings.commonPhotos, settings.defaultWidgetStyle]);
 
@@ -1027,7 +1070,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   };
 
   const handleSave = () => {
-    const configUpdates: Record<string, any> = {
+    let configUpdates: Record<string, any> = {
       ...widget.config,
       themeMode,
     };
@@ -1373,6 +1416,21 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       );
       configUpdates.defaultSleepTimerMin = soundscapeDefaultSleepMin;
       configUpdates.fadeOutOnNightMode = soundscapeFadeOutOnNightMode;
+    } else if (effectiveType === 'homelab') {
+      configUpdates = stripHomelabCredentialsFromConfig(configUpdates);
+      configUpdates.services = resolveHomelabServices(homelabServices);
+      configUpdates.haBaseUrl = normalizeHomelabBaseUrl(homelabHaBaseUrl);
+      configUpdates.haEntities = resolveHomeAssistantEntities(homelabHaEntities);
+      configUpdates.displayMode = homelabDisplayMode;
+      configUpdates.showLatency = homelabShowLatency;
+      configUpdates.refreshIntervalSec = homelabRefreshSec;
+
+      const cleanToken = homelabHaToken.trim();
+      if (cleanToken) {
+        void saveHomelabCredentialsToVault(widget.id, { haAccessToken: cleanToken });
+      } else {
+        void deleteHomelabCredentialsFromVault(widget.id);
+      }
     }
 
     const pendingUpdates = {
@@ -1624,6 +1682,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
               'daily_discovery',
               'chalkboard',
               'soundscape',
+              'homelab',
             ].includes(effectiveType) && (
               <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-800/60">
                 <div>
@@ -5164,6 +5223,26 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                 setDefaultSleepTimerMin={setSoundscapeDefaultSleepMin}
                 fadeOutOnNightMode={soundscapeFadeOutOnNightMode}
                 setFadeOutOnNightMode={setSoundscapeFadeOutOnNightMode}
+              />
+            )}
+
+            {/* HOME LAB & HOME ASSISTANT SETTINGS */}
+            {effectiveType === 'homelab' && (
+              <HomelabSettingsPanel
+                services={homelabServices}
+                setServices={setHomelabServices}
+                haBaseUrl={homelabHaBaseUrl}
+                setHaBaseUrl={setHomelabHaBaseUrl}
+                haAccessToken={homelabHaToken}
+                setHaAccessToken={setHomelabHaToken}
+                haEntities={homelabHaEntities}
+                setHaEntities={setHomelabHaEntities}
+                displayMode={homelabDisplayMode}
+                setDisplayMode={setHomelabDisplayMode}
+                showLatency={homelabShowLatency}
+                setShowLatency={setHomelabShowLatency}
+                refreshIntervalSec={homelabRefreshSec}
+                setRefreshIntervalSec={setHomelabRefreshSec}
               />
             )}
         </div>

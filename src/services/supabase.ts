@@ -20,8 +20,13 @@ import {
   isSameWidgetPhotoSource,
   sanitizeRestoredPhotoWidget,
 } from '../utils/photoSourceIsolation';
-import { sanitizeWidgetConfigForCloud, stripWifiCredentialsFromConfig } from '../utils/mediaOptimization';
+import {
+  sanitizeWidgetConfigForCloud,
+  stripHomelabCredentialsFromConfig,
+  stripWifiCredentialsFromConfig,
+} from '../utils/mediaOptimization';
 import { getWifiVaultKey } from '../utils/wifiQr';
+import { getHomelabVaultKey } from '../utils/homelabVault';
 import type { DashboardTab, DashboardWidget, StickyNoteItem, AppSettings } from '../types/dashboard';
 import type { ChoreEngineSnapshot } from '../types/chores';
 import type { HouseholdProfile } from '../types/profiles';
@@ -480,7 +485,9 @@ function attachRealtimeChannel(
           config:
             raw.type === 'wifi_qr'
               ? stripWifiCredentialsFromConfig(raw.config || {})
-              : (raw.config || {}),
+              : raw.type === 'homelab'
+                ? stripHomelabCredentialsFromConfig(raw.config || {})
+                : (raw.config || {}),
           updated_at: raw.updated_at || new Date().toISOString(),
           deleted_at: raw.deleted_at,
         };
@@ -1740,12 +1747,19 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
           if (w.type === 'wifi_qr' || local?.type === 'wifi_qr') {
             wifiVaultKeysToDelete.add(getWifiVaultKey(w.id));
           }
+          if (w.type === 'homelab' || local?.type === 'homelab') {
+            wifiVaultKeysToDelete.add(getHomelabVaultKey(w.id));
+          }
           continue;
         }
         const baseConfig =
-          w.type === 'wifi_qr' ? stripWifiCredentialsFromConfig(w.config || {}) : (w.config || {});
-        const config =
           w.type === 'wifi_qr'
+            ? stripWifiCredentialsFromConfig(w.config || {})
+            : w.type === 'homelab'
+              ? stripHomelabCredentialsFromConfig(w.config || {})
+              : (w.config || {});
+        const config =
+          w.type === 'wifi_qr' || w.type === 'homelab'
             ? baseConfig
             : {
                 ...baseConfig,
@@ -1786,6 +1800,9 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
           if (mapped.deleted_at && (mapped.type === 'wifi_qr' || local?.type === 'wifi_qr')) {
             wifiVaultKeysToDelete.add(getWifiVaultKey(mapped.id));
           }
+          if (mapped.deleted_at && (mapped.type === 'homelab' || local?.type === 'homelab')) {
+            wifiVaultKeysToDelete.add(getHomelabVaultKey(mapped.id));
+          }
           widgetsToPut.push(!local ? mapped : keepLocalWidgetFields(mapped, local));
         } else if (!switchingBoards && !overwriteLocal && local) {
           hasUnsyncedLocalChanges = true;
@@ -1800,6 +1817,9 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
             toDeleteWidgetIds.push(lw.id);
             if (lw.type === 'wifi_qr') {
               wifiVaultKeysToDelete.add(getWifiVaultKey(lw.id));
+            }
+            if (lw.type === 'homelab') {
+              wifiVaultKeysToDelete.add(getHomelabVaultKey(lw.id));
             }
           } else if (!switchingBoards && !joiningExistingCloudBoard) {
             hasUnsyncedLocalChanges = true;

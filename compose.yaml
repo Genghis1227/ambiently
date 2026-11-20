@@ -16,7 +16,7 @@ services:
       - SUPABASE_URL=${SUPABASE_URL:-}
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
       # Optional: Set to "true" ONLY on trusted home networks to allow LAN http:// or .local/.lan
-      # calendar (.ics) and RSS feeds (e.g., Nextcloud, Radicale, Home Assistant, FreshRSS).
+      # endpoints for calendars (.ics), RSS feeds, and Home Lab / Home Assistant probes.
       - AMBIENTLY_ALLOW_PRIVATE_FEEDS=${AMBIENTLY_ALLOW_PRIVATE_FEEDS:-false}
     security_opt:
       - no-new-privileges:true

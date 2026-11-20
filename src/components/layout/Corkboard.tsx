@@ -107,6 +107,9 @@ const ChalkboardWidget = React.lazy(() =>
 const SoundscapeWidget = React.lazy(() =>
   import('../widgets/SoundscapeWidget').then((m) => ({ default: m.SoundscapeWidget }))
 );
+const HomelabWidget = React.lazy(() =>
+  import('../widgets/HomelabWidget').then((m) => ({ default: m.HomelabWidget }))
+);
 import { useDashboardStore } from '../../store/dashboardStore';
 import { CANVAS_THEMES, isCanvasThemeLight } from '../../data/canvasThemes';
 import { findOpenCanvasSpot } from '../../utils/autoLayout';
@@ -535,6 +538,15 @@ const MemoizedCanvasWidgetBody: React.FC<CanvasWidgetBodyProps> = React.memo(({
           isLight={isWidgetLight}
           transparentBg={isFramelessWidget}
           onUpdateConfig={handleConfigUpdate}
+        />
+      ) : widget.type === 'homelab' ? (
+        <HomelabWidget
+          widgetId={widget.id}
+          title={widget.title}
+          config={widget.config}
+          isLight={isWidgetLight}
+          transparentBg={isFramelessWidget}
+          onOpenSettings={handleOpenSettings}
         />
       ) : null}
       </React.Suspense>

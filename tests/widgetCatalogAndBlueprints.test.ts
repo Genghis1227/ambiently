@@ -51,6 +51,7 @@ const ALL_WIDGET_TYPES: WidgetType[] = [
   'daily_discovery',
   'chalkboard',
   'soundscape',
+  'homelab',
 ];
 
 function makeWidget(
@@ -79,8 +80,8 @@ function boxesOverlap(a: FreeformPosition, b: FreeformPosition): boolean {
 }
 
 describe('widgetCatalog', () => {
-  it('covers all 27 WidgetTypes cleanly across 24 entries and 4 categories', () => {
-    assert.equal(WIDGET_CATALOG_ENTRIES.length, 24);
+  it('covers all 28 WidgetTypes cleanly across 25 entries and 4 categories', () => {
+    assert.equal(WIDGET_CATALOG_ENTRIES.length, 25);
     assert.deepEqual(
       WIDGET_CATEGORIES.map((c) => c.id),
       ['all', 'household', 'time_weather', 'media_ambient', 'text_feeds']
@@ -226,6 +227,16 @@ describe('widgetCatalog', () => {
     assert.equal(soundPayload.type, 'soundscape');
     assert.equal(soundPayload.title, 'Ambient Soundscape Mixer');
     assert.equal(soundPayload.config?.fadeOutOnNightMode, true);
+
+    for (const term of ['uptime kuma', 'home assistant', 'pihole']) {
+      const homelabSearch = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'text_feeds', term);
+      assert.equal(homelabSearch[0]?.entry.id, 'homelab');
+    }
+    const homelabEntry = WIDGET_CATALOG_ENTRIES.find((e) => e.id === 'homelab')!;
+    const homelabPayload = buildWidgetPayloadFromVariant(homelabEntry.variants[0], 'tab-home', []);
+    assert.equal(homelabPayload.type, 'homelab');
+    assert.equal(homelabPayload.title, 'Home Lab & Home Assistant');
+    assert.equal(homelabPayload.config?.showLatency, true);
 
     assert.equal(getDefaultTitleForWidgetType('kanban'), 'Project Board (Kanban)');
     const projectBoardSearch = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'all', 'project board');
