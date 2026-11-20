@@ -79,7 +79,10 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 export async function onRequestGet(context: PagesContext): Promise<Response> {
-  const blocked = refuseOtherSites(context.request);
+  const blocked = refuseOtherSites(context.request, {
+    maxRequestsPerMinute: 60,
+    bucket: '/api/homelab',
+  });
   if (blocked) return blocked;
   return jsonResponse({
     ok: true,
@@ -88,7 +91,10 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
 }
 
 export async function onRequestPost(context: PagesContext): Promise<Response> {
-  const blocked = refuseOtherSites(context.request);
+  const blocked = refuseOtherSites(context.request, {
+    maxRequestsPerMinute: 60,
+    bucket: '/api/homelab',
+  });
   if (blocked) return blocked;
 
   let bodyText: string;

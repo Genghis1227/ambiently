@@ -409,6 +409,10 @@ export const ShareBoardModal: React.FC<ShareBoardModalProps> = ({ isOpen, onClos
                   </div>
                 </div>
 
+                <p className="text-[11px] text-gray-400 leading-relaxed">
+                  Invited household emails join as <strong className="text-gray-200">Board Editors</strong> with cloud sync access across calendars, chores, rewards, and widgets. Keep children on Kiosk Household Profiles rather than inviting their personal emails if Parent PIN chore restrictions apply.
+                </p>
+
                 <form onSubmit={handleAddMember} className="flex gap-2">
                   <input
                     type="email"

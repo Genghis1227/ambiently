@@ -161,16 +161,54 @@ function loadHeaderRules(): HeaderRule[] {
   return headerRules;
 }
 
-function applySecurityHeaders(res: ServerResponse, urlPathname?: string): void {
+function isHttpsRequest(req?: IncomingMessage): boolean {
+  const rawProto = req?.headers['x-forwarded-proto'];
+  const proto = Array.isArray(rawProto) ? rawProto[0] : rawProto;
+  return (
+    String(proto || '')
+      .split(',')[0]
+      .trim()
+      .toLowerCase() === 'https'
+  );
+}
+
+function applySecurityHeaders(
+  res: ServerResponse,
+  urlPathname?: string,
+  req?: IncomingMessage
+): void {
+  const httpsReq = isHttpsRequest(req);
   if (urlPathname) {
     for (const rule of loadHeaderRules()) {
       const p = rule.pattern;
-      const matches = p === '/*' || p === urlPathname || (p.endsWith('/*') && urlPathname.startsWith(p.slice(0, -1)));
-      if (matches) for (const [name, value] of rule.headers) res.setHeader(name, value);
+      const matches =
+        p === '/*' ||
+        p === urlPathname ||
+        (p.endsWith('/*') && urlPathname.startsWith(p.slice(0, -1)));
+      if (matches) {
+        for (const [name, value] of rule.headers) {
+          if (name.toLowerCase() === 'strict-transport-security' && !httpsReq) {
+            continue;
+          }
+          res.setHeader(name, value);
+        }
+      }
     }
   }
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
+}
+
+function applyApiSecurityHeaders(res: ServerResponse): void {
+  if (!res.hasHeader('X-Content-Type-Options')) {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+  }
+  if (!res.hasHeader('Referrer-Policy')) {
+    res.setHeader('Referrer-Policy', 'no-referrer');
+  }
+  if (!res.hasHeader('X-Robots-Tag')) {
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+  }
 }
 
 function serveStaticFile(
@@ -192,7 +230,7 @@ function serveStaticFile(
   const cacheControl = getCacheControl(urlPathname);
   const etag = `W/"${stat.size.toString(16)}-${Math.trunc(stat.mtimeMs).toString(16)}"`;
 
-  applySecurityHeaders(res, urlPathname);
+  applySecurityHeaders(res, urlPathname, req);
   res.setHeader('Content-Type', contentType);
   res.setHeader('Cache-Control', cacheControl);
   res.setHeader('ETag', etag);
@@ -278,6 +316,7 @@ async function handleApiRoute(
     ? API_POST_ROUTES[routeName]
     : undefined;
   if (!getHandler && !postHandler) {
+    applyApiSecurityHeaders(res);
     res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify({ error: 'Not found' }));
     return;
@@ -286,6 +325,7 @@ async function handleApiRoute(
   const handler = method === 'POST' ? postHandler : method === 'GET' ? getHandler : undefined;
   if (!handler) {
     const allowedMethods = [getHandler ? 'GET' : '', postHandler ? 'POST' : ''].filter(Boolean).join(', ');
+    applyApiSecurityHeaders(res);
     res.writeHead(405, {
       'Content-Type': 'application/json; charset=utf-8',
       Allow: allowedMethods || 'GET',
@@ -322,6 +362,7 @@ async function handleApiRoute(
     webResponse.headers.forEach((val, key) => {
       res.setHeader(key, val);
     });
+    applyApiSecurityHeaders(res);
     const bodyBuffer = Buffer.from(await webResponse.arrayBuffer());
     res.setHeader('Content-Length', bodyBuffer.byteLength);
     res.end(bodyBuffer);
@@ -334,6 +375,7 @@ async function handleApiRoute(
       console.error(`[ambiently-server] Error in /api/${routeName}:`, err);
     }
     if (!res.headersSent) {
+      applyApiSecurityHeaders(res);
       res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' });
     }
     res.end(
@@ -346,7 +388,7 @@ async function handleApiRoute(
 
 export function createAmbientlyServer(): http.Server {
   installAddressGuard();
-  return http.createServer(async (req, res) => {
+  const server = http.createServer(async (req, res) => {
     const rawUrl = req.url || '/';
     let pathname = '/';
     try {
@@ -365,7 +407,8 @@ export function createAmbientlyServer(): http.Server {
         uptimeSec: Math.round(process.uptime()),
         timestamp: new Date().toISOString(),
       });
-      applySecurityHeaders(res);
+      applySecurityHeaders(res, pathname, req);
+      applyApiSecurityHeaders(res);
       res.writeHead(200, {
         'Content-Type': 'application/json; charset=utf-8',
         'Cache-Control': 'no-store',
@@ -378,7 +421,7 @@ export function createAmbientlyServer(): http.Server {
     // 2. Dynamic Runtime Config (/config.js) for zero-rebuild Docker Supabase configuration
     if (pathname === '/config.js') {
       const script = buildRuntimeConfigScript();
-      applySecurityHeaders(res, pathname);
+      applySecurityHeaders(res, pathname, req);
       res.writeHead(200, {
         'Content-Type': 'text/javascript; charset=utf-8',
         'Cache-Control': 'no-store',
@@ -396,6 +439,7 @@ export function createAmbientlyServer(): http.Server {
     }
 
     if (pathname.startsWith('/api/') || pathname.startsWith('/functions/')) {
+      applyApiSecurityHeaders(res);
       res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify({ error: 'API endpoint not found' }));
       return;
@@ -431,6 +475,10 @@ export function createAmbientlyServer(): http.Server {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('Not Found');
   });
+  server.headersTimeout = 15_000;
+  server.requestTimeout = 30_000;
+  server.keepAliveTimeout = 5_000;
+  return server;
 }
 
 // Start listener when invoked directly as the server entry point

@@ -4,6 +4,25 @@ import type { DashboardWidget } from '../types/dashboard';
 import { MAX_UPLOAD_BYTES, VAULT_MEDIA_PREFIX } from './mediaOptimization';
 
 const MAX_STATIC_IMAGE_DIMENSION = 1600;
+const MAX_VAULT_DATA_URL_LENGTH = Math.ceil((MAX_UPLOAD_BYTES * 4) / 3) + 256;
+const ALLOWED_RASTER_UPLOAD_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/avif',
+]);
+const SAFE_VAULT_MEDIA_DATA_URL_RE =
+  /^data:image\/(?:jpeg|jpg|png|webp|gif|avif);base64,[A-Za-z0-9+/=\s]+$/i;
+const VALID_LOCAL_MEDIA_KEY_RE = /^local-media:[A-Za-z0-9._-]{1,96}$/;
+
+/** Validates that an uploaded or restored media payload is a bounded raster base64 image data URL. */
+export function isSafeVaultMediaDataUrl(raw: unknown): raw is string {
+  if (typeof raw !== 'string') return false;
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.length > MAX_VAULT_DATA_URL_LENGTH) return false;
+  return SAFE_VAULT_MEDIA_DATA_URL_RE.test(trimmed);
+}
 
 /**
  * Extracts the `db.vault` storage key from a `vault://local-media:*` URL, or returns null.
@@ -105,6 +124,9 @@ function dataUrlToBlob(dataUrl: string): Blob | null {
 export async function storeUploadedMediaInVault(
   file: File
 ): Promise<{ vaultUrl: string; title: string }> {
+  if (!ALLOWED_RASTER_UPLOAD_TYPES.has((file.type || '').toLowerCase())) {
+    throw new Error('Only raster image files (JPEG, PNG, WebP, GIF, AVIF) are supported.');
+  }
   if (file.size > MAX_UPLOAD_BYTES) {
     throw new Error('File exceeds the 10 MB upload limit.');
   }
@@ -112,6 +134,9 @@ export async function storeUploadedMediaInVault(
   let dataUrl = await readFileAsDataUrl(file);
   if (file.type === 'image/jpeg' || file.type === 'image/png') {
     dataUrl = await optimizeStaticRasterDataUrl(dataUrl);
+  }
+  if (!isSafeVaultMediaDataUrl(dataUrl)) {
+    throw new Error('Uploaded file must decode to a valid raster image payload.');
   }
 
   const key = `local-media:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -243,10 +268,10 @@ export async function restoreVaultMediaMap(localMedia?: Record<string, string>):
   if (!localMedia || typeof localMedia !== 'object') return;
   const now = new Date().toISOString();
   const entries = Object.entries(localMedia)
-    .filter(([key, value]) => key.startsWith('local-media:') && typeof value === 'string' && value.length > 0)
+    .filter(([key, value]) => VALID_LOCAL_MEDIA_KEY_RE.test(key) && isSafeVaultMediaDataUrl(value))
     .map(([key, value]) => ({
       key,
-      value,
+      value: value.trim(),
       description: 'Restored local media upload',
       updated_at: now,
     }));

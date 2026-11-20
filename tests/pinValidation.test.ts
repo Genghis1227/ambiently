@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import {
   applyPinLockTransition,
   isCanvasPinLocked,
@@ -8,6 +9,13 @@ import {
   sanitizePinDigits,
   validatePinSetup,
 } from '../src/utils/pinValidation.ts';
+import {
+  getPinLockoutStatus,
+  hashPinSecure,
+  recordFailedPinAttempt,
+  resetPinLockout,
+  verifyPinSecure,
+} from '../src/utils/pinSecurity.ts';
 import type { AppSettings } from '../src/types/dashboard';
 
 function makePinSettings(overrides: Partial<AppSettings> = {}): AppSettings {
@@ -160,5 +168,73 @@ describe('pinValidation double-entry PIN setup and lock normalization', () => {
       ),
       true
     );
+  });
+});
+
+describe('pinSecurity salted PBKDF2 hashing and exponential lockout', () => {
+  it('hashes PINs with salted PBKDF2-SHA-256 and signals transparent upgrade for legacy SHA-256 hashes', async () => {
+    const hash = await hashPinSecure('2580');
+    assert.match(hash, /^pbkdf2\$120000\$[0-9a-f]{32}\$[0-9a-f]{64}$/);
+    assert.deepEqual(await verifyPinSecure('2580', hash), {
+      valid: true,
+      needsUpgrade: false,
+    });
+    assert.deepEqual(await verifyPinSecure('9999', hash), {
+      valid: false,
+      needsUpgrade: false,
+    });
+
+    // Different salts yield distinct derived hashes for the same PIN
+    const secondHash = await hashPinSecure('2580');
+    assert.notEqual(secondHash, hash);
+
+    // Legacy unsalted SHA-256 continues verifying with needsUpgrade=true
+    const legacySha256 = crypto.createHash('sha256').update('2580').digest('hex');
+    assert.deepEqual(await verifyPinSecure('2580', legacySha256), {
+      valid: true,
+      needsUpgrade: true,
+    });
+    assert.deepEqual(await verifyPinSecure('1234', legacySha256), {
+      valid: false,
+      needsUpgrade: false,
+    });
+  });
+
+  it('applies exponential lockout cooldowns after 5 failed attempts and resets on unlock', () => {
+    resetPinLockout();
+    const baseMs = 1_700_000_000_000;
+
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      const status = recordFailedPinAttempt(baseMs + attempt * 100);
+      assert.equal(status.isLockedOut, false);
+      assert.equal(status.remainingSeconds, 0);
+      assert.equal(status.failedAttempts, attempt);
+    }
+
+    const fifth = recordFailedPinAttempt(baseMs + 500);
+    assert.equal(fifth.isLockedOut, true);
+    assert.equal(fifth.remainingSeconds, 30);
+
+    const sixth = recordFailedPinAttempt(baseMs + 31_000);
+    assert.equal(sixth.isLockedOut, true);
+    assert.equal(sixth.remainingSeconds, 60);
+
+    const seventh = recordFailedPinAttempt(baseMs + 92_000);
+    assert.equal(seventh.isLockedOut, true);
+    assert.equal(seventh.remainingSeconds, 120);
+
+    const eighth = recordFailedPinAttempt(baseMs + 213_000);
+    assert.equal(eighth.isLockedOut, true);
+    assert.equal(eighth.remainingSeconds, 300);
+
+    assert.equal(getPinLockoutStatus(baseMs + 213_000).isLockedOut, true);
+    assert.equal(getPinLockoutStatus(baseMs + 514_000).isLockedOut, false);
+
+    resetPinLockout();
+    assert.deepEqual(getPinLockoutStatus(baseMs + 514_000), {
+      isLockedOut: false,
+      remainingSeconds: 0,
+      failedAttempts: 0,
+    });
   });
 });

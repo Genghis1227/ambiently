@@ -10,8 +10,10 @@ import {
 } from '../src/utils/homelabEngine';
 import {
   deleteHomelabCredentialsFromVault,
+  extractHomelabOrigin,
   getHomelabVaultKey,
   loadHomelabCredentialsFromVault,
+  resolveBoundHomelabToken,
   saveHomelabCredentialsToVault,
 } from '../src/utils/homelabVault';
 import {
@@ -100,6 +102,33 @@ describe('homelabVault and cloud credential stripping', () => {
     });
     const loaded = await loadHomelabCredentialsFromVault(widgetId);
     assert.deepEqual(loaded, { haAccessToken: 'ha-local-token-sample-987654' });
+
+    await saveHomelabCredentialsToVault(widgetId, {
+      haAccessToken: 'ha-local-token-sample-987654',
+      boundOrigin: 'http://homeassistant.local:8123',
+    });
+    const boundLoaded = await loadHomelabCredentialsFromVault(widgetId);
+    assert.deepEqual(boundLoaded, {
+      haAccessToken: 'ha-local-token-sample-987654',
+      boundOrigin: 'http://homeassistant.local:8123',
+    });
+
+    assert.equal(extractHomelabOrigin('http://HomeAssistant.local:8123/api/states'), 'http://homeassistant.local:8123');
+    assert.equal(extractHomelabOrigin('javascript:alert(1)'), null);
+
+    // Matching origin attaches token; changed origin or legacy unbound record blocks attachment
+    assert.deepEqual(resolveBoundHomelabToken(boundLoaded, 'http://homeassistant.local:8123/lovelace'), {
+      token: 'ha-local-token-sample-987654',
+      originMismatch: false,
+    });
+    assert.deepEqual(resolveBoundHomelabToken(boundLoaded, 'https://evil.example.com'), {
+      token: '',
+      originMismatch: true,
+    });
+    assert.deepEqual(
+      resolveBoundHomelabToken({ haAccessToken: 'ha-local-token-sample-987654' }, 'http://homeassistant.local:8123'),
+      { token: '', originMismatch: true }
+    );
 
     await deleteHomelabCredentialsFromVault(widgetId);
     assert.equal(await loadHomelabCredentialsFromVault(widgetId), null);

@@ -14,6 +14,7 @@ import {
 } from '../../utils/mediaOptimization';
 import { useVaultMediaUrl } from '../../utils/localMediaVault';
 import { useDisplayActivity } from '../../utils/displayActivity';
+import { sanitizeExternalHttpUrl } from '../../utils/urlSecurity';
 
 interface ImageWidgetProps {
   id: string;
@@ -276,6 +277,8 @@ const ImageWidgetInner: React.FC<ImageWidgetProps> = ({
     : media.optimizedImgUrl || media.fallbackImgUrl;
 
   // 4. Rendered Video / Animated WebP / Image View
+  const safeLinkUrl = sanitizeExternalHttpUrl(config.linkUrl);
+
   const content = (
     <div
       className={`relative w-full h-full overflow-hidden select-none group flex items-center justify-center ${
@@ -339,7 +342,7 @@ const ImageWidgetInner: React.FC<ImageWidgetProps> = ({
       )}
 
       {/* External Link Indicator */}
-      {config.linkUrl && (
+      {safeLinkUrl && (
         <div className="absolute top-2 right-2 p-1 rounded-md bg-black/60 text-white/80 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
           <ExternalLink className="w-3 h-3" />
         </div>
@@ -349,9 +352,9 @@ const ImageWidgetInner: React.FC<ImageWidgetProps> = ({
 
   return (
     <>
-      {config.linkUrl ? (
+      {safeLinkUrl ? (
         <a
-          href={config.linkUrl}
+          href={safeLinkUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="block w-full h-full cursor-pointer"

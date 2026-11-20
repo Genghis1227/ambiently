@@ -11,6 +11,17 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.8.1",
+    date: "November 20, 2026",
+    title: "Vault Origin Binding, PBKDF2 PIN Lockout & Proxy Security Hardening",
+    highlights: [
+      "Origin-Bound Home Assistant Vault Tokens: Bound db.vault Home Assistant access tokens to their exact saved server origin so synced or restored URL changes can never forward local Bearer tokens to another host.",
+      "Salted PBKDF2 PIN Hashing & Brute-Force Lockout: Upgraded Kiosk Parent PIN hashes to 120,000-iteration salted PBKDF2-SHA-256 with seamless legacy upgrade, exponential failed-attempt cooldowns, and secret redaction across exported/synced JSON backups.",
+      "Proxy Framing, Rate Limiting & Self-Hosted Server Hardening: Added frame-ancestors 'self' and stricter frame/Origin/Referer guards to /api/web-proxy, per-IP sliding-window rate limits, optional AMBIENTLY_API_KEY auth, bounded Node HTTP timeouts, conditional HTTPS HSTS, and no-referrer headers.",
+      "URL/CSS Sanitizers, Raster Vault Checks & Pi Installer Validation: Enforced http(s): link validation on external widget links, CSS url(...) escaping on wallpapers/slideshows, raster-only db.vault media validation, and shell-quoted --port/--url checks in pi-kiosk-setup.sh.",
+    ],
+  },
+  {
     version: "v0.8.0",
     date: "November 20, 2026",
     title: "Kiosk GPU Mode, Zero-Flow Canvas Dragging & Incremental Sync Engine",

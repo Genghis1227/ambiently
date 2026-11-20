@@ -83,17 +83,170 @@ export function checkPublicHttpsUrl(raw: string, allowedHosts?: string[], allowP
   return url;
 }
 
-/** A 403 response if the request came from another website, otherwise null. */
-export function refuseOtherSites(request: Request): Response | null {
-  // Browsers send Sec-Fetch-Site. "same-site" covers the owner's other subdomains, and requests
-  // without it (older browsers, scripts) are let through.
+const MAX_TRACKED_CLIENT_KEYS = 2048;
+const rateLimitBuckets = new Map<string, { windowStartMs: number; count: number }>();
+
+function getClientIp(request: Request): string {
+  const cfIp = (request.headers.get('CF-Connecting-IP') || '').trim();
+  if (cfIp) return cfIp;
+  const xff = (request.headers.get('X-Forwarded-For') || '').split(',')[0].trim();
+  if (xff) return xff;
+  return 'local';
+}
+
+function timingSafeEqualUtf8(a: string, b: string): boolean {
+  const enc = new TextEncoder();
+  const ab = enc.encode(a);
+  const bb = enc.encode(b);
+  const len = Math.max(ab.length, bb.length);
+  let diff = ab.length ^ bb.length;
+  for (let i = 0; i < len; i++) {
+    diff |= (ab[i] ?? 0) ^ (bb[i] ?? 0);
+  }
+  return diff === 0;
+}
+
+function extractCookieValue(cookieHeader: string | null, name: string): string | null {
+  if (!cookieHeader) return null;
+  for (const part of cookieHeader.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq <= 0) continue;
+    if (part.slice(0, eq).trim() === name) {
+      const rawVal = part.slice(eq + 1).trim();
+      try {
+        return decodeURIComponent(rawVal);
+      } catch {
+        return rawVal;
+      }
+    }
+  }
+  return null;
+}
+
+/** Resets in-memory API rate limit buckets (intended for automated tests). */
+export function resetApiRateLimitsForTests(): void {
+  rateLimitBuckets.clear();
+}
+
+/**
+ * Enforces an optional shared-secret API key (`AMBIENTLY_API_KEY`) when configured on a
+ * self-hosted server via `X-Ambiently-Key`, `Authorization: Bearer <key>`, or `ambiently_api_key` cookie.
+ */
+export function verifyOptionalServerApiKey(request: Request): Response | null {
+  const configuredKey =
+    typeof process !== 'undefined' && typeof process.env !== 'undefined'
+      ? (process.env.AMBIENTLY_API_KEY || '').trim()
+      : '';
+  if (!configuredKey) return null;
+
+  const headerKey = (request.headers.get('X-Ambiently-Key') || '').trim();
+  const authHeader = (request.headers.get('Authorization') || '').trim();
+  const bearerKey = /^Bearer\s+/i.test(authHeader)
+    ? authHeader.replace(/^Bearer\s+/i, '').trim()
+    : '';
+  const cookieKey = (extractCookieValue(request.headers.get('Cookie'), 'ambiently_api_key') || '').trim();
+  const supplied = headerKey || bearerKey || cookieKey;
+
+  if (!supplied || !timingSafeEqualUtf8(supplied, configuredKey)) {
+    return new Response(JSON.stringify({ error: 'Valid server API key required.' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' },
+    });
+  }
+  return null;
+}
+
+/** Bounded per-IP sliding-window rate limiter across proxy endpoints. */
+export function checkApiRateLimit(
+  request: Request,
+  bucket: string,
+  maxRequests: number = 120,
+  windowMs: number = 60_000
+): Response | null {
+  const key = `${bucket}:${getClientIp(request)}`;
+  const now = Date.now();
+  const existing = rateLimitBuckets.get(key);
+
+  if (!existing || now - existing.windowStartMs >= windowMs) {
+    if (rateLimitBuckets.has(key)) {
+      rateLimitBuckets.delete(key);
+    } else if (rateLimitBuckets.size >= MAX_TRACKED_CLIENT_KEYS) {
+      const oldestKey = rateLimitBuckets.keys().next().value;
+      if (oldestKey !== undefined) rateLimitBuckets.delete(oldestKey);
+    }
+    rateLimitBuckets.set(key, { windowStartMs: now, count: 1 });
+    return null;
+  }
+
+  existing.count += 1;
+  if (existing.count > maxRequests) {
+    return new Response(JSON.stringify({ error: 'Too many requests. Please slow down.' }), {
+      status: 429,
+      headers: {
+        'Content-Type': 'application/json',
+        'Retry-After': '60',
+        'Cache-Control': 'private, no-store',
+      },
+    });
+  }
+  return null;
+}
+
+export interface RefuseOtherSitesOptions {
+  maxRequestsPerMinute?: number;
+  bucket?: string;
+}
+
+/** A 401/403/429 response if unauthorized, cross-site, or rate-limited; otherwise null. */
+export function refuseOtherSites(
+  request: Request,
+  options?: RefuseOtherSitesOptions
+): Response | null {
+  const keyError = verifyOptionalServerApiKey(request);
+  if (keyError) return keyError;
+
   if (request.headers.get('Sec-Fetch-Site') === 'cross-site') {
     return new Response(JSON.stringify({ error: 'Requests from other websites are not allowed.' }), {
       status: 403,
       headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' },
     });
   }
-  return null;
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(request.url);
+  } catch {
+    return new Response(JSON.stringify({ error: 'Invalid request URL.' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' },
+    });
+  }
+
+  const origin = request.headers.get('Origin');
+  if (origin !== null) {
+    const method = (request.method || 'GET').toUpperCase();
+    const expectedOrigin = parsedUrl.origin;
+    if (method !== 'GET' && method !== 'HEAD') {
+      if (origin !== expectedOrigin) {
+        return new Response(JSON.stringify({ error: 'Cross-origin state-changing requests are not allowed.' }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' },
+        });
+      }
+    } else if (origin !== 'null' && origin !== expectedOrigin) {
+      return new Response(JSON.stringify({ error: 'Requests from other websites are not allowed.' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' },
+      });
+    }
+  }
+
+  return checkApiRateLimit(
+    request,
+    options?.bucket || parsedUrl.pathname,
+    options?.maxRequestsPerMinute ?? 120,
+    60_000
+  );
 }
 
 export interface ExternalFetchOptions {

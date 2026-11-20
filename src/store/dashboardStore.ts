@@ -51,6 +51,13 @@ import {
 import { inferCuratedCategoryId } from '../data/curatedScenery';
 import { applySharedPhotoUpdateToWidgets, sanitizeRestoredPhotoWidget } from '../utils/photoSourceIsolation';
 import { applyPinLockTransition, normalizePinLockSettings } from '../utils/pinValidation';
+import {
+  getPinLockoutStatus,
+  hashPinSecure,
+  recordFailedPinAttempt,
+  resetPinLockout,
+  verifyPinSecure,
+} from '../utils/pinSecurity';
 import { getWifiVaultKey } from '../utils/wifiQr';
 import { getHomelabVaultKey } from '../utils/homelabVault';
 import { parseVaultMediaKey } from '../utils/localMediaVault';
@@ -431,16 +438,6 @@ interface DashboardState {
     noteId: string,
     freeformPos: StickyNoteItem['freeformPos']
   ) => Promise<void>;
-}
-
-// Simple SHA-256 helper for PIN
-async function hashPin(pin: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(pin);
-  const hash = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hash))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
 }
 
 function getExistingBoxesForTab(
@@ -1204,9 +1201,10 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     let pinHash: string | null = null;
     let pinLockEnabled = false;
     if (pin && pin.length >= 4) {
-      pinHash = await hashPin(pin);
+      pinHash = await hashPinSecure(pin);
       pinLockEnabled = true;
     }
+    resetPinLockout();
     const current = get().settings;
     let hasBoundCloudBoard = false;
     try {
@@ -1228,15 +1226,35 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   unlockKiosk: async (enteredPin) => {
     const { settings } = get();
     if (!settings.pinLockEnabled || !settings.pinHash) {
+      resetPinLockout();
       set({ isUnlocked: true });
       return true;
+    }
+    if (getPinLockoutStatus().isLockedOut) {
+      return false;
     }
     if (!enteredPin) return false;
-    const hash = await hashPin(enteredPin);
-    if (hash === settings.pinHash) {
+    const { valid, needsUpgrade } = await verifyPinSecure(enteredPin, settings.pinHash);
+    if (valid) {
+      resetPinLockout();
+      if (needsUpgrade) {
+        try {
+          const upgradedHash = await hashPinSecure(enteredPin);
+          const upgradedSettings: AppSettings = {
+            ...settings,
+            pinHash: upgradedHash,
+          };
+          await db.settings.put(upgradedSettings);
+          set({ settings: upgradedSettings, isUnlocked: true });
+          return true;
+        } catch {
+          // Proceed unlocked even if local persistence is unavailable
+        }
+      }
       set({ isUnlocked: true });
       return true;
     }
+    recordFailedPinAttempt();
     return false;
   },
 

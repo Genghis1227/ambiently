@@ -9,9 +9,11 @@
 // any page under Ambiently's name, or loaded as a script.
 
 import {
+  checkApiRateLimit,
   fetchExternal,
   externalFetchErrorResponse,
   ExternalFetchError,
+  verifyOptionalServerApiKey,
   type ExternalFetchResult,
 } from '../_shared/fetchExternal';
 
@@ -20,14 +22,15 @@ interface PagesContext {
 }
 
 const SANDBOXED_PAGE_HEADERS: Record<string, string> = {
-  // No allow-same-origin: the page gets an anonymous origin with no access to Ambiently's storage
-  'Content-Security-Policy': 'sandbox allow-scripts allow-forms allow-popups',
+  // No allow-same-origin: the page gets an anonymous origin with no access to Ambiently's storage,
+  // and frame-ancestors 'self' prevents external sites from embedding /api/web-proxy.
+  'Content-Security-Policy': "sandbox allow-scripts allow-forms allow-popups; frame-ancestors 'self'",
   'X-Content-Type-Options': 'nosniff',
   'Cross-Origin-Resource-Policy': 'same-origin',
   'Referrer-Policy': 'no-referrer',
   'X-Robots-Tag': 'noindex, nofollow',
-  // A frame's cached answer must not be reused for a direct visit
-  Vary: 'Sec-Fetch-Dest',
+  // A frame's cached answer must not be reused across origins/fetch destinations
+  Vary: 'Sec-Fetch-Dest, Sec-Fetch-Site, Origin',
 };
 
 function htmlResponse(html: string, status: number, extra: Record<string, string> = {}): Response {
@@ -41,20 +44,66 @@ function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
 }
 
+const FRAME_FORBIDDEN_HTML =
+  '<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem;background:#090d16;color:#cbd5e1;">This preview only opens inside Ambiently\'s web viewer.</body></html>';
+
 /**
- * Browsers say what a request is for (Sec-Fetch-Dest). Only frames may load the proxy: a direct
- * visit, or a script or style tag pointing at it, is refused. Links clicked inside a proxied page
- * are frame loads too, and come from its anonymous origin, so they count as cross-site; that's
- * fine here because the answer is sandboxed either way. Clients that don't send the header (older
- * browsers, scripts) still get the sandbox.
+ * Requires genuine iframe/frame navigation from the same origin (or anonymous sandbox child
+ * navigations with no Origin/Referer) while rejecting direct/script/cross-origin proxy loads.
  */
 function refuseNonFrameRequests(request: Request): Response | null {
-  const dest = request.headers.get('Sec-Fetch-Dest');
-  if (!dest || dest === 'iframe' || dest === 'frame') return null;
-  return htmlResponse(
-    `<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem;background:#090d16;color:#cbd5e1;">This preview only opens inside Ambiently's web viewer.</body></html>`,
-    403
-  );
+  const keyError = verifyOptionalServerApiKey(request);
+  if (keyError) {
+    return htmlResponse(
+      '<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem;background:#090d16;color:#cbd5e1;">Unauthorized</body></html>',
+      401,
+      { 'Cache-Control': 'private, no-store' }
+    );
+  }
+
+  const dest = (request.headers.get('Sec-Fetch-Dest') || '').trim().toLowerCase();
+  if (dest !== 'iframe' && dest !== 'frame') {
+    return htmlResponse(FRAME_FORBIDDEN_HTML, 403);
+  }
+
+  let reqOrigin = '';
+  try {
+    reqOrigin = new URL(request.url).origin;
+  } catch {
+    return htmlResponse(FRAME_FORBIDDEN_HTML, 400);
+  }
+
+  const origin = request.headers.get('Origin');
+  if (origin && origin !== 'null' && origin !== reqOrigin) {
+    return htmlResponse(FRAME_FORBIDDEN_HTML, 403);
+  }
+
+  const referer = request.headers.get('Referer');
+  if (referer) {
+    try {
+      if (new URL(referer).origin !== reqOrigin) {
+        return htmlResponse(FRAME_FORBIDDEN_HTML, 403);
+      }
+    } catch {
+      return htmlResponse(FRAME_FORBIDDEN_HTML, 403);
+    }
+  }
+
+  const secFetchSite = (request.headers.get('Sec-Fetch-Site') || '').trim().toLowerCase();
+  if (secFetchSite === 'cross-site' && (Boolean(referer) || (Boolean(origin) && origin !== 'null'))) {
+    return htmlResponse(FRAME_FORBIDDEN_HTML, 403);
+  }
+
+  const rateLimited = checkApiRateLimit(request, '/api/web-proxy', 60, 60_000);
+  if (rateLimited) {
+    return htmlResponse(
+      '<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem;background:#090d16;color:#cbd5e1;">Too many preview requests. Please wait a moment.</body></html>',
+      429,
+      { 'Retry-After': '60', 'Cache-Control': 'private, no-store' }
+    );
+  }
+
+  return null;
 }
 
 const WEB_PROXY_USER_AGENTS = [
@@ -170,6 +219,9 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       } catch (err) {}
     }, true);
   </script>`;
+
+    // Strip existing upstream <base> tags before injecting our base URL so relative resolution cannot be hijacked
+    html = html.replace(/<base\b[^>]*>/gi, '');
 
     // Inject right after <head> or at top
     if (/<head[^>]*>/i.test(html)) {

@@ -200,10 +200,12 @@ import {
 } from '../../utils/homelabEngine';
 import {
   deleteHomelabCredentialsFromVault,
+  extractHomelabOrigin,
   loadHomelabCredentialsFromVault,
   saveHomelabCredentialsToVault,
 } from '../../utils/homelabVault';
 import { stripHomelabCredentialsFromConfig } from '../../utils/mediaOptimization';
+import { sanitizeExternalHttpUrl } from '../../utils/urlSecurity';
 
 interface WidgetSettingsModalProps {
   isOpen: boolean;
@@ -859,9 +861,14 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setHomelabRefreshSec(sec === 30 || sec === 120 || sec === 300 ? sec : 60);
 
       const targetId = widget.id;
+      const savedHaOrigin = extractHomelabOrigin(widget.config?.haBaseUrl);
       void loadHomelabCredentialsFromVault(targetId).then((creds) => {
         if (lastOpenedWidgetIdRef.current === targetId && creds) {
-          setHomelabHaToken(creds.haAccessToken);
+          if (!creds.boundOrigin || creds.boundOrigin === savedHaOrigin) {
+            setHomelabHaToken(creds.haAccessToken);
+          } else {
+            setHomelabHaToken('');
+          }
         }
       });
     }
@@ -1205,7 +1212,8 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.fit = imageFit;
       configUpdates.caption = imageCaption.trim();
       configUpdates.transparentBg = imageTransparentBg;
-      configUpdates.linkUrl = imageLinkUrl.trim();
+      const trimmedLink = imageLinkUrl.trim();
+      configUpdates.linkUrl = trimmedLink ? sanitizeExternalHttpUrl(trimmedLink) || '' : '';
     }
 
     let freeformPosUpdate: DashboardWidget['freeformPos'] | undefined;
@@ -1443,8 +1451,12 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.refreshIntervalSec = homelabRefreshSec;
 
       const cleanToken = homelabHaToken.trim();
+      const boundOrigin = extractHomelabOrigin(configUpdates.haBaseUrl) ?? undefined;
       if (cleanToken) {
-        void saveHomelabCredentialsToVault(widget.id, { haAccessToken: cleanToken });
+        void saveHomelabCredentialsToVault(widget.id, {
+          haAccessToken: cleanToken,
+          ...(boundOrigin ? { boundOrigin } : {}),
+        });
       } else {
         void deleteHomelabCredentialsFromVault(widget.id);
       }
