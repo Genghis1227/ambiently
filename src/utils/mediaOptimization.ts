@@ -133,6 +133,13 @@ export function resolveOptimizedImageMedia(
 }
 
 const WIFI_SECRET_KEYS = ['ssid', 'password', 'security', 'hiddenNetwork', 'credentialStorage'] as const;
+const HOMELAB_SECRET_KEYS = [
+  'haAccessToken',
+  'accessToken',
+  'apiToken',
+  'bearerToken',
+  'serviceHeaders',
+] as const;
 
 /**
  * Strips all Guest Wi-Fi QR credentials from a widget config object so SSID, password,
@@ -149,8 +156,33 @@ export function stripWifiCredentialsFromConfig(config: Record<string, any>): Rec
 }
 
 /**
- * Strips bulky client-only arrays, multi-MB inline Data URLs, and Guest Wi-Fi QR credentials
- * from widget config before Cloud Sync.
+ * Strips all device-local Home Assistant and Home Lab API tokens from a widget config object
+ * so bearer credentials never enter Cloud Sync or persistent widget rows.
+ */
+export function stripHomelabCredentialsFromConfig(config: Record<string, any>): Record<string, any> {
+  const next = { ...(config || {}) };
+  for (const key of HOMELAB_SECRET_KEYS) {
+    if (key in next) {
+      delete next[key];
+    }
+  }
+  if (Array.isArray(next.services)) {
+    next.services = next.services.map((svc: any) => {
+      if (!svc || typeof svc !== 'object') return svc;
+      const copy = { ...svc };
+      delete copy.token;
+      delete copy.headers;
+      delete copy.accessToken;
+      delete copy.bearerToken;
+      return copy;
+    });
+  }
+  return next;
+}
+
+/**
+ * Strips bulky client-only arrays, multi-MB inline Data URLs, Guest Wi-Fi QR credentials,
+ * and Home Lab / Home Assistant access tokens from widget config before Cloud Sync.
  */
 export function sanitizeWidgetConfigForCloud(
   config: Record<string, any>,
@@ -159,10 +191,17 @@ export function sanitizeWidgetConfigForCloud(
   const hasWifiKeys = Boolean(
     config && WIFI_SECRET_KEYS.some((key) => key !== 'security' && key in config)
   );
-  const next =
+  const hasHomelabSecretKeys = Boolean(
+    config && HOMELAB_SECRET_KEYS.some((key) => key in config)
+  );
+  let next =
     widgetType === 'wifi_qr' || hasWifiKeys
       ? stripWifiCredentialsFromConfig(config)
       : { ...(config || {}) };
+
+  if (widgetType === 'homelab' || hasHomelabSecretKeys) {
+    next = stripHomelabCredentialsFromConfig(next);
+  }
 
   if ('customPhotos' in next) {
     delete next.customPhotos;

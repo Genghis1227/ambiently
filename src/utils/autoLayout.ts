@@ -35,6 +35,7 @@ const WIDGET_PRIORITY: Record<string, number> = {
   world_clock: 7,
   chalkboard: 5,
   soundscape: 6,
+  homelab: 6,
   rss: 8,
   countdown: 9,
   quotes: 10,

@@ -14,16 +14,49 @@ export default defineConfig({
       name: 'cloudflare-dev-functions',
       configureServer(server) {
         server.middlewares.use(async (req, res, next) => {
-          const match = (req.url || '').match(/^(?:\/functions)?\/api\/(ical|rss|gphotos|gdrive|reader|web-proxy|metadata|finance)(?:\?|$)/);
-          if (!match || req.method !== 'GET') return next();
+          const match = (req.url || '').match(
+            /^(?:\/functions)?\/api\/(ical|rss|gphotos|gdrive|reader|web-proxy|metadata|finance|sports|discovery|homelab)(?:\?|$)/
+          );
+          const method = (req.method || 'GET').toUpperCase();
+          if (!match) return next();
+          if (method !== 'GET' && !(method === 'POST' && match[1] === 'homelab')) {
+            return next();
+          }
           try {
             const mod = await server.ssrLoadModule(`/functions/api/${match[1]}.ts`);
             const headers = new Headers();
             for (const [key, value] of Object.entries(req.headers)) {
               if (typeof value === 'string') headers.set(key, value);
             }
-            const request = new Request(new URL(req.url!, `http://${req.headers.host || 'localhost'}`), { headers });
-            const response: Response = await mod.onRequestGet({ request });
+            let bodyBytes: Uint8Array | undefined;
+            if (method === 'POST') {
+              const chunks: Buffer[] = [];
+              let total = 0;
+              for await (const chunk of req) {
+                const buf = typeof chunk === 'string' ? Buffer.from(chunk) : Buffer.from(chunk);
+                total += buf.byteLength;
+                if (total > 64 * 1024) {
+                  res.statusCode = 413;
+                  res.end(JSON.stringify({ error: 'Payload Too Large' }));
+                  return;
+                }
+                chunks.push(buf);
+              }
+              bodyBytes = new Uint8Array(Buffer.concat(chunks));
+            }
+            const request = new Request(
+              new URL(req.url!, `http://${req.headers.host || 'localhost'}`),
+              {
+                method,
+                headers,
+                ...(bodyBytes ? { body: bodyBytes as unknown as BodyInit } : {}),
+              }
+            );
+            const handler =
+              method === 'POST' && typeof mod.onRequestPost === 'function'
+                ? mod.onRequestPost
+                : mod.onRequestGet;
+            const response: Response = await handler({ request });
             res.statusCode = response.status;
             response.headers.forEach((value, key) => res.setHeader(key, value));
             res.end(Buffer.from(await response.arrayBuffer()));

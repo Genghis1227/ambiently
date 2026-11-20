@@ -68,6 +68,20 @@ export type {
   SoundscapeSleepTimerMin,
   SoundscapeWidgetConfig,
 } from './phase4Widgets';
+export type {
+  HomeAssistantEntityReading,
+  HomeAssistantEntityTarget,
+  HomelabApiCheckRequest,
+  HomelabApiCheckResponse,
+  HomelabDisplayMode,
+  HomelabEntityIconHint,
+  HomelabLocalVaultCredentials,
+  HomelabServicePresetId,
+  HomelabServiceState,
+  HomelabServiceStatus,
+  HomelabServiceTarget,
+  HomelabWidgetConfig,
+} from './phase5Widgets';
 export type { PhotoAutoSyncInterval, PlexPhotoSyncConfig, PhotoTargetSyncMeta };
 
 export type DockPosition = 'left' | 'top' | 'right' | 'bottom';
@@ -116,7 +130,8 @@ export type WidgetType =
   | 'sports'
   | 'daily_discovery'
   | 'chalkboard'
-  | 'soundscape';
+  | 'soundscape'
+  | 'homelab';
 
 export interface RssWidgetConfig {
   feedUrl?: string;

@@ -14,6 +14,10 @@ import { onRequestGet as handleMetadata } from '../functions/api/metadata';
 import { onRequestGet as handleFinance } from '../functions/api/finance';
 import { onRequestGet as handleSports } from '../functions/api/sports';
 import { onRequestGet as handleDiscovery } from '../functions/api/discovery';
+import {
+  onRequestGet as handleHomelabGet,
+  onRequestPost as handleHomelabPost,
+} from '../functions/api/homelab';
 import { installAddressGuard } from './addressGuard';
 
 type ApiHandler = (ctx: { request: Request }) => Promise<Response>;
@@ -29,7 +33,14 @@ const API_ROUTES: Record<string, ApiHandler> = {
   finance: handleFinance,
   sports: handleSports,
   discovery: handleDiscovery,
+  homelab: handleHomelabGet,
 };
+
+const API_POST_ROUTES: Record<string, ApiHandler> = {
+  homelab: handleHomelabPost,
+};
+
+const MAX_API_POST_BODY_BYTES = 64 * 1024;
 
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -240,22 +251,44 @@ function serveStaticFile(
   return true;
 }
 
+async function readBoundedRequestBody(req: IncomingMessage, maxBytes: number): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for await (const chunk of req) {
+    const buf = typeof chunk === 'string' ? Buffer.from(chunk) : Buffer.from(chunk);
+    total += buf.byteLength;
+    if (total > maxBytes) {
+      const tooLargeErr = new Error('Request payload too large.') as Error & { statusCode?: number };
+      tooLargeErr.statusCode = 413;
+      throw tooLargeErr;
+    }
+    chunks.push(buf);
+  }
+  return Buffer.concat(chunks);
+}
+
 async function handleApiRoute(
   req: IncomingMessage,
   res: ServerResponse,
   routeName: string
 ): Promise<void> {
-  const handler = API_ROUTES[routeName];
-  if (!handler) {
+  const method = (req.method || 'GET').toUpperCase();
+  const getHandler = Object.hasOwn(API_ROUTES, routeName) ? API_ROUTES[routeName] : undefined;
+  const postHandler = Object.hasOwn(API_POST_ROUTES, routeName)
+    ? API_POST_ROUTES[routeName]
+    : undefined;
+  if (!getHandler && !postHandler) {
     res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify({ error: 'Not found' }));
     return;
   }
 
-  if (req.method !== 'GET') {
+  const handler = method === 'POST' ? postHandler : method === 'GET' ? getHandler : undefined;
+  if (!handler) {
+    const allowedMethods = [getHandler ? 'GET' : '', postHandler ? 'POST' : ''].filter(Boolean).join(', ');
     res.writeHead(405, {
       'Content-Type': 'application/json; charset=utf-8',
-      Allow: 'GET',
+      Allow: allowedMethods || 'GET',
     });
     res.end(JSON.stringify({ error: 'Method Not Allowed' }));
     return;
@@ -276,7 +309,13 @@ async function handleApiRoute(
       }
     }
 
-    const webRequest = new Request(fullUrl, { method: 'GET', headers });
+    const requestBody =
+      method === 'POST' ? await readBoundedRequestBody(req, MAX_API_POST_BODY_BYTES) : undefined;
+    const webRequest = new Request(fullUrl, {
+      method,
+      headers,
+      ...(requestBody ? { body: new Uint8Array(requestBody) } : {}),
+    });
     const webResponse = await handler({ request: webRequest });
 
     res.statusCode = webResponse.status;
@@ -287,11 +326,21 @@ async function handleApiRoute(
     res.setHeader('Content-Length', bodyBuffer.byteLength);
     res.end(bodyBuffer);
   } catch (err) {
-    console.error(`[ambiently-server] Error in /api/${routeName}:`, err);
-    if (!res.headersSent) {
-      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+    const statusCode =
+      typeof (err as { statusCode?: unknown })?.statusCode === 'number'
+        ? (err as { statusCode: number }).statusCode
+        : 500;
+    if (statusCode === 500) {
+      console.error(`[ambiently-server] Error in /api/${routeName}:`, err);
     }
-    res.end(JSON.stringify({ error: 'Internal server error' }));
+    if (!res.headersSent) {
+      res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' });
+    }
+    res.end(
+      JSON.stringify({
+        error: statusCode === 413 ? 'Payload Too Large' : 'Internal server error',
+      })
+    );
   }
 }
 

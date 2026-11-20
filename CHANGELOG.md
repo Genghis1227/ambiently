@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.26] - 2026-11-20
+
+### Added
+- **Phase 5 — Home Lab Uptime & Home Assistant Glance (`HomelabWidget.tsx`, `/api/homelab`, `homelabEngine.ts`, `homelabVault.ts`):**
+  - Added a self-hosted **Home Lab & Home Assistant** glance tile with 1-click presets (*Plex*, *NAS*, *Pi-hole*, *Immich*, *Uptime Kuma*, *Jellyfin*, *Proxmox*, *Home Assistant UI*), `Up` / `Slow` / `Down` status badges with response latency (`ms`), and read-only Home Assistant entity cards (`/api/states/<entity_id>`) for sensors, doors/covers, power metrics, and locks.
+  - Strictly isolated Home Assistant Long-Lived Access Tokens in device-local `db.vault` (`homelab-cred:<widgetId>`) with unconditional stripping in `sanitizeWidgetConfigForCloud` / `supabase.ts` and automatic vault purging on widget/tab deletion.
+  - Hardened `/api/homelab` (`POST` + `GET` capability check, `Cache-Control: private, no-store`, strict `entity_id` validation, `maxRedirects: 0` with Bearer auth) behind `AMBIENTLY_ALLOW_PRIVATE_FEEDS=true` while keeping loopback (`127.0.0.1`, `::1`, `localhost`) and cloud metadata (`169.254.169.254`) permanently blocked in `fetchExternal.ts` and `server/addressGuard.ts`.
+  - Added `POST` API routing support in `server/index.ts` and `vite.config.ts`, Mobile Companion parity, unit + SSRF test coverage (`tests/phase5Homelab.test.ts`), and Docker / Raspberry Pi documentation updates.
+
 ## [0.7.25] - 2026-11-19
 
 ### Added
