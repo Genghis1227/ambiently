@@ -56,7 +56,9 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({
   const [loading, setLoading] = useState(false);
   const { isOledNightClock } = useDisplayActivity();
   const isOledRef = useRef(isOledNightClock);
-  isOledRef.current = isOledNightClock;
+  useEffect(() => {
+    isOledRef.current = isOledNightClock;
+  }, [isOledNightClock]);
   const wasOledRef = useRef(false);
 
   const loadWeather = useCallback(async () => {

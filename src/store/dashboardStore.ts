@@ -42,9 +42,11 @@ import {
   keepLocalNoteFields,
   keepLocalTabFields,
   keepLocalWidgetFields,
+  mergeDirtySyncScopes,
   nextMonotonicIso,
   normalizeLoadedNote,
   shouldApplyRealtimeRow,
+  type DirtySyncScopes,
 } from '../services/syncMerge';
 import { inferCuratedCategoryId } from '../data/curatedScenery';
 import { applySharedPhotoUpdateToWidgets, sanitizeRestoredPhotoWidget } from '../utils/photoSourceIsolation';
@@ -80,7 +82,9 @@ const SYSTEM_WIDGET_CLOUD_ROW_IDS = new Set([
 
 let backupDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 let cloudAutoSyncTimer: ReturnType<typeof setTimeout> | null = null;
+let carouselPauseTimerId: ReturnType<typeof setTimeout> | null = null;
 let hasPendingCloudPush = false;
+let pendingDirtyScopes: DirtySyncScopes = {};
 let activeCloudPushPromise: Promise<void> | null = null;
 let latestDashboardGet: (() => DashboardState) | null = null;
 
@@ -93,6 +97,7 @@ export function cancelPendingCloudPush(): void {
     cloudAutoSyncTimer = null;
   }
   hasPendingCloudPush = false;
+  pendingDirtyScopes = {};
 }
 
 /**
@@ -108,6 +113,7 @@ export async function flushPendingCloudPush(): Promise<void> {
   }
   if (!hasPendingCloudPush) return;
   hasPendingCloudPush = false;
+  pendingDirtyScopes = {};
   if (!hasSupabaseCredentials()) return;
 
   try {
@@ -136,8 +142,9 @@ export async function flushPendingCloudPush(): Promise<void> {
   }
 }
 
-function scheduleCloudAutoPush(get: () => DashboardState): void {
+function scheduleCloudAutoPush(get: () => DashboardState, scope?: DirtySyncScopes): void {
   latestDashboardGet = get;
+  pendingDirtyScopes = mergeDirtySyncScopes(pendingDirtyScopes, scope);
   if (!hasSupabaseCredentials()) return;
   hasPendingCloudPush = true;
   if (cloudAutoSyncTimer) {
@@ -147,15 +154,24 @@ function scheduleCloudAutoPush(get: () => DashboardState): void {
     cloudAutoSyncTimer = null;
     if (!hasPendingCloudPush) return;
     hasPendingCloudPush = false;
+    const dirtySnapshot = { ...pendingDirtyScopes };
+    pendingDirtyScopes = {};
     void getCachedSessionUser()
       .then((user) => {
         if (!user) return;
         const state = get();
         const runPush = Promise.resolve(
-          pushToCloud(state.settings, state.tabs, state.widgets, state.notes)
+          pushToCloud(state.settings, state.tabs, state.widgets, state.notes, {
+            dirtyScopes: dirtySnapshot,
+          })
         ).then(
-          () => undefined,
+          (res) => {
+            if (res && !res.success) {
+              pendingDirtyScopes = mergeDirtySyncScopes(pendingDirtyScopes, dirtySnapshot);
+            }
+          },
           (err) => {
+            pendingDirtyScopes = mergeDirtySyncScopes(pendingDirtyScopes, dirtySnapshot);
             console.warn('Cloud auto-push skipped:', err);
           }
         );
@@ -167,6 +183,7 @@ function scheduleCloudAutoPush(get: () => DashboardState): void {
         });
       })
       .catch((err) => {
+        pendingDirtyScopes = mergeDirtySyncScopes(pendingDirtyScopes, dirtySnapshot);
         console.warn('Cloud auto-push skipped:', err);
       });
   }, 2500);
@@ -369,8 +386,8 @@ interface DashboardState {
   setPinLock: (pin: string | null) => Promise<void>;
   unlockKiosk: (enteredPin: string) => Promise<boolean>;
   lockKiosk: () => void;
-  saveLocalBackup: () => Promise<void>;
-  saveLocalBackupImmediate: () => Promise<void>;
+  saveLocalBackup: (scope?: DirtySyncScopes) => Promise<void>;
+  saveLocalBackupImmediate: (scope?: DirtySyncScopes) => Promise<void>;
   syncRemoteNoteChange: (note: StickyNoteItem, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void;
   syncRemoteWidgetChange: (widget: DashboardWidget, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void;
   syncRemoteTabChange: (tab: DashboardTab, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void;
@@ -722,7 +739,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       activeTabId: newId,
     });
     await markCanvasLooksChanged(get, set);
-    get().saveLocalBackup();
+    get().saveLocalBackup({ tabs: true, widgets: true, notes: true, settings: true });
     return newId;
   },
 
@@ -780,7 +797,12 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     if (hasTabChanges) {
       await markCanvasLooksChanged(get, set);
     }
-    get().saveLocalBackup();
+    get().saveLocalBackup({
+      tabs: true,
+      widgets: true,
+      notes: true,
+      ...(hasTabChanges ? { settings: true } : {}),
+    });
   },
 
   updateTab: async (tabId, updates) => {
@@ -795,10 +817,11 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     set({
       tabs: get().tabs.map((t) => (t.id === tabId ? updated : t)),
     });
-    if (CANVAS_LOOK_FIELDS.some((field) => field in updates)) {
+    const touchedLooks = CANVAS_LOOK_FIELDS.some((field) => field in updates);
+    if (touchedLooks) {
       await markCanvasLooksChanged(get, set);
     }
-    get().saveLocalBackup();
+    get().saveLocalBackup({ tabs: true, ...(touchedLooks ? { settings: true } : {}) });
   },
 
   setHomeTab: async (tabId) => {
@@ -811,7 +834,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     await db.tabs.bulkPut(updatedTabs).catch(() => {});
     set({ tabs: updatedTabs });
     await markCanvasLooksChanged(get, set);
-    get().saveLocalBackup();
+    get().saveLocalBackup({ tabs: true, settings: true });
   },
 
   deleteTab: async (tabId) => {
@@ -855,7 +878,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     if (tab.isHome) {
       await markCanvasLooksChanged(get, set);
     }
-    get().saveLocalBackup();
+    get().saveLocalBackup({ tabs: true, ...(tab.isHome ? { settings: true } : {}) });
   },
 
   reorderTabs: async (orderedTabIds) => {
@@ -868,21 +891,21 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
 
     await db.tabs.bulkPut(updatedTabs);
     set({ tabs: updatedTabs });
-    get().saveLocalBackup();
+    get().saveLocalBackup({ tabs: true });
   },
 
   setDockPosition: async (dockPosition) => {
     const updated = { ...get().settings, dockPosition, updated_at: new Date().toISOString() };
     await db.settings.put(updated);
     set({ settings: updated });
-    get().saveLocalBackup();
+    get().saveLocalBackup({ settings: true });
   },
 
   setSnapToGrid: async (snapToGrid) => {
     const updated = { ...get().settings, snapToGrid, updated_at: new Date().toISOString() };
     await db.settings.put(updated);
     set({ settings: updated });
-    get().saveLocalBackup();
+    get().saveLocalBackup({ settings: true });
   },
 
   toggleSnapToGrid: async () => {
@@ -894,7 +917,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const updated = { ...get().settings, isDockHidden, updated_at: new Date().toISOString() };
     await db.settings.put(updated);
     set({ settings: updated });
-    get().saveLocalBackup();
+    get().saveLocalBackup({ settings: true });
   },
 
   toggleDockHidden: async () => {
@@ -926,7 +949,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     };
     await db.settings.put(updated);
     set({ settings: updated });
-    get().saveLocalBackup();
+    get().saveLocalBackup({ settings: true });
   },
 
   applyCommonPhotosToAllWidgets: async (
@@ -947,7 +970,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       await db.widgets.bulkPut(changedWidgets);
       set({ widgets: updatedWidgets });
     }
-    get().saveLocalBackup();
+    get().saveLocalBackup({ settings: true, widgets: true });
   },
 
   setPhotoSyncState: (photoSyncState) => {
@@ -1034,7 +1057,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         widgets: get().widgets.map((w) => (w.id === targetWidgetId ? updatedWidget : w)),
       });
     }
-    get().saveLocalBackup();
+    get().saveLocalBackup({ ...(targetWidgetId ? { widgets: true } : { settings: true }) });
   },
 
   finalizePhotosToTarget: async (targetWidgetId, allPhotos, sourceLabel, sourceUrl, sourceType, plexSyncConfig) => {
@@ -1073,7 +1096,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         set({
           widgets: get().widgets.map((w) => (w.id === targetWidgetId ? updatedWidget : w)),
         });
-        get().saveLocalBackup();
+        get().saveLocalBackup({ widgets: true });
       }
     }
   },
@@ -1099,7 +1122,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       tabs: updatedTabs,
       activeTabId: nextActiveTabId,
     });
-    get().saveLocalBackup();
+    get().saveLocalBackup({ tabs: true, settings: true });
   },
 
   setDisplayDensity: async (displayDensity) => {
@@ -1109,20 +1132,28 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   setCarouselEnabled: async (carouselEnabled) => {
+    if (!carouselEnabled && carouselPauseTimerId) {
+      clearTimeout(carouselPauseTimerId);
+      carouselPauseTimerId = null;
+    }
     const updated = { ...get().settings, carouselEnabled, updated_at: new Date().toISOString() };
     await db.settings.put(updated);
-    set({ settings: updated });
-    get().saveLocalBackup();
+    set({ settings: updated, ...(!carouselEnabled && get().isCarouselPaused ? { isCarouselPaused: false } : {}) });
+    get().saveLocalBackup({ settings: true });
   },
 
   setCarouselDuration: async (defaultRotateDurationSec) => {
     const updated = { ...get().settings, defaultRotateDurationSec, updated_at: new Date().toISOString() };
     await db.settings.put(updated);
     set({ settings: updated });
-    get().saveLocalBackup();
+    get().saveLocalBackup({ settings: true });
   },
 
   pauseCarouselTemporarily: (durationMs = 20000) => {
+    if (carouselPauseTimerId) {
+      clearTimeout(carouselPauseTimerId);
+      carouselPauseTimerId = null;
+    }
     const currentTimer = get().carouselPauseTimer;
     if (currentTimer) clearTimeout(currentTimer);
 
@@ -1133,11 +1164,17 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const rotateMs = (get().settings.defaultRotateDurationSec || 30) * 1000;
     const holdMs = Math.max(50, durationMs - rotateMs);
 
-    const timer = window.setTimeout(() => {
-      set({ isCarouselPaused: false, carouselPauseTimer: null });
+    carouselPauseTimerId = setTimeout(() => {
+      carouselPauseTimerId = null;
+      if (get().isCarouselPaused) {
+        set({ isCarouselPaused: false });
+      }
     }, holdMs);
 
-    set({ isCarouselPaused: true, carouselPauseTimer: timer });
+    // Avoid emitting redundant Zustand store notifications when already paused
+    if (!get().isCarouselPaused) {
+      set({ isCarouselPaused: true });
+    }
   },
 
   toggleNightModeManual: () => {
@@ -1160,7 +1197,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         weekStartsOn: updates.weekStartsOn,
       });
     }
-    get().saveLocalBackup();
+    get().saveLocalBackup({ settings: true });
   },
 
   setPinLock: async (pin) => {
@@ -1185,7 +1222,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     };
     await db.settings.put(updated);
     set({ settings: updated, isUnlocked: !pinLockEnabled });
-    get().saveLocalBackup();
+    get().saveLocalBackup({ settings: true });
   },
 
   unlockKiosk: async (enteredPin) => {
@@ -1209,8 +1246,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     }
   },
 
-  saveLocalBackup: async () => {
-    scheduleCloudAutoPush(get);
+  saveLocalBackup: async (scope) => {
+    scheduleCloudAutoPush(get, scope);
     if (!hasActiveLocalFile()) return;
     if (backupDebounceTimer) {
       clearTimeout(backupDebounceTimer);
@@ -1233,8 +1270,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     }, 400);
   },
 
-  saveLocalBackupImmediate: async () => {
-    scheduleCloudAutoPush(get);
+  saveLocalBackupImmediate: async (scope) => {
+    scheduleCloudAutoPush(get, scope);
     if (!hasActiveLocalFile()) return;
     if (backupDebounceTimer) {
       clearTimeout(backupDebounceTimer);
@@ -1333,7 +1370,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       },
       movedWidgetToast: null,
     });
-    get().saveLocalBackup();
+    get().saveLocalBackup({ widgets: true, notes: true });
   },
 
   undoAutoOrganize: async () => {
@@ -1409,7 +1446,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         lastLayoutSnapshot: nextLastSnapshot,
         layoutUndoToast: null,
       });
-      get().saveLocalBackup();
+      get().saveLocalBackup({ widgets: true, notes: true });
       return true;
     }
 
@@ -1471,7 +1508,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     delete nextDeletedNoteTimestamps[noteId];
     await db.notes.put(note).catch(() => {});
     set({ notes: [note, ...get().notes], deletedNoteTimestamps: nextDeletedNoteTimestamps });
-    get().saveLocalBackup();
+    get().saveLocalBackup({ notes: true });
   },
 
   updateNote: async (noteId, updates) => {
@@ -1513,7 +1550,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       notes: get().notes.map((n) => (n.id === noteId ? updated : n)),
       deletedNoteTimestamps: nextDeletedNoteTimestamps,
     });
-    get().saveLocalBackup();
+    get().saveLocalBackup({ notes: true });
   },
 
   syncRemoteNoteChange: (incomingNote, eventType) => {
@@ -1795,7 +1832,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     set({
       notes: get().notes.map((n) => (n.id === noteId ? updated : n)),
     });
-    get().saveLocalBackup();
+    get().saveLocalBackup({ notes: true });
   },
 
   permanentlyDeleteNote: async (noteId) => {
@@ -1815,7 +1852,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         [noteId]: nowIso,
       },
     });
-    get().saveLocalBackup();
+    get().saveLocalBackup({ notes: true });
   },
 
   permanentlyDeleteNotes: async (noteIds) => {
@@ -1841,7 +1878,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       notes: get().notes.filter((n) => !idSet.has(n.id)),
       deletedNoteTimestamps: nextDeletedNoteTimestamps,
     });
-    get().saveLocalBackup();
+    get().saveLocalBackup({ notes: true });
   },
 
   addWidget: async (partialWidget) => {
@@ -1888,7 +1925,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       widgets: [...get().widgets, newWidget],
       deletedWidgetTimestamps: nextDeletedWidgetTimestamps,
     });
-    get().saveLocalBackup();
+    get().saveLocalBackup({ widgets: true });
   },
 
   removeWidget: async (widgetId) => {
@@ -1916,7 +1953,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         [widgetId]: nowIso,
       },
     });
-    get().saveLocalBackup();
+    get().saveLocalBackup({ widgets: true });
   },
 
   restoreWidget: async (widgetId, targetTabId) => {
@@ -1992,7 +2029,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           }
         : {}),
     });
-    void get().saveLocalBackup();
+    void get().saveLocalBackup({ widgets: true });
     return true;
   },
 
@@ -2075,7 +2112,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       deletedWidgets: latest.deletedWidgets.filter((w) => !idSet.has(w.id)),
       deletedWidgetTimestamps: nextDeletedTimestamps,
     });
-    get().saveLocalBackup();
+    get().saveLocalBackup({ widgets: true });
   },
 
   updateWidget: async (widgetId, updates) => {
@@ -2091,7 +2128,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     set({
       widgets: get().widgets.map((w) => (w.id === widgetId ? updated : w)),
     });
-    get().saveLocalBackup();
+    get().saveLocalBackup({ widgets: true });
   },
 
   updateWidgetConfig: async (widgetId, configUpdates) => {
@@ -2106,7 +2143,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     set({
       widgets: get().widgets.map((w) => (w.id === widgetId ? updated : w)),
     });
-    get().saveLocalBackup();
+    get().saveLocalBackup({ widgets: true });
   },
 
   moveWidgetToTab: async (widgetId, targetTabId, extraUpdates) => {
@@ -2160,7 +2197,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       },
       layoutUndoToast: null,
     });
-    void get().saveLocalBackup();
+    void get().saveLocalBackup({ widgets: true });
     return true;
   },
 
@@ -2233,7 +2270,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       layoutUndoToast: null,
     });
     await markCanvasLooksChanged(get, set);
-    void get().saveLocalBackup();
+    void get().saveLocalBackup({ tabs: true, widgets: true, settings: true });
     return newTabId;
   },
 
@@ -2294,7 +2331,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           }
         : {}),
     });
-    get().saveLocalBackup();
+    get().saveLocalBackup({ widgets: true });
   },
 
   updateNotePosition: async (noteId, freeformPos) => {
@@ -2359,42 +2396,42 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           }
         : {}),
     });
-    get().saveLocalBackup();
+    get().saveLocalBackup({ notes: true });
   },
 }));
 
 registerChorePersistListener(() => {
   const dashState = useDashboardStore.getState();
   if (dashState.isInitialized) {
-    dashState.saveLocalBackup();
+    dashState.saveLocalBackup({ householdStores: true });
   }
 });
 
 registerMealPersistListener(() => {
   const dashState = useDashboardStore.getState();
   if (dashState.isInitialized) {
-    dashState.saveLocalBackup();
+    dashState.saveLocalBackup({ householdStores: true });
   }
 });
 
 registerProfileSyncListener(() => {
   const dashState = useDashboardStore.getState();
   if (dashState.isInitialized) {
-    dashState.saveLocalBackup();
+    dashState.saveLocalBackup({ householdStores: true });
   }
 });
 
 registerKanbanPersistListener(() => {
   const dashState = useDashboardStore.getState();
   if (dashState.isInitialized) {
-    dashState.saveLocalBackup();
+    dashState.saveLocalBackup({ householdStores: true });
   }
 });
 
 registerRoutinesPersistListener(() => {
   const dashState = useDashboardStore.getState();
   if (dashState.isInitialized) {
-    dashState.saveLocalBackup();
+    dashState.saveLocalBackup({ householdStores: true });
   }
 });
 

@@ -72,7 +72,7 @@
   * Pin dense boards of GIPHY GIFs and transparent stickers smoothly: opaque GIFs play as GPU-decoded MP4 loops, transparent stickers use animated WebP with zero per-frame shadow thrashing, CDN assets are locally cached up to bounded quotas, and animations/photo timers automatically suspend during Night Mode or hidden browser tabs.
 * **📅 Multi-Calendar Feeds & Family Meals Overlay:** Unified agenda, 3-day, weekly, and monthly views combining multiple `webcal://` and `.ics` feeds with an optional **Show Planned Family Meals** overlay, per-calendar color tags, smart rate-limit protection, and a built-in US Holidays fallback.
 * **🔒 Kiosk Security & Hardware Polish:**
-  * Screen Wake Lock API, Fullscreen Mode, Scheduled Night Mode with pixel-shifting OLED clock, Kid-Proof 4-digit PIN lock with double-entry confirmation on setup/change (and email recovery when signed in), and Display Density scaling (`75%` to `150%`).
+  * Screen Wake Lock API, Fullscreen Mode, **Reduce Blur & GPU Effects** low-power mode (`reduceVisualEffects`) for smooth 60fps rendering on Raspberry Pi and 4K displays, idle-cursor tooltip/edit-chrome auto-hiding, Scheduled Night Mode with pixel-shifting OLED clock, Kid-Proof 4-digit PIN lock with double-entry confirmation on setup/change (and email recovery when signed in), and Display Density scaling (`75%` to `150%`).
 
 ---
 

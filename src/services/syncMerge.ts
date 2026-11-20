@@ -370,3 +370,66 @@ export function shouldApplyRealtimeRow(params: {
   }
   return true;
 }
+
+export interface DirtySyncScopes {
+  settings?: boolean;
+  tabs?: boolean;
+  widgets?: boolean;
+  notes?: boolean;
+  householdStores?: boolean;
+}
+
+export const ALL_DIRTY_SYNC_SCOPES: Required<DirtySyncScopes> = {
+  settings: true,
+  tabs: true,
+  widgets: true,
+  notes: true,
+  householdStores: true,
+};
+
+export function mergeDirtySyncScopes(
+  current: DirtySyncScopes,
+  addition?: DirtySyncScopes
+): DirtySyncScopes {
+  if (!addition) {
+    return { ...ALL_DIRTY_SYNC_SCOPES };
+  }
+  return {
+    settings: Boolean(current.settings || addition.settings),
+    tabs: Boolean(current.tabs || addition.tabs),
+    widgets: Boolean(current.widgets || addition.widgets),
+    notes: Boolean(current.notes || addition.notes),
+    householdStores: Boolean(current.householdStores || addition.householdStores),
+  };
+}
+
+/**
+ * Determines which local/remote entity collections must be read and reconciled during `pushToCloud`.
+ * Forced pushes, un-scoped calls, or devices without an established cloud baseline sync all scopes.
+ */
+export function resolveEffectiveSyncScopes(
+  options?: { force?: boolean; dirtyScopes?: DirtySyncScopes },
+  hasEstablishedCloudBaseline: boolean = false
+): Required<DirtySyncScopes> {
+  const dirty = options?.dirtyScopes;
+  if (options?.force || !hasEstablishedCloudBaseline || !dirty) {
+    return { ...ALL_DIRTY_SYNC_SCOPES };
+  }
+  const resolved: Required<DirtySyncScopes> = {
+    settings: Boolean(dirty.settings),
+    tabs: Boolean(dirty.tabs),
+    widgets: Boolean(dirty.widgets),
+    notes: Boolean(dirty.notes),
+    householdStores: Boolean(dirty.householdStores),
+  };
+  if (
+    !resolved.settings &&
+    !resolved.tabs &&
+    !resolved.widgets &&
+    !resolved.notes &&
+    !resolved.householdStores
+  ) {
+    return { ...ALL_DIRTY_SYNC_SCOPES };
+  }
+  return resolved;
+}

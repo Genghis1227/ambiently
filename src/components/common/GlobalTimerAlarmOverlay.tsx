@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { AlarmClock, ArrowRight, BellOff, Play } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import { useDashboardStore } from '../../store/dashboardStore';
 import type { DashboardTab, DashboardWidget } from '../../types/dashboard';
 import type { TimerItem, TimerWidgetConfig } from '../../types/phase1Widgets';
 import { useSharedClock } from '../../utils/sharedClock';
 import { useDisplayActivity } from '../../utils/displayActivity';
-import { isAmbientlyInNightMode } from '../../utils/confetti';
 import {
   addSecondsToTimerItem,
   dismissTimerItem,
@@ -54,19 +54,22 @@ function isModalOrEditorActiveInDom(): boolean {
   );
 }
 
-export const GlobalTimerAlarmOverlay: React.FC<GlobalTimerAlarmOverlayProps> = ({
+export const GlobalTimerAlarmOverlay: React.FC<GlobalTimerAlarmOverlayProps> = React.memo(({
   visibleTabs,
   activeTabId,
   isAnyModalOpen = false,
   onSelectTab,
 }) => {
-  const widgets = useDashboardStore((s) => s.widgets);
-  const settings = useDashboardStore((s) => s.settings);
+  const timerWidgetsRaw = useDashboardStore(
+    useShallow((s) => s.widgets.filter((w) => !w.deleted_at && w.type === 'timer'))
+  );
+  const nightModeEnabled = useDashboardStore((s) => Boolean(s.settings.nightModeEnabled));
+  const carouselEnabled = useDashboardStore((s) => Boolean(s.settings.carouselEnabled));
   const updateWidgetConfig = useDashboardStore((s) => s.updateWidgetConfig);
   const pauseCarouselTemporarily = useDashboardStore((s) => s.pauseCarouselTemporarily);
 
   const { isNightMode } = useDisplayActivity();
-  const nightActive = isNightMode || isAmbientlyInNightMode(settings);
+  const nightActive = isNightMode || nightModeEnabled;
 
   const tabNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -77,11 +80,8 @@ export const GlobalTimerAlarmOverlay: React.FC<GlobalTimerAlarmOverlayProps> = (
   }, [visibleTabs]);
 
   const timerWidgets = useMemo(
-    () =>
-      widgets.filter(
-        (w) => !w.deleted_at && w.type === 'timer' && tabNameById.has(w.tabId)
-      ),
-    [widgets, tabNameById]
+    () => timerWidgetsRaw.filter((w) => tabNameById.has(w.tabId)),
+    [timerWidgetsRaw, tabNameById]
   );
 
   const allTabTimerEntries = useMemo<GlobalTimerEntry[]>(() => {
@@ -108,7 +108,7 @@ export const GlobalTimerAlarmOverlay: React.FC<GlobalTimerAlarmOverlayProps> = (
     ({ timer }) => timer.status === 'running' || timer.status === 'completed'
   );
   const nowDate = useSharedClock('second', hasActiveOrDoneAcrossTabs);
-  const nowMs = nowDate.getTime() > 0 ? nowDate.getTime() : Date.now();
+  const nowMs = nowDate.getTime();
 
   // Persist running -> completed timers across ALL visible tabs even when their tab is hidden
   useEffect(() => {
@@ -191,7 +191,7 @@ export const GlobalTimerAlarmOverlay: React.FC<GlobalTimerAlarmOverlayProps> = (
       for (const k of newlyHandledKeys) {
         handledAlarmKeysRef.current.add(k);
       }
-      if (settings.carouselEnabled) {
+      if (carouselEnabled) {
         pauseCarouselTemporarily(30000);
       }
     }
@@ -204,7 +204,7 @@ export const GlobalTimerAlarmOverlay: React.FC<GlobalTimerAlarmOverlayProps> = (
     activeTabId,
     nowMs,
     isAnyModalOpen,
-    settings.carouselEnabled,
+    carouselEnabled,
     pauseCarouselTemporarily,
     onSelectTab,
   ]);
@@ -372,4 +372,4 @@ export const GlobalTimerAlarmOverlay: React.FC<GlobalTimerAlarmOverlayProps> = (
     </div>,
     document.body
   );
-};
+});

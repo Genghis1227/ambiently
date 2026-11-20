@@ -267,6 +267,7 @@ export interface AppSettings {
   isDockHidden?: boolean;
   autoHideCursor?: boolean;
   cursorIdleTimeoutSec?: number;
+  reduceVisualEffects?: boolean;
 
   // Common Photo Library (shared across photo widgets)
   commonPhotos?: PhotoItem[];

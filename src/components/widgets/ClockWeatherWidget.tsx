@@ -59,7 +59,9 @@ export const ClockWeatherWidget: React.FC<ClockWeatherWidgetProps> = ({
   const { hour12 } = useTimePrefs();
   const { isOledNightClock } = useDisplayActivity();
   const isOledRef = useRef(isOledNightClock);
-  isOledRef.current = isOledNightClock;
+  useEffect(() => {
+    isOledRef.current = isOledNightClock;
+  }, [isOledNightClock]);
   const wasOledRef = useRef(false);
   const time = useSharedClock(showSeconds ? 'second' : '10s', !isOledNightClock);
   const [weather, setWeather] = useState<WeatherData | null>(null);

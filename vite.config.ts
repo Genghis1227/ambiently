@@ -113,9 +113,17 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        // The app's own scripts and styles are built into assets/, so they must be cached for the app to
-        // open offline. Only the donation pictures from public/assets are left out.
-        globIgnores: ['**/og-banner.png', 'assets/{paypal,venmo,zelle}.*', 'assets/vendor-heif-*.js', 'assets/ChangelogModal-*.js', 'config.js'],
+        // The app's own scripts, core widgets, and styles are precached for instant offline boot; heavy
+        // setup/settings/HEIF chunks are cached on first open instead of bloating initial kiosk install.
+        globIgnores: [
+          '**/og-banner.png',
+          'assets/{paypal,venmo,zelle}.*',
+          'assets/vendor-heif-*.js',
+          'assets/ChangelogModal-*.js',
+          'assets/{WidgetSettingsModal,SettingsModal,AddWidgetModal,PhotoSourcesModal,MediaSearchModal,CalendarUrlGuideModal}-*.js',
+          'assets/Phase*WidgetSettingsPanel*-*.js',
+          'config.js',
+        ],
         // Never intercept /api/*, /functions/*, or runtime /config.js requests
         // with the SPA index.html navigation fallback.
         navigateFallbackDenylist: [/^\/api\//, /^\/functions\//, /^\/config\.js$/],
@@ -124,12 +132,14 @@ export default defineConfig({
             // Cache lazy-excluded immutable hashed chunks on first demand rather than eager precache
             urlPattern: ({ url }) =>
               url.origin === (globalThis as unknown as { location: { origin: string } }).location.origin &&
-              /^\/assets\/(ChangelogModal|vendor-heif)-[a-zA-Z0-9_-]+\.js$/.test(url.pathname),
+              /^\/assets\/(ChangelogModal|vendor-heif|WidgetSettingsModal|SettingsModal|AddWidgetModal|PhotoSourcesModal|MediaSearchModal|CalendarUrlGuideModal|Phase[0-9]WidgetSettingsPanels?)-[a-zA-Z0-9_-]+\.js$/.test(
+                url.pathname
+              ),
             handler: 'CacheFirst',
             options: {
               cacheName: 'ambiently-lazy-chunks-v1',
               expiration: {
-                maxEntries: 8,
+                maxEntries: 24,
                 maxAgeSeconds: 30 * 24 * 60 * 60,
                 purgeOnQuotaError: true,
               },

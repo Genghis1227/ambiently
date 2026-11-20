@@ -17,6 +17,14 @@ import { addPlexToken } from '../../services/plexLinks';
 import { usePlexServerTokens } from '../../hooks/usePlexServerTokens';
 import { useDisplayActivity } from '../../utils/displayActivity';
 import { useIsCursorHidden } from '../../hooks/useIdleCursor';
+import {
+  appendBoundedFocalState,
+  canReadCanvasPixelsWithoutCorsRefetch,
+  computeDefaultFocalPosition,
+  getCachedPhotoFocal,
+  getSharedSaliencyContext,
+  setCachedPhotoFocal,
+} from '../../utils/photoFocal';
 
 
 export type PolaroidDensity = 6 | 12 | 18 | 24 | 32;
@@ -148,17 +156,7 @@ interface PhotoWidgetRuntimeState {
   scatteredPolaroids?: ActivePolaroidItem[];
 }
 
-const MAX_FOCAL_CACHE_ENTRIES = 250;
 const photoRuntimeCache = new Map<string, PhotoWidgetRuntimeState>();
-const photoFocalCache = new Map<string, string>();
-
-function setCachedPhotoFocal(photoId: string, focalPos: string): void {
-  if (photoFocalCache.size >= MAX_FOCAL_CACHE_ENTRIES) {
-    const oldestKey = photoFocalCache.keys().next().value;
-    if (oldestKey) photoFocalCache.delete(oldestKey);
-  }
-  photoFocalCache.set(photoId, focalPos);
-}
 
 function getPhotosSignature(items: PhotoItem[]): string {
   if (!items || items.length === 0) return 'empty';
@@ -718,21 +716,20 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
 
   // Detect photo aspect ratio and face location to intelligently center where faces and people are
   const handleImageLoad = useCallback((photoId: string, img: HTMLImageElement) => {
-    if (photoFocalCache.has(photoId)) {
-      const cached = photoFocalCache.get(photoId)!;
-      setPhotoFocals((prev) => (prev[photoId] === cached ? prev : { ...prev, [photoId]: cached }));
+    const cached = getCachedPhotoFocal(photoId);
+    if (cached !== undefined) {
+      setPhotoFocals((prev) => appendBoundedFocalState(prev, photoId, cached));
       return;
     }
 
     const { naturalWidth, naturalHeight } = img;
     if (!naturalWidth || !naturalHeight) return;
 
-    const isPortrait = naturalHeight > naturalWidth * 1.05;
-    const defaultFocalPos = isPortrait ? 'center 25%' : 'center center';
+    const defaultFocalPos = computeDefaultFocalPosition(naturalWidth, naturalHeight);
 
     const applyFocal = (pos: string) => {
       setCachedPhotoFocal(photoId, pos);
-      setPhotoFocals((prev) => ({ ...prev, [photoId]: pos }));
+      setPhotoFocals((prev) => appendBoundedFocalState(prev, photoId, pos));
     };
 
     // 1. Try modern browser FaceDetector API if supported (Chromium / Edge / Android)
@@ -783,75 +780,57 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     runSkinSaliencyAnalysis();
 
     function runSkinSaliencyAnalysis() {
+      // Never spawn a second crossOrigin="anonymous" HTTP request for cross-origin album hosts
+      if (!canReadCanvasPixelsWithoutCorsRefetch(img.currentSrc || img.src)) {
+        applyFocal(defaultFocalPos);
+        return;
+      }
+
       try {
-        const canvas = document.createElement('canvas');
-        canvas.width = 64;
-        canvas.height = 64;
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const ctx = getSharedSaliencyContext();
         if (!ctx) {
           applyFocal(defaultFocalPos);
           return;
         }
 
-        const computeFromImage = (source: CanvasImageSource) => {
-          try {
-            ctx.drawImage(source, 0, 0, 64, 64);
-            const imgData = ctx.getImageData(0, 0, 64, 64);
-            const data = imgData.data;
-            let skinCount = 0;
-            let sumX = 0;
-            let sumY = 0;
+        ctx.drawImage(img, 0, 0, 64, 64);
+        const imgData = ctx.getImageData(0, 0, 64, 64);
+        const data = imgData.data;
+        let skinCount = 0;
+        let sumX = 0;
+        let sumY = 0;
 
-            for (let y = 0; y < 64; y++) {
-              for (let x = 0; x < 64; x++) {
-                const idx = (y * 64 + x) * 4;
-                const r = data[idx];
-                const g = data[idx + 1];
-                const b = data[idx + 2];
-                const a = data[idx + 3];
-                if (a < 128) continue;
+        for (let y = 0; y < 64; y++) {
+          for (let x = 0; x < 64; x++) {
+            const idx = (y * 64 + x) * 4;
+            const r = data[idx];
+            const g = data[idx + 1];
+            const b = data[idx + 2];
+            const a = data[idx + 3];
+            if (a < 128) continue;
 
-                // Human skin tone detection in YCbCr color space
-                const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-                const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
-                const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
+            // Human skin tone detection in YCbCr color space
+            const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+            const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
+            const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
 
-                if (cr >= 133 && cr <= 175 && cb >= 77 && cb <= 128 && lum > 35 && lum < 242) {
-                  skinCount++;
-                  sumX += x;
-                  sumY += y;
-                }
-              }
+            if (cr >= 133 && cr <= 175 && cb >= 77 && cb <= 128 && lum > 35 && lum < 242) {
+              skinCount++;
+              sumX += x;
+              sumY += y;
             }
-
-            // If we detected significant human skin tone clusters (~0.8% of image)
-            if (skinCount >= 32) {
-              const xPercent = Math.max(10, Math.min(90, Math.round((sumX / skinCount / 64) * 100)));
-              const yPercent = Math.max(10, Math.min(90, Math.round((sumY / skinCount / 64) * 100)));
-              applyFocal(`${xPercent}% ${yPercent}%`);
-              return;
-            }
-
-            applyFocal(defaultFocalPos);
-          } catch {
-            applyFocal(defaultFocalPos);
           }
-        };
-
-        // Try direct canvas inspection if CORS allowed
-        try {
-          ctx.drawImage(img, 0, 0, 64, 64);
-          ctx.getImageData(0, 0, 1, 1);
-          computeFromImage(img);
-        } catch {
-          // If tainted due to CORS, create background Image with crossOrigin="anonymous"
-          const offscreen = new Image();
-          offscreen.crossOrigin = 'anonymous';
-          offscreen.referrerPolicy = 'no-referrer';
-          offscreen.onload = () => computeFromImage(offscreen);
-          offscreen.onerror = () => applyFocal(defaultFocalPos);
-          offscreen.src = img.src;
         }
+
+        // If we detected significant human skin tone clusters (~0.8% of image)
+        if (skinCount >= 32) {
+          const xPercent = Math.max(10, Math.min(90, Math.round((sumX / skinCount / 64) * 100)));
+          const yPercent = Math.max(10, Math.min(90, Math.round((sumY / skinCount / 64) * 100)));
+          applyFocal(`${xPercent}% ${yPercent}%`);
+          return;
+        }
+
+        applyFocal(defaultFocalPos);
       } catch {
         applyFocal(defaultFocalPos);
       }
@@ -1123,7 +1102,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
               style={{
                 backgroundImage: `url(${getPhotoDisplayUrl(currentPhoto, 1920)})`,
                 backgroundSize: 'cover',
-                backgroundPosition: photoFocals[currentPhoto.id] || photoFocalCache.get(currentPhoto.id) || 'center',
+                backgroundPosition: photoFocals[currentPhoto.id] || getCachedPhotoFocal(currentPhoto.id) || 'center',
               }}
               className="absolute inset-0 w-full h-full"
             >
@@ -1131,6 +1110,7 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                 src={getPhotoDisplayUrl(currentPhoto, 1920)}
                 alt=""
                 referrerPolicy="no-referrer"
+                decoding="async"
                 className="hidden"
                 onLoad={(e) => handleImageLoad(currentPhoto.id, e.currentTarget)}
                 onError={() => handleKenBurnsError(currentPhoto.id)}
@@ -1224,11 +1204,12 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                       src={getPhotoDisplayUrl(p, 800)}
                       alt={p.caption || 'Photo'}
                       referrerPolicy="no-referrer"
+                      decoding="async"
                       className={`w-full h-full object-cover transition-transform duration-500 ${
                         !isFocused ? 'group-hover:scale-105' : ''
                       }`}
                       style={{
-                        objectPosition: photoFocals[p.id] || photoFocalCache.get(p.id) || undefined,
+                        objectPosition: photoFocals[p.id] || getCachedPhotoFocal(p.id) || undefined,
                       }}
                       loading="lazy"
                       onLoad={(e) => handleImageLoad(p.id, e.currentTarget)}
@@ -1366,9 +1347,10 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                           src={getPhotoDisplayUrl(item.photo, isHero ? 800 : 600)}
                           alt={item.photo.caption || 'Polaroid moment'}
                           referrerPolicy="no-referrer"
+                          decoding="async"
                           className="w-full h-full object-cover select-none pointer-events-none"
                           style={{
-                            objectPosition: photoFocals[item.photo.id] || photoFocalCache.get(item.photo.id) || undefined,
+                            objectPosition: photoFocals[item.photo.id] || getCachedPhotoFocal(item.photo.id) || undefined,
                           }}
                           loading="lazy"
                           onLoad={(e) => handleImageLoad(item.photo.id, e.currentTarget)}
@@ -1501,9 +1483,10 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
                   src={getPhotoDisplayUrl(p, 800)}
                   alt={p.caption || 'Film frame'}
                   referrerPolicy="no-referrer"
+                  decoding="async"
                   className="w-full h-full object-cover select-none pointer-events-none"
                   style={{
-                    objectPosition: photoFocals[p.id] || photoFocalCache.get(p.id) || undefined,
+                    objectPosition: photoFocals[p.id] || getCachedPhotoFocal(p.id) || undefined,
                   }}
                   loading="lazy"
                   onLoad={(e) => handleImageLoad(p.id, e.currentTarget)}
