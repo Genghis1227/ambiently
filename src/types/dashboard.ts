@@ -56,6 +56,18 @@ export type {
   SportsTeamSummary,
   SportsWidgetConfig,
 } from './phase3Widgets';
+export type {
+  ChalkboardSurface,
+  ChalkboardWidgetConfig,
+  ChalkBrushSize,
+  ChalkStroke,
+  ChalkTool,
+  SoundscapeChannelId,
+  SoundscapeChannelLevels,
+  SoundscapePresetId,
+  SoundscapeSleepTimerMin,
+  SoundscapeWidgetConfig,
+} from './phase4Widgets';
 export type { PhotoAutoSyncInterval, PlexPhotoSyncConfig, PhotoTargetSyncMeta };
 
 export type DockPosition = 'left' | 'top' | 'right' | 'bottom';
@@ -102,7 +114,9 @@ export type WidgetType =
   | 'wifi_qr'
   | 'decision_maker'
   | 'sports'
-  | 'daily_discovery';
+  | 'daily_discovery'
+  | 'chalkboard'
+  | 'soundscape';
 
 export interface RssWidgetConfig {
   feedUrl?: string;

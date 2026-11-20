@@ -83,6 +83,8 @@ describe('widgetStickerMode defaults and overrides', () => {
     assert.equal(isStickerCapableWidget('decision_maker'), true);
     assert.equal(isStickerCapableWidget('sports'), true);
     assert.equal(isStickerCapableWidget('daily_discovery'), true);
+    assert.equal(isStickerCapableWidget('chalkboard'), true);
+    assert.equal(isStickerCapableWidget('soundscape'), true);
 
     assert.equal(isStickerCapableWidget('chores'), false);
     assert.equal(isStickerCapableWidget('meals'), false);

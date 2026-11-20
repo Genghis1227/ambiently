@@ -2,6 +2,10 @@ import type { DashboardWidget, WidgetType } from '../types/dashboard';
 import { DEFAULT_FINANCE_WATCHLIST } from '../types/finance';
 import { DEFAULT_DECISION_OPTIONS } from './decisionEngine';
 import { DEFAULT_SPORTS_LEAGUES } from '../types/phase3Widgets';
+import {
+  DEFAULT_SOUNDSCAPE_CHANNELS,
+  DEFAULT_SOUNDSCAPE_MASTER_VOLUME,
+} from './soundscapeEngine';
 
 export type WidgetCategoryId =
   | 'all'
@@ -32,7 +36,9 @@ export type WidgetCatalogIconKey =
   | 'wifi_qr'
   | 'decision_maker'
   | 'sports'
-  | 'daily_discovery';
+  | 'daily_discovery'
+  | 'chalkboard'
+  | 'soundscape';
 
 export interface WidgetCategoryMeta {
   id: WidgetCategoryId;
@@ -626,6 +632,89 @@ export const WIDGET_CATALOG_ENTRIES: WidgetCatalogEntry[] = [
         defaultGridPos: { w: 4, h: 4 },
         defaultConfig: { preset: 'lofi', muted: true, customUrl: '' },
         keywords: ['embed', 'stream', 'lofi', 'fireplace', 'radar'],
+      },
+    ],
+  },
+  {
+    id: 'chalkboard',
+    category: 'media_ambient',
+    title: 'Family Chalkboard & Doodle Pad',
+    description:
+      'Smooth touch, mouse, and stylus sketchpad with multi-color chalk, marker, eraser, undo, and transparent Sticker Mode.',
+    iconKey: 'chalkboard',
+    color: 'from-emerald-500/20 to-teal-500/20 text-emerald-300 border-emerald-500/30',
+    keywords: [
+      'chalkboard',
+      'doodle',
+      'sketchpad',
+      'draw',
+      'drawing',
+      'whiteboard',
+      'chalk',
+      'kids',
+      'art',
+      'sketch',
+    ],
+    variants: [
+      {
+        type: 'chalkboard',
+        pillLabel: 'Chalkboard & Doodles',
+        title: 'Family Chalkboard & Doodle Pad',
+        description:
+          'Interactive touch and stylus drawing pad with Slate, Warm Cork, Whiteboard, and floating Sticker surfaces.',
+        defaultGridPos: { w: 4, h: 5 },
+        defaultConfig: {
+          surface: 'slate',
+          defaultTool: 'chalk',
+          defaultColor: '#f8fafc',
+          defaultSize: 'medium',
+          showToolbar: true,
+          confirmBeforeClear: true,
+          allowDrawingWhenLocked: true,
+          strokes: [],
+        },
+        keywords: ['chalkboard', 'doodle', 'sketchpad', 'draw', 'whiteboard', 'chalk'],
+      },
+    ],
+  },
+  {
+    id: 'soundscape',
+    category: 'media_ambient',
+    title: 'Ambient Soundscape Mixer',
+    description:
+      'Offline procedural Web Audio mixer blending rain, fireplace crackle, brown noise, ocean waves, and forest wind with Night Mode fade-out.',
+    iconKey: 'soundscape',
+    color: 'from-cyan-500/20 to-indigo-500/20 text-cyan-300 border-cyan-500/30',
+    keywords: [
+      'soundscape',
+      'audio',
+      'ambient',
+      'rain',
+      'fireplace',
+      'brown noise',
+      'ocean',
+      'wind',
+      'sleep',
+      'focus',
+      'relax',
+      'mixer',
+    ],
+    variants: [
+      {
+        type: 'soundscape',
+        pillLabel: 'Soundscape Mixer',
+        title: 'Ambient Soundscape Mixer',
+        description:
+          '5-channel procedural Web Audio ambient mixer with presets, sleep timer, and automatic Scheduled Night Mode fade-out.',
+        defaultGridPos: { w: 4, h: 5 },
+        defaultConfig: {
+          channels: DEFAULT_SOUNDSCAPE_CHANNELS,
+          masterVolume: DEFAULT_SOUNDSCAPE_MASTER_VOLUME,
+          activePreset: 'cozy_hearth',
+          fadeOutOnNightMode: true,
+          defaultSleepTimerMin: 0,
+        },
+        keywords: ['soundscape', 'ambient', 'rain', 'fireplace', 'brown noise', 'ocean', 'mixer'],
       },
     ],
   },
