@@ -63,14 +63,25 @@ const ChangelogModal = React.lazy(() =>
 );
 import { ClockWeatherWidget } from '../widgets/ClockWeatherWidget';
 import { ClockWidget } from '../widgets/ClockWidget';
-import { WorldClockWidget } from '../widgets/WorldClockWidget';
-import { WeatherWidget } from '../widgets/WeatherWidget';
-import { CountdownWidget } from '../widgets/CountdownWidget';
 import { inferCuratedCategoryId } from '../../services/photos';
 import { isWidgetStickerMode } from '../../utils/widgetStickerMode';
 import { isCanvasPinLocked, isSettingsPinRequired } from '../../utils/pinValidation';
-import { QuotesWidget } from '../widgets/QuotesWidget';
-import { MediaEmbedWidget } from '../widgets/MediaEmbedWidget';
+
+const WorldClockWidget = React.lazy(() =>
+  import('../widgets/WorldClockWidget').then((m) => ({ default: m.WorldClockWidget }))
+);
+const WeatherWidget = React.lazy(() =>
+  import('../widgets/WeatherWidget').then((m) => ({ default: m.WeatherWidget }))
+);
+const CountdownWidget = React.lazy(() =>
+  import('../widgets/CountdownWidget').then((m) => ({ default: m.CountdownWidget }))
+);
+const QuotesWidget = React.lazy(() =>
+  import('../widgets/QuotesWidget').then((m) => ({ default: m.QuotesWidget }))
+);
+const MediaEmbedWidget = React.lazy(() =>
+  import('../widgets/MediaEmbedWidget').then((m) => ({ default: m.MediaEmbedWidget }))
+);
 
 const CorkboardTrashModal = React.lazy(() =>
   import('../layout/CorkboardTrashModal').then((m) => ({ default: m.CorkboardTrashModal }))
@@ -86,7 +97,9 @@ const AddWidgetModal = React.lazy(() =>
   import('../widgets/AddWidgetModal').then((m) => ({ default: m.AddWidgetModal }))
 );
 import { TextBoxWidget } from '../widgets/TextBoxWidget';
-import { ImageWidget } from '../widgets/ImageWidget';
+const ImageWidget = React.lazy(() =>
+  import('../widgets/ImageWidget').then((m) => ({ default: m.ImageWidget }))
+);
 
 const CalendarWidget = React.lazy(() =>
   import('../widgets/CalendarWidget').then((m) => ({ default: m.CalendarWidget }))

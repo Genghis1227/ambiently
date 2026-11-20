@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, lazy, Suspense } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo, lazy, Suspense } from 'react';
 import { useDashboardStore, flushPendingCloudPush } from './store/dashboardStore';
 import type { AutoOrganizeMode } from './types/dashboard';
 import { useChoreStore } from './store/choreStore';
@@ -32,6 +32,11 @@ import { CanvasSwipePreviewPill } from './components/common/CanvasSwipePreviewPi
 import { GlobalTimerAlarmOverlay } from './components/common/GlobalTimerAlarmOverlay';
 import { isCanvasPinLocked, isSettingsPinRequired } from './utils/pinValidation';
 import { useCanvasSwipe } from './hooks/useCanvasSwipe';
+import { useSharedClock } from './utils/sharedClock';
+import {
+  getBackgroundCanvasWidgetTypes,
+  preloadWidgetChunksForTypes,
+} from './utils/widgetPreloader';
 
 const SettingsModal = lazy(() =>
   import('./components/settings/SettingsModal').then((m) => ({ default: m.SettingsModal }))
@@ -445,7 +450,7 @@ export function App() {
     };
   }, []);
 
-  const handleToggleFullscreen = () => {
+  const handleToggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch((err) => {
         console.warn('Error attempting to enable fullscreen:', err.message);
@@ -455,9 +460,9 @@ export function App() {
       document.exitFullscreen().catch(() => {});
       setIsFullscreen(false);
     }
-  };
+  }, []);
 
-  const handleOpenSettings = () => {
+  const handleOpenSettings = useCallback(() => {
     if (isSettingsLocked) {
       setPinChallenge({
         action: 'open_settings',
@@ -467,10 +472,10 @@ export function App() {
       return;
     }
     setIsSettingsOpen(true);
-  };
+  }, [isSettingsLocked]);
 
   // The household sharing screen and Plex sign-in are settings too, so they need the PIN the same way
-  const handleOpenShare = () => {
+  const handleOpenShare = useCallback(() => {
     if (isSettingsLocked) {
       setPinChallenge({
         action: 'open_share',
@@ -480,9 +485,9 @@ export function App() {
       return;
     }
     setIsShareOpen(true);
-  };
+  }, [isSettingsLocked]);
 
-  const handleOpenPlexPairing = () => {
+  const handleOpenPlexPairing = useCallback(() => {
     if (isSettingsLocked) {
       setPinChallenge({
         action: 'open_plex_pairing',
@@ -492,7 +497,7 @@ export function App() {
       return;
     }
     setIsPlexPairingModalOpen(true);
-  };
+  }, [isSettingsLocked]);
 
   // Does what the PIN pad was opened for, once the PIN is entered or removed
   const finishPinChallenge = () => {
@@ -758,13 +763,53 @@ export function App() {
     }
   }, [isInitialized, settings.nightModeEnabled]);
 
-  const visibleTabs = tabs.filter((t) =>
-    t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false
+  const visibleTabs = useMemo(
+    () =>
+      tabs.filter((t) =>
+        t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false
+      ),
+    [tabs]
   );
 
   const homeTab = visibleTabs.find((t) => t.isHome) || visibleTabs[0] || tabs[0];
   const activeTab = visibleTabs.find((t) => t.id === activeTabId) || homeTab;
   const activeTabIdResolved = activeTab?.id || 'tab-corkboard';
+
+  // Low-Power Kiosk GPU Mode class sync on root element
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.classList.toggle(
+      'reduce-visual-effects',
+      Boolean(settings.reduceVisualEffects)
+    );
+  }, [settings.reduceVisualEffects]);
+
+  // Pre-warm lazy widget chunks used on inactive canvases once idle so carousel/swipe switches stay instant
+  useEffect(() => {
+    if (!isInitialized) return;
+    const enabledIds = new Set(visibleTabs.map((t) => t.id));
+    const backgroundTypes = getBackgroundCanvasWidgetTypes(widgets, activeTabIdResolved, enabledIds);
+    if (backgroundTypes.length === 0) return;
+
+    const win = window as unknown as {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (typeof win.requestIdleCallback === 'function') {
+      const idleId = win.requestIdleCallback(() => {
+        void preloadWidgetChunksForTypes(backgroundTypes);
+      }, { timeout: 2500 });
+      return () => {
+        if (typeof win.cancelIdleCallback === 'function') {
+          win.cancelIdleCallback(idleId);
+        }
+      };
+    }
+    const timer = setTimeout(() => {
+      void preloadWidgetChunksForTypes(backgroundTypes);
+    }, 1800);
+    return () => clearTimeout(timer);
+  }, [isInitialized, visibleTabs, widgets, activeTabIdResolved]);
 
   const handleOpenCreator = useCallback(() => setIsNoteCreatorOpen(true), []);
   const handleCloseCreator = useCallback(() => setIsNoteCreatorOpen(false), []);
@@ -963,6 +1008,31 @@ export function App() {
     rotateToTab,
   ]);
 
+  const tabWidgets = useMemo(
+    () => widgets.filter((w) => w.tabId === activeTabIdResolved),
+    [widgets, activeTabIdResolved]
+  );
+
+  // Strict per-canvas sticky notes (plus notes explicitly pinned to 'all' canvases)
+  const activeCanvasNotes = useMemo(
+    () =>
+      notes.filter(
+        (n) => (n.tabId || 'tab-corkboard') === activeTabIdResolved || n.tabId === 'all'
+      ),
+    [notes, activeTabIdResolved]
+  );
+
+  const minuteClock = useSharedClock('minute', !isMobileCompanionActive);
+  const minuteNowMs = minuteClock.getTime();
+  const noteTrashCount = useMemo(
+    () =>
+      activeCanvasNotes.filter(
+        (n) => n.archivedAt || (n.expiresAt && new Date(n.expiresAt).getTime() <= minuteNowMs)
+      ).length,
+    [activeCanvasNotes, minuteNowMs]
+  );
+  const trashCount = noteTrashCount + deletedWidgetCount;
+
   if (!isInitialized) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-gray-950 text-white font-sans">
@@ -973,8 +1043,6 @@ export function App() {
       </div>
     );
   }
-
-  const tabWidgets = widgets.filter((w) => w.tabId === activeTabIdResolved);
 
   // 1. Mobile Companion Mode on small screens unless user specifically toggled Desktop
   if (isMobileViewport && !forceDesktopMode) {
@@ -1049,17 +1117,6 @@ export function App() {
     );
   }
 
-  // Strict per-canvas sticky notes (plus notes explicitly pinned to 'all' canvases)
-  const activeCanvasNotes = notes.filter(
-    (n) => (n.tabId || 'tab-corkboard') === activeTabIdResolved || n.tabId === 'all'
-  );
-
-  const now = new Date();
-  const noteTrashCount = activeCanvasNotes.filter(
-    (n) => n.archivedAt || (n.expiresAt && new Date(n.expiresAt) <= now)
-  ).length;
-  const trashCount = noteTrashCount + deletedWidgetCount;
-
   // Dynamic padding based on Dock position (omitted if dock is hidden for full immersion)
   const dockPaddingClasses = settings.isDockHidden
     ? ''
@@ -1077,12 +1134,7 @@ export function App() {
 
   return (
     <div
-      onPointerDownCapture={(e) => {
-        if (settings.carouselEnabled) {
-          pauseCarouselTemporarily(20000);
-        }
-        handleCanvasSwipePointerDown(e);
-      }}
+      onPointerDownCapture={handleCanvasSwipePointerDown}
       className={`relative w-screen h-screen overflow-hidden ${
         isCanvasLight ? 'bg-slate-100 text-slate-800' : 'bg-[#090d16] text-white'
       } select-none`}

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.0] - 2026-11-20
+
+### Added & Improved
+- **Low-Power Kiosk GPU Mode (*Reduce Blur & GPU Effects*, `Settings → Display & Kiosk`, `reduceVisualEffects`):**
+  - Added a dedicated kiosk performance toggle that disables per-frame `backdrop-filter` frosted-glass blurs (`html.reduce-visual-effects`) across widget cards, sticky action bars, and overlays, substituting crisp high-contrast opaque card surfaces for smooth 60fps rendering on Raspberry Pi 4/5 and 4K wall displays.
+- **Zero-Flow `translate3d` Dragging & `O(1)` Memoized Canvas Cards (`Corkboard.tsx`, `cardDragTransform.ts`):**
+  - Split card frames into `MemoizedCanvasWidgetCard` and `MemoizedCanvasStickyNoteCard` (`React.memo`) with stable ref-backed callbacks and card-scoped drag/resize/rotate props so manipulating a single tile only re-renders that card (`O(1)`) while untouched siblings skip rendering cleanly.
+  - Anchored freeform card `left`/`top` base coordinates during active drags and translated pointer deltas strictly via GPU-composited `transform: translate3d(dx, dy, 0)` to eliminate per-frame layout reflow.
+- **Zero-CORS-Refetch Photo Framing & Bounded Focal Caches (`PhotoFrameWidget.tsx`, `photoFocal.ts`):**
+  - Guarded canvas pixel saliency analysis (`canReadCanvasPixelsWithoutCorsRefetch`) to run only on same-origin, `blob:`, or `data:` images—preventing cross-origin album hosts (Google Photos, Google Drive, Plex) from triggering duplicate full-resolution `crossOrigin="anonymous"` HTTP downloads—reusing a single 64×64 saliency canvas, skipping redundant `'center center'` React state updates, bounding focal caches (`400` LRU / `120` state keys), and enabling `decoding="async"` on slideshow frames.
+- **Idle-Cursor Wake Coalescing, CSS Edit-Chrome Hiding & App Selector Boundaries (`useIdleCursor.ts`, `index.css`, `dashboardStore.ts`, `App.tsx`, `GlobalTimerAlarmOverlay.tsx`):**
+  - Eliminated full-document `restoreDocumentTooltips` DOM scans on awake pointer moves (`shouldWakeOrThrottleIdleCursor`), consolidated `pointermove`/`mousemove` listeners, hid canvas edit chrome via pure CSS (`html.idle-cursor-hidden [data-kiosk-edit-chrome="true"]`), moved the carousel pause timeout out of reactive Zustand state without redundant updates, memoized `visibleTabs`/`tabWidgets`/`activeCanvasNotes`, scoped `GlobalTimerAlarmOverlay` with `useShallow` strictly to active `timer` widgets, added a 1-minute cadence to `useSharedClock`, and resolved React Compiler render-purity/ref warnings down to 94 total lint warnings (`0` errors).
+- **Broader Code Splitting, Idle Background Canvas Pre-Warming & Leaner Workbox Precache (`Corkboard.tsx`, `MobileCompanion.tsx`, `WidgetSettingsModal.tsx`, `widgetPreloader.ts`, `vite.config.ts`):**
+  - Lazy-loaded secondary canvas widgets (`WorldClockWidget`, `WeatherWidget`, `CountdownWidget`, `QuotesWidget`, `MediaEmbedWidget`, `ImageWidget`) and heavy `WidgetSettingsModal` sub-modals/phase panels (`MediaSearchModal`, `CalendarUrlGuideModal`, Phase 2–5 panels), added an idle-time pre-warmer (`getBackgroundCanvasWidgetTypes` + `preloadWidgetChunksForTypes`) for inactive tabs before carousel rotation, and moved editor-only modal chunks out of cold Workbox precaching into `ambiently-lazy-chunks-v1`.
+- **Dirty-Scope Incremental Cloud Auto-Push & Throttled Tombstone Purges (`supabase.ts`, `syncMerge.ts`, `dashboardStore.ts`):**
+  - Scoped background debounced `pushToCloud` passes (`DirtySyncScopes` + `resolveEffectiveSyncScopes`) after initial baseline sync to query and reconcile only modified Dexie/Supabase collections (`notes`, `widgets`, `tabs`, `settings`, `householdStores`), and throttled background 30-day expired tombstone `DELETE` sweeps per board to once every 30 minutes.
+
 ## [0.7.26] - 2026-11-20
 
 ### Added

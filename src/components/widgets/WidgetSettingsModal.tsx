@@ -60,13 +60,19 @@ import {
 } from '../../utils/widgetCatalog';
 import { type CalendarSource, normalizeCalendarUrl, testCalendarFeed } from '../../services/feeds';
 import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
-import { CalendarUrlGuideModal } from '../calendar/CalendarUrlGuideModal';
 import type { QuoteItem } from '../../services/quotes';
 import { EMBED_PRESETS, type EmbedPresetId } from './MediaEmbedWidget';
 import { DEFAULT_WORLD_CITIES, type WorldClockCity, getZoneOffsetMinutes } from './WorldClockWidget';
 import type { TextBoxConfig } from './TextBoxWidget';
 import { CURATED_RSS_FEEDS, RSS_FEED_CATEGORIES, type RssFeedCategory } from '../../data/curatedFeeds';
-import { MediaSearchModal, type MediaSelectionMeta } from './MediaSearchModal';
+import type { MediaSelectionMeta } from './MediaSearchModal';
+
+const CalendarUrlGuideModal = React.lazy(() =>
+  import('../calendar/CalendarUrlGuideModal').then((m) => ({ default: m.CalendarUrlGuideModal }))
+);
+const MediaSearchModal = React.lazy(() =>
+  import('./MediaSearchModal').then((m) => ({ default: m.MediaSearchModal }))
+);
 import { resolveOptimizedImageMedia } from '../../utils/mediaOptimization';
 import { useVaultMediaUrl } from '../../utils/localMediaVault';
 import {
@@ -117,11 +123,16 @@ import {
   searchFinanceSymbols,
 } from '../../services/finance';
 import { HouseholdAvatar } from '../common/HouseholdAvatar';
-import {
-  DecisionMakerSettingsPanel,
-  RoutinesSettingsPanel,
-  WifiQrSettingsPanel,
-} from './Phase2WidgetSettingsPanels';
+
+const DecisionMakerSettingsPanel = React.lazy(() =>
+  import('./Phase2WidgetSettingsPanels').then((m) => ({ default: m.DecisionMakerSettingsPanel }))
+);
+const RoutinesSettingsPanel = React.lazy(() =>
+  import('./Phase2WidgetSettingsPanels').then((m) => ({ default: m.RoutinesSettingsPanel }))
+);
+const WifiQrSettingsPanel = React.lazy(() =>
+  import('./Phase2WidgetSettingsPanels').then((m) => ({ default: m.WifiQrSettingsPanel }))
+);
 import {
   MAX_EMERGENCY_CONTACTS,
   type DecisionMakerMode,
@@ -139,10 +150,12 @@ import {
 } from '../../utils/wifiQr';
 import { resolveDecisionOptions } from '../../utils/decisionEngine';
 import { resolveCountdownTarget } from '../../utils/countdownTarget';
-import {
-  DailyDiscoverySettingsPanel,
-  SportsSettingsPanel,
-} from './Phase3WidgetSettingsPanels';
+const DailyDiscoverySettingsPanel = React.lazy(() =>
+  import('./Phase3WidgetSettingsPanels').then((m) => ({ default: m.DailyDiscoverySettingsPanel }))
+);
+const SportsSettingsPanel = React.lazy(() =>
+  import('./Phase3WidgetSettingsPanels').then((m) => ({ default: m.SportsSettingsPanel }))
+);
 import {
   DEFAULT_SPORTS_LEAGUES,
   type DiscoveryTabMode,
@@ -152,10 +165,12 @@ import {
   type SportsLeagueId,
 } from '../../types/phase3Widgets';
 import { resolveFollowedTeams, resolveSportsLeagues } from '../../services/sports';
-import {
-  ChalkboardSettingsPanel,
-  SoundscapeSettingsPanel,
-} from './Phase4WidgetSettingsPanels';
+const ChalkboardSettingsPanel = React.lazy(() =>
+  import('./Phase4WidgetSettingsPanels').then((m) => ({ default: m.ChalkboardSettingsPanel }))
+);
+const SoundscapeSettingsPanel = React.lazy(() =>
+  import('./Phase4WidgetSettingsPanels').then((m) => ({ default: m.SoundscapeSettingsPanel }))
+);
 import type {
   ChalkBrushSize,
   ChalkboardSurface,
@@ -170,7 +185,9 @@ import {
   resolveMasterVolume,
   resolveSoundscapeChannels,
 } from '../../utils/soundscapeEngine';
-import { HomelabSettingsPanel } from './Phase5WidgetSettingsPanel';
+const HomelabSettingsPanel = React.lazy(() =>
+  import('./Phase5WidgetSettingsPanel').then((m) => ({ default: m.HomelabSettingsPanel }))
+);
 import type {
   HomeAssistantEntityTarget,
   HomelabDisplayMode,
@@ -5101,6 +5118,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
               </div>
             )}
 
+            <React.Suspense fallback={null}>
             {/* HOME CHECK-INS & RHYTHMS SETTINGS */}
             {effectiveType === 'routines' && (
               <RoutinesSettingsPanel
@@ -5245,6 +5263,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                 setRefreshIntervalSec={setHomelabRefreshSec}
               />
             )}
+            </React.Suspense>
         </div>
 
         {/* Footer Actions */}
@@ -5267,24 +5286,32 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
         </div>
       </div>
 
-      <CalendarUrlGuideModal
-        isOpen={isCalendarGuideOpen}
-        onClose={() => setIsCalendarGuideOpen(false)}
-      />
+      {isCalendarGuideOpen && (
+        <React.Suspense fallback={null}>
+          <CalendarUrlGuideModal
+            isOpen={isCalendarGuideOpen}
+            onClose={() => setIsCalendarGuideOpen(false)}
+          />
+        </React.Suspense>
+      )}
 
-      <MediaSearchModal
-        isOpen={isMediaSearchOpen}
-        onClose={() => setIsMediaSearchOpen(false)}
-        onSelect={(selectedUrl, selectedTitle, meta?: MediaSelectionMeta) => {
-          setImageUrl(selectedUrl);
-          setImageMp4Url(meta?.mp4Url);
-          setImageMediaSource(meta?.mediaSource);
-          if (selectedTitle && !imageCaption) {
-            setImageCaption(selectedTitle);
-          }
-        }}
-        initialUrl={imageUrl}
-      />
+      {isMediaSearchOpen && (
+        <React.Suspense fallback={null}>
+          <MediaSearchModal
+            isOpen={isMediaSearchOpen}
+            onClose={() => setIsMediaSearchOpen(false)}
+            onSelect={(selectedUrl, selectedTitle, meta?: MediaSelectionMeta) => {
+              setImageUrl(selectedUrl);
+              setImageMp4Url(meta?.mp4Url);
+              setImageMediaSource(meta?.mediaSource);
+              if (selectedTitle && !imageCaption) {
+                setImageCaption(selectedTitle);
+              }
+            }}
+            initialUrl={imageUrl}
+          />
+        </React.Suspense>
+      )}
     </div>
   );
 };

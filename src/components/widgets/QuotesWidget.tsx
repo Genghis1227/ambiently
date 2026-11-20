@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Quote, RefreshCw } from 'lucide-react';
 import { CURATED_QUOTES, type QuoteItem } from '../../services/quotes';
 import { useDisplayActivity } from '../../utils/displayActivity';
+import { useSharedClock } from '../../utils/sharedClock';
 
 interface QuotesWidgetProps {
   customQuotes?: QuoteItem[];
@@ -29,19 +30,23 @@ export const QuotesWidget: React.FC<QuotesWidgetProps> = ({
   }, [customQuotes, quoteMode]);
 
   const intervalSec = rotationIntervalSec ?? 3600;
+  const { isOledNightClock } = useDisplayActivity();
+  const isOledRef = useRef(isOledNightClock);
+  useEffect(() => {
+    isOledRef.current = isOledNightClock;
+  }, [isOledNightClock]);
+  const sharedDate = useSharedClock('minute', !isOledNightClock && intervalSec > 0);
+  const minuteMs = sharedDate.getTime();
 
   // Compute time block index so synchronized displays show the same quote
   const timeBlock = useMemo(() => {
     if (intervalSec <= 0) return 0;
-    return Math.floor(Date.now() / (intervalSec * 1000));
-  }, [intervalSec]);
+    return Math.floor(minuteMs / (intervalSec * 1000));
+  }, [intervalSec, minuteMs]);
 
   const [offset, setOffset] = useState(0);
   const [currentBlock, setCurrentBlock] = useState(timeBlock);
   const [isFading, setIsFading] = useState(false);
-  const { isOledNightClock } = useDisplayActivity();
-  const isOledRef = useRef(isOledNightClock);
-  isOledRef.current = isOledNightClock;
 
   // Sync currentBlock if intervalSec or wall-clock block changes
   useEffect(() => {

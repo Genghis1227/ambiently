@@ -6,6 +6,7 @@ import type {
   CanvasBackgroundTheme,
   DashboardTab,
   WidgetThemeMode,
+  DefaultWidgetFrameStyle,
 } from '../../types/dashboard';
 import {
   CheckSquare,
@@ -26,15 +27,30 @@ import {
 } from 'lucide-react';
 import { ClockWeatherWidget } from '../widgets/ClockWeatherWidget';
 import { ClockWidget } from '../widgets/ClockWidget';
-import { WorldClockWidget } from '../widgets/WorldClockWidget';
-import { WeatherWidget } from '../widgets/WeatherWidget';
-import { CountdownWidget } from '../widgets/CountdownWidget';
-import { QuotesWidget } from '../widgets/QuotesWidget';
 import { TextBoxWidget } from '../widgets/TextBoxWidget';
 import { TileErrorBoundary } from '../common/TileErrorBoundary';
-import { MediaEmbedWidget } from '../widgets/MediaEmbedWidget';
-import { ImageWidget } from '../widgets/ImageWidget';
 import type { CorkboardContextMenuState } from './CorkboardContextMenu';
+import { computeCardDragLayout } from '../../utils/cardDragTransform';
+import { useSharedClock } from '../../utils/sharedClock';
+
+const WorldClockWidget = React.lazy(() =>
+  import('../widgets/WorldClockWidget').then((m) => ({ default: m.WorldClockWidget }))
+);
+const WeatherWidget = React.lazy(() =>
+  import('../widgets/WeatherWidget').then((m) => ({ default: m.WeatherWidget }))
+);
+const CountdownWidget = React.lazy(() =>
+  import('../widgets/CountdownWidget').then((m) => ({ default: m.CountdownWidget }))
+);
+const QuotesWidget = React.lazy(() =>
+  import('../widgets/QuotesWidget').then((m) => ({ default: m.QuotesWidget }))
+);
+const MediaEmbedWidget = React.lazy(() =>
+  import('../widgets/MediaEmbedWidget').then((m) => ({ default: m.MediaEmbedWidget }))
+);
+const ImageWidget = React.lazy(() =>
+  import('../widgets/ImageWidget').then((m) => ({ default: m.ImageWidget }))
+);
 
 const StickyNotesWidget = React.lazy(() =>
   import('../widgets/StickyNotesWidget').then((m) => ({ default: m.StickyNotesWidget }))
@@ -554,6 +570,1057 @@ const MemoizedCanvasWidgetBody: React.FC<CanvasWidgetBodyProps> = React.memo(({
   );
 });
 
+interface CanvasCardEventHandlers {
+  onPointerDown: (
+    e: React.PointerEvent,
+    id: string,
+    type: 'note' | 'widget',
+    pos?: NonNullable<DashboardWidget['freeformPos']>
+  ) => void;
+  onBringToFront: (id: string, type: 'note' | 'widget') => void;
+  onRotatePointerDown: (
+    e: React.PointerEvent,
+    id: string,
+    type: 'note' | 'widget',
+    pos?: NonNullable<DashboardWidget['freeformPos']>
+  ) => void;
+  onResizePointerDown: (
+    e: React.PointerEvent,
+    id: string,
+    type: 'note' | 'widget',
+    pos?: NonNullable<DashboardWidget['freeformPos']>
+  ) => void;
+  onPointerMove: (e: React.PointerEvent | PointerEvent) => void;
+  onPointerUp: (e?: React.PointerEvent | PointerEvent) => void;
+  onUpdateWidgetPos?: (
+    widgetId: string,
+    gridPos: any,
+    freeformPos: NonNullable<DashboardWidget['freeformPos']>
+  ) => void;
+  onUpdateWidget?: (widgetId: string, updates: Partial<DashboardWidget>) => void;
+  onRemoveWidget?: (widgetId: string) => void;
+  onUpdateNotePos: (noteId: string, pos: NonNullable<StickyNoteItem['freeformPos']>) => void;
+  onUpdateNote: (noteId: string, updates: Partial<StickyNoteItem>) => void;
+  onDeleteNote: (noteId: string) => void;
+  onOpenNoteEditor: (note: StickyNoteItem) => void;
+  onToggleChecklistItem: (note: StickyNoteItem, itemId: string) => void;
+  checkIsDragging: () => boolean;
+}
+
+interface MemoizedCanvasWidgetCardProps {
+  widget: DashboardWidget;
+  isWidgetLight: boolean;
+  isCanvasLocked: boolean;
+  isCursorHidden: boolean;
+  isSwipeNavigationActive: boolean;
+  defaultWidgetStyle: DefaultWidgetFrameStyle;
+  reduceVisualEffects: boolean;
+  dockPaddingClass: string;
+  topZIndex: number;
+  canUpdateWidget: boolean;
+  hasUpdateWidgetPos: boolean;
+  hasRemoveWidget: boolean;
+  isDragging: boolean;
+  activeDragPos: { xRatio: number; yRatio: number } | null;
+  activeContainerSize: { width: number; height: number } | null;
+  isResizing: boolean;
+  activeResizeRatio: { wRatio: number; hRatio: number } | null;
+  isRotating: boolean;
+  activeRotateAngle: number | null;
+  isCompactExpanded: boolean;
+  stickyNotes?: StickyNoteItem[];
+  stickyActions?: StickyCanvasActions;
+  onUpdateWidgetConfig: (widgetId: string, config: Record<string, any>) => void;
+  onOpenWidgetSettings: (widget: DashboardWidget) => void;
+  onSetExpandedCompactToolbarId: React.Dispatch<React.SetStateAction<string | null>>;
+  onSetContextMenu: React.Dispatch<React.SetStateAction<CorkboardContextMenuState | null>>;
+  handlersRef: React.RefObject<CanvasCardEventHandlers | null>;
+}
+
+const DEFAULT_WIDGET_FREEFORM_POS: NonNullable<DashboardWidget['freeformPos']> = {
+  xRatio: 0.1,
+  yRatio: 0.1,
+  wRatio: 0.35,
+  hRatio: 0.45,
+  zIndex: 5,
+  rotation: 0,
+};
+
+const MemoizedCanvasWidgetCard: React.FC<MemoizedCanvasWidgetCardProps> = React.memo(({
+  widget,
+  isWidgetLight,
+  isCanvasLocked,
+  isCursorHidden,
+  isSwipeNavigationActive,
+  defaultWidgetStyle,
+  reduceVisualEffects,
+  dockPaddingClass,
+  topZIndex,
+  canUpdateWidget,
+  hasUpdateWidgetPos,
+  hasRemoveWidget,
+  isDragging,
+  activeDragPos,
+  activeContainerSize,
+  isResizing,
+  activeResizeRatio,
+  isRotating,
+  activeRotateAngle,
+  isCompactExpanded,
+  stickyNotes,
+  stickyActions,
+  onUpdateWidgetConfig,
+  onOpenWidgetSettings,
+  onSetExpandedCompactToolbarId,
+  onSetContextMenu,
+  handlersRef,
+}) => {
+  const pos = widget.freeformPos || DEFAULT_WIDGET_FREEFORM_POS;
+  const isFullScreen =
+    Boolean(pos.isFullScreen) ||
+    (widget.type === 'chores' && widget.config?.displayMode === 'hub') ||
+    (widget.type === 'kanban' && widget.config?.displayMode === 'view');
+  const isActiveManipulating = isDragging || isResizing || isRotating;
+  const isFramelessWidget = isWidgetStickerMode(widget, defaultWidgetStyle);
+
+  const layout = computeCardDragLayout({
+    basePos: {
+      xRatio: pos.xRatio ?? 0.1,
+      yRatio: pos.yRatio ?? 0.1,
+      wRatio: pos.wRatio ?? 0.35,
+      hRatio: pos.hRatio ?? 0.45,
+      rotation: pos.rotation ?? 0,
+    },
+    isDragging,
+    dragPos: activeDragPos,
+    containerSize: activeContainerSize,
+    isResizing,
+    resizeRatio: activeResizeRatio,
+    isRotating,
+    rotateAngle: activeRotateAngle,
+    dragScale: 1.02,
+  });
+
+  const toolbarPlacement = resolveWidgetToolbarPlacement({
+    isFullScreen,
+    yRatio: layout.effectiveYRatio,
+    hRatio: layout.effectiveHRatio,
+  });
+  const isNarrowCardForToolbar = layout.effectiveWRatio < 0.3;
+  const isCompactToolbar = toolbarPlacement === 'compact-pill';
+  const showCompactExpanded = !isCompactToolbar || isCompactExpanded;
+
+  const cardSurfaceClasses = isFramelessWidget
+    ? isWidgetLight
+      ? 'bg-transparent text-slate-800'
+      : 'bg-transparent text-white'
+    : reduceVisualEffects
+      ? isWidgetLight
+        ? 'bg-white/98 shadow-xl text-slate-800'
+        : 'bg-gray-900/95 shadow-2xl text-white'
+      : isWidgetLight
+        ? `bg-white/95 ${isActiveManipulating ? '' : 'backdrop-blur-md '}shadow-xl text-slate-800`
+        : `bg-gray-900/80 ${isActiveManipulating ? '' : 'backdrop-blur-md '}shadow-2xl text-white`;
+
+  return (
+    <div
+      data-canvas-card="true"
+      data-canvas-fullscreen={isFullScreen ? 'true' : undefined}
+      data-canvas-manipulating={isActiveManipulating ? 'true' : undefined}
+      onPointerDown={(e) => {
+        if (isPortalEvent(e)) return;
+        if (shouldYieldToEdgeSwipeCardEvent(e, isSwipeNavigationActive)) return;
+        if (!isFullScreen && !isCanvasLocked) {
+          handlersRef.current?.onPointerDown(e, widget.id, 'widget', pos);
+        }
+      }}
+      onPointerDownCapture={(e) => {
+        if (isPortalEvent(e)) return;
+        if (isSwipeNavigationActive) return;
+        if (!isFullScreen && !isCanvasLocked && !pos?.isBackground && (pos?.zIndex || 1) < topZIndex) {
+          handlersRef.current?.onBringToFront(widget.id, 'widget');
+        }
+      }}
+      onContextMenu={(e) => {
+        if (isPortalEvent(e) || isCanvasLocked) return;
+        e.preventDefault();
+        e.stopPropagation();
+        onSetContextMenu({
+          x: e.clientX,
+          y: e.clientY,
+          id: widget.id,
+          type: 'widget',
+          title: widget.title,
+          currentZ: pos.zIndex || 1,
+          isBackground: Boolean(pos.isBackground),
+          rotation: pos.rotation,
+        });
+      }}
+      onPointerMove={(e) => handlersRef.current?.onPointerMove(e)}
+      onPointerUp={(e) => handlersRef.current?.onPointerUp(e)}
+      onPointerCancel={(e) => handlersRef.current?.onPointerUp(e)}
+      style={
+        isFullScreen
+          ? {
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              width: '100%',
+              height: '100%',
+              zIndex: 60,
+              touchAction: 'pan-y',
+              WebkitTouchCallout: 'none',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+            }
+          : ({
+              position: 'absolute',
+              left: `${layout.leftPct}%`,
+              top: `${layout.topPct}%`,
+              width: `${layout.widthPct}%`,
+              height: `${layout.heightPct}%`,
+              minWidth: '180px',
+              minHeight: isFramelessWidget ? '50px' : '140px',
+              maxWidth: '100%',
+              maxHeight: '100%',
+              transform: layout.transform,
+              '--card-z': isActiveManipulating ? 58 : pos.zIndex,
+              touchAction: isActiveManipulating ? 'none' : 'pan-y',
+              WebkitTouchCallout: 'none',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+              willChange: layout.willChange,
+              transition: isActiveManipulating
+                ? 'none'
+                : 'left 0.3s cubic-bezier(0.22, 1, 0.36, 1), top 0.3s cubic-bezier(0.22, 1, 0.36, 1), width 0.3s cubic-bezier(0.22, 1, 0.36, 1), height 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.25s ease-out, box-shadow 0.2s',
+            } as React.CSSProperties)
+      }
+      className={`group ${
+        isFullScreen
+          ? widget.type === 'meals'
+            ? 'rounded-none border-0 p-4 overflow-hidden'
+            : 'rounded-none border-0 p-0 overflow-hidden'
+          : isFramelessWidget
+          ? widget.type === 'photo_frame'
+            ? 'rounded-2xl border-0 p-0'
+            : 'rounded-2xl border-0 p-1'
+          : widget.type === 'image'
+          ? isWidgetLight ? 'rounded-2xl border border-slate-200/90 p-0' : 'rounded-2xl border border-gray-800/90 p-0'
+          : isWidgetLight ? 'rounded-2xl border border-slate-200/90 p-4' : 'rounded-2xl border border-gray-800/90 p-4'
+      } ${cardSurfaceClasses} ${isFullScreen ? '' : `z-[var(--card-z)] ${!isCanvasLocked && !isActiveManipulating ? 'hover:z-[55] ' : ''}`}${
+        isCanvasLocked || isFullScreen ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
+      } ${isFullScreen ? '' : isActiveManipulating ? 'touch-none' : 'touch-pan-y'} select-none transition-shadow ${
+        isDragging || isRotating
+          ? 'ring-2 ring-blue-500 shadow-blue-500/20'
+          : isFramelessWidget
+          ? ''
+          : 'hover:shadow-blue-500/10'
+      } flex flex-col justify-between`}
+    >
+      {/* Elevated Grab-to-Rotate Handle */}
+      {!isFullScreen && !isCanvasLocked && hasUpdateWidgetPos && !isCompactToolbar && (
+        <div
+          data-no-drag="true"
+          data-no-canvas-swipe="true"
+          data-kiosk-edit-chrome="true"
+          onPointerDown={(e) => handlersRef.current?.onRotatePointerDown(e, widget.id, 'widget', pos)}
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            handlersRef.current?.onUpdateWidgetPos?.(widget.id, widget.gridPos, { ...pos, rotation: 0 });
+          }}
+          title={
+            isCursorHidden
+              ? undefined
+              : 'Grab and drag in a circle to rotate tile (double-click to reset to 0°)'
+          }
+          className={`absolute ${
+            isNarrowCardForToolbar ? 'left-3' : 'left-1/2 -translate-x-1/2'
+          } z-50 flex flex-col items-center transition-opacity pointer-events-auto cursor-grab active:cursor-grabbing px-3 ${
+            isRotating
+              ? 'opacity-100'
+              : isCursorHidden
+                ? 'opacity-0 pointer-events-none'
+                : 'opacity-0 group-hover:opacity-100'
+          } ${
+            toolbarPlacement === 'outside-bottom'
+              ? '-bottom-8 pt-2 flex-col-reverse'
+              : '-top-7.5 pb-2'
+          }`}
+        >
+          <div
+            className={`w-6 h-6 rounded-full bg-gray-950 border border-blue-400 hover:border-blue-300 text-blue-300 hover:text-white shadow-xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all ${
+              isRotating ? 'ring-2 ring-blue-400 bg-blue-900/60' : ''
+            }`}
+          >
+            <RotateCw className="w-3 h-3" />
+          </div>
+          <div className="w-0.5 h-1.5 bg-blue-400/60" />
+          {isRotating && (
+            <span className="px-1.5 py-0.5 rounded-full bg-blue-600 text-white font-mono font-bold text-[10px] shadow-lg mt-0.5">
+              {layout.effectiveRotation}°
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Floating Widget Controls: Outside-top, flipped outside-bottom near top edge, or compact pill */}
+      <div
+        data-no-drag="true"
+        data-kiosk-edit-chrome="true"
+        onPointerEnter={(e) => {
+          if (e.pointerType === 'mouse' && isCompactToolbar) {
+            onSetExpandedCompactToolbarId(widget.id);
+          }
+        }}
+        onPointerLeave={(e) => {
+          if (e.pointerType === 'mouse' && isCompactToolbar) {
+            onSetExpandedCompactToolbarId((prev) => (prev === widget.id ? null : prev));
+          }
+        }}
+        className={`absolute z-50 transition-opacity ${
+          isCursorHidden ? 'opacity-0 pointer-events-none' : 'opacity-0 group-hover:opacity-100'
+        } ${
+          toolbarPlacement === 'outside-top'
+            ? 'bottom-full right-2 pb-1.5'
+            : toolbarPlacement === 'outside-bottom'
+              ? 'top-full right-6 pt-1.5'
+              : `left-1/2 -translate-x-1/2 ${
+                  isFullScreen && dockPaddingClass === 'pt-20' ? 'top-20' : 'top-1.5'
+                }`
+        }`}
+      >
+        {!showCompactExpanded ? (
+          <button
+            type="button"
+            data-no-drag="true"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSetExpandedCompactToolbarId(widget.id);
+            }}
+            title={isCursorHidden ? undefined : 'Tile actions'}
+            className={`flex items-center justify-center px-2 py-0.5 rounded-full backdrop-blur-md shadow-lg transition-colors cursor-pointer ${
+              isWidgetLight
+                ? 'bg-white/95 border border-slate-300/90 text-slate-600 hover:text-slate-900'
+                : 'bg-gray-950/90 border border-gray-700/80 text-gray-300 hover:text-white'
+            }`}
+          >
+            <MoreHorizontal className="w-3.5 h-3.5" />
+          </button>
+        ) : (
+          <div
+            className={`flex items-center gap-1 backdrop-blur-md px-1.5 py-1 rounded-xl shadow-xl ${
+              isWidgetLight
+                ? 'bg-white/95 border border-slate-300/90 text-slate-700'
+                : 'bg-gray-950/90 border border-gray-700/80 shadow-2xl text-gray-300'
+            }`}
+          >
+            {!isFullScreen && !isCanvasLocked && hasUpdateWidgetPos && (
+              <button
+                type="button"
+                data-no-canvas-swipe="true"
+                onPointerDown={(e) => handlersRef.current?.onRotatePointerDown(e, widget.id, 'widget', pos)}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  handlersRef.current?.onUpdateWidgetPos?.(widget.id, widget.gridPos, { ...pos, rotation: 0 });
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!isRotating && pos.rotation !== 0) {
+                    handlersRef.current?.onUpdateWidgetPos?.(widget.id, widget.gridPos, { ...pos, rotation: 0 });
+                  }
+                }}
+                title={
+                  isCursorHidden
+                    ? undefined
+                    : pos.rotation !== 0
+                      ? `Rotated ${pos.rotation}° — drag to rotate or click to reset to 0°`
+                      : 'Drag in a circle to rotate tile'
+                }
+                className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold flex items-center gap-0.5 transition-all cursor-grab active:cursor-grabbing ${
+                  pos.rotation !== 0
+                    ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-600 hover:text-white'
+                    : isWidgetLight
+                      ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
+                      : 'hover:bg-gray-800 text-gray-300 hover:text-white'
+                }`}
+              >
+                <RotateCw className="w-3 h-3" />
+                {pos.rotation !== 0 && <span>{pos.rotation}°</span>}
+              </button>
+            )}
+            {!isCanvasLocked && canUpdateWidget && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (isCompactToolbar) onSetExpandedCompactToolbarId(null);
+                  onOpenWidgetSettings(widget);
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                title={isCursorHidden ? undefined : 'Configure tile title and settings'}
+                className={`p-1 rounded-lg transition-all cursor-pointer ${
+                  isWidgetLight
+                    ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
+                    : 'hover:bg-gray-800 text-gray-300 hover:text-white'
+                }`}
+              >
+                <Settings className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {!isCanvasLocked && hasUpdateWidgetPos && !isFullScreen && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (isCompactToolbar) onSetExpandedCompactToolbarId(null);
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  onSetContextMenu({
+                    x: rect.left,
+                    y: rect.bottom + 6,
+                    id: widget.id,
+                    type: 'widget',
+                    title: widget.title,
+                    currentZ: pos.zIndex || 1,
+                    isBackground: Boolean(pos.isBackground),
+                    rotation: pos.rotation,
+                  });
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                title={isCursorHidden ? undefined : 'Layer order & appearance'}
+                className={`p-1 rounded-lg transition-all cursor-pointer ${
+                  isWidgetLight
+                    ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
+                    : 'hover:bg-gray-800 text-gray-300 hover:text-white'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {hasUpdateWidgetPos && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (isCompactToolbar) onSetExpandedCompactToolbarId(null);
+                  if (isFullScreen) {
+                    const nextPos = {
+                      ...pos,
+                      xRatio: 0.1,
+                      yRatio: 0.1,
+                      wRatio: 0.45,
+                      hRatio: 0.5,
+                      rotation: 0,
+                      isFullScreen: false,
+                    };
+                    if (widget.type === 'chores' && canUpdateWidget) {
+                      handlersRef.current?.onUpdateWidget?.(widget.id, {
+                        freeformPos: nextPos,
+                        config: { ...widget.config, displayMode: 'tile' },
+                      });
+                    } else if (widget.type === 'kanban' && canUpdateWidget) {
+                      handlersRef.current?.onUpdateWidget?.(widget.id, {
+                        freeformPos: nextPos,
+                        config: { ...widget.config, displayMode: 'tile' },
+                      });
+                    } else {
+                      handlersRef.current?.onUpdateWidgetPos?.(widget.id, widget.gridPos, nextPos);
+                    }
+                  } else {
+                    const nextPos = {
+                      ...pos,
+                      xRatio: 0,
+                      yRatio: 0,
+                      wRatio: 1,
+                      hRatio: 1,
+                      rotation: 0,
+                      isFullScreen: true,
+                    };
+                    if (widget.type === 'chores' && canUpdateWidget) {
+                      handlersRef.current?.onUpdateWidget?.(widget.id, {
+                        freeformPos: nextPos,
+                        config: { ...widget.config, displayMode: 'hub' },
+                      });
+                    } else if (widget.type === 'kanban' && canUpdateWidget) {
+                      handlersRef.current?.onUpdateWidget?.(widget.id, {
+                        freeformPos: nextPos,
+                        config: { ...widget.config, displayMode: 'view' },
+                      });
+                    } else {
+                      handlersRef.current?.onUpdateWidgetPos?.(widget.id, widget.gridPos, nextPos);
+                    }
+                  }
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                title={
+                  isCursorHidden
+                    ? undefined
+                    : isFullScreen
+                      ? 'Restore card size'
+                      : 'Fill full screen / canvas'
+                }
+                className={`p-1 rounded-lg transition-all cursor-pointer ${
+                  isWidgetLight
+                    ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
+                    : 'hover:bg-gray-800 text-gray-300 hover:text-white'
+                }`}
+              >
+                {isFullScreen ? (
+                  <Minimize2 className="w-3.5 h-3.5" />
+                ) : (
+                  <Maximize2 className="w-3.5 h-3.5" />
+                )}
+              </button>
+            )}
+
+            {!isCanvasLocked && hasRemoveWidget && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (isCompactToolbar) onSetExpandedCompactToolbarId(null);
+                  handlersRef.current?.onRemoveWidget?.(widget.id);
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                title={isCursorHidden ? undefined : 'Remove widget'}
+                className="p-1 rounded-lg hover:bg-red-500/80 text-gray-400 hover:text-white transition-all cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Bottom Right Resize Handle */}
+      {!isFullScreen && !isCanvasLocked && (
+        <div
+          data-no-drag="true"
+          data-no-canvas-swipe="true"
+          data-kiosk-edit-chrome="true"
+          onPointerDown={(e) => handlersRef.current?.onResizePointerDown(e, widget.id, 'widget', pos)}
+          title={isCursorHidden ? undefined : 'Drag to resize tile'}
+          className={`absolute bottom-1 right-1 p-1.5 cursor-nwse-resize z-40 touch-none transition-opacity ${
+            isResizing
+              ? 'opacity-100'
+              : isCursorHidden
+                ? 'opacity-0 pointer-events-none'
+                : 'opacity-40 group-hover:opacity-100 hover:opacity-100'
+          } ${
+            isWidgetLight ? 'text-slate-400 hover:text-slate-800' : 'text-gray-400 hover:text-white'
+          }`}
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" className="fill-current">
+            <circle cx="10" cy="10" r="1.5" />
+            <circle cx="6" cy="10" r="1.5" />
+            <circle cx="10" cy="6" r="1.5" />
+            <circle cx="2" cy="10" r="1.5" />
+            <circle cx="6" cy="6" r="1.5" />
+            <circle cx="10" cy="2" r="1.5" />
+          </svg>
+        </div>
+      )}
+
+      {/* Widget Inner Renderers */}
+      <div
+        className={`relative z-0 isolate w-full h-full flex flex-col justify-between ${
+          isFramelessWidget && widget.type === 'photo_frame' && widget.config?.displayStyle === 'polaroid'
+            ? 'overflow-visible'
+            : 'overflow-hidden'
+        } rounded-[inherit]`}
+      >
+        <MemoizedCanvasWidgetBody
+          widget={widget}
+          isWidgetLight={isWidgetLight}
+          isFramelessWidget={isFramelessWidget}
+          isFullScreen={isFullScreen}
+          isCanvasLocked={isCanvasLocked}
+          dockPaddingClass={dockPaddingClass}
+          canUpdateWidget={canUpdateWidget}
+          onUpdateWidgetConfig={onUpdateWidgetConfig}
+          onOpenWidgetSettings={onOpenWidgetSettings}
+          stickyNotes={widget.type === 'sticky_notes' ? stickyNotes : undefined}
+          stickyActions={widget.type === 'sticky_notes' ? stickyActions : undefined}
+        />
+      </div>
+    </div>
+  );
+});
+
+const DEFAULT_NOTE_FREEFORM_POS: NonNullable<StickyNoteItem['freeformPos']> = {
+  xRatio: 0.1,
+  yRatio: 0.1,
+  wRatio: 0.26,
+  hRatio: 0.3,
+  zIndex: 1,
+  rotation: 0,
+};
+
+interface MemoizedCanvasStickyNoteCardProps {
+  note: StickyNoteItem;
+  nowMs: number;
+  isCanvasLocked: boolean;
+  isCursorHidden: boolean;
+  isSwipeNavigationActive: boolean;
+  isHighlighted: boolean;
+  hasStickyNotesTile: boolean;
+  topZIndex: number;
+  isDragging: boolean;
+  activeDragPos: { xRatio: number; yRatio: number } | null;
+  activeContainerSize: { width: number; height: number } | null;
+  isResizing: boolean;
+  activeResizeRatio: { wRatio: number; hRatio: number } | null;
+  isRotating: boolean;
+  activeRotateAngle: number | null;
+  lastTapRef: React.RefObject<{ id: string; time: number }>;
+  onSetContextMenu: React.Dispatch<React.SetStateAction<CorkboardContextMenuState | null>>;
+  handlersRef: React.RefObject<CanvasCardEventHandlers | null>;
+}
+
+const MemoizedCanvasStickyNoteCard: React.FC<MemoizedCanvasStickyNoteCardProps> = React.memo(({
+  note,
+  nowMs,
+  isCanvasLocked,
+  isCursorHidden,
+  isSwipeNavigationActive,
+  isHighlighted,
+  hasStickyNotesTile,
+  topZIndex,
+  isDragging,
+  activeDragPos,
+  activeContainerSize,
+  isResizing,
+  activeResizeRatio,
+  isRotating,
+  activeRotateAngle,
+  lastTapRef,
+  onSetContextMenu,
+  handlersRef,
+}) => {
+  const pos = note.freeformPos || DEFAULT_NOTE_FREEFORM_POS;
+  const isActiveManipulating = isDragging || isResizing || isRotating;
+  const isExpiringSoon =
+    Boolean(note.expiresAt) &&
+    new Date(note.expiresAt!).getTime() - nowMs < 12 * 60 * 60 * 1000;
+  const fontSizeClass = FONT_SIZE_CLASSES[note.fontSize || 'base'];
+
+  const layout = computeCardDragLayout({
+    basePos: {
+      xRatio: pos.xRatio ?? 0.1,
+      yRatio: pos.yRatio ?? 0.1,
+      wRatio: pos.wRatio ?? 0.26,
+      hRatio: pos.hRatio ?? 0.3,
+      rotation: pos.rotation ?? 0,
+    },
+    isDragging,
+    dragPos: activeDragPos,
+    containerSize: activeContainerSize,
+    isResizing,
+    resizeRatio: activeResizeRatio,
+    isRotating,
+    rotateAngle: activeRotateAngle,
+    dragScale: 1.03,
+  });
+
+  const handleCheckDragGuard = useCallback(
+    () => Boolean(handlersRef.current?.checkIsDragging()),
+    [handlersRef]
+  );
+
+  return (
+    <div
+      data-canvas-card="true"
+      data-canvas-manipulating={isActiveManipulating ? 'true' : undefined}
+      onPointerDown={(e) => {
+        if (isPortalEvent(e)) return;
+        if (shouldYieldToEdgeSwipeCardEvent(e, isSwipeNavigationActive)) return;
+        if (!isCanvasLocked) handlersRef.current?.onPointerDown(e, note.id, 'note', pos);
+      }}
+      onPointerDownCapture={(e) => {
+        if (isPortalEvent(e)) return;
+        if (isSwipeNavigationActive) return;
+        if (!isCanvasLocked && !pos?.isBackground && (pos?.zIndex || 1) < topZIndex) {
+          handlersRef.current?.onBringToFront(note.id, 'note');
+        }
+      }}
+      onContextMenu={(e) => {
+        if (isPortalEvent(e) || isCanvasLocked) return;
+        e.preventDefault();
+        e.stopPropagation();
+        onSetContextMenu({
+          x: e.clientX,
+          y: e.clientY,
+          id: note.id,
+          type: 'note',
+          title: note.title || 'Sticky Note',
+          currentZ: pos.zIndex || 1,
+          isBackground: Boolean(pos.isBackground),
+          rotation: pos.rotation,
+        });
+      }}
+      onPointerMove={(e) => handlersRef.current?.onPointerMove(e)}
+      onPointerUp={(e) => {
+        if (isPortalEvent(e)) return;
+        handlersRef.current?.onPointerUp(e);
+        if (!handlersRef.current?.checkIsDragging()) {
+          const tapNow = Date.now();
+          if (lastTapRef.current.id === note.id && tapNow - lastTapRef.current.time < 350) {
+            handlersRef.current?.onOpenNoteEditor(note);
+            lastTapRef.current = { id: '', time: 0 };
+          } else {
+            lastTapRef.current = { id: note.id, time: tapNow };
+          }
+        }
+      }}
+      onPointerCancel={(e) => handlersRef.current?.onPointerUp(e)}
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        handlersRef.current?.onOpenNoteEditor(note);
+      }}
+      style={{
+        position: 'absolute',
+        left: `${layout.leftPct}%`,
+        top: `${layout.topPct}%`,
+        width: `${layout.widthPct}%`,
+        height: `${layout.heightPct}%`,
+        minWidth: '110px',
+        minHeight: '90px',
+        maxWidth: '100%',
+        maxHeight: '100%',
+        transform: layout.transform,
+        backgroundColor: note.bgColor || '#fef08a',
+        '--card-z': isActiveManipulating ? 58 : pos.zIndex,
+        touchAction: isActiveManipulating ? 'none' : 'pan-y',
+        WebkitTouchCallout: 'none',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        willChange: layout.willChange,
+        transition: isActiveManipulating
+          ? 'none'
+          : 'left 0.3s cubic-bezier(0.22, 1, 0.36, 1), top 0.3s cubic-bezier(0.22, 1, 0.36, 1), width 0.3s cubic-bezier(0.22, 1, 0.36, 1), height 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.25s ease-out, box-shadow 0.2s',
+      } as React.CSSProperties}
+      className={`group rounded-2xl p-3.5 shadow-2xl text-gray-900 z-[var(--card-z)] ${!isCanvasLocked && !isActiveManipulating ? 'hover:z-[55] ' : ''}${
+        isCanvasLocked ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
+      } border border-black/10 ${isActiveManipulating ? 'touch-none' : 'touch-pan-y'} select-none transition-all ${
+        isDragging || isRotating
+          ? 'ring-2 ring-blue-500/70 shadow-2xl'
+          : isHighlighted
+          ? 'ring-4 ring-blue-500 shadow-2xl shadow-blue-500/50 scale-105'
+          : isExpiringSoon
+          ? 'ring-2 ring-amber-500 shadow-amber-500/20'
+          : 'hover:shadow-yellow-500/10'
+      } flex flex-col justify-between`}
+    >
+      {/* Top-Center Grab-to-Rotate Handle with Stem */}
+      {!isCanvasLocked && (
+        <div
+          data-no-drag="true"
+          data-no-canvas-swipe="true"
+          data-kiosk-edit-chrome="true"
+          onPointerDown={(e) => handlersRef.current?.onRotatePointerDown(e, note.id, 'note', pos)}
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            handlersRef.current?.onUpdateNotePos(note.id, { ...pos, rotation: 0 });
+          }}
+          title={isCursorHidden ? undefined : 'Grab and drag in a circle to rotate note (double-click to reset to 0°)'}
+          className={`absolute -top-7.5 left-1/2 -translate-x-1/2 flex flex-col items-center z-50 transition-opacity pointer-events-auto cursor-grab active:cursor-grabbing px-3 pb-2 ${
+            isRotating ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+          }`}
+        >
+          <div
+            className={`w-6 h-6 rounded-full bg-gray-900/95 border border-gray-700 hover:border-gray-500 text-white shadow-xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all ${
+              isRotating ? 'ring-2 ring-blue-400' : ''
+            }`}
+          >
+            <RotateCw className="w-3 h-3" />
+          </div>
+          <div className="w-0.5 h-1.5 bg-gray-600/70" />
+          {isRotating && (
+            <span className="px-1.5 py-0.5 rounded-full bg-gray-900 text-white font-mono font-bold text-[10px] shadow mt-0.5">
+              {layout.effectiveRotation}°
+            </span>
+          )}
+        </div>
+      )}
+
+      <div
+        className="flex-1 overflow-y-auto min-h-0 pr-0.5 select-none touch-none"
+        style={{
+          touchAction: 'none',
+          WebkitUserSelect: 'none',
+          WebkitTouchCallout: 'none',
+          userSelect: 'none',
+        }}
+      >
+        {/* Note Title & Header Edit Button */}
+        <div
+          className="font-bold text-xs md:text-sm mb-1.5 flex items-center justify-between border-b border-black/10 pb-1 select-none touch-none"
+          style={{
+            touchAction: 'none',
+            WebkitUserSelect: 'none',
+            WebkitTouchCallout: 'none',
+            userSelect: 'none',
+          }}
+        >
+          <span className="truncate select-none touch-none">
+            {note.title ||
+              (note.isShoppingList || note.freeformPos?.isShoppingList
+                ? '🛒 Shopping List'
+                : note.isChecklist
+                ? 'Checklist'
+                : 'Note')}
+          </span>
+          <div className="flex items-center gap-1 shrink-0 select-none touch-none">
+            {note.expiresAt && (
+              <span
+                title={isCursorHidden ? undefined : `Expires: ${new Date(note.expiresAt).toLocaleString()}`}
+                className={`text-[9px] px-1.5 py-0.5 rounded-full flex items-center gap-0.5 select-none touch-none ${
+                  isExpiringSoon ? 'bg-amber-500/30 text-amber-950 font-bold' : 'bg-black/10 text-gray-700'
+                }`}
+              >
+                <Clock className="w-2.5 h-2.5" />
+                {new Date(note.expiresAt).toLocaleDateString([], { month: 'numeric', day: 'numeric' })}
+              </span>
+            )}
+            {!isCanvasLocked && (
+              <>
+                <button
+                  type="button"
+                  data-no-drag="true"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlersRef.current?.onOpenNoteEditor(note);
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="p-1 rounded-md text-gray-700 hover:text-blue-900 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
+                  title={isCursorHidden ? undefined : 'Edit note'}
+                >
+                  <Edit2 className="w-3 h-3" />
+                </button>
+                <button
+                  type="button"
+                  data-no-drag="true"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    onSetContextMenu({
+                      x: rect.left,
+                      y: rect.bottom + 6,
+                      id: note.id,
+                      type: 'note',
+                      title: note.title || 'Sticky Note',
+                      currentZ: pos.zIndex || 1,
+                      isBackground: Boolean(pos.isBackground),
+                      rotation: pos.rotation,
+                    });
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="p-1 rounded-md text-gray-700 hover:text-blue-900 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
+                  title={isCursorHidden ? undefined : 'Layer order (Bring to Front / Send to Back)'}
+                >
+                  <Layers className="w-3 h-3" />
+                </button>
+                <button
+                  type="button"
+                  data-no-drag="true"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (hasStickyNotesTile) {
+                      handlersRef.current?.onUpdateNote(note.id, { isPinnedToCanvas: false });
+                    } else {
+                      handlersRef.current?.onDeleteNote(note.id);
+                    }
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="p-1 rounded-md text-gray-700 hover:text-red-900 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
+                  title={
+                    isCursorHidden
+                      ? undefined
+                      : hasStickyNotesTile
+                        ? 'Close from canvas (remains saved in Notes Tile)'
+                        : 'Delete note (move to Archive)'
+                  }
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Note Content / Checklist / Shopping List */}
+        {note.isShoppingList || note.freeformPos?.isShoppingList ? (
+          <React.Suspense fallback={null}>
+            <ShoppingListNoteBody
+              note={note}
+              fontSizeClass={fontSizeClass}
+              onUpdateItems={(nextItems) =>
+                handlersRef.current?.onUpdateNote(note.id, { checklistItems: nextItems })
+              }
+              onToggleItem={(itemId) => handlersRef.current?.onToggleChecklistItem(note, itemId)}
+              onCheckDragGuard={handleCheckDragGuard}
+            />
+          </React.Suspense>
+        ) : note.isChecklist && note.checklistItems ? (
+          <div className="space-y-1.5 mt-1 select-none touch-none">
+            {note.checklistItems.map((item) => (
+              <div
+                key={item.id}
+                className={`flex items-center gap-2 w-full text-left select-none touch-none ${fontSizeClass}`}
+              >
+                <button
+                  type="button"
+                  data-no-drag="true"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlersRef.current?.onToggleChecklistItem(note, item.id);
+                  }}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                  }}
+                  title={isCursorHidden ? undefined : item.done ? 'Mark as incomplete' : 'Mark as complete'}
+                  className="p-0.5 -m-0.5 hover:opacity-80 transition-opacity shrink-0 cursor-pointer text-gray-700 hover:text-gray-900"
+                >
+                  {item.done ? (
+                    <CheckSquare className="w-4 h-4 text-emerald-800 shrink-0" />
+                  ) : (
+                    <Square className="w-4 h-4 text-gray-700 shrink-0" />
+                  )}
+                </button>
+                <span
+                  onClick={() => {
+                    if (!handlersRef.current?.checkIsDragging()) {
+                      handlersRef.current?.onToggleChecklistItem(note, item.id);
+                    }
+                  }}
+                  className={`flex-1 select-none touch-none cursor-pointer ${
+                    item.done ? 'line-through opacity-50' : 'font-medium'
+                  }`}
+                >
+                  {item.text}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p
+            className={`whitespace-pre-wrap break-words select-none touch-none ${fontSizeClass}`}
+            style={{
+              touchAction: 'none',
+              WebkitUserSelect: 'none',
+              WebkitTouchCallout: 'none',
+              userSelect: 'none',
+            }}
+          >
+            {note.content}
+          </p>
+        )}
+      </div>
+
+      {/* Note Bottom Actions: 1-Click Color Swatches, Tilt, Edit & Archive/Delete */}
+      <div
+        data-kiosk-edit-chrome="true"
+        className="flex items-center justify-between gap-1 pt-1.5 border-t border-black/10 mt-1.5 opacity-90 md:opacity-0 md:group-hover:opacity-100 transition-opacity pr-3 shrink-0"
+      >
+        <div className="flex items-center gap-1">
+          {COLOR_PALETTE.map((color) => (
+            <button
+              key={color}
+              type="button"
+              data-no-drag="true"
+              onClick={(e) => {
+                e.stopPropagation();
+                handlersRef.current?.onUpdateNote(note.id, { bgColor: color });
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              style={{ backgroundColor: color }}
+              title={isCursorHidden ? undefined : 'Change note color'}
+              className={`w-3.5 h-3.5 rounded-full border transition-transform cursor-pointer ${
+                (note.bgColor || '#fef08a') === color
+                  ? 'border-gray-900 scale-125 ring-1 ring-gray-900/50'
+                  : 'border-black/25 hover:scale-110'
+              }`}
+            />
+          ))}
+        </div>
+
+        <div className="flex items-center gap-0.5">
+          <button
+            type="button"
+            data-no-drag="true"
+            onClick={(e) => {
+              e.stopPropagation();
+              handlersRef.current?.onUpdateNotePos(note.id, {
+                ...pos,
+                rotation: 0,
+              });
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="px-1 py-0.5 rounded text-[9px] font-mono text-gray-700 hover:bg-black/10 transition-all cursor-pointer"
+            title={isCursorHidden ? undefined : 'Straighten note (0°)'}
+          >
+            0°
+          </button>
+          {!isCanvasLocked && (
+            <button
+              type="button"
+              data-no-drag="true"
+              onClick={(e) => {
+                e.stopPropagation();
+                handlersRef.current?.onDeleteNote(note.id);
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="p-1.5 rounded-lg text-gray-700 hover:text-red-700 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
+              title={isCursorHidden ? undefined : 'Archive note to Trash'}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Bottom Right Resize Handle for Sticky Note */}
+      {!isCanvasLocked && (
+        <div
+          data-no-drag="true"
+          data-no-canvas-swipe="true"
+          data-kiosk-edit-chrome="true"
+          onPointerDown={(e) => handlersRef.current?.onResizePointerDown(e, note.id, 'note', pos)}
+          title={isCursorHidden ? undefined : 'Drag to resize note (from mini post-it to full poster)'}
+          className="absolute bottom-1 right-1 p-1.5 cursor-nwse-resize z-20 opacity-50 group-hover:opacity-100 hover:opacity-100 touch-none text-gray-700 hover:text-black transition-opacity"
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" className="fill-current">
+            <circle cx="10" cy="10" r="1.5" />
+            <circle cx="6" cy="10" r="1.5" />
+            <circle cx="10" cy="6" r="1.5" />
+            <circle cx="2" cy="10" r="1.5" />
+            <circle cx="6" cy="6" r="1.5" />
+            <circle cx="10" cy="2" r="1.5" />
+          </svg>
+        </div>
+      )}
+    </div>
+  );
+});
+
+function shouldYieldToEdgeSwipeCardEvent(
+  e: React.PointerEvent,
+  isSwipeNavigationActive: boolean
+): boolean {
+  if (!isSwipeNavigationActive) return false;
+  if ((e.target as HTMLElement | null)?.closest?.('[data-no-canvas-swipe="true"]')) {
+    return false;
+  }
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 1024;
+  const settings = useDashboardStore.getState().settings;
+  return isPointInCanvasEdgeSwipeZone({
+    clientX: e.clientX,
+    viewportWidth: vw,
+    dockPosition: settings.dockPosition,
+    isDockHidden: Boolean(settings.isDockHidden),
+  });
+}
+
 export const Corkboard: React.FC<CorkboardProps> = ({
   notes,
   widgets = [],
@@ -587,14 +1654,14 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const defaultWidgetStyle = useDashboardStore((s) => s.settings.defaultWidgetStyle || 'auto');
   const canvasSwipeEnabled = useDashboardStore((s) => s.settings.canvasSwipeEnabled !== false);
-  const dockPosition = useDashboardStore((s) => s.settings.dockPosition);
-  const isDockHidden = useDashboardStore((s) => Boolean(s.settings.isDockHidden));
+  const reduceVisualEffects = useDashboardStore((s) => Boolean(s.settings.reduceVisualEffects));
   const isCursorHidden = useIsCursorHidden();
   const [expandedCompactToolbarId, setExpandedCompactToolbarId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [draggingType, setDraggingType] = useState<'note' | 'widget'>('note');
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [dragPos, setDragPos] = useState<{ xRatio: number; yRatio: number } | null>(null);
+  const [activeContainerSize, setActiveContainerSize] = useState<{ width: number; height: number } | null>(null);
   const dragPosRef = useRef<{ xRatio: number; yRatio: number } | null>(null);
   const dragStartPointerRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const dragTargetInitialPosRef = useRef<NonNullable<DashboardWidget['freeformPos']> | null>(null);
@@ -620,20 +1687,6 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       clearPendingHold();
     };
   }, [clearPendingHold]);
-
-  const shouldYieldToEdgeSwipe = (e: React.PointerEvent): boolean => {
-    if (!isSwipeNavigationActive) return false;
-    if ((e.target as HTMLElement | null)?.closest?.('[data-no-canvas-swipe="true"]')) {
-      return false;
-    }
-    const vw = typeof window !== 'undefined' ? window.innerWidth : 1024;
-    return isPointInCanvasEdgeSwipeZone({
-      clientX: e.clientX,
-      viewportWidth: vw,
-      dockPosition,
-      isDockHidden,
-    });
-  };
 
   const notesRef = useRef(notes);
   const widgetsRef = useRef(widgets);
@@ -1246,6 +2299,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
       setDraggingId(id);
       setDraggingType(type);
+      setActiveContainerSize({ width: rect.width, height: rect.height });
       const initialOffset = {
         x: containerX - currentX,
         y: containerY - currentY,
@@ -1475,6 +2529,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
 
       setDraggingId(null);
       setDragPos(null);
+      setActiveContainerSize(null);
       dragPosRef.current = null;
       dragTargetInitialPosRef.current = null;
       setTimeout(() => {
@@ -1580,6 +2635,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       isDraggingRef.current = true;
       setDraggingId(null);
       setDragPos(null);
+      setActiveContainerSize(null);
       setTimeout(() => {
         isDraggingRef.current = false;
       }, 100);
@@ -1765,24 +2821,69 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     [widgets]
   );
 
-  const now = new Date();
-  const activeNotes = notes.filter((n) => {
-    if (n.archivedAt) return false;
-    if (n.expiresAt && new Date(n.expiresAt) <= now) return false;
-    if (n.isPinnedToCanvas === false) return false;
-    // If the canvas has hideNotes active, only hide notes that have not been explicitly pinned to canvas
-    if (hideNotes && n.isPinnedToCanvas !== true) return false;
-    return true;
-  });
+  const minuteClock = useSharedClock('minute');
+  const nowMs = minuteClock.getTime();
 
-  const trashNotes = notes.filter((n) => {
-    if (n.archivedAt) return true;
-    if (n.expiresAt && new Date(n.expiresAt) <= now) return true;
-    return false;
+  const activeNotes = useMemo(
+    () =>
+      notes.filter((n) => {
+        if (n.archivedAt) return false;
+        if (n.expiresAt && new Date(n.expiresAt).getTime() <= nowMs) return false;
+        if (n.isPinnedToCanvas === false) return false;
+        // If the canvas has hideNotes active, only hide notes that have not been explicitly pinned to canvas
+        if (hideNotes && n.isPinnedToCanvas !== true) return false;
+        return true;
+      }),
+    [notes, nowMs, hideNotes]
+  );
+
+  const trashNotes = useMemo(
+    () =>
+      notes.filter((n) => {
+        if (n.archivedAt) return true;
+        if (n.expiresAt && new Date(n.expiresAt).getTime() <= nowMs) return true;
+        return false;
+      }),
+    [notes, nowMs]
+  );
+
+  const topZIndex = useMemo(() => {
+    let max = 1;
+    for (const w of widgets) {
+      const p = w.freeformPos;
+      if (!p?.isBackground && (p?.zIndex ?? 1) > max) max = p?.zIndex ?? 1;
+    }
+    for (const n of notes) {
+      const p = n.freeformPos;
+      if (!p?.isBackground && (p?.zIndex ?? 1) > max) max = p?.zIndex ?? 1;
+    }
+    return max;
+  }, [widgets, notes]);
+
+  const cardHandlersRef = useRef<CanvasCardEventHandlers | null>(null);
+  useEffect(() => {
+    cardHandlersRef.current = {
+      onPointerDown: handlePointerDown,
+      onBringToFront: handleBringToFront,
+      onRotatePointerDown: handleRotatePointerDown,
+      onResizePointerDown: handleResizePointerDown,
+      onPointerMove: handlePointerMove,
+      onPointerUp: handlePointerUp,
+      onUpdateWidgetPos,
+      onUpdateWidget,
+      onRemoveWidget,
+      onUpdateNotePos,
+      onUpdateNote,
+      onDeleteNote,
+      onOpenNoteEditor: openNoteEditorForExisting,
+      onToggleChecklistItem: toggleChecklistItem,
+      checkIsDragging: () => isDraggingRef.current,
+    };
   });
 
   const activeThemeObj =
     CANVAS_THEMES.find((t) => t.id === backgroundTheme) || CANVAS_THEMES[0];
+  const isCanvasLight = isCanvasThemeLight(backgroundTheme);
 
   const dimAlpha = Math.max(0, Math.min(0.92, (backgroundDimLevel ?? 45) / 100));
 
@@ -1910,875 +3011,76 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         </div>
       )}
 
-      {/* Render Freeform Widgets on Corkboard */}
+      {/* Render Freeform Widgets on Corkboard (O(1) per-card memoization + GPU translate3d drag) */}
       {widgets.map((widget) => {
-        const isCanvasLight = isCanvasThemeLight(backgroundTheme);
         const widgetThemeMode = (widget.config?.themeMode as WidgetThemeMode) || 'auto';
         const isWidgetLight = widgetThemeMode === 'light' || (widgetThemeMode === 'auto' && isCanvasLight);
-
-        const pos = widget.freeformPos || {
-          xRatio: 0.1,
-          yRatio: 0.1,
-          wRatio: 0.35,
-          hRatio: 0.45,
-          zIndex: 5,
-          rotation: 0,
-        };
-
-        const isFullScreen =
-          Boolean(pos.isFullScreen) ||
-          (widget.type === 'chores' && widget.config?.displayMode === 'hub') ||
-          (widget.type === 'kanban' && widget.config?.displayMode === 'view');
         const isDragging = draggingId === widget.id;
         const isRotating = rotatingId === widget.id;
         const isResizing = resizingId === widget.id;
-        const isActiveManipulating = isDragging || isResizing || isRotating;
-        const isFramelessWidget = isWidgetStickerMode(widget, defaultWidgetStyle);
-
-        const displayPos = {
-          ...pos,
-          xRatio: isDragging && dragPos ? dragPos.xRatio : pos.xRatio,
-          yRatio: isDragging && dragPos ? dragPos.yRatio : pos.yRatio,
-          wRatio: isResizing && resizeRatio ? resizeRatio.wRatio : pos.wRatio,
-          hRatio: isResizing && resizeRatio ? resizeRatio.hRatio : pos.hRatio,
-          rotation: isRotating && rotateAngle !== null ? rotateAngle : pos.rotation,
-        };
-
-        const toolbarPlacement = resolveWidgetToolbarPlacement({
-          isFullScreen,
-          yRatio: displayPos.yRatio ?? 0,
-          hRatio: displayPos.hRatio ?? 0.45,
-        });
-        const isNarrowCardForToolbar = (displayPos.wRatio ?? 0.35) < 0.3;
-        const isCompactToolbar = toolbarPlacement === 'compact-pill';
-        const isCompactExpanded = !isCompactToolbar || expandedCompactToolbarId === widget.id;
 
         return (
-          <div
+          <MemoizedCanvasWidgetCard
             key={widget.id}
-            data-canvas-card="true"
-            data-canvas-fullscreen={isFullScreen ? 'true' : undefined}
-            data-canvas-manipulating={isActiveManipulating ? 'true' : undefined}
-            onPointerDown={(e) => {
-              if (isPortalEvent(e)) return;
-              if (shouldYieldToEdgeSwipe(e)) return;
-              if (!isFullScreen && !isCanvasLocked) handlePointerDown(e, widget.id, 'widget', pos);
-            }}
-            onPointerDownCapture={(e) => {
-              if (isPortalEvent(e)) return;
-              if (isSwipeNavigationActive) return;
-              if (!isFullScreen && !isCanvasLocked && !pos?.isBackground && (pos?.zIndex || 1) < getTopZIndex()) {
-                handleBringToFront(widget.id, 'widget');
-              }
-            }}
-            onContextMenu={(e) => {
-              if (isPortalEvent(e) || isCanvasLocked) return;
-              e.preventDefault();
-              e.stopPropagation();
-              setContextMenu({
-                x: e.clientX,
-                y: e.clientY,
-                id: widget.id,
-                type: 'widget',
-                title: widget.title,
-                currentZ: pos.zIndex || 1,
-                isBackground: Boolean(pos.isBackground),
-                rotation: pos.rotation,
-              });
-            }}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerUp}
-            style={
-              isFullScreen
-                ? {
-                    position: 'absolute',
-                    left: 0,
-                    top: 0,
-                    width: '100%',
-                    height: '100%',
-                    zIndex: 60,
-                    touchAction: 'pan-y',
-                    WebkitTouchCallout: 'none',
-                    userSelect: 'none',
-                    WebkitUserSelect: 'none',
-                  }
-                : ({
-                    position: 'absolute',
-                    left: `${displayPos.xRatio * 100}%`,
-                    top: `${displayPos.yRatio * 100}%`,
-                    width: `${displayPos.wRatio * 100}%`,
-                    height: `${displayPos.hRatio * 100}%`,
-                    minWidth: '180px',
-                    minHeight: isFramelessWidget ? '50px' : '140px',
-                    maxWidth: '100%',
-                    maxHeight: '100%',
-                    transform: `rotate(${displayPos.rotation}deg) ${isDragging ? 'scale(1.02)' : 'scale(1)'}`,
-                    '--card-z': isActiveManipulating ? 58 : pos.zIndex,
-                    touchAction: isActiveManipulating ? 'none' : 'pan-y',
-                    WebkitTouchCallout: 'none',
-                    userSelect: 'none',
-                    WebkitUserSelect: 'none',
-                    willChange: isActiveManipulating ? 'left, top, width, height, transform' : 'auto',
-                    transition: isActiveManipulating
-                      ? 'none'
-                      : 'left 0.3s cubic-bezier(0.22, 1, 0.36, 1), top 0.3s cubic-bezier(0.22, 1, 0.36, 1), width 0.3s cubic-bezier(0.22, 1, 0.36, 1), height 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.25s ease-out, box-shadow 0.2s',
-                  } as React.CSSProperties)
-            }
-            className={`group ${
-              isFullScreen
-                ? widget.type === 'meals'
-                  ? 'rounded-none border-0 p-4 overflow-hidden'
-                  : 'rounded-none border-0 p-0 overflow-hidden'
-                : isFramelessWidget
-                ? widget.type === 'photo_frame'
-                  ? 'rounded-2xl border-0 p-0'
-                  : 'rounded-2xl border-0 p-1'
-                : widget.type === 'image'
-                ? isWidgetLight ? 'rounded-2xl border border-slate-200/90 p-0' : 'rounded-2xl border border-gray-800/90 p-0'
-                : isWidgetLight ? 'rounded-2xl border border-slate-200/90 p-4' : 'rounded-2xl border border-gray-800/90 p-4'
-            } ${
-              isFramelessWidget
-                ? isWidgetLight ? 'bg-transparent text-slate-800' : 'bg-transparent text-white'
-                : isWidgetLight
-                ? `bg-white/95 ${isActiveManipulating ? '' : 'backdrop-blur-md '}shadow-xl text-slate-800`
-                : `bg-gray-900/80 ${isActiveManipulating ? '' : 'backdrop-blur-md '}shadow-2xl text-white`
-            } ${isFullScreen ? '' : `z-[var(--card-z)] ${!isCanvasLocked && !isActiveManipulating ? 'hover:z-[55] ' : ''}`}${
-              isCanvasLocked || isFullScreen ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
-            } ${isFullScreen ? '' : isActiveManipulating ? 'touch-none' : 'touch-pan-y'} select-none transition-shadow ${
-              isDragging || isRotating
-                ? 'ring-2 ring-blue-500 shadow-blue-500/20'
-                : isFramelessWidget
-                ? ''
-                : 'hover:shadow-blue-500/10'
-            } flex flex-col justify-between`}
-          >
-            {/* Elevated Grab-to-Rotate Handle (Prominent, impossible to obscure) */}
-            {!isFullScreen && !isCanvasLocked && onUpdateWidgetPos && !isCompactToolbar && (
-              <div
-                data-no-drag="true"
-                data-no-canvas-swipe="true"
-                onPointerDown={(e) => handleRotatePointerDown(e, widget.id, 'widget', pos)}
-                onDoubleClick={(e) => {
-                  e.stopPropagation();
-                  onUpdateWidgetPos(widget.id, widget.gridPos, { ...pos, rotation: 0 });
-                }}
-                title={
-                  isCursorHidden
-                    ? undefined
-                    : 'Grab and drag in a circle to rotate tile (double-click to reset to 0°)'
-                }
-                className={`absolute ${
-                  isNarrowCardForToolbar ? 'left-3' : 'left-1/2 -translate-x-1/2'
-                } z-50 flex flex-col items-center transition-opacity pointer-events-auto cursor-grab active:cursor-grabbing px-3 ${
-                  isRotating
-                    ? 'opacity-100'
-                    : isCursorHidden
-                      ? 'opacity-0 pointer-events-none'
-                      : 'opacity-0 group-hover:opacity-100'
-                } ${
-                  toolbarPlacement === 'outside-bottom'
-                    ? '-bottom-8 pt-2 flex-col-reverse'
-                    : '-top-7.5 pb-2'
-                }`}
-              >
-                <div
-                  className={`w-6 h-6 rounded-full bg-gray-950 border border-blue-400 hover:border-blue-300 text-blue-300 hover:text-white shadow-xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all ${
-                    isRotating ? 'ring-2 ring-blue-400 bg-blue-900/60' : ''
-                  }`}
-                >
-                  <RotateCw className="w-3 h-3" />
-                </div>
-                {/* Visual stem line */}
-                <div className="w-0.5 h-1.5 bg-blue-400/60" />
-                {isRotating && (
-                  <span className="px-1.5 py-0.5 rounded-full bg-blue-600 text-white font-mono font-bold text-[10px] shadow-lg mt-0.5">
-                    {displayPos.rotation}°
-                  </span>
-                )}
-              </div>
-            )}
-
-            {/* Floating Widget Controls: Outside-top, flipped outside-bottom near top edge, or compact pill */}
-            <div
-              data-no-drag="true"
-              onPointerEnter={(e) => {
-                if (e.pointerType === 'mouse' && isCompactToolbar) {
-                  setExpandedCompactToolbarId(widget.id);
-                }
-              }}
-              onPointerLeave={(e) => {
-                if (e.pointerType === 'mouse' && isCompactToolbar) {
-                  setExpandedCompactToolbarId((prev) => (prev === widget.id ? null : prev));
-                }
-              }}
-              className={`absolute z-50 transition-opacity ${
-                isCursorHidden ? 'opacity-0 pointer-events-none' : 'opacity-0 group-hover:opacity-100'
-              } ${
-                toolbarPlacement === 'outside-top'
-                  ? 'bottom-full right-2 pb-1.5'
-                  : toolbarPlacement === 'outside-bottom'
-                    ? 'top-full right-6 pt-1.5'
-                    : `left-1/2 -translate-x-1/2 ${
-                        isFullScreen && dockPaddingClass === 'pt-20' ? 'top-20' : 'top-1.5'
-                      }`
-              }`}
-            >
-              {!isCompactExpanded ? (
-                <button
-                  type="button"
-                  data-no-drag="true"
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setExpandedCompactToolbarId(widget.id);
-                  }}
-                  title={isCursorHidden ? undefined : 'Tile actions'}
-                  className={`flex items-center justify-center px-2 py-0.5 rounded-full backdrop-blur-md shadow-lg transition-colors cursor-pointer ${
-                    isWidgetLight
-                      ? 'bg-white/95 border border-slate-300/90 text-slate-600 hover:text-slate-900'
-                      : 'bg-gray-950/90 border border-gray-700/80 text-gray-300 hover:text-white'
-                  }`}
-                >
-                  <MoreHorizontal className="w-3.5 h-3.5" />
-                </button>
-              ) : (
-                <div
-                  className={`flex items-center gap-1 backdrop-blur-md px-1.5 py-1 rounded-xl shadow-xl ${
-                    isWidgetLight
-                      ? 'bg-white/95 border border-slate-300/90 text-slate-700'
-                      : 'bg-gray-950/90 border border-gray-700/80 shadow-2xl text-gray-300'
-                  }`}
-                >
-                  {!isFullScreen && !isCanvasLocked && onUpdateWidgetPos && (
-                    <button
-                      type="button"
-                      data-no-canvas-swipe="true"
-                      onPointerDown={(e) => handleRotatePointerDown(e, widget.id, 'widget', pos)}
-                      onDoubleClick={(e) => {
-                        e.stopPropagation();
-                        onUpdateWidgetPos(widget.id, widget.gridPos, { ...pos, rotation: 0 });
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (!isRotating && pos.rotation !== 0) {
-                          onUpdateWidgetPos(widget.id, widget.gridPos, { ...pos, rotation: 0 });
-                        }
-                      }}
-                      title={
-                        isCursorHidden
-                          ? undefined
-                          : pos.rotation !== 0
-                            ? `Rotated ${pos.rotation}° — drag to rotate or click to reset to 0°`
-                            : 'Drag in a circle to rotate tile'
-                      }
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold flex items-center gap-0.5 transition-all cursor-grab active:cursor-grabbing ${
-                        pos.rotation !== 0
-                          ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-600 hover:text-white'
-                          : isWidgetLight
-                            ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
-                            : 'hover:bg-gray-800 text-gray-300 hover:text-white'
-                      }`}
-                    >
-                      <RotateCw className="w-3 h-3" />
-                      {pos.rotation !== 0 && <span>{pos.rotation}°</span>}
-                    </button>
-                  )}
-                  {!isCanvasLocked && onUpdateWidget && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (isCompactToolbar) setExpandedCompactToolbarId(null);
-                        setEditingWidget(widget);
-                      }}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      title={isCursorHidden ? undefined : 'Configure tile title and settings'}
-                      className={`p-1 rounded-lg transition-all cursor-pointer ${
-                        isWidgetLight
-                          ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
-                          : 'hover:bg-gray-800 text-gray-300 hover:text-white'
-                      }`}
-                    >
-                      <Settings className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                  {!isCanvasLocked && onUpdateWidgetPos && !isFullScreen && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (isCompactToolbar) setExpandedCompactToolbarId(null);
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        setContextMenu({
-                          x: rect.left,
-                          y: rect.bottom + 6,
-                          id: widget.id,
-                          type: 'widget',
-                          title: widget.title,
-                          currentZ: pos.zIndex || 1,
-                          isBackground: Boolean(pos.isBackground),
-                          rotation: pos.rotation,
-                        });
-                      }}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      title={isCursorHidden ? undefined : 'Layer order & appearance'}
-                      className={`p-1 rounded-lg transition-all cursor-pointer ${
-                        isWidgetLight
-                          ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
-                          : 'hover:bg-gray-800 text-gray-300 hover:text-white'
-                      }`}
-                    >
-                      <Layers className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                  {onUpdateWidgetPos && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (isCompactToolbar) setExpandedCompactToolbarId(null);
-                        if (isFullScreen) {
-                          const nextPos = {
-                            ...pos,
-                            xRatio: 0.1,
-                            yRatio: 0.1,
-                            wRatio: 0.45,
-                            hRatio: 0.5,
-                            rotation: 0,
-                            isFullScreen: false,
-                          };
-                          if (widget.type === 'chores' && onUpdateWidget) {
-                            onUpdateWidget(widget.id, {
-                              freeformPos: nextPos,
-                              config: { ...widget.config, displayMode: 'tile' },
-                            });
-                          } else if (widget.type === 'kanban' && onUpdateWidget) {
-                            onUpdateWidget(widget.id, {
-                              freeformPos: nextPos,
-                              config: { ...widget.config, displayMode: 'tile' },
-                            });
-                          } else {
-                            onUpdateWidgetPos(widget.id, widget.gridPos, nextPos);
-                          }
-                        } else {
-                          const nextPos = {
-                            ...pos,
-                            xRatio: 0,
-                            yRatio: 0,
-                            wRatio: 1,
-                            hRatio: 1,
-                            rotation: 0,
-                            isFullScreen: true,
-                          };
-                          if (widget.type === 'chores' && onUpdateWidget) {
-                            onUpdateWidget(widget.id, {
-                              freeformPos: nextPos,
-                              config: { ...widget.config, displayMode: 'hub' },
-                            });
-                          } else if (widget.type === 'kanban' && onUpdateWidget) {
-                            onUpdateWidget(widget.id, {
-                              freeformPos: nextPos,
-                              config: { ...widget.config, displayMode: 'view' },
-                            });
-                          } else {
-                            onUpdateWidgetPos(widget.id, widget.gridPos, nextPos);
-                          }
-                        }
-                      }}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      title={
-                        isCursorHidden
-                          ? undefined
-                          : isFullScreen
-                            ? 'Restore card size'
-                            : 'Fill full screen / canvas'
-                      }
-                      className={`p-1 rounded-lg transition-all cursor-pointer ${
-                        isWidgetLight
-                          ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
-                          : 'hover:bg-gray-800 text-gray-300 hover:text-white'
-                      }`}
-                    >
-                      {isFullScreen ? (
-                        <Minimize2 className="w-3.5 h-3.5" />
-                      ) : (
-                        <Maximize2 className="w-3.5 h-3.5" />
-                      )}
-                    </button>
-                  )}
-
-                  {!isCanvasLocked && onRemoveWidget && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (isCompactToolbar) setExpandedCompactToolbarId(null);
-                        onRemoveWidget(widget.id);
-                      }}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      title={isCursorHidden ? undefined : 'Remove widget'}
-                      className="p-1 rounded-lg hover:bg-red-500/80 text-gray-400 hover:text-white transition-all cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Bottom Right Resize Handle */}
-            {!isFullScreen && !isCanvasLocked && (
-              <div
-                data-no-drag="true"
-                data-no-canvas-swipe="true"
-                onPointerDown={(e) => handleResizePointerDown(e, widget.id, 'widget', pos)}
-                title={isCursorHidden ? undefined : 'Drag to resize tile'}
-                className={`absolute bottom-1 right-1 p-1.5 cursor-nwse-resize z-40 touch-none transition-opacity ${
-                  isResizing
-                    ? 'opacity-100'
-                    : isCursorHidden
-                      ? 'opacity-0 pointer-events-none'
-                      : 'opacity-40 group-hover:opacity-100 hover:opacity-100'
-                } ${
-                  isWidgetLight ? 'text-slate-400 hover:text-slate-800' : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                <svg width="12" height="12" viewBox="0 0 12 12" className="fill-current">
-                  <circle cx="10" cy="10" r="1.5" />
-                  <circle cx="6" cy="10" r="1.5" />
-                  <circle cx="10" cy="6" r="1.5" />
-                  <circle cx="2" cy="10" r="1.5" />
-                  <circle cx="6" cy="6" r="1.5" />
-                  <circle cx="10" cy="2" r="1.5" />
-                </svg>
-              </div>
-            )}
-
-
-            {/* Widget Inner Renderers */}
-            <div
-              className={`relative z-0 isolate w-full h-full flex flex-col justify-between ${
-                isFramelessWidget && widget.type === 'photo_frame' && widget.config?.displayStyle === 'polaroid'
-                  ? 'overflow-visible'
-                  : 'overflow-hidden'
-              } rounded-[inherit]`}
-            >
-              <MemoizedCanvasWidgetBody
-                widget={widget}
-                isWidgetLight={isWidgetLight}
-                isFramelessWidget={isFramelessWidget}
-                isFullScreen={isFullScreen}
-                isCanvasLocked={isCanvasLocked}
-                dockPaddingClass={dockPaddingClass}
-                canUpdateWidget={Boolean(onUpdateWidget)}
-                onUpdateWidgetConfig={handleUpdateWidgetConfig}
-                onOpenWidgetSettings={handleOpenWidgetSettings}
-                stickyNotes={widget.type === 'sticky_notes' ? notes : undefined}
-                stickyActions={widget.type === 'sticky_notes' ? stickyActions : undefined}
-              />
-            </div>
-          </div>
+            widget={widget}
+            isWidgetLight={isWidgetLight}
+            isCanvasLocked={isCanvasLocked}
+            isCursorHidden={isCursorHidden}
+            isSwipeNavigationActive={isSwipeNavigationActive}
+            defaultWidgetStyle={defaultWidgetStyle}
+            reduceVisualEffects={reduceVisualEffects}
+            dockPaddingClass={dockPaddingClass}
+            topZIndex={topZIndex}
+            canUpdateWidget={Boolean(onUpdateWidget)}
+            hasUpdateWidgetPos={Boolean(onUpdateWidgetPos)}
+            hasRemoveWidget={Boolean(onRemoveWidget)}
+            isDragging={isDragging}
+            activeDragPos={isDragging ? dragPos : null}
+            activeContainerSize={isDragging ? activeContainerSize : null}
+            isResizing={isResizing}
+            activeResizeRatio={isResizing ? resizeRatio : null}
+            isRotating={isRotating}
+            activeRotateAngle={isRotating ? rotateAngle : null}
+            isCompactExpanded={expandedCompactToolbarId === widget.id}
+            stickyNotes={widget.type === 'sticky_notes' ? notes : undefined}
+            stickyActions={widget.type === 'sticky_notes' ? stickyActions : undefined}
+            onUpdateWidgetConfig={handleUpdateWidgetConfig}
+            onOpenWidgetSettings={handleOpenWidgetSettings}
+            onSetExpandedCompactToolbarId={setExpandedCompactToolbarId}
+            onSetContextMenu={setContextMenu}
+            handlersRef={cardHandlersRef}
+          />
         );
       })}
 
-      {/* Render All Freeform Notes */}
+      {/* Render All Freeform Notes (O(1) per-card memoization + GPU translate3d drag) */}
       {activeNotes.map((note) => {
-        const pos = note.freeformPos || {
-          xRatio: 0.1,
-          yRatio: 0.1,
-          wRatio: 0.26,
-          hRatio: 0.3,
-          zIndex: 1,
-          rotation: 0,
-        };
-
         const isDragging = draggingId === note.id;
         const isRotating = rotatingId === note.id;
         const isResizing = resizingId === note.id;
-        const isActiveManipulating = isDragging || isResizing || isRotating;
-        const isExpiringSoon =
-          note.expiresAt &&
-          new Date(note.expiresAt).getTime() - now.getTime() < 12 * 60 * 60 * 1000;
-        const fontSizeClass = FONT_SIZE_CLASSES[note.fontSize || 'base'];
-
-        const displayPos = {
-          ...pos,
-          xRatio: isDragging && dragPos ? dragPos.xRatio : pos.xRatio,
-          yRatio: isDragging && dragPos ? dragPos.yRatio : pos.yRatio,
-          wRatio: isResizing && resizeRatio ? resizeRatio.wRatio : pos.wRatio,
-          hRatio: isResizing && resizeRatio ? resizeRatio.hRatio : (pos.hRatio || 0.3),
-          rotation: isRotating && rotateAngle !== null ? rotateAngle : pos.rotation,
-        };
 
         return (
-          <div
+          <MemoizedCanvasStickyNoteCard
             key={note.id}
-            data-canvas-card="true"
-            data-canvas-manipulating={isActiveManipulating ? 'true' : undefined}
-            onPointerDown={(e) => {
-              if (isPortalEvent(e)) return;
-              if (shouldYieldToEdgeSwipe(e)) return;
-              if (!isCanvasLocked) handlePointerDown(e, note.id, 'note', pos);
-            }}
-            onPointerDownCapture={(e) => {
-              if (isPortalEvent(e)) return;
-              if (isSwipeNavigationActive) return;
-              if (!isCanvasLocked && !pos?.isBackground && (pos?.zIndex || 1) < getTopZIndex()) {
-                handleBringToFront(note.id, 'note');
-              }
-            }}
-            onContextMenu={(e) => {
-              if (isPortalEvent(e) || isCanvasLocked) return;
-              e.preventDefault();
-              e.stopPropagation();
-              setContextMenu({
-                x: e.clientX,
-                y: e.clientY,
-                id: note.id,
-                type: 'note',
-                title: note.title || 'Sticky Note',
-                currentZ: pos.zIndex || 1,
-                isBackground: Boolean(pos.isBackground),
-                rotation: pos.rotation,
-              });
-            }}
-            onPointerMove={handlePointerMove}
-            onPointerUp={(e) => {
-              if (isPortalEvent(e)) return;
-              handlePointerUp(e);
-              if (!isDraggingRef.current) {
-                const now = Date.now();
-                if (lastTapRef.current.id === note.id && now - lastTapRef.current.time < 350) {
-                  openNoteEditorForExisting(note);
-                  lastTapRef.current = { id: '', time: 0 };
-                } else {
-                  lastTapRef.current = { id: note.id, time: now };
-                }
-              }
-            }}
-            onPointerCancel={handlePointerUp}
-            onDoubleClick={(e) => {
-              e.stopPropagation();
-              openNoteEditorForExisting(note);
-            }}
-            style={{
-              position: 'absolute',
-              left: `${displayPos.xRatio * 100}%`,
-              top: `${displayPos.yRatio * 100}%`,
-              width: `${displayPos.wRatio * 100}%`,
-              height: `${(displayPos.hRatio || 0.3) * 100}%`,
-              minWidth: '110px',
-              minHeight: '90px',
-              maxWidth: '100%',
-              maxHeight: '100%',
-              transform: `rotate(${displayPos.rotation}deg) ${isDragging ? 'scale(1.03)' : 'scale(1)'}`,
-              backgroundColor: note.bgColor || '#fef08a',
-              '--card-z': isActiveManipulating ? 58 : pos.zIndex,
-              touchAction: isActiveManipulating ? 'none' : 'pan-y',
-              WebkitTouchCallout: 'none',
-              userSelect: 'none',
-              WebkitUserSelect: 'none',
-              willChange: isActiveManipulating ? 'left, top, width, height, transform' : 'auto',
-              transition: isActiveManipulating
-                ? 'none'
-                : 'left 0.3s cubic-bezier(0.22, 1, 0.36, 1), top 0.3s cubic-bezier(0.22, 1, 0.36, 1), width 0.3s cubic-bezier(0.22, 1, 0.36, 1), height 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.25s ease-out, box-shadow 0.2s',
-            } as React.CSSProperties}
-            className={`group rounded-2xl p-3.5 shadow-2xl text-gray-900 z-[var(--card-z)] ${!isCanvasLocked && !isActiveManipulating ? 'hover:z-[55] ' : ''}${
-              isCanvasLocked ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
-            } border border-black/10 ${isActiveManipulating ? 'touch-none' : 'touch-pan-y'} select-none transition-all ${
-              isDragging || isRotating
-                ? 'ring-2 ring-blue-500/70 shadow-2xl'
-                : highlightedNoteId === note.id
-                ? 'ring-4 ring-blue-500 shadow-2xl shadow-blue-500/50 scale-105'
-                : isExpiringSoon
-                ? 'ring-2 ring-amber-500 shadow-amber-500/20'
-                : 'hover:shadow-yellow-500/10'
-            } flex flex-col justify-between`}
-          >
-            {/* Top-Center Grab-to-Rotate Handle with Stem (appears on hover) */}
-            {!isCanvasLocked && (
-              <div
-                data-no-drag="true"
-                data-no-canvas-swipe="true"
-                onPointerDown={(e) => handleRotatePointerDown(e, note.id, 'note', pos)}
-                onDoubleClick={(e) => {
-                  e.stopPropagation();
-                  onUpdateNotePos(note.id, { ...pos, rotation: 0 });
-                }}
-                title="Grab and drag in a circle to rotate note (double-click to reset to 0°)"
-                className={`absolute -top-7.5 left-1/2 -translate-x-1/2 flex flex-col items-center z-50 transition-opacity pointer-events-auto cursor-grab active:cursor-grabbing px-3 pb-2 ${
-                  isRotating ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                }`}
-              >
-                <div
-                  className={`w-6 h-6 rounded-full bg-gray-900/95 border border-gray-700 hover:border-gray-500 text-white shadow-xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all ${
-                    isRotating ? 'ring-2 ring-blue-400' : ''
-                  }`}
-                >
-                  <RotateCw className="w-3 h-3" />
-                </div>
-                <div className="w-0.5 h-1.5 bg-gray-600/70" />
-                {isRotating && (
-                  <span className="px-1.5 py-0.5 rounded-full bg-gray-900 text-white font-mono font-bold text-[10px] shadow mt-0.5">
-                    {displayPos.rotation}°
-                  </span>
-                )}
-              </div>
-            )}
-
-            <div
-              className="flex-1 overflow-y-auto min-h-0 pr-0.5 select-none touch-none"
-              style={{
-                touchAction: 'none',
-                WebkitUserSelect: 'none',
-                WebkitTouchCallout: 'none',
-                userSelect: 'none',
-              }}
-            >
-              {/* Note Title & Header Edit Button */}
-              <div
-                className="font-bold text-xs md:text-sm mb-1.5 flex items-center justify-between border-b border-black/10 pb-1 select-none touch-none"
-                style={{
-                  touchAction: 'none',
-                  WebkitUserSelect: 'none',
-                  WebkitTouchCallout: 'none',
-                  userSelect: 'none',
-                }}
-              >
-                <span className="truncate select-none touch-none">
-                  {note.title ||
-                    (note.isShoppingList || note.freeformPos?.isShoppingList
-                      ? '🛒 Shopping List'
-                      : note.isChecklist
-                      ? 'Checklist'
-                      : 'Note')}
-                </span>
-                <div className="flex items-center gap-1 shrink-0 select-none touch-none">
-                  {note.expiresAt && (
-                    <span
-                      title={`Expires: ${new Date(note.expiresAt).toLocaleString()}`}
-                      className={`text-[9px] px-1.5 py-0.5 rounded-full flex items-center gap-0.5 select-none touch-none ${
-                        isExpiringSoon ? 'bg-amber-500/30 text-amber-950 font-bold' : 'bg-black/10 text-gray-700'
-                      }`}
-                    >
-                      <Clock className="w-2.5 h-2.5" />
-                      {new Date(note.expiresAt).toLocaleDateString([], { month: 'numeric', day: 'numeric' })}
-                    </span>
-                  )}
-                  {!isCanvasLocked && (
-                    <>
-                      <button
-                        type="button"
-                        data-no-drag="true"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openNoteEditorForExisting(note);
-                        }}
-                        onPointerDown={(e) => e.stopPropagation()}
-                        className="p-1 rounded-md text-gray-700 hover:text-blue-900 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
-                        title="Edit note"
-                      >
-                        <Edit2 className="w-3 h-3" />
-                      </button>
-                      <button
-                        type="button"
-                        data-no-drag="true"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          setContextMenu({
-                            x: rect.left,
-                            y: rect.bottom + 6,
-                            id: note.id,
-                            type: 'note',
-                            title: note.title || 'Sticky Note',
-                            currentZ: pos.zIndex || 1,
-                            isBackground: Boolean(pos.isBackground),
-                            rotation: pos.rotation,
-                          });
-                        }}
-                        onPointerDown={(e) => e.stopPropagation()}
-                        className="p-1 rounded-md text-gray-700 hover:text-blue-900 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
-                        title="Layer order (Bring to Front / Send to Back)"
-                      >
-                        <Layers className="w-3 h-3" />
-                      </button>
-                      <button
-                        type="button"
-                        data-no-drag="true"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (hasStickyNotesTile) {
-                            onUpdateNote(note.id, { isPinnedToCanvas: false });
-                          } else {
-                            onDeleteNote(note.id);
-                          }
-                        }}
-                        onPointerDown={(e) => e.stopPropagation()}
-                        className="p-1 rounded-md text-gray-700 hover:text-red-900 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
-                        title={
-                          hasStickyNotesTile
-                            ? 'Close from canvas (remains saved in Notes Tile)'
-                            : 'Delete note (move to Archive)'
-                        }
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Note Content / Checklist / Shopping List */}
-              {note.isShoppingList || note.freeformPos?.isShoppingList ? (
-                <React.Suspense fallback={null}>
-                  <ShoppingListNoteBody
-                    note={note}
-                    fontSizeClass={fontSizeClass}
-                    onUpdateItems={(nextItems) =>
-                      onUpdateNote(note.id, { checklistItems: nextItems })
-                    }
-                    onToggleItem={(itemId) => toggleChecklistItem(note, itemId)}
-                    onCheckDragGuard={() => isDraggingRef.current}
-                  />
-                </React.Suspense>
-              ) : note.isChecklist && note.checklistItems ? (
-                <div className="space-y-1.5 mt-1 select-none touch-none">
-                  {note.checklistItems.map((item) => (
-                    <div
-                      key={item.id}
-                      className={`flex items-center gap-2 w-full text-left select-none touch-none ${fontSizeClass}`}
-                    >
-                      <button
-                        type="button"
-                        data-no-drag="true"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleChecklistItem(note, item.id);
-                        }}
-                        onPointerDown={(e) => {
-                          e.stopPropagation();
-                        }}
-                        title={item.done ? 'Mark as incomplete' : 'Mark as complete'}
-                        className="p-0.5 -m-0.5 hover:opacity-80 transition-opacity shrink-0 cursor-pointer text-gray-700 hover:text-gray-900"
-                      >
-                        {item.done ? (
-                          <CheckSquare className="w-4 h-4 text-emerald-800 shrink-0" />
-                        ) : (
-                          <Square className="w-4 h-4 text-gray-700 shrink-0" />
-                        )}
-                      </button>
-                      <span
-                        onClick={() => {
-                          if (!isDraggingRef.current) {
-                            toggleChecklistItem(note, item.id);
-                          }
-                        }}
-                        className={`flex-1 select-none touch-none cursor-pointer ${
-                          item.done ? 'line-through opacity-50' : 'font-medium'
-                        }`}
-                      >
-                        {item.text}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p
-                  className={`whitespace-pre-wrap break-words select-none touch-none ${fontSizeClass}`}
-                  style={{
-                    touchAction: 'none',
-                    WebkitUserSelect: 'none',
-                    WebkitTouchCallout: 'none',
-                    userSelect: 'none',
-                  }}
-                >
-                  {note.content}
-                </p>
-              )}
-            </div>
-
-            {/* Note Bottom Actions: 1-Click Color Swatches, Tilt, Edit & Archive/Delete */}
-            <div className="flex items-center justify-between gap-1 pt-1.5 border-t border-black/10 mt-1.5 opacity-90 md:opacity-0 md:group-hover:opacity-100 transition-opacity pr-3 shrink-0">
-              {/* 1-Click Inline Pastel Color Swatches */}
-              <div className="flex items-center gap-1">
-                {COLOR_PALETTE.map((color) => (
-                  <button
-                    key={color}
-                    type="button"
-                    data-no-drag="true"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onUpdateNote(note.id, { bgColor: color });
-                    }}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    style={{ backgroundColor: color }}
-                    title="Change note color"
-                    className={`w-3.5 h-3.5 rounded-full border transition-transform cursor-pointer ${
-                      (note.bgColor || '#fef08a') === color
-                        ? 'border-gray-900 scale-125 ring-1 ring-gray-900/50'
-                        : 'border-black/25 hover:scale-110'
-                    }`}
-                  />
-                ))}
-              </div>
-
-              <div className="flex items-center gap-0.5">
-                <button
-                  type="button"
-                  data-no-drag="true"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onUpdateNotePos(note.id, {
-                      ...pos,
-                      rotation: 0,
-                    });
-                  }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  className="px-1 py-0.5 rounded text-[9px] font-mono text-gray-700 hover:bg-black/10 transition-all cursor-pointer"
-                  title="Straighten note (0°)"
-                >
-                  0°
-                </button>
-                {!isCanvasLocked && (
-                  <button
-                    type="button"
-                    data-no-drag="true"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteNote(note.id);
-                    }}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    className="p-1.5 rounded-lg text-gray-700 hover:text-red-700 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
-                    title="Archive note to Trash"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Bottom Right Resize Handle for Sticky Note */}
-            {!isCanvasLocked && (
-              <div
-                data-no-drag="true"
-                data-no-canvas-swipe="true"
-                onPointerDown={(e) => handleResizePointerDown(e, note.id, 'note', pos)}
-                title="Drag to resize note (from mini post-it to full poster)"
-                className="absolute bottom-1 right-1 p-1.5 cursor-nwse-resize z-20 opacity-50 group-hover:opacity-100 hover:opacity-100 touch-none text-gray-700 hover:text-black transition-opacity"
-              >
-                <svg width="12" height="12" viewBox="0 0 12 12" className="fill-current">
-                  <circle cx="10" cy="10" r="1.5" />
-                  <circle cx="6" cy="10" r="1.5" />
-                  <circle cx="10" cy="6" r="1.5" />
-                  <circle cx="2" cy="10" r="1.5" />
-                  <circle cx="6" cy="6" r="1.5" />
-                  <circle cx="10" cy="2" r="1.5" />
-                </svg>
-              </div>
-            )}
-          </div>
+            note={note}
+            nowMs={nowMs}
+            isCanvasLocked={isCanvasLocked}
+            isCursorHidden={isCursorHidden}
+            isSwipeNavigationActive={isSwipeNavigationActive}
+            isHighlighted={highlightedNoteId === note.id}
+            hasStickyNotesTile={hasStickyNotesTile}
+            topZIndex={topZIndex}
+            isDragging={isDragging}
+            activeDragPos={isDragging ? dragPos : null}
+            activeContainerSize={isDragging ? activeContainerSize : null}
+            isResizing={isResizing}
+            activeResizeRatio={isResizing ? resizeRatio : null}
+            isRotating={isRotating}
+            activeRotateAngle={isRotating ? rotateAngle : null}
+            lastTapRef={lastTapRef}
+            onSetContextMenu={setContextMenu}
+            handlersRef={cardHandlersRef}
+          />
         );
       })}
 

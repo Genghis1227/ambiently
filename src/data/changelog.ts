@@ -11,6 +11,17 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.8.0",
+    date: "November 20, 2026",
+    title: "Kiosk GPU Mode, Zero-Flow Canvas Dragging & Incremental Sync Engine",
+    highlights: [
+      "Low-Power Kiosk GPU Mode (Reduce Blur & GPU Effects): Toggle reduceVisualEffects in Settings -> Display & Kiosk to replace per-frame frosted backdrop blurs with crisp opaque surfaces on Raspberry Pi and 4K wall displays.",
+      "Zero-Flow translate3d Drag & O(1) Card Memoization: Corkboard widget and sticky note cards render inside React.memo wrappers and translate drag offsets on the GPU compositor without re-rendering untouched sibling tiles.",
+      "Zero-CORS-Refetch Photo Framing & Idle Tab Pre-Warming: Eliminated duplicate cross-origin album downloads during photo saliency checks, added decoding=\"async\", lazy-loaded secondary widgets and WidgetSettingsModal sub-panels, trimmed Workbox precache, and pre-warmed inactive canvas widgets at idle.",
+      "Idle-Cursor Wake Coalescing & Incremental Dirty-Scope Cloud Sync: Skipped redundant DOM tooltip scans during pointer motion, isolated carousel pause and GlobalTimerAlarmOverlay selectors, and scoped debounced cloud pushes to modified collections.",
+    ],
+  },
+  {
     version: "v0.7.26",
     date: "November 20, 2026",
     title: "Phase 5: Home Lab Uptime & Home Assistant Glance Tile",

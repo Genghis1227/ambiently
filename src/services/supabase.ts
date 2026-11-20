@@ -10,10 +10,13 @@ import {
   keepLocalTabFields,
   keepLocalWidgetFields,
   mergeCloudSettingsForLocal,
+  resolveEffectiveSyncScopes,
   shouldAcceptCloudRow,
   shouldAcceptCloudSettings,
   shouldPushLocalRowToCloud,
+  type DirtySyncScopes,
 } from './syncMerge';
+export { resolveEffectiveSyncScopes, type DirtySyncScopes };
 import { resolveCuratedPhotos } from '../data/curatedScenery';
 import {
   isSameCommonPhotoSource,
@@ -136,6 +139,8 @@ let cachedDashboardTarget: {
 // The board's updated_at as the cloud last returned it, compared as text to skip downloading an
 // unchanged board
 let lastKnownCloudUpdatedAt: string | null = null;
+const TOMBSTONE_PURGE_INTERVAL_MS = 30 * 60 * 1000;
+const lastTombstonePurgeAtByBoard = new Map<string, number>();
 
 // The board this device's tabs, widgets and notes belong to. When the signed-in account moves to
 // another board (accepting an invitation, leaving or being removed from one, or a different account
@@ -939,7 +944,7 @@ export async function pushToCloud(
   tabs: DashboardTab[],
   widgets: DashboardWidget[],
   notes: StickyNoteItem[],
-  options?: { force?: boolean }
+  options?: { force?: boolean; dirtyScopes?: DirtySyncScopes }
 ): Promise<{ success: boolean; error?: string }> {
   const sb = await getSupabaseAsync();
   const user = await getCachedSessionUser();
@@ -958,17 +963,30 @@ export async function pushToCloud(
       return { success: false, error: 'This device is switching boards. Sync again in a moment.' };
     }
 
-    // 1. Query Dexie to include all active and soft-deleted records so remote devices sync additions and deletions
-    const [dbSettings, dbTabs, dbWidgets, dbNotes, dbChoreSnapshot, dbProfiles, dbMealSnapshot, dbKanbanSnapshot, dbRoutinesSnapshot] = await Promise.all([
-      db.settings.get('global'),
-      db.tabs.toArray(),
-      db.widgets.toArray(),
-      db.notes.toArray(),
-      db.chores.get('household_chores'),
-      db.profiles.toArray(),
-      db.meals.get('household_meals'),
-      db.kanban.get('household_kanban'),
-      db.routines.get('household_routines'),
+    const scopes = resolveEffectiveSyncScopes(options, Boolean(lastKnownCloudUpdatedAt));
+    const needsRemoteWidgetsTable = scopes.widgets || scopes.householdStores;
+
+    // 1. Query Dexie only for dirty/needed scopes so incremental auto-pushes stay lightweight
+    const [
+      dbSettings,
+      dbTabs,
+      dbWidgets,
+      dbNotes,
+      dbChoreSnapshot,
+      dbProfiles,
+      dbMealSnapshot,
+      dbKanbanSnapshot,
+      dbRoutinesSnapshot,
+    ] = await Promise.all([
+      scopes.settings ? db.settings.get('global') : Promise.resolve(undefined),
+      scopes.tabs ? db.tabs.toArray() : Promise.resolve([]),
+      scopes.widgets ? db.widgets.toArray() : Promise.resolve([]),
+      scopes.notes ? db.notes.toArray() : Promise.resolve([]),
+      scopes.householdStores ? db.chores.get('household_chores') : Promise.resolve(undefined),
+      scopes.householdStores ? db.profiles.toArray() : Promise.resolve([]),
+      scopes.householdStores ? db.meals.get('household_meals') : Promise.resolve(undefined),
+      scopes.householdStores ? db.kanban.get('household_kanban') : Promise.resolve(undefined),
+      scopes.householdStores ? db.routines.get('household_routines') : Promise.resolve(undefined),
     ]);
 
     const propSettingsTime = Date.parse(settings?.updated_at || '') || 0;
@@ -976,16 +994,22 @@ export async function pushToCloud(
     const activeSettings =
       dbSettings && dbSettingsTime >= propSettingsTime ? dbSettings : settings;
 
-    const tabsToPush = dbTabs.length > 0 ? dbTabs : tabs;
-    const widgetsToPush = dbWidgets.length > 0 ? dbWidgets : widgets;
-    const notesToPush = dbNotes.length > 0 ? dbNotes : notes;
+    const tabsToPush = scopes.tabs ? (dbTabs.length > 0 ? dbTabs : tabs) : [];
+    const widgetsToPush = scopes.widgets ? (dbWidgets.length > 0 ? dbWidgets : widgets) : [];
+    const notesToPush = scopes.notes ? (dbNotes.length > 0 ? dbNotes : notes) : [];
 
-    // 2. Query remote timestamps and soft-delete/archive states to avoid stomping newer remote edits or deletions
+    // 2. Query remote timestamps and soft-delete/archive states only for active sync scopes
     const [remoteDashRes, remoteTabsRes, remoteWidgetsRes, remoteNotesRes] = await Promise.all([
       sb.from('dashboards').select('id, updated_at').eq('id', dashboardId).maybeSingle(),
-      sb.from('tabs').select('id, updated_at, deleted_at').eq('dashboard_id', dashboardId),
-      sb.from('widgets').select('id, updated_at, deleted_at').eq('dashboard_id', dashboardId),
-      sb.from('notes').select('id, updated_at, deleted_at, archived_at').eq('dashboard_id', dashboardId),
+      scopes.tabs
+        ? sb.from('tabs').select('id, updated_at, deleted_at').eq('dashboard_id', dashboardId)
+        : Promise.resolve({ data: null }),
+      needsRemoteWidgetsTable
+        ? sb.from('widgets').select('id, updated_at, deleted_at').eq('dashboard_id', dashboardId)
+        : Promise.resolve({ data: null }),
+      scopes.notes
+        ? sb.from('notes').select('id, updated_at, deleted_at, archived_at').eq('dashboard_id', dashboardId)
+        : Promise.resolve({ data: null }),
     ]);
 
     const toRemoteMetaMap = (rows: any[] | null | undefined, checkArchived = false) =>
@@ -1009,7 +1033,7 @@ export async function pushToCloud(
     // settings themselves, so most syncs don't.
     const localSettingsTime = Date.parse(activeSettings.updated_at || '') || 0;
     let shouldUpsertDash = false;
-    if (!isMember) {
+    if (!isMember && (scopes.settings || options?.force || !remoteDashRes.data)) {
       const knownCloudSettingsTime = getKnownCloudSettingsAt(dashboardId);
       if (options?.force || !remoteDashRes.data) {
         shouldUpsertDash = true;
@@ -1029,7 +1053,7 @@ export async function pushToCloud(
 
     // Upsert Tabs: only send tabs with genuinely newer timestamps or new records (or all when forced)
     let tabsToUpsert: any[] = [];
-    if (tabsToPush.length > 0) {
+    if (scopes.tabs && tabsToPush.length > 0) {
       const formattedTabs = tabsToPush.map((t, idx) => ({
         id: t.id,
         dashboard_id: dashboardId,
@@ -1057,7 +1081,7 @@ export async function pushToCloud(
 
     // Upsert Widgets: only send widgets with genuinely newer timestamps or new records
     let widgetsToUpsert: any[] = [];
-    if (widgetsToPush.length > 0) {
+    if (scopes.widgets && widgetsToPush.length > 0) {
       const formattedWidgets = widgetsToPush.map((w) => {
         // Strip customPhotos, oversized inline Data URLs, and Guest Wi-Fi QR credentials from cloud sync payloads
         const configToPush = sanitizeWidgetConfigForCloud(w.config || {}, w.type);
@@ -1094,7 +1118,9 @@ export async function pushToCloud(
     }
 
     // Sync household Chore Engine snapshot via reserved system row in widgets table
-    const activeChoreSnapshot = dbChoreSnapshot || useChoreStore.getState().snapshot;
+    const activeChoreSnapshot = scopes.householdStores
+      ? dbChoreSnapshot || useChoreStore.getState().snapshot
+      : null;
     if (activeChoreSnapshot && activeChoreSnapshot.id === 'household_chores') {
       const localChoreTime = new Date(activeChoreSnapshot.updated_at || 0).getTime();
       const remoteChoreTime = remoteWidgetsMap.get(CHORE_ENGINE_CLOUD_ROW_ID)?.time;
@@ -1122,7 +1148,11 @@ export async function pushToCloud(
     }
 
     // Sync Global Household Profiles & Avatars via reserved system row + household_profiles table
-    const profilesToPush = dbProfiles.length > 0 ? dbProfiles : useProfileStore.getState().profiles;
+    const profilesToPush = scopes.householdStores
+      ? dbProfiles.length > 0
+        ? dbProfiles
+        : useProfileStore.getState().profiles
+      : [];
     if (profilesToPush.length > 0) {
       const latestProfileTime = profilesToPush.reduce(
         (max, p) => Math.max(max, new Date(p.updatedAt || 0).getTime()),
@@ -1154,7 +1184,9 @@ export async function pushToCloud(
     }
 
     // Sync Meal Planner & Smart Shopping List snapshot via reserved system row in widgets table
-    const activeMealSnapshot = dbMealSnapshot || useMealStore.getState().snapshot;
+    const activeMealSnapshot = scopes.householdStores
+      ? dbMealSnapshot || useMealStore.getState().snapshot
+      : null;
     if (activeMealSnapshot && activeMealSnapshot.id === 'household_meals') {
       const localMealTime = new Date(activeMealSnapshot.updated_at || 0).getTime();
       const remoteMealTime = remoteWidgetsMap.get(MEAL_PLANNER_CLOUD_ROW_ID)?.time;
@@ -1182,7 +1214,9 @@ export async function pushToCloud(
     }
 
     // Sync Multi-Board Kanban Engine snapshot via reserved system row + direct table upserts/deletes
-    const activeKanbanSnapshot = dbKanbanSnapshot || useKanbanStore.getState().snapshot;
+    const activeKanbanSnapshot = scopes.householdStores
+      ? dbKanbanSnapshot || useKanbanStore.getState().snapshot
+      : null;
     const kanbanSnapshotPushed = (() => {
       if (!activeKanbanSnapshot || activeKanbanSnapshot.id !== 'household_kanban') return false;
       const localKanbanTime = new Date(activeKanbanSnapshot.updated_at || 0).getTime();
@@ -1212,7 +1246,9 @@ export async function pushToCloud(
     })();
 
     // Sync Home Check-Ins & Rhythms singleton household snapshot via reserved system row
-    const activeRoutinesSnapshot = dbRoutinesSnapshot || useRoutinesStore.getState().snapshot;
+    const activeRoutinesSnapshot = scopes.householdStores
+      ? dbRoutinesSnapshot || useRoutinesStore.getState().snapshot
+      : null;
     if (activeRoutinesSnapshot && activeRoutinesSnapshot.id === 'household_routines') {
       const localRoutinesTime = new Date(activeRoutinesSnapshot.updated_at || 0).getTime();
       const remoteRoutinesTime = remoteWidgetsMap.get(ROUTINES_CLOUD_ROW_ID)?.time;
@@ -1241,7 +1277,7 @@ export async function pushToCloud(
 
     // Upsert Notes: only send notes with genuinely newer timestamps or new records (or all when forced)
     let notesToUpsert: any[] = [];
-    if (notesToPush.length > 0) {
+    if (scopes.notes && notesToPush.length > 0) {
       const formattedNotes = notesToPush.map((n) => {
         const isShoppingList = Boolean(n.isShoppingList || n.freeformPos?.isShoppingList);
         return {
@@ -1418,13 +1454,18 @@ export async function pushToCloud(
       })()).catch(() => {});
     }
 
-    // Non-blocking purge of expired tombstones (> 30 days old) in cloud database
-    const thirtyDaysAgoIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    Promise.all([
-      sb.from('tabs').delete().eq('dashboard_id', dashboardId).lt('deleted_at', thirtyDaysAgoIso),
-      sb.from('widgets').delete().eq('dashboard_id', dashboardId).lt('deleted_at', thirtyDaysAgoIso),
-      sb.from('notes').delete().eq('dashboard_id', dashboardId).lt('deleted_at', thirtyDaysAgoIso),
-    ]).catch(() => {});
+    // Throttled purge of expired tombstones (> 30 days old) in cloud database
+    const nowEpochMs = Date.now();
+    const lastPurgeAt = lastTombstonePurgeAtByBoard.get(dashboardId) ?? 0;
+    if (options?.force || nowEpochMs - lastPurgeAt >= TOMBSTONE_PURGE_INTERVAL_MS) {
+      lastTombstonePurgeAtByBoard.set(dashboardId, nowEpochMs);
+      const thirtyDaysAgoIso = new Date(nowEpochMs - 30 * 24 * 60 * 60 * 1000).toISOString();
+      Promise.all([
+        sb.from('tabs').delete().eq('dashboard_id', dashboardId).lt('deleted_at', thirtyDaysAgoIso),
+        sb.from('widgets').delete().eq('dashboard_id', dashboardId).lt('deleted_at', thirtyDaysAgoIso),
+        sb.from('notes').delete().eq('dashboard_id', dashboardId).lt('deleted_at', thirtyDaysAgoIso),
+      ]).catch(() => {});
+    }
 
     // Remember the board's revision after this device's own changes, so the next check doesn't download
     // the whole board again. Only when nobody else had changed it since this device last synced, or

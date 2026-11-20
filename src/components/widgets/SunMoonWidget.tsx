@@ -94,13 +94,13 @@ export const SunMoonWidget: React.FC<SunMoonWidgetProps> = ({
   const { isOledNightClock } = useDisplayActivity();
   const sharedDate = useSharedClock('10s', !isOledNightClock);
   const rawMs = sharedDate.getTime();
-  const minuteBucketMs = rawMs > 0 ? Math.floor(rawMs / 60_000) * 60_000 : 0;
+  const minuteBucketMs = Math.floor(rawMs / 60_000) * 60_000;
   const timeFormat = useDashboardStore((s) => s.settings.timeFormat);
 
   const solar = useMemo(
     () =>
       computeSolarSummary(
-        new Date(minuteBucketMs > 0 ? minuteBucketMs : Date.now()),
+        new Date(minuteBucketMs),
         latitude,
         longitude,
         timezone || undefined
@@ -108,7 +108,7 @@ export const SunMoonWidget: React.FC<SunMoonWidgetProps> = ({
     [minuteBucketMs, latitude, longitude, timezone]
   );
   const lunar = useMemo(
-    () => computeLunarSummary(new Date(minuteBucketMs > 0 ? minuteBucketMs : Date.now())),
+    () => computeLunarSummary(new Date(minuteBucketMs)),
     [minuteBucketMs]
   );
 

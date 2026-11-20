@@ -69,6 +69,33 @@ export function restoreDocumentTooltips(root: ParentNode): void {
   }
 }
 
+export interface IdleCursorWakeDecision {
+  shouldRestoreDom: boolean;
+  shouldResetTimer: boolean;
+}
+
+/**
+ * Pure wake/throttle evaluator for pointer activity: only triggers DOM tooltip restoration
+ * when transitioning out of hidden state, and coalesces idle timer resets while already awake
+ * so high-rate pointer motion causes zero layout/DOM scan churn.
+ */
+export function shouldWakeOrThrottleIdleCursor(params: {
+  isCurrentlyHidden: boolean;
+  hasClassOnRoot: boolean;
+  hasObserver: boolean;
+  nowMs: number;
+  lastResetMs: number;
+  throttleMs?: number;
+}): IdleCursorWakeDecision {
+  const wasHidden =
+    params.isCurrentlyHidden || params.hasClassOnRoot || params.hasObserver;
+  const throttleWindow = params.throttleMs ?? 200;
+  return {
+    shouldRestoreDom: wasHidden,
+    shouldResetTimer: wasHidden || params.nowMs - params.lastResetMs >= throttleWindow,
+  };
+}
+
 /**
  * useIdleCursor
  *
@@ -102,6 +129,7 @@ export function useIdleCursor({
 
     const currentTimeout = isNightMode ? nightModeTimeoutMs : timeoutMs;
     let observer: MutationObserver | null = null;
+    let lastTimerResetMs = 0;
 
     const attachTooltipObserver = () => {
       if (observer || typeof MutationObserver === 'undefined') return;
@@ -139,7 +167,7 @@ export function useIdleCursor({
       setIdleCursorHiddenStore(true);
     };
 
-    const showCursor = () => {
+    const forceShowCursor = () => {
       if (observer) {
         observer.disconnect();
         observer = null;
@@ -150,7 +178,22 @@ export function useIdleCursor({
     };
 
     const resetTimer = () => {
-      showCursor();
+      const nowMs = Date.now();
+      const decision = shouldWakeOrThrottleIdleCursor({
+        isCurrentlyHidden: isIdleCursorHidden,
+        hasClassOnRoot: document.documentElement.classList.contains('idle-cursor-hidden'),
+        hasObserver: observer !== null,
+        nowMs,
+        lastResetMs: lastTimerResetMs,
+      });
+
+      if (decision.shouldRestoreDom) {
+        forceShowCursor();
+      }
+      if (!decision.shouldResetTimer) {
+        return;
+      }
+      lastTimerResetMs = nowMs;
 
       if (timerRef.current) {
         clearTimeout(timerRef.current);
@@ -186,10 +229,13 @@ export function useIdleCursor({
       resetTimer();
     };
 
-    window.addEventListener('mousemove', handleMove, { passive: true });
-    window.addEventListener('pointermove', handleMove, { passive: true });
-    window.addEventListener('mousedown', handleDiscreteActivity, { passive: true });
-    window.addEventListener('pointerdown', handleDiscreteActivity, { passive: true });
+    const moveEvent =
+      typeof window !== 'undefined' && 'PointerEvent' in window ? 'pointermove' : 'mousemove';
+    const downEvent =
+      typeof window !== 'undefined' && 'PointerEvent' in window ? 'pointerdown' : 'mousedown';
+
+    window.addEventListener(moveEvent, handleMove, { passive: true });
+    window.addEventListener(downEvent, handleDiscreteActivity, { passive: true });
     window.addEventListener('touchstart', handleDiscreteActivity, { passive: true });
     window.addEventListener('wheel', handleDiscreteActivity, { passive: true });
     window.addEventListener('keydown', handleDiscreteActivity, { passive: true });
@@ -198,14 +244,12 @@ export function useIdleCursor({
       if (timerRef.current) {
         clearTimeout(timerRef.current);
       }
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('pointermove', handleMove);
-      window.removeEventListener('mousedown', handleDiscreteActivity);
-      window.removeEventListener('pointerdown', handleDiscreteActivity);
+      window.removeEventListener(moveEvent, handleMove);
+      window.removeEventListener(downEvent, handleDiscreteActivity);
       window.removeEventListener('touchstart', handleDiscreteActivity);
       window.removeEventListener('wheel', handleDiscreteActivity);
       window.removeEventListener('keydown', handleDiscreteActivity);
-      showCursor();
+      forceShowCursor();
     };
   }, [enabled, timeoutMs, nightModeTimeoutMs, isNightMode]);
 }

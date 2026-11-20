@@ -44,6 +44,7 @@ import {
   HelpCircle,
   Users,
   Server,
+  Gauge,
 } from 'lucide-react';
 import { useUpdateChecker } from '../../services/updateChecker';
 import { db } from '../../services/db';
@@ -1209,6 +1210,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     />
                   </button>
                 </div>
+              </div>
+
+              {/* Low-Power Kiosk GPU Mode: Reduce Backdrop Blur & Effects */}
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-gray-900/60 border border-gray-800 mt-2.5">
+                <div className="flex items-start gap-2 pr-3">
+                  <Gauge className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="text-xs font-medium text-gray-200 block">Reduce Blur &amp; GPU Effects</span>
+                    <span className="text-[11px] text-gray-400">
+                      Disables frosted-glass backdrop blurs across tiles and toolbars for cooler, smoother 60fps performance on Raspberry Pi and 4K wall displays.
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => updateSettings({ reduceVisualEffects: !settings.reduceVisualEffects })}
+                  className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
+                    settings.reduceVisualEffects ? 'bg-emerald-600' : 'bg-gray-700'
+                  }`}
+                >
+                  <div
+                    className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                      settings.reduceVisualEffects ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
               </div>
             </div>
 
