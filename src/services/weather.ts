@@ -1,4 +1,5 @@
 // Open-Meteo zero-key Weather & Geocoding Service with Dexie caching
+import { pruneLocalStorageCachePrefix } from './feeds';
 
 export interface WeatherData {
   locationName: string;
@@ -134,16 +135,13 @@ function setCachedWeather(key: string, data: WeatherData): void {
     try {
       const targetStorageKey = `ambiently_weather_cache_${key}`;
       localStorage.setItem(targetStorageKey, JSON.stringify(data));
-      // Prune stale weather cache keys beyond active memory keys
-      for (let i = localStorage.length - 1; i >= 0; i--) {
-        const k = localStorage.key(i);
-        if (k && k.startsWith('ambiently_weather_cache_')) {
-          const subKey = k.slice('ambiently_weather_cache_'.length);
-          if (!memoryWeatherCache.has(subKey)) {
-            localStorage.removeItem(k);
-          }
-        }
-      }
+      pruneLocalStorageCachePrefix(
+        'ambiently_weather_cache_',
+        MAX_WEATHER_CACHE_KEYS,
+        memoryWeatherCache,
+        key,
+        (parsed) => (parsed && typeof parsed.fetchedAt === 'number' ? parsed.fetchedAt : null)
+      );
     } catch {
       // ignore storage errors
     }

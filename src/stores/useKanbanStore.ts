@@ -383,6 +383,7 @@ export interface KanbanStoreState {
     eventType: 'INSERT' | 'UPDATE' | 'DELETE'
   ) => Promise<void>;
   applyRemoteKanbanSnapshot: (remote: KanbanEngineSnapshot) => Promise<void>;
+  resetForBoardSwitch: () => void;
 }
 
 function scheduleNextMidnightTick(evaluateFn: () => Promise<number>): void {
@@ -1241,14 +1242,30 @@ export const useKanbanStore = create<KanbanStoreState>((set, get) => ({
 
   applyRemoteKanbanSnapshot: async (remote) => {
     if (!remote || remote.id !== 'household_kanban') return;
-    const merged = mergeKanbanSnapshots(get().snapshot, remote);
+    let baseLocal = get().snapshot;
+    if (!get().isInitialized && hasIndexedDB()) {
+      const storedSnap = await db.kanban.get('household_kanban').catch(() => undefined);
+      if (storedSnap) {
+        baseLocal = storedSnap;
+      }
+    }
+    const merged = mergeKanbanSnapshots(baseLocal, remote);
     set({
       isInitialized: true,
       snapshot: merged,
       boards: merged.boards,
       cards: merged.cards,
     });
-    void persistFullKanbanStateToDexie(merged, { replaceAll: true });
+    await persistFullKanbanStateToDexie(merged, { replaceAll: true });
     await get().evaluateAutoArchive();
+  },
+
+  resetForBoardSwitch: () => {
+    set({
+      isInitialized: false,
+      snapshot: DEFAULT_KANBAN_SNAPSHOT,
+      boards: DEFAULT_KANBAN_BOARDS,
+      cards: DEFAULT_KANBAN_CARDS,
+    });
   },
 }));

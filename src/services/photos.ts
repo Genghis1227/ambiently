@@ -766,7 +766,13 @@ export function parseWebPhotoUrls(text: string): PhotoItem[] {
 
 export interface WebScanOptions {
   maxPhotos?: number;
-  onBatch?: (photos: PhotoItem[], sourceTitle: string, isInitial: boolean, isDone: boolean) => void;
+  onBatch?: (
+    photos: PhotoItem[],
+    sourceTitle: string,
+    isInitial: boolean,
+    isDone: boolean,
+    totalAlbumCount?: number
+  ) => void | Promise<void>;
   signal?: AbortSignal;
 }
 
@@ -863,11 +869,6 @@ export async function resolveWebAndCloudPhotoUrls(
       ? `${mainAlbumTitle} & Web`
       : `Web Images (${initialCombined.length})`;
 
-  // Emit initial batch immediately so PhotoFrame starts playing right away
-  if (onBatch) {
-    onBatch(initialCombined, sourceTitle, true, false);
-  }
-
   // Check if deep pagination is needed in background for Google Photos albums
   const needsDeepPagination =
     Boolean(onBatch) &&
@@ -875,40 +876,50 @@ export async function resolveWebAndCloudPhotoUrls(
     maxPhotos > initialGPhotosLimit &&
     albumResults.some((r) => (r.totalAlbumCount || 0) > r.count);
 
+  // Emit initial batch immediately so PhotoFrame starts playing right away
+  if (onBatch && initialCombined.length > 0 && !signal?.aborted) {
+    await onBatch(initialCombined, sourceTitle, true, !needsDeepPagination, highestAlbumTotal);
+  }
+
+  let finalPhotos = initialCombined;
+
   if (needsDeepPagination && !signal?.aborted) {
-    // Background deep pagination
-    (async () => {
-      try {
-        const deepGPhotos = await Promise.all(
-          gphotosUrls.map((u) => fetchGooglePhotosAlbum(u, maxPhotos, signal))
-        );
-        if (signal?.aborted) return;
-
-        const deepItems: PhotoItem[] = [];
-        for (const res of deepGPhotos) {
-          if (res.photos && res.photos.length > 0) {
-            deepItems.push(...res.photos);
-          }
-        }
-        // Retain Drive and direct items
-        const gdriveItems = albumResults
-          .filter((_, idx) => idx >= gphotosUrls.length)
-          .flatMap((r) => r.photos || []);
-        const fullCombined = [...deepItems, ...gdriveItems, ...directItems];
-
-        if (onBatch && fullCombined.length > initialCombined.length) {
-          onBatch(fullCombined, sourceTitle, false, true);
-        }
-      } catch {
-        // Deep pagination failed or completed
+    try {
+      const deepGPhotos = await Promise.all(
+        gphotosUrls.map((u) => fetchGooglePhotosAlbum(u, maxPhotos, signal))
+      );
+      if (signal?.aborted) {
+        return {
+          photos: finalPhotos,
+          sourceTitle,
+          totalAlbumCount: highestAlbumTotal,
+        };
       }
-    })();
-  } else if (onBatch) {
-    onBatch(initialCombined, sourceTitle, false, true);
+
+      const deepItems: PhotoItem[] = [];
+      for (const deepRes of deepGPhotos) {
+        if (deepRes.photos && deepRes.photos.length > 0) {
+          deepItems.push(...deepRes.photos);
+        }
+      }
+      // Retain Drive and direct items
+      const gdriveItems = albumResults
+        .filter((_, idx) => idx >= gphotosUrls.length)
+        .flatMap((r) => r.photos || []);
+      const fullCombined = [...deepItems, ...gdriveItems, ...directItems];
+      if (fullCombined.length > finalPhotos.length) {
+        finalPhotos = fullCombined;
+      }
+    } catch {
+      // Deep pagination failed or aborted; finalize with initial batch so UI state settles
+    }
+    if (onBatch && !signal?.aborted && finalPhotos.length > 0) {
+      await onBatch(finalPhotos, sourceTitle, false, true, highestAlbumTotal);
+    }
   }
 
   return {
-    photos: initialCombined,
+    photos: finalPhotos,
     sourceTitle,
     totalAlbumCount: highestAlbumTotal,
   };

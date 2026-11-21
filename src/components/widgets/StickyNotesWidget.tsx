@@ -167,6 +167,7 @@ export const StickyNotesWidget: React.FC<StickyNotesWidgetProps> = ({
       title: note.title ? `${note.title} (Copy)` : undefined,
       content: clonedContent,
       isChecklist: note.isChecklist,
+      isShoppingList: note.isShoppingList,
       checklistItems: note.checklistItems
         ? note.checklistItems.map((item) => ({
             ...item,

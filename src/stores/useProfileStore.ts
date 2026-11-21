@@ -3,21 +3,28 @@ import { db, DEFAULT_HOUSEHOLD_PROFILES } from '../services/db';
 import { resolveProfileColorHex, type HouseholdProfile, type HouseholdRole } from '../types/profiles';
 import { compressAvatarToWebP } from '../utils/avatarCompressor';
 
-const profileSyncListeners = new Set<(profiles: HouseholdProfile[]) => void>();
+export type ProfileSyncSource = 'local' | 'remote';
+export type ProfileSyncListener = (
+  profiles: HouseholdProfile[],
+  source: ProfileSyncSource
+) => void;
 
-export function registerProfileSyncListener(
-  listener: (profiles: HouseholdProfile[]) => void
-): () => void {
+const profileSyncListeners = new Set<ProfileSyncListener>();
+
+export function registerProfileSyncListener(listener: ProfileSyncListener): () => void {
   profileSyncListeners.add(listener);
   return () => {
     profileSyncListeners.delete(listener);
   };
 }
 
-function notifyProfileListeners(profiles: HouseholdProfile[]): void {
+function notifyProfileListeners(
+  profiles: HouseholdProfile[],
+  source: ProfileSyncSource = 'local'
+): void {
   for (const listener of profileSyncListeners) {
     try {
-      listener(profiles);
+      listener(profiles, source);
     } catch {
       // Ignore listener errors
     }
@@ -57,6 +64,7 @@ export interface ProfileStoreState {
     row: HouseholdProfile,
     eventType: 'INSERT' | 'UPDATE' | 'DELETE'
   ) => Promise<void>;
+  resetForBoardSwitch: () => void;
 }
 
 function hasIndexedDB(): boolean {
@@ -260,7 +268,7 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
         await db.profiles.bulkPut(DEFAULT_HOUSEHOLD_PROFILES);
       }
       set({ profiles: DEFAULT_HOUSEHOLD_PROFILES });
-      notifyProfileListeners(DEFAULT_HOUSEHOLD_PROFILES);
+      notifyProfileListeners(DEFAULT_HOUSEHOLD_PROFILES, 'remote');
       return;
     }
 
@@ -275,7 +283,7 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
       legacyIdsToDelete.length > 0 ||
       remoteProfiles.some(isUntouchedLegacyProfile)
     ) {
-      notifyProfileListeners(active);
+      notifyProfileListeners(active, 'remote');
     }
   },
 
@@ -299,7 +307,7 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
       await safePutProfile(tombstone);
       const next = get().profiles.filter((p) => p.id !== row.id);
       set({ profiles: next });
-      notifyProfileListeners(next);
+      notifyProfileListeners(next, 'remote');
       return;
     }
 
@@ -310,6 +318,13 @@ export const useProfileStore = create<ProfileStoreState>((set, get) => ({
       ? current.map((p) => (p.id === row.id ? row : p))
       : [...current, row];
     set({ profiles: next });
-    notifyProfileListeners(next);
+    notifyProfileListeners(next, 'remote');
+  },
+
+  resetForBoardSwitch: () => {
+    set({
+      profiles: [...DEFAULT_HOUSEHOLD_PROFILES],
+      isInitialized: false,
+    });
   },
 }));

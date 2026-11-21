@@ -41,7 +41,7 @@ import {
   getPhotoSyncTargetKey,
   isTargetRescannable,
 } from '../../utils/photoSyncPolicy';
-import { isWidgetStickerMode } from '../../utils/widgetStickerMode';
+import { isStickerCapableWidget, isWidgetStickerMode } from '../../utils/widgetStickerMode';
 import {
   MAX_CANVASES,
   type DashboardWidget,
@@ -1100,24 +1100,9 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
     };
 
     if (
-      [
-        'clock',
-        'world_clock',
-        'clock_weather',
-        'weather',
-        'countdown',
-        'quotes',
-        'photo_frame',
-        'finance',
-        'timer',
-        'air_quality',
-        'sun_moon',
-        'routines',
-        'wifi_qr',
-        'decision_maker',
-        'sports',
-        'daily_discovery',
-      ].includes(effectiveType)
+      isStickerCapableWidget(effectiveType) &&
+      effectiveType !== 'textbox' &&
+      effectiveType !== 'image'
     ) {
       configUpdates.transparentBg = widgetTransparentBg;
     }

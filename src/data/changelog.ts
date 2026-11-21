@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.8.3",
+    date: "November 21, 2026",
+    title: "RSS Parser Fix, Sync & Board-Switch Isolation & Multi-Widget Reliability",
+    highlights: [
+      "RSS / Atom / RDF Feed & HTML Stripping Fix: Normalized single-pass XML entities prior to HTML stripping while keeping XXE protection active, added Atom XHTML, default alternate link, relative URL, and RSS 1.0 RDF support, preserved private LAN http:// feeds, and busted stale client/edge RSS caches cleanly.",
+      "Cloud Sync & Board-Switch Data Isolation: Reset all in-memory household stores and feed caches when switching boards, prevented remote profile updates from overwriting kid chore actions, preserved reverted ledger entries and merged offline meal edits, repaired Kanban/Realtime/tab/Trash sync edge cases, and switched localStorage cache eviction to LRU.",
+      "Photo Sync, Soundscape, Uploads, Mobile PIN Lock & Widget Fixes: Eliminated Google Photos TDZ crash and un-cancellable background pagination, fixed Soundscape sleep fade loop, enforced Parent PIN lock in Mobile Companion & Settings, fixed apostrophe meta scraping, comma srcset URLs, HEIC/empty-MIME uploads, Weather metric units/icons, YouTube mute without reload, Calendar DST timeline offsets, and cold-load marquee tickers.",
+    ],
+  },
+  {
     version: "v0.8.2",
     date: "November 20, 2026",
     title: "Plex Origin Guard, Proxy Trust Boundary, Parser & Container Hardening",

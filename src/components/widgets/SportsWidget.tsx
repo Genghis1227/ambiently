@@ -315,6 +315,30 @@ export const SportsWidget: React.FC<SportsWidgetProps> = ({
     visibleGames.length
   );
 
+  // Re-measure horizontal ticker overflow after cold data loads or filters change
+  useEffect(() => {
+    const containerEl = containerRef.current;
+    const measureEl = tickerMeasureRef.current;
+    if (!containerEl || !measureEl) return;
+
+    const checkOverflow = () => {
+      if (containerEl.clientWidth <= 0) return;
+      const overflow = measureEl.scrollWidth > containerEl.clientWidth - 16;
+      setTickerShouldScroll((prev) => (prev === overflow ? prev : overflow));
+    };
+
+    const frame = window.requestAnimationFrame(checkOverflow);
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(checkOverflow);
+      ro.observe(measureEl);
+      return () => {
+        window.cancelAnimationFrame(frame);
+        ro.disconnect();
+      };
+    }
+    return () => window.cancelAnimationFrame(frame);
+  }, [effectiveMode, visibleGames.length, isRefreshing]);
+
   const hasLiveGame = useMemo(
     () => visibleGames.some((g) => g.state === 'LIVE'),
     [visibleGames]

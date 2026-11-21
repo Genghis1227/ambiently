@@ -46,7 +46,12 @@ export const WifiQrWidget: React.FC<WifiQrWidgetProps> = ({
   const [vaultCreds, setVaultCreds] = useState<WifiLocalVaultCredentials | null>(null);
   const [isPasswordRevealed, setIsPasswordRevealed] = useState(false);
   const [copiedField, setCopiedField] = useState<'password' | 'address' | null>(null);
+  const [prevConfigActiveView, setPrevConfigActiveView] = useState(config?.activeView);
   const [localViewOverride, setLocalViewOverride] = useState<WifiCardDisplayView | null>(null);
+  if (config?.activeView !== prevConfigActiveView) {
+    setPrevConfigActiveView(config?.activeView);
+    setLocalViewOverride(null);
+  }
 
   const ssid = vaultCreds?.ssid || '';
   const effectivePassword = vaultCreds?.password || '';

@@ -73,9 +73,14 @@ export const DecisionMakerWidget: React.FC<DecisionMakerWidgetProps> = ({
 
   const [rotationDeg, setRotationDeg] = useState(0);
   const [isSpinning, setIsSpinning] = useState(false);
+  const [prevConfigWinnerId, setPrevConfigWinnerId] = useState(config?.lastWinnerOptionId);
   const [localWinnerId, setLocalWinnerId] = useState<string | null>(
     config?.lastWinnerOptionId ?? null
   );
+  if (config?.lastWinnerOptionId !== prevConfigWinnerId) {
+    setPrevConfigWinnerId(config?.lastWinnerOptionId);
+    setLocalWinnerId(config?.lastWinnerOptionId ?? null);
+  }
   const [tieBreakOptionIds, setTieBreakOptionIds] = useState<string[] | null>(null);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [quickOptionInput, setQuickOptionInput] = useState('');

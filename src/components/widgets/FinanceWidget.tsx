@@ -389,6 +389,30 @@ export const FinanceWidget: React.FC<FinanceWidgetProps> = ({
     return 'list';
   }, [configuredMode, containerSize]);
 
+  // Re-measure ticker overflow once quotes/sparklines finish rendering on cold load
+  useEffect(() => {
+    const containerEl = containerRef.current;
+    const measureEl = tickerMeasureRef.current;
+    if (!containerEl || !measureEl) return;
+
+    const checkOverflow = () => {
+      if (containerEl.clientWidth <= 0) return;
+      const overflow = measureEl.scrollWidth > containerEl.clientWidth - 16;
+      setTickerShouldScroll((prev) => (prev === overflow ? prev : overflow));
+    };
+
+    const frame = window.requestAnimationFrame(checkOverflow);
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(checkOverflow);
+      ro.observe(measureEl);
+      return () => {
+        window.cancelAnimationFrame(frame);
+        ro.disconnect();
+      };
+    }
+    return () => window.cancelAnimationFrame(frame);
+  }, [effectiveMode, loadedQuotes.length, range, isRefreshing]);
+
   const handleManualRefresh = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsRefreshing(true);

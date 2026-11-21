@@ -267,6 +267,34 @@ export function mergeMealSnapshots(
   };
 }
 
+function normalizeSortedIds(ids?: string[]): string[] {
+  return Array.isArray(ids) ? [...ids].sort() : [];
+}
+
+function normalizeSortedById<T extends { id: string }>(items?: T[]): T[] {
+  return Array.isArray(items) ? [...items].sort((a, b) => a.id.localeCompare(b.id)) : [];
+}
+
+export function mealSnapshotsContentEqual(
+  a: MealPlannerSnapshot,
+  b: MealPlannerSnapshot
+): boolean {
+  const serialize = (snap: MealPlannerSnapshot) =>
+    JSON.stringify({
+      recipes: normalizeSortedById(snap.recipes),
+      scheduledMeals: normalizeSortedById(snap.scheduledMeals),
+      shoppingItems: normalizeSortedById(snap.shoppingItems),
+      staples: normalizeSortedById(snap.staples),
+      aisleOrder: Array.isArray(snap.aisleOrder) ? snap.aisleOrder : [],
+      weekStartsOn: snap.weekStartsOn === 'monday' ? 'monday' : 'sunday',
+      deletedRecipeIds: normalizeSortedIds(snap.deletedRecipeIds),
+      deletedScheduledMealIds: normalizeSortedIds(snap.deletedScheduledMealIds),
+      deletedShoppingItemIds: normalizeSortedIds(snap.deletedShoppingItemIds),
+      deletedStapleIds: normalizeSortedIds(snap.deletedStapleIds),
+    });
+  return serialize(a) === serialize(b);
+}
+
 export interface MealStoreState {
   isInitialized: boolean;
   snapshot: MealPlannerSnapshot;
@@ -279,6 +307,7 @@ export interface MealStoreState {
 
   initMealStore: () => Promise<void>;
   applyRemoteMealSnapshot: (remote: MealPlannerSnapshot) => Promise<void>;
+  resetForBoardSwitch: () => void;
 
   // Recipes (custom & scraped with tags)
   upsertRecipe: (
@@ -428,6 +457,20 @@ export const useMealStore = create<MealStoreState>((set, get) => {
           : undefined;
       const local = storedLocal || remote;
       const merged = mergeMealSnapshots(local, remote);
+      if (storedLocal && !mealSnapshotsContentEqual(merged, remote)) {
+        const nextMs = Math.max(
+          Date.now(),
+          (Date.parse(local.updated_at || '') || 0) + 1,
+          (Date.parse(remote.updated_at || '') || 0) + 1
+        );
+        const toShare: MealPlannerSnapshot = {
+          ...merged,
+          updated_at: new Date(nextMs).toISOString(),
+        };
+        commitMealState(toShare, { isInitialized: true });
+        await persistMealSnapshot(toShare);
+        return;
+      }
       commitMealState(merged, { isInitialized: true });
       if (typeof indexedDB !== 'undefined') {
         try {
@@ -436,6 +479,10 @@ export const useMealStore = create<MealStoreState>((set, get) => {
           console.warn('Failed to persist merged meal snapshot to IndexedDB:', err);
         }
       }
+    },
+
+    resetForBoardSwitch: () => {
+      commitMealState(DEFAULT_MEAL_SNAPSHOT, { isInitialized: false });
     },
 
     upsertRecipe: async (input) => {

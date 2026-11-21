@@ -184,6 +184,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const restoreFileRef = useRef<HTMLInputElement>(null);
   const wallpaperUploadRef = useRef<HTMLInputElement>(null);
   const [isUploadingWallpaper, setIsUploadingWallpaper] = useState(false);
+  const [wallpaperUploadError, setWallpaperUploadError] = useState('');
+  const hasActiveParentPin = Boolean(settings.pinLockEnabled && settings.pinHash);
 
   useEffect(() => {
     if (!isOpen || activeTab !== 'photos') return;
@@ -214,6 +216,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleEditWallpaperUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setWallpaperUploadError('');
     setIsUploadingWallpaper(true);
     try {
       const dataUrl = await processUploadedWallpaper(file);
@@ -221,8 +224,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setEditTabTheme('custom');
     } catch (err) {
       console.error('Failed to process wallpaper:', err);
+      setWallpaperUploadError(
+        err instanceof Error ? err.message : 'Could not process the selected image file.'
+      );
     } finally {
       setIsUploadingWallpaper(false);
+      e.target.value = '';
     }
   };
 
@@ -828,7 +835,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 <input
                                   ref={wallpaperUploadRef}
                                   type="file"
-                                  accept="image/*"
+                                  accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/heic,image/heif,.heic,.heif,image/*"
                                   onChange={handleEditWallpaperUpload}
                                   className="hidden"
                                 />
@@ -842,6 +849,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                   <span>{isUploadingWallpaper ? 'Processing...' : 'Upload Picture'}</span>
                                 </button>
                               </div>
+                              {wallpaperUploadError && (
+                                <p className="text-[11px] text-rose-400 leading-snug">{wallpaperUploadError}</p>
+                              )}
 
                               {/* 4K Curated Photo Presets */}
                               <div className="grid grid-cols-4 gap-1.5">
@@ -1484,17 +1494,43 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <p className="text-xs text-gray-400">
                   Disable modifying canvases. Freezes tile positions, sizes, and layout. Disables moving, rotating, resizing, deleting, adding widgets/canvases, or auto-organizing.
                 </p>
+                {!hasActiveParentPin && (
+                  <p className="text-[11px] text-amber-300/90 pt-0.5">
+                    Requires a 4-digit Parent PIN first.{' '}
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('system')}
+                      className="underline font-semibold hover:text-amber-200 cursor-pointer"
+                    >
+                      Set up Parent PIN
+                    </button>
+                  </p>
+                )}
               </div>
               <button
                 type="button"
-                onClick={() => updateSettings({ lockCanvasEditing: !settings.lockCanvasEditing })}
-                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                  settings.lockCanvasEditing ? 'bg-amber-600' : 'bg-gray-700'
+                disabled={!hasActiveParentPin}
+                aria-checked={Boolean(hasActiveParentPin && settings.lockCanvasEditing)}
+                title={
+                  hasActiveParentPin
+                    ? 'Toggle canvas layout lock'
+                    : 'Set up a 4-digit Parent PIN under System & Security first'
+                }
+                onClick={() => {
+                  if (!hasActiveParentPin) return;
+                  updateSettings({ lockCanvasEditing: !settings.lockCanvasEditing });
+                }}
+                className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                  !hasActiveParentPin
+                    ? 'bg-gray-800 opacity-50 cursor-not-allowed'
+                    : settings.lockCanvasEditing
+                      ? 'bg-amber-600 cursor-pointer'
+                      : 'bg-gray-700 cursor-pointer'
                 }`}
               >
                 <span
                   className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                    settings.lockCanvasEditing ? 'translate-x-5' : 'translate-x-0'
+                    hasActiveParentPin && settings.lockCanvasEditing ? 'translate-x-5' : 'translate-x-0'
                   }`}
                 />
               </button>
@@ -2393,17 +2429,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <span className="text-[11px] text-gray-400 block leading-tight">
                       Disables modifying canvases. Freezes tiles in place — disables moving, resizing, rotating, deleting, adding widgets/canvases, or auto-organizing. Interactive widgets & chore checkboxes remain usable.
                     </span>
+                    {!hasActiveParentPin && (
+                      <span className="text-[11px] text-amber-300/90 block pt-0.5">
+                        Configure and enable a 4-digit Parent PIN above to use layout lock.
+                      </span>
+                    )}
                   </div>
                   <button
                     type="button"
-                    onClick={() => updateSettings({ lockCanvasEditing: !settings.lockCanvasEditing })}
-                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                      settings.lockCanvasEditing ? 'bg-amber-600' : 'bg-gray-700'
+                    disabled={!hasActiveParentPin}
+                    aria-checked={Boolean(hasActiveParentPin && settings.lockCanvasEditing)}
+                    title={
+                      hasActiveParentPin
+                        ? 'Toggle canvas layout lock'
+                        : 'Set a 4-digit Parent PIN above first'
+                    }
+                    onClick={() => {
+                      if (!hasActiveParentPin) return;
+                      updateSettings({ lockCanvasEditing: !settings.lockCanvasEditing });
+                    }}
+                    className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                      !hasActiveParentPin
+                        ? 'bg-gray-800 opacity-50 cursor-not-allowed'
+                        : settings.lockCanvasEditing
+                          ? 'bg-amber-600 cursor-pointer'
+                          : 'bg-gray-700 cursor-pointer'
                     }`}
                   >
                     <span
                       className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                        settings.lockCanvasEditing ? 'translate-x-5' : 'translate-x-0'
+                        hasActiveParentPin && settings.lockCanvasEditing ? 'translate-x-5' : 'translate-x-0'
                       }`}
                     />
                   </button>

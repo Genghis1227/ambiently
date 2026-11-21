@@ -2,16 +2,11 @@ import { useEffect, useState } from 'react';
 import { db } from '../services/db';
 import type { DashboardWidget } from '../types/dashboard';
 import { MAX_UPLOAD_BYTES, VAULT_MEDIA_PREFIX } from './mediaOptimization';
+import { classifyRasterImageFile } from './imageUpload';
+import { decodeImageFileForPreview } from './avatarCompressor';
 
 const MAX_STATIC_IMAGE_DIMENSION = 1600;
 const MAX_VAULT_DATA_URL_LENGTH = Math.ceil((MAX_UPLOAD_BYTES * 4) / 3) + 256;
-const ALLOWED_RASTER_UPLOAD_TYPES = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'image/gif',
-  'image/avif',
-]);
 const SAFE_VAULT_MEDIA_DATA_URL_RE =
   /^data:image\/(?:jpeg|jpg|png|webp|gif|avif);base64,[A-Za-z0-9+/=\s]+$/i;
 const VALID_LOCAL_MEDIA_KEY_RE = /^local-media:[A-Za-z0-9._-]{1,96}$/;
@@ -124,17 +119,66 @@ function dataUrlToBlob(dataUrl: string): Blob | null {
 export async function storeUploadedMediaInVault(
   file: File
 ): Promise<{ vaultUrl: string; title: string }> {
-  if (!ALLOWED_RASTER_UPLOAD_TYPES.has((file.type || '').toLowerCase())) {
-    throw new Error('Only raster image files (JPEG, PNG, WebP, GIF, AVIF) are supported.');
+  const classification = classifyRasterImageFile(file);
+  if (!classification.allowed) {
+    throw new Error('Only raster image files (JPEG, PNG, WebP, GIF, AVIF, HEIC) are supported.');
   }
   if (file.size > MAX_UPLOAD_BYTES) {
     throw new Error('File exceeds the 10 MB upload limit.');
   }
 
-  let dataUrl = await readFileAsDataUrl(file);
-  if (file.type === 'image/jpeg' || file.type === 'image/png') {
-    dataUrl = await optimizeStaticRasterDataUrl(dataUrl);
+  let dataUrl = '';
+  if (classification.isHeic) {
+    const { previewUrl, revoke } = await decodeImageFileForPreview(file);
+    try {
+      dataUrl = await new Promise<string>((resolve, reject) => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('Could not decode HEIC image.'));
+        img.onload = () => {
+          const naturalWidth = img.naturalWidth || img.width;
+          const naturalHeight = img.naturalHeight || img.height;
+          if (!naturalWidth || !naturalHeight) {
+            reject(new Error('Invalid HEIC image dimensions.'));
+            return;
+          }
+          const scale = Math.min(1, MAX_STATIC_IMAGE_DIMENSION / Math.max(naturalWidth, naturalHeight));
+          const targetWidth = Math.max(1, Math.round(naturalWidth * scale));
+          const targetHeight = Math.max(1, Math.round(naturalHeight * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = targetWidth;
+          canvas.height = targetHeight;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Canvas context unavailable for HEIC conversion.'));
+            return;
+          }
+          ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+          const webpUrl = canvas.toDataURL('image/webp', 0.88);
+          resolve(webpUrl.startsWith('data:image/webp') ? webpUrl : canvas.toDataURL('image/jpeg', 0.9));
+        };
+        img.src = previewUrl;
+      });
+    } finally {
+      revoke();
+    }
+  } else {
+    const rawDataUrl = await readFileAsDataUrl(file);
+    dataUrl = classification.inferredMime
+      ? rawDataUrl.replace(
+          /^data:(?:application\/octet-stream)?;base64,/i,
+          `data:${classification.inferredMime};base64,`
+        )
+      : rawDataUrl;
+    if (
+      classification.inferredMime === 'image/jpeg' ||
+      classification.inferredMime === 'image/png' ||
+      classification.inferredMime === 'image/webp' ||
+      classification.inferredMime === 'image/avif'
+    ) {
+      dataUrl = await optimizeStaticRasterDataUrl(dataUrl);
+    }
   }
+
   if (!isSafeVaultMediaDataUrl(dataUrl)) {
     throw new Error('Uploaded file must decode to a valid raster image payload.');
   }

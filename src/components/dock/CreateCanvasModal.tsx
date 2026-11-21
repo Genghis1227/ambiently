@@ -48,6 +48,7 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
   const [customWallpaperUrl, setCustomWallpaperUrl] = useState('');
   const [backgroundDimLevel, setBackgroundDimLevel] = useState<number>(45);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const onCloseRef = useRef(onClose);
 
@@ -64,6 +65,7 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
       setThemeTouched(false);
       setCustomWallpaperUrl('');
       setBackgroundDimLevel(45);
+      setUploadError('');
     }
   }
 
@@ -98,6 +100,7 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setUploadError('');
     setIsUploading(true);
     try {
       const dataUrl = await processUploadedWallpaper(file);
@@ -106,8 +109,12 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
       setSelectedTheme('custom');
     } catch (err) {
       console.error('Failed to process uploaded wallpaper:', err);
+      setUploadError(
+        err instanceof Error ? err.message : 'Could not process the selected image file.'
+      );
     } finally {
       setIsUploading(false);
+      e.target.value = '';
     }
   };
 
@@ -309,7 +316,7 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/heic,image/heif,.heic,.heif,image/*"
                   onChange={handleFileUpload}
                   className="hidden"
                 />
@@ -323,6 +330,9 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
                   <span>{isUploading ? 'Processing...' : 'Upload Picture'}</span>
                 </button>
               </div>
+              {uploadError && (
+                <p className="text-[11px] text-rose-400 leading-snug">{uploadError}</p>
+              )}
 
               {/* 4K Curated Photo Presets */}
               <div className="grid grid-cols-4 gap-1.5">

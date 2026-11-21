@@ -252,21 +252,23 @@ function extractMetaContent(html: string, keys: string[]): string | undefined {
   for (const key of keys) {
     const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const pattern1 = new RegExp(
-      `<meta[^>]+(?:property|name|itemprop)=["']${escaped}["'][^>]+content=["']([^"']+)["'][^>]*>`,
+      `<meta[^>]+(?:property|name|itemprop)=(?:"${escaped}"|'${escaped}')[^>]+content=(?:"([^"]+)"|'([^']+)')[^>]*>`,
       'i'
     );
     const m1 = html.match(pattern1);
-    if (m1?.[1]?.trim()) {
-      return decodeHtmlEntities(m1[1]);
+    const val1 = m1?.[1] ?? m1?.[2];
+    if (val1?.trim()) {
+      return decodeHtmlEntities(val1);
     }
 
     const pattern2 = new RegExp(
-      `<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name|itemprop)=["']${escaped}["'][^>]*>`,
+      `<meta[^>]+content=(?:"([^"]+)"|'([^']+)')[^>]+(?:property|name|itemprop)=(?:"${escaped}"|'${escaped}')[^>]*>`,
       'i'
     );
     const m2 = html.match(pattern2);
-    if (m2?.[1]?.trim()) {
-      return decodeHtmlEntities(m2[1]);
+    const val2 = m2?.[1] ?? m2?.[2];
+    if (val2?.trim()) {
+      return decodeHtmlEntities(val2);
     }
   }
   return undefined;

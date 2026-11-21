@@ -303,6 +303,7 @@ export interface ChoreStoreState {
   ) => Promise<void>;
   deleteChoreTemplate: (templateId: string) => Promise<void>;
   updateHouseholdSettings: (partial: Partial<ChoreHouseholdSettings>) => Promise<void>;
+  resetForBoardSwitch: () => void;
 }
 
 export const useChoreStore = create<ChoreStoreState>((set, get) => {
@@ -354,7 +355,7 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => {
         const householdProfiles = useProfileStore.getState().profiles;
         const [stored, storedSettings] = await Promise.all([
           db.chores.get('household_chores'),
-          db.settings.get('default_settings').catch(() => undefined),
+          db.settings.get('global').catch(() => undefined),
         ]);
         const base = stored || DEFAULT_CHORE_SNAPSHOT;
         const resolvedWeekStartsOn: 'sunday' | 'monday' =
@@ -458,6 +459,10 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => {
       const { snapshot: rolled } = evaluateChoreRollover(withProfiles, new Date());
       commitSnapshotState(rolled, { isInitialized: true });
       await db.chores.put(rolled);
+    },
+
+    resetForBoardSwitch: () => {
+      commitSnapshotState(DEFAULT_CHORE_SNAPSHOT, { isInitialized: false });
     },
 
     completeChore: async (instanceId, completions, now = new Date()) => {
@@ -1609,7 +1614,7 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => {
   };
 });
 
-registerProfileSyncListener((householdProfiles) => {
+registerProfileSyncListener((householdProfiles, source) => {
   const state = useChoreStore.getState();
   if (!state.isInitialized) return;
   const current = state.snapshot;
@@ -1617,17 +1622,18 @@ registerProfileSyncListener((householdProfiles) => {
     reconcileTemplateAndRewardProfileIds(current.templates, current.rewards, householdProfiles);
   const nextProfiles = mapHouseholdToChoreProfiles(householdProfiles, current.ledger);
   const nextRewards = syncRewardUnlockStates(reconciledRewards, nextProfiles);
-  const nowIso = new Date().toISOString();
   const nextSnapshot: ChoreEngineSnapshot = {
     ...current,
     templates: nextTemplates,
     profiles: nextProfiles,
     rewards: nextRewards,
-    updated_at: nowIso,
+    updated_at: source === 'local' ? new Date().toISOString() : current.updated_at,
   };
   useChoreStore.setState({
     snapshot: nextSnapshot,
     pendingParentActionsCount: selectPendingParentActionsCount(nextSnapshot),
   });
-  persistSnapshot(nextSnapshot).catch(() => {});
+  if (source === 'local') {
+    persistSnapshot(nextSnapshot).catch(() => {});
+  }
 });
