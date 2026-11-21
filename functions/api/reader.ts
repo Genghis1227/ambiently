@@ -10,6 +10,14 @@ import {
   ExternalFetchError,
   type ExternalFetchResult,
 } from '../_shared/fetchExternal';
+import { sanitizeExternalHttpUrl } from '../../src/utils/urlSecurity';
+
+function escapeHtmlText(text: string): string {
+  return text.replace(
+    /[&<>"']/g,
+    (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch] as string
+  );
+}
 
 interface PagesContext {
   request: Request;
@@ -146,9 +154,9 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     let absoluteLeadImage: string | null = null;
     if (ogImage) {
       try {
-        absoluteLeadImage = new URL(ogImage, finalUrl).href;
+        absoluteLeadImage = sanitizeExternalHttpUrl(new URL(ogImage, finalUrl).href);
       } catch {
-        absoluteLeadImage = ogImage;
+        absoluteLeadImage = null;
       }
     }
 
@@ -264,11 +272,16 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     const anchors = Array.from(document.querySelectorAll('a')) as any[];
     for (const a of anchors) {
       const href = a.getAttribute('href');
-      if (href) {
+      if (href && !href.startsWith('#')) {
         try {
-          a.setAttribute('href', new URL(href, finalUrl).href);
+          const safeHref = sanitizeExternalHttpUrl(new URL(href, finalUrl).href);
+          if (safeHref) {
+            a.setAttribute('href', safeHref);
+          } else {
+            a.removeAttribute('href');
+          }
         } catch {
-          // Keep original href
+          a.removeAttribute('href');
         }
       }
     }
@@ -376,7 +389,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     if (textContent.length < 200 && jsonLdBody.length > 200 && !isBoilerplateStub(jsonLdBody)) {
       contentHtml = jsonLdBody
         .split(/\n\n+/)
-        .map((p) => `<p>${p.trim()}</p>`)
+        .map((p) => `<p>${escapeHtmlText(p.trim())}</p>`)
         .join('\n');
       textContent = jsonLdBody;
     }
@@ -408,7 +421,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       {
         headers: {
           'Content-Type': 'application/json',
-          'Cache-Control': 'public, max-age=180',
+          'Cache-Control': 'private, max-age=180',
         },
       }
     );

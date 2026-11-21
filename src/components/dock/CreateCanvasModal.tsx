@@ -14,6 +14,7 @@ import {
 import type { CanvasBackgroundTheme } from '../../types/dashboard';
 import { MAX_CANVASES } from '../../types/dashboard';
 import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
+import { safeCssBackgroundUrl } from '../../utils/urlSecurity';
 
 interface CreateCanvasModalProps {
   isOpen: boolean;
@@ -380,25 +381,29 @@ export const CreateCanvasModal: React.FC<CreateCanvasModalProps> = ({
               </div>
 
               {/* Live Wallpaper + Dim Preview */}
-              {customWallpaperUrl && (
-                <div
-                  className="relative h-20 rounded-xl overflow-hidden border border-gray-800 flex items-center justify-center"
-                  style={{
-                    backgroundImage: `linear-gradient(rgba(9, 13, 22, ${
-                      backgroundDimLevel / 100
-                    }), rgba(9, 13, 22, ${Math.min(
-                      0.95,
-                      backgroundDimLevel / 100 + 0.1
-                    )})), url("${customWallpaperUrl}")`,
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center',
-                  }}
-                >
-                  <span className="px-2.5 py-1 rounded-md bg-gray-900/75 backdrop-blur-sm border border-white/10 text-[10px] font-semibold text-white shadow">
-                    Live Background Preview ({backgroundDimLevel}% Dim)
-                  </span>
-                </div>
-              )}
+              {(() => {
+                const safeWallpaperCss = safeCssBackgroundUrl(customWallpaperUrl);
+                if (!safeWallpaperCss) return null;
+                return (
+                  <div
+                    className="relative h-20 rounded-xl overflow-hidden border border-gray-800 flex items-center justify-center"
+                    style={{
+                      backgroundImage: `linear-gradient(rgba(9, 13, 22, ${
+                        backgroundDimLevel / 100
+                      }), rgba(9, 13, 22, ${Math.min(
+                        0.95,
+                        backgroundDimLevel / 100 + 0.1
+                      )})), ${safeWallpaperCss}`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                    }}
+                  >
+                    <span className="px-2.5 py-1 rounded-md bg-gray-900/75 backdrop-blur-sm border border-white/10 text-[10px] font-semibold text-white shadow">
+                      Live Background Preview ({backgroundDimLevel}% Dim)
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           )}
 

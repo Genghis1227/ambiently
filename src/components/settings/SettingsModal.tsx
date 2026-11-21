@@ -96,6 +96,7 @@ import type { CanvasBackgroundTheme } from '../../types/dashboard';
 import { CreateCanvasModal } from '../dock/CreateCanvasModal';
 import { SupportPanel } from './SupportPanel';
 import { sanitizePinDigits, validatePinSetup } from '../../utils/pinValidation';
+import { safeCssBackgroundUrl } from '../../utils/urlSecurity';
 
 const ChangelogModal = React.lazy(() =>
   import('../changelog/ChangelogModal').then((m) => ({ default: m.ChangelogModal }))
@@ -904,25 +905,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 </div>
                               </div>
 
-                              {editTabWallpaperUrl && (
-                                <div
-                                  className="relative h-16 rounded-lg overflow-hidden border border-gray-800 flex items-center justify-center"
-                                  style={{
-                                    backgroundImage: `linear-gradient(rgba(9, 13, 22, ${
-                                      editTabDimLevel / 100
-                                    }), rgba(9, 13, 22, ${Math.min(
-                                      0.95,
-                                      editTabDimLevel / 100 + 0.1
-                                    )})), url("${editTabWallpaperUrl}")`,
-                                    backgroundSize: 'cover',
-                                    backgroundPosition: 'center',
-                                  }}
-                                >
-                                  <span className="px-2 py-0.5 rounded bg-gray-900/75 text-[10px] font-semibold text-white">
-                                    Preview ({editTabDimLevel}% Dim)
-                                  </span>
-                                </div>
-                              )}
+                              {(() => {
+                                const safeWallpaperCss = safeCssBackgroundUrl(editTabWallpaperUrl);
+                                if (!safeWallpaperCss) return null;
+                                return (
+                                  <div
+                                    className="relative h-16 rounded-lg overflow-hidden border border-gray-800 flex items-center justify-center"
+                                    style={{
+                                      backgroundImage: `linear-gradient(rgba(9, 13, 22, ${
+                                        editTabDimLevel / 100
+                                      }), rgba(9, 13, 22, ${Math.min(
+                                        0.95,
+                                        editTabDimLevel / 100 + 0.1
+                                      )})), ${safeWallpaperCss}`,
+                                      backgroundSize: 'cover',
+                                      backgroundPosition: 'center',
+                                    }}
+                                  >
+                                    <span className="px-2 py-0.5 rounded bg-gray-900/75 text-[10px] font-semibold text-white">
+                                      Preview ({editTabDimLevel}% Dim)
+                                    </span>
+                                  </div>
+                                );
+                              })()}
                             </div>
                           )}
 

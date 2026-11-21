@@ -568,10 +568,9 @@ begin
   end loop;
 end $$;
 
--- 11. Keep Plex Tokens Out of Shared Data
--- A Plex token in a saved photo link opens the whole Plex server to every household member and device.
--- Current versions of the app save links without one, and each device adds its own when it shows a
--- photo. This removes any token that still arrives, from an older version or another client.
+-- 11. Keep Plex Tokens, Vault Credentials & Kiosk PIN Hashes Out of Shared Data
+-- A Plex token in a saved photo link opens the whole Plex server to every household member and device,
+-- and device-local Home Assistant / Wi-Fi / Kiosk PIN secrets belong strictly in local storage/db.vault.
 create or replace function private.strip_plex_tokens_from_settings() returns trigger
 language plpgsql set search_path = '' as $$
 begin
@@ -580,6 +579,12 @@ begin
       regexp_replace(new.settings::text, '([?&])x-plex-token=[^&"\\#]*&', '\1', 'gi'),
       '[?&]x-plex-token=[^&"\\#]*', '', 'gi'
     )::jsonb;
+  end if;
+  if pg_catalog.jsonb_typeof(new.settings) = 'object' and (
+    coalesce(new.settings->>'pinLockEnabled', 'false') = 'true'
+    or (new.settings ? 'pinHash' and new.settings->'pinHash' <> 'null'::jsonb)
+  ) then
+    new.settings := new.settings || '{"pinLockEnabled": false, "pinHash": null}'::jsonb;
   end if;
   return new;
 end $$;
@@ -592,6 +597,11 @@ begin
       regexp_replace(new.config::text, '([?&])x-plex-token=[^&"\\#]*&', '\1', 'gi'),
       '[?&]x-plex-token=[^&"\\#]*', '', 'gi'
     )::jsonb;
+  end if;
+  if pg_catalog.jsonb_typeof(new.config) = 'object' and (
+    new.config ?| array['password', 'ssid', 'haAccessToken', 'accessToken', 'apiToken', 'bearerToken', 'serviceHeaders']
+  ) then
+    new.config := new.config - array['password', 'ssid', 'haAccessToken', 'accessToken', 'apiToken', 'bearerToken', 'serviceHeaders'];
   end if;
   return new;
 end $$;
@@ -610,5 +620,14 @@ create trigger strip_plex_tokens before insert or update of config on public.wid
   for each row execute function private.strip_plex_tokens_from_config();
 
 -- Clean what is already stored. Each update runs through the trigger above.
-update public.dashboards set settings = settings where settings::text ~* 'x-plex-token=';
-update public.widgets set config = config where config::text ~* 'x-plex-token=';
+update public.dashboards set settings = settings
+where settings::text ~* 'x-plex-token='
+   or (pg_catalog.jsonb_typeof(settings) = 'object' and (
+     coalesce(settings->>'pinLockEnabled', 'false') = 'true'
+     or (settings ? 'pinHash' and settings->'pinHash' <> 'null'::jsonb)
+   ));
+update public.widgets set config = config
+where config::text ~* 'x-plex-token='
+   or (pg_catalog.jsonb_typeof(config) = 'object' and (
+     config ?| array['password', 'ssid', 'haAccessToken', 'accessToken', 'apiToken', 'bearerToken', 'serviceHeaders']
+   ));

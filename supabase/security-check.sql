@@ -167,10 +167,12 @@ union all
 select 'Secret-looking value stored in settings or widget config', 'dashboard ' || id
 from public.dashboards
 where settings::text ilike '%x-plex-token=%'
+   or (jsonb_typeof(settings) = 'object' and settings ? 'pinHash' and settings->'pinHash' <> 'null'::jsonb)
 
 union all
 select 'Secret-looking value stored in settings or widget config', 'widget ' || dashboard_id || '/' || id
 from public.widgets
 where config::text ilike '%x-plex-token=%'
+   or (jsonb_typeof(config) = 'object' and config ?| array['password', 'haAccessToken', 'accessToken', 'apiToken', 'bearerToken'])
 
 order by 1, 2;

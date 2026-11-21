@@ -188,6 +188,35 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       );
     }
 
+    if (
+      fetchRes.contentType &&
+      !/\b(?:text\/html|application\/xhtml\+xml|text\/plain)\b/i.test(fetchRes.contentType)
+    ) {
+      return htmlResponse(
+        `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Preview Unavailable</title>
+  <style>
+    body { background: #090d16; color: #cbd5e1; font-family: system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 1.5rem; text-align: center; }
+    .card { background: #0f172a; border: 1px solid #1e293b; padding: 2rem; border-radius: 1rem; max-width: 480px; }
+    h2 { color: #f87171; margin-top: 0; font-size: 1.25rem; }
+    p { font-size: 0.875rem; line-height: 1.5; color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Unsupported Content Type</h2>
+    <p>Web Preview only renders HTML pages (received ${escapeHtml(fetchRes.contentType.split(';')[0] || 'non-HTML content')}).</p>
+  </div>
+</body>
+</html>`,
+        415,
+        { 'Cache-Control': 'private, no-store' }
+      );
+    }
+
     let html = fetchRes.text;
     const finalUrl = fetchRes.url || normalizedUrl;
     // The page's own origin is anonymous in the sandbox, so links are pointed back at the proxy by

@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import {
   extractMetadataFromHtml,
   formatIsoDuration,
+  onRequestGet as metadataHandler,
 } from '../functions/api/metadata';
+import { setGuardedFetch, resetApiRateLimitsForTests } from '../functions/_shared/fetchExternal';
 
 describe('Unified Metadata & Recipe Scraper (/api/metadata)', () => {
   it('extracts Schema.org Recipe nested inside a JSON-LD @graph array with HowToSection/HowToStep', () => {
@@ -121,5 +123,50 @@ describe('Unified Metadata & Recipe Scraper (/api/metadata)', () => {
     assert.equal(formatIsoDuration('PT1H'), '1 hr');
     assert.equal(formatIsoDuration('PT2H30M'), '2 hrs 30 mins');
     assert.equal(formatIsoDuration('25 minutes'), '25 minutes');
+  });
+
+  it('safely handles out-of-range numeric entities, deep JSON-LD nesting, and refuses Origin: null reflection', async () => {
+    let deepInstructions: unknown = { '@type': 'HowToStep', text: 'Too deep' };
+    for (let i = 0; i < 25; i += 1) {
+      deepInstructions = { '@type': 'HowToSection', itemListElement: [deepInstructions] };
+    }
+    const entityResult = extractMetadataFromHtml(
+      '<!doctype html><html><head><title>Entity &#99999999; &#xFFFFFF; Test &#1114111;</title></head><body></body></html>',
+      'https://example.org/entities'
+    );
+    assert.equal(entityResult.title, 'Entity &#99999999; &#xFFFFFF; Test \u{10FFFF}');
+
+    const html = `<!doctype html><html><head>
+      <title>Entity &#99999999; &#xFFFFFF; Test</title>
+      <script type="application/ld+json">
+        ${JSON.stringify({ '@type': 'Recipe', name: 'Safe Recipe', recipeIngredient: ['Water'], recipeInstructions: deepInstructions })}
+      </script>
+    </head><body></body></html>`;
+
+    const result = extractMetadataFromHtml(html, 'https://example.org/recipe');
+    assert.equal(result.title, 'Safe Recipe');
+    assert.ok(result.recipe);
+    assert.deepEqual(result.recipe.instructions, []);
+
+    setGuardedFetch({
+      publicOnly: async () =>
+        new Response('<!doctype html><html><head><title>Meta Item</title></head><body></body></html>', {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        }),
+      privateAllowed: async () => new Response('unused', { status: 500 }),
+    });
+    try {
+      const res = await metadataHandler({
+        request: new Request('https://ambiently.example/api/metadata?url=' + encodeURIComponent('https://example.org/item'), {
+          headers: { Origin: 'null', 'Sec-Fetch-Site': 'same-origin' },
+        }),
+      });
+      assert.equal(res.status, 200);
+      assert.equal(res.headers.get('access-control-allow-origin'), null);
+    } finally {
+      setGuardedFetch(null);
+      resetApiRateLimitsForTests();
+    }
   });
 });
