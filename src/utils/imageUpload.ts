@@ -37,9 +37,21 @@ export const CURATED_WALLPAPER_PRESETS: WallpaperPreset[] = [
   },
 ];
 
+const ALLOWED_WALLPAPER_MIMES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/avif',
+]);
+const SAFE_RASTER_DATA_URL_PREFIX_RE =
+  /^data:image\/(?:jpeg|jpg|png|webp|gif|avif);base64,/i;
+const MAX_WALLPAPER_UPLOAD_BYTES = 15 * 1024 * 1024;
+
 /**
  * Converts an uploaded image file into a persistent Data URL optimized for up to 4K Ultra HD (3840x2160) displays.
- * - If the file is already <= 3.5 MB and <= 3840px, preserves native resolution directly.
+ * - Rejects SVG or non-raster file types.
+ * - If the file is already raster base64, <= 1.5 MB, and <= 3840px, preserves native encoding directly.
  * - Otherwise scales down proportionally to fit within 3840x2160 (4K UHD) using high-quality WebP/JPEG encoding.
  */
 export async function processUploadedWallpaper(
@@ -48,6 +60,13 @@ export async function processUploadedWallpaper(
   maxHeight = 2160,
   quality = 0.9
 ): Promise<string> {
+  if (!ALLOWED_WALLPAPER_MIMES.has((file.type || '').toLowerCase())) {
+    throw new Error('Only raster image files (JPEG, PNG, WebP, GIF, AVIF) are supported.');
+  }
+  if (file.size > MAX_WALLPAPER_UPLOAD_BYTES) {
+    throw new Error('Wallpaper file exceeds the 15 MB upload limit.');
+  }
+
   // Detect if user's physical screen is even higher than 4K (e.g., 5K iMac / Studio Display)
   const physicalScreenW =
     typeof window !== 'undefined'
@@ -73,8 +92,13 @@ export async function processUploadedWallpaper(
       img.onload = () => {
         const { width, height } = img;
 
-        // If already within target resolution and reasonable file size (<= 3.5 MB), keep original untouched
-        if (width <= targetMaxW && height <= targetMaxH && file.size <= 3.5 * 1024 * 1024) {
+        // If already within target resolution and compact raster base64 (<= 1.5 MB), keep untouched
+        if (
+          SAFE_RASTER_DATA_URL_PREFIX_RE.test(rawDataUrl) &&
+          width <= targetMaxW &&
+          height <= targetMaxH &&
+          file.size <= 1.5 * 1024 * 1024
+        ) {
           resolve(rawDataUrl);
           return;
         }

@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.2] - 2026-11-20
+
+### Security & Reliability
+- **Same-Origin Plex Token Binding & Board-Switch Vault Purge (`plex.ts`, `supabase.ts`):**
+  - Updated `buildPlexItemUrl()` to enforce exact `origin` matching against the configured server URI before attaching `X-Plex-Token`, rejecting foreign `https://` or scheme-relative (`//`) folder keys during background rescans.
+  - Updated `clearLocalBoard()` in `supabase.ts` to purge board-scoped `db.vault` entries (`wifi-cred:*`, `homelab-cred:*`, `local-media:*`) and cached `localStorage` feed/homelab entries cleanly when switching accounts or accepting invitations.
+- **Reverse-Proxy Trust Boundary & Container Isolation (`server/index.ts`, `compose.yaml`, `fetchExternal.ts`, `web-proxy.ts`, `ical.ts`):**
+  - Added opt-in `AMBIENTLY_TRUST_PROXY=true` gating (default `false` for direct LAN/Pi deployments): untrusted requests strip client-spoofable `CF-Connecting-IP` / `X-Forwarded-For` / `X-Real-IP` / `X-Forwarded-Proto` headers, anchor rate limits to `req.socket.remoteAddress`, and return `400` JSON on malformed `Host` headers instead of `500`.
+  - Updated `/api/web-proxy` to validate upstream `contentType` and reject non-HTML streams with `415`, bounded `ianaZoneCache` in `/api/ical` at `256` entries (skipping malformed TZIDs >128 chars), and hardened `compose.yaml` with `read_only: true` and `cap_drop: [ALL]`.
+- **Parser, Viewer & Embed Hardening (`rss.ts`, `metadata.ts`, `reader.ts`, `InAppWebViewerModal.tsx`, `MediaEmbedWidget.tsx`, `imageUpload.ts`):**
+  - Disabled DTD entity expansion (`processEntities: false`) in `/api/rss`; bounded numeric HTML character entities (`0 <= code <= 0x10ffff`) and JSON-LD recursion depth (`<= 16`) and removed `Origin: null` reflection in `/api/metadata`.
+  - Enforced `sanitizeExternalHttpUrl`, HTML-escaped JSON-LD body fallbacks, and `Cache-Control: private` in `/api/reader`; prevented duplicate `/api/reader` fetches and stale races via `AbortController` + `isSafeExternalEmbedUrl` self-framing guards in `InAppWebViewerModal.tsx` and `MediaEmbedWidget.tsx` (with strict YouTube `postMessage` origin/source checks).
+  - Restricted `processUploadedWallpaper()` to raster MIME types and applied `safeCssBackgroundUrl()` in `CreateCanvasModal.tsx` and `SettingsModal.tsx`.
+- **Server-Side Postgres Secret Guards (`supabase/schema.sql`, `supabase/security-check.sql`, `supabase/migrations/20261120_strip_vault_and_pin_secrets.sql`):**
+  - Extended `strip_plex_tokens` triggers and `security-check.sql` audits to strip/flag `pinHash`, `pinLockEnabled`, and device-local Home Assistant / Wi-Fi secret keys in `public.dashboards` and `public.widgets`.
+
 ## [0.8.1] - 2026-11-20
 
 ### Security

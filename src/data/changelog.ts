@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.8.2",
+    date: "November 20, 2026",
+    title: "Plex Origin Guard, Proxy Trust Boundary, Parser & Container Hardening",
+    highlights: [
+      "Plex Same-Origin Token Guard & Board-Switch Vault Cleanup: Enforced exact Plex server origin matching in buildPlexItemUrl() so foreign synced folder keys never receive X-Plex-Token, and cleared board-scoped db.vault secrets and localStorage feed caches when switching boards.",
+      "Trusted Proxy Boundary & Read-Only Container: Added AMBIENTLY_TRUST_PROXY gating so self-hosted instances ignore spoofed X-Forwarded-* / CF-Connecting-IP headers unless behind a reverse proxy, return 400 on invalid Host headers, reject non-HTML /api/web-proxy streams (415), bound /api/ical timezone caches, and run read_only with cap_drop: ALL in compose.yaml.",
+      "XML/JSON-LD/Reader/Embed & Upload Hardening: Disabled XML entity expansion in /api/rss, bounded recursion depth & Unicode entities in /api/metadata, eliminated duplicate /api/reader fetches via AbortController, tightened iframe/postMessage origin checks in InAppWebViewerModal and MediaEmbedWidget, enforced raster-only wallpaper uploads, and added Postgres server-side secret-stripping parity.",
+    ],
+  },
+  {
     version: "v0.8.1",
     date: "November 20, 2026",
     title: "Vault Origin Binding, PBKDF2 PIN Lockout & Proxy Security Hardening",

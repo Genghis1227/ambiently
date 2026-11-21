@@ -1,7 +1,7 @@
 // Plex PIN / OAuth2-style Authentication & Photo Library API Service
 import { db } from './db';
 import type { PhotoItem } from './photos';
-import { serverTokensFrom } from './plexLinks';
+import { serverTokensFrom, stripPlexToken } from './plexLinks';
 
 const PLEX_API_URL = 'https://plex.tv/api/v2';
 const PLEX_CLIENT_ID_KEY = 'ambiently_plex_client_id';
@@ -351,25 +351,70 @@ function isBrowserCompatibleImage(filePathOrKey: string): boolean {
   return /\.(jpe?g|png|webp|gif|bmp|svg)$/i.test(clean);
 }
 
-function buildPlexItemUrl(
+function hasAsciiControlChars(value: string): boolean {
+  for (let i = 0; i < value.length; i += 1) {
+    const code = value.charCodeAt(i);
+    if (code <= 0x1f || code === 0x7f) return true;
+  }
+  return false;
+}
+
+export function buildPlexItemUrl(
   cleanUri: string,
   key: string,
   tokenParam: string,
   fallbackSectionKey?: string
-): string {
+): string | null {
+  let baseOrigin: string;
+  try {
+    const baseParsed = new URL(cleanUri);
+    if (baseParsed.protocol !== 'http:' && baseParsed.protocol !== 'https:') {
+      return null;
+    }
+    baseOrigin = baseParsed.origin.toLowerCase();
+  } catch {
+    return null;
+  }
+
+  const trimmedKey = typeof key === 'string' ? key.trim() : '';
+  if (!trimmedKey || hasAsciiControlChars(trimmedKey) || trimmedKey.startsWith('//')) {
+    return null;
+  }
+
   const detailParam = 'includeDetails=1&includeAdvanced=1&checkFiles=1';
   const combinedParam = `${detailParam}&${tokenParam}`;
 
-  if (key.startsWith('http://') || key.startsWith('https://')) {
-    return `${key}${key.includes('?') ? '&' : '?'}${combinedParam}`;
+  if (/^https?:\/\//i.test(trimmedKey)) {
+    try {
+      const parsedKey = new URL(trimmedKey);
+      if (parsedKey.origin.toLowerCase() !== baseOrigin) {
+        return null;
+      }
+      const cleaned = stripPlexToken(parsedKey.toString());
+      return `${cleaned}${cleaned.includes('?') ? '&' : '?'}${combinedParam}`;
+    } catch {
+      return null;
+    }
   }
-  if (key.startsWith('/')) {
-    return `${cleanUri}${key}${key.includes('?') ? '&' : '?'}${combinedParam}`;
+  if (trimmedKey.startsWith('/')) {
+    try {
+      const resolved = new URL(trimmedKey, baseOrigin);
+      if (resolved.origin.toLowerCase() !== baseOrigin) {
+        return null;
+      }
+      return `${cleanUri}${trimmedKey}${trimmedKey.includes('?') ? '&' : '?'}${combinedParam}`;
+    } catch {
+      return null;
+    }
   }
-  if (/^\d+$/.test(key) && fallbackSectionKey) {
-    return `${cleanUri}/library/sections/${fallbackSectionKey}/folder?parent=${key}&${combinedParam}`;
+  if (/^\d+$/.test(trimmedKey) && fallbackSectionKey) {
+    return `${cleanUri}/library/sections/${encodeURIComponent(fallbackSectionKey)}/folder?parent=${trimmedKey}&${combinedParam}`;
   }
-  return `${cleanUri}/${key}${key.includes('?') ? '&' : '?'}${combinedParam}`;
+  if (/^[A-Za-z0-9/_?=&.-]+$/.test(trimmedKey)) {
+    const rel = trimmedKey.replace(/^\/+/, '');
+    return `${cleanUri}/${rel}${rel.includes('?') ? '&' : '?'}${combinedParam}`;
+  }
+  return null;
 }
 
 // Helper to determine if a Plex JSON item represents a subfolder, directory, or photoalbum container
@@ -647,8 +692,8 @@ export async function getPlexSectionFolders(
         const subItems: PlexFolderItem[] = [];
         try {
           const childUrl = buildPlexItemUrl(cleanUri, rootKey, tokenParam, sectionKey);
-          const childRes = await fetch(childUrl, { headers: { Accept: 'application/json' } });
-          if (childRes.ok) {
+          const childRes = childUrl ? await fetch(childUrl, { headers: { Accept: 'application/json' } }) : null;
+          if (childRes?.ok) {
             const childData = await childRes.json();
             const childEntries = getContainerEntries(childData).filter(isPlexDirectoryItem);
             for (const c of childEntries) {
@@ -985,6 +1030,7 @@ export async function getPlexPhotosFromSection(
       visitedDirectoryKeys.add(key);
 
       const targetUrl = buildPlexItemUrl(cleanUri, key, tokenParam, sectionKey);
+      if (!targetUrl) return null;
       try {
         const res = await fetch(targetUrl, { headers: { Accept: 'application/json' }, signal });
         if (!res.ok) return null;

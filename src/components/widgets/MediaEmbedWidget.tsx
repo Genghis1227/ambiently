@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Tv, Volume2, VolumeX, RefreshCw, Edit2, Check } from 'lucide-react';
+import { isSafeExternalEmbedUrl } from '../../utils/urlSecurity';
 
 export type EmbedPresetId = 'lofi' | 'fireplace' | 'nasa' | 'radar' | 'custom';
 
@@ -44,18 +45,20 @@ export function normalizeEmbedUrl(rawUrl: string, muted: boolean, savedTime = 0)
 }
 
 function isEmbeddableUrl(rawUrl: string): boolean {
-  try {
-    return new URL(rawUrl.trim()).protocol === 'https:';
-  } catch {
-    return false;
-  }
+  const appOrigin = typeof window !== 'undefined' ? window.location.origin : null;
+  return Boolean(
+    isSafeExternalEmbedUrl(rawUrl, {
+      requireHttps: true,
+      disallowOrigin: appOrigin,
+    })
+  );
 }
 
 // An embedded page can run its own scripts, play media and open links in a new tab, but can't
 // navigate the dashboard away, show alert dialogs, start downloads or reach the dashboard's storage.
 // YouTube and Windy work within this.
 const EMBED_SANDBOX =
-  'allow-scripts allow-same-origin allow-presentation allow-popups allow-popups-to-escape-sandbox allow-forms';
+  'allow-scripts allow-same-origin allow-presentation allow-popups allow-forms';
 
 export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
   preset: initialPreset = 'lofi',
@@ -114,11 +117,15 @@ export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
     setMuted(nextMuted);
 
     // Send postMessage to YouTube IFrame API to toggle sound without restarting video
-    if (iframeRef.current?.contentWindow) {
+    const iframeOrigin = iframeRef.current?.src || '';
+    if (
+      iframeRef.current?.contentWindow &&
+      iframeOrigin.startsWith('https://www.youtube-nocookie.com/')
+    ) {
       try {
         iframeRef.current.contentWindow.postMessage(
           JSON.stringify({ event: 'command', func: nextMuted ? 'mute' : 'unMute', args: [] }),
-          '*'
+          'https://www.youtube-nocookie.com'
         );
       } catch {
         // ignore cross-origin restrictions if non-YouTube embed
@@ -133,6 +140,14 @@ export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
   // Listen for YouTube player time updates to resume recorded videos across tab switches
   useEffect(() => {
     const handleWindowMessage = (e: MessageEvent) => {
+      if (
+        (e.origin !== 'https://www.youtube-nocookie.com' &&
+          e.origin !== 'https://www.youtube.com') ||
+        !iframeRef.current ||
+        e.source !== iframeRef.current.contentWindow
+      ) {
+        return;
+      }
       try {
         if (typeof e.data !== 'string') return;
         const parsed = JSON.parse(e.data);

@@ -17,7 +17,13 @@ import {
 } from '../functions/_shared/fetchExternal';
 import { installAddressGuard, isBlockedAddress } from '../server/addressGuard';
 import { onRequestGet as webProxy } from '../functions/api/web-proxy';
-import { safeCssBackgroundUrl, sanitizeExternalHttpUrl } from '../src/utils/urlSecurity';
+import { onRequestGet as rssHandler } from '../functions/api/rss';
+import { buildPlexItemUrl } from '../src/services/plex';
+import {
+  isSafeExternalEmbedUrl,
+  safeCssBackgroundUrl,
+  sanitizeExternalHttpUrl,
+} from '../src/utils/urlSecurity';
 import { isSafeVaultMediaDataUrl } from '../src/utils/localMediaVault';
 import { sanitizePayloadForBackupExport } from '../src/services/fileSync';
 
@@ -225,37 +231,93 @@ describe('Self-hosted server security headers', () => {
     fs.rmSync(tmpDist, { recursive: true, force: true });
   });
 
-  it('sends Content-Security-Policy, conditional HSTS, API hardening headers, and configures bounded timeouts', async () => {
+  it('sends Content-Security-Policy, trusted-proxy HSTS, API hardening headers, rejects bad Host with 400, and resists CF-Connecting-IP spoofing', async () => {
     assert.equal(serverRef.headersTimeout, 15_000);
     assert.equal(serverRef.requestTimeout, 30_000);
     assert.equal(serverRef.keepAliveTimeout, 5_000);
 
-    const res = await fetch(`${baseUrl}/`);
-    assert.equal(res.status, 200);
-    const csp = res.headers.get('content-security-policy') || '';
-    assert.match(csp, /script-src 'self'/);
-    assert.match(csp, /object-src 'none'/);
-    assert.ok(res.headers.get('permissions-policy'));
-    assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
-    assert.equal(res.headers.get('referrer-policy'), 'no-referrer');
-    assert.equal(res.headers.get('strict-transport-security'), null, 'plain HTTP must not emit HSTS');
+    const prevTrustProxy = process.env.AMBIENTLY_TRUST_PROXY;
+    try {
+      delete process.env.AMBIENTLY_TRUST_PROXY;
 
-    const httpsProxiedRes = await fetch(`${baseUrl}/`, {
-      headers: { 'X-Forwarded-Proto': 'https' },
-    });
-    assert.equal(httpsProxiedRes.status, 200);
-    assert.match(httpsProxiedRes.headers.get('strict-transport-security') || '', /max-age=31536000/);
+      const res = await fetch(`${baseUrl}/`);
+      assert.equal(res.status, 200);
+      const csp = res.headers.get('content-security-policy') || '';
+      assert.match(csp, /script-src 'self'/);
+      assert.match(csp, /object-src 'none'/);
+      assert.ok(res.headers.get('permissions-policy'));
+      assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+      assert.equal(res.headers.get('referrer-policy'), 'no-referrer');
+      assert.equal(res.headers.get('strict-transport-security'), null, 'plain HTTP must not emit HSTS');
 
-    const apiRes = await fetch(`${baseUrl}/api/health`);
-    assert.equal(apiRes.status, 200);
-    assert.equal(apiRes.headers.get('x-content-type-options'), 'nosniff');
-    assert.equal(apiRes.headers.get('x-robots-tag'), 'noindex, nofollow');
-    assert.equal(apiRes.headers.get('referrer-policy'), 'no-referrer');
+      // Without AMBIENTLY_TRUST_PROXY=true, client X-Forwarded-Proto: https is ignored
+      const spoofedHttpsRes = await fetch(`${baseUrl}/`, {
+        headers: { 'X-Forwarded-Proto': 'https' },
+      });
+      assert.equal(spoofedHttpsRes.status, 200);
+      assert.equal(
+        spoofedHttpsRes.headers.get('strict-transport-security'),
+        null,
+        'untrusted X-Forwarded-Proto must not emit HSTS'
+      );
 
-    const unknownApiRes = await fetch(`${baseUrl}/api/unknown-route`);
-    assert.equal(unknownApiRes.status, 404);
-    assert.equal(unknownApiRes.headers.get('x-content-type-options'), 'nosniff');
-    assert.equal(unknownApiRes.headers.get('x-robots-tag'), 'noindex, nofollow');
+      // Rotating fake CF-Connecting-IP headers does not bypass /api/homelab rate limit without AMBIENTLY_TRUST_PROXY
+      resetApiRateLimitsForTests();
+      for (let i = 1; i <= 60; i += 1) {
+        const probe = await fetch(`${baseUrl}/api/homelab`, {
+          headers: { 'CF-Connecting-IP': `198.51.100.${i}` },
+        });
+        assert.equal(probe.status, 200);
+      }
+      const throttled = await fetch(`${baseUrl}/api/homelab`, {
+        headers: { 'CF-Connecting-IP': '198.51.100.250' },
+      });
+      assert.equal(throttled.status, 429);
+      resetApiRateLimitsForTests();
+
+      // With AMBIENTLY_TRUST_PROXY=true, X-Forwarded-Proto: https emits HSTS
+      process.env.AMBIENTLY_TRUST_PROXY = 'true';
+      const trustedHttpsRes = await fetch(`${baseUrl}/`, {
+        headers: { 'X-Forwarded-Proto': 'https' },
+      });
+      assert.equal(trustedHttpsRes.status, 200);
+      assert.match(trustedHttpsRes.headers.get('strict-transport-security') || '', /max-age=31536000/);
+
+      // Invalid Host header on /api/* returns 400 (never 500)
+      const parsedBase = new URL(baseUrl);
+      const badHostStatus = await new Promise<number>((resolve, reject) => {
+        const req = http.request(
+          {
+            hostname: parsedBase.hostname,
+            port: Number(parsedBase.port),
+            path: '/api/discovery?month=1&day=1',
+            headers: { Host: 'bad host name!' },
+          },
+          (incoming) => {
+            incoming.resume();
+            resolve(incoming.statusCode || 0);
+          }
+        );
+        req.on('error', reject);
+        req.end();
+      });
+      assert.equal(badHostStatus, 400);
+
+      const apiRes = await fetch(`${baseUrl}/api/health`);
+      assert.equal(apiRes.status, 200);
+      assert.equal(apiRes.headers.get('x-content-type-options'), 'nosniff');
+      assert.equal(apiRes.headers.get('x-robots-tag'), 'noindex, nofollow');
+      assert.equal(apiRes.headers.get('referrer-policy'), 'no-referrer');
+
+      const unknownApiRes = await fetch(`${baseUrl}/api/unknown-route`);
+      assert.equal(unknownApiRes.status, 404);
+      assert.equal(unknownApiRes.headers.get('x-content-type-options'), 'nosniff');
+      assert.equal(unknownApiRes.headers.get('x-robots-tag'), 'noindex, nofollow');
+    } finally {
+      if (prevTrustProxy === undefined) delete process.env.AMBIENTLY_TRUST_PROXY;
+      else process.env.AMBIENTLY_TRUST_PROXY = prevTrustProxy;
+      resetApiRateLimitsForTests();
+    }
   });
 });
 
@@ -361,6 +423,79 @@ describe('URL/CSS sanitizers, backup secret redaction, vault validation & Pi ins
     assert.ok(!script.includes('--no-sandbox'));
     assert.ok(!script.includes('--disable-web-security'));
   });
+
+  it('prevents Plex token leakage on cross-origin folder keys and validates embed URLs', () => {
+    const cleanUri = 'https://plex.example.com:32400';
+    const rel = buildPlexItemUrl(cleanUri, '/library/sections/1/folder?parent=7', 'X-Plex-Token=tok-123');
+    assert.equal(
+      rel,
+      'https://plex.example.com:32400/library/sections/1/folder?parent=7&includeDetails=1&includeAdvanced=1&checkFiles=1&X-Plex-Token=tok-123'
+    );
+
+    const sameOrigin = buildPlexItemUrl(cleanUri, 'https://plex.example.com:32400/library/metadata/9', 'X-Plex-Token=tok-123');
+    assert.equal(
+      sameOrigin,
+      'https://plex.example.com:32400/library/metadata/9?includeDetails=1&includeAdvanced=1&checkFiles=1&X-Plex-Token=tok-123'
+    );
+
+    assert.equal(buildPlexItemUrl(cleanUri, 'https://evil.example/collect', 'X-Plex-Token=tok-123'), null);
+    assert.equal(buildPlexItemUrl(cleanUri, '//evil.example/collect', 'X-Plex-Token=tok-123'), null);
+
+    assert.equal(
+      isSafeExternalEmbedUrl('https://www.youtube-nocookie.com/embed/abc', {
+        requireHttps: true,
+        disallowOrigin: 'https://dashboard.trinhism.com',
+      }),
+      'https://www.youtube-nocookie.com/embed/abc'
+    );
+    assert.equal(
+      isSafeExternalEmbedUrl('http://example.com/embed', { requireHttps: true }),
+      null
+    );
+    assert.equal(
+      isSafeExternalEmbedUrl('https://dashboard.trinhism.com/board', {
+        requireHttps: true,
+        disallowOrigin: 'https://dashboard.trinhism.com',
+      }),
+      null
+    );
+  });
+
+  it('disables XML entity expansion in /api/rss and rejects non-HTML Content-Type in /api/web-proxy', async () => {
+    setGuardedFetch({
+      publicOnly: async (url) => {
+        if (url.includes('/feed.xml')) {
+          return new Response(
+            '<!DOCTYPE lolz [<!ENTITY boom "EXPANDED_SECRET">]><rss><channel><title>Safe</title><item><title>&boom;</title><link>https://example.org/post</link></item></channel></rss>',
+            { status: 200, headers: { 'Content-Type': 'application/rss+xml' } }
+          );
+        }
+        return new Response('%PDF-1.7 binary', {
+          status: 200,
+          headers: { 'Content-Type': 'application/pdf' },
+        });
+      },
+      privateAllowed: async () => new Response('unused', { status: 500 }),
+    });
+    try {
+      const rssRes = await rssHandler({
+        request: new Request('https://ambiently.example/api/rss?url=' + encodeURIComponent('https://example.org/feed.xml')),
+      });
+      assert.equal(rssRes.status, 200);
+      const rssJson = (await rssRes.json()) as { items: { title: string }[] };
+      assert.ok(!JSON.stringify(rssJson).includes('EXPANDED_SECRET'));
+
+      const proxyPdfRes = await webProxy({
+        request: new Request('https://ambiently.example/api/web-proxy?url=' + encodeURIComponent('https://example.org/doc.pdf'), {
+          headers: { 'Sec-Fetch-Dest': 'iframe', 'Sec-Fetch-Site': 'same-origin' },
+        }),
+      });
+      assert.equal(proxyPdfRes.status, 415);
+    } finally {
+      setGuardedFetch(null);
+      resetApiRateLimitsForTests();
+    }
+  });
 });
 
 describe('Database security audit & board usage coverage (supabase/)', () => {
@@ -423,8 +558,25 @@ describe('Database security audit & board usage coverage (supabase/)', () => {
       'check_board_limits_',
       'touch_dashboard_on_',
       'strip_plex_tokens',
+      'pinHash',
+      'haAccessToken',
     ]) {
       assert.ok(checkSql.includes(expectedCheck), `security-check.sql must check ${expectedCheck}`);
     }
+
+    const schemaSql = fs.readFileSync(path.join(supabaseDir, 'schema.sql'), 'utf8');
+    const secretMigrationSql = fs.readFileSync(
+      path.join(supabaseDir, 'migrations', '20261120_strip_vault_and_pin_secrets.sql'),
+      'utf8'
+    );
+    for (const sqlText of [schemaSql, secretMigrationSql]) {
+      assert.ok(sqlText.includes('haAccessToken'));
+      assert.ok(sqlText.includes('pinHash'));
+    }
+
+    const repoRoot = path.resolve(supabaseDir, '..');
+    const composeText = fs.readFileSync(path.join(repoRoot, 'compose.yaml'), 'utf8');
+    assert.match(composeText, /read_only:\s*true/);
+    assert.match(composeText, /cap_drop:\s*\r?\n\s*-\s*ALL/);
   });
 });

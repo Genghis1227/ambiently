@@ -18,5 +18,14 @@ services:
       # Optional: Set to "true" ONLY on trusted home networks to allow LAN http:// or .local/.lan
       # endpoints for calendars (.ics), RSS feeds, and Home Lab / Home Assistant probes.
       - AMBIENTLY_ALLOW_PRIVATE_FEEDS=${AMBIENTLY_ALLOW_PRIVATE_FEEDS:-false}
+      # Optional: Shared secret required on `/api/*` requests when exposed via reverse proxy.
+      - AMBIENTLY_API_KEY=${AMBIENTLY_API_KEY:-}
+      # Optional: Set to "true" only when running behind a trusted TLS reverse proxy (Caddy/Nginx/Cloudflare).
+      - AMBIENTLY_TRUST_PROXY=${AMBIENTLY_TRUST_PROXY:-false}
+    read_only: true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:size=16m,mode=1777
     security_opt:
       - no-new-privileges:true

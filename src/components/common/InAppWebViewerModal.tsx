@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { X, RotateCw, Globe, BookOpen, Loader2, Calendar, User, Clock, AlertCircle } from 'lucide-react';
 import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 import { sanitizeReaderHtml } from '../../utils/readerSanitize';
+import { isSafeExternalEmbedUrl, sanitizeExternalHttpUrl } from '../../utils/urlSecurity';
 
 export interface InAppWebViewerModalProps {
   isOpen: boolean;
@@ -74,14 +75,21 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
   }, [isOpen, onClose]);
 
   // Fetch article for Reader Mode
-  const loadReaderArticle = useCallback(async (targetUrl: string) => {
+  const loadReaderArticle = useCallback(async (targetUrl: string, signal?: AbortSignal) => {
+    const safeTarget = sanitizeExternalHttpUrl(targetUrl);
+    if (!safeTarget) {
+      setIsReaderLoading(false);
+      setReaderError('Unsupported link address.');
+      return;
+    }
+
     setIsReaderLoading(true);
     setReaderError(null);
 
     try {
-      let res = await fetch(`/api/reader?url=${encodeURIComponent(targetUrl.trim())}`);
+      let res = await fetch(`/api/reader?url=${encodeURIComponent(safeTarget)}`, { signal });
       if (res.status === 404) {
-        res = await fetch(`/functions/api/reader?url=${encodeURIComponent(targetUrl.trim())}`);
+        res = await fetch(`/functions/api/reader?url=${encodeURIComponent(safeTarget)}`, { signal });
       }
 
       const ct = res.headers.get('content-type') || '';
@@ -94,22 +102,29 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
         throw new Error(data.error || `Reader service answered ${res.status}`);
       }
 
+      if (signal?.aborted) return;
       setArticle(data);
-      if (data.title && !currentTitle) {
-        setCurrentTitle(data.title);
+      if (data.title) {
+        setCurrentTitle((prev) => prev || data.title);
       }
     } catch (err) {
+      if (signal?.aborted || (err instanceof Error && err.name === 'AbortError')) {
+        return;
+      }
       setReaderError(err instanceof Error ? err.message : 'Could not extract article text.');
     } finally {
-      setIsReaderLoading(false);
+      if (!signal?.aborted) {
+        setIsReaderLoading(false);
+      }
     }
-  }, [currentTitle]);
+  }, []);
 
   // Load reader article when url changes or modal opens
   useEffect(() => {
-    if (isOpen && currentUrl) {
-      loadReaderArticle(currentUrl);
-    }
+    if (!isOpen || !currentUrl) return;
+    const controller = new AbortController();
+    void loadReaderArticle(currentUrl, controller.signal);
+    return () => controller.abort();
   }, [isOpen, currentUrl, loadReaderArticle]);
 
   if (!isOpen || !currentUrl) return null;
@@ -137,14 +152,15 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
     if (!anchor) return;
 
     const href = anchor.getAttribute('href');
-    if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+    if (!href || href.startsWith('#')) return;
 
     e.preventDefault();
     e.stopPropagation();
 
     try {
-      const absUrl = new URL(href, currentUrl).href;
-      setCurrentUrl(absUrl);
+      const safeNextUrl = sanitizeExternalHttpUrl(new URL(href, currentUrl).href);
+      if (!safeNextUrl) return;
+      setCurrentUrl(safeNextUrl);
       setCurrentTitle(anchor.innerText.trim() || undefined);
     } catch {
       // Ignore malformed href
@@ -152,10 +168,22 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
   };
 
   // If the destination server does not block iframes (no X-Frame-Options or CSP frame-ancestors),
-  // load it directly for 100% native styles and interactivity; otherwise route through /api/web-proxy.
-  const webIframeSrc = article?.canEmbedDirectly
-    ? currentUrl
-    : `/api/web-proxy?url=${encodeURIComponent(currentUrl)}`;
+  // load it directly when it is an external HTTPS page; otherwise route through /api/web-proxy.
+  const appOrigin = typeof window !== 'undefined' ? window.location.origin : null;
+  const safeCurrentUrl = sanitizeExternalHttpUrl(currentUrl);
+  const canDirectFrame = Boolean(
+    article?.canEmbedDirectly &&
+      safeCurrentUrl &&
+      isSafeExternalEmbedUrl(safeCurrentUrl, {
+        requireHttps: true,
+        disallowOrigin: appOrigin,
+      })
+  );
+  const webIframeSrc = !safeCurrentUrl
+    ? 'about:blank'
+    : canDirectFrame
+      ? safeCurrentUrl
+      : `/api/web-proxy?url=${encodeURIComponent(safeCurrentUrl)}`;
 
   return (
     <div
@@ -458,6 +486,7 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
                       <img
                         src={article.leadImageUrl}
                         alt={article.title}
+                        referrerPolicy="no-referrer"
                         className="w-full max-h-[460px] object-cover"
                         onError={(e) => {
                           (e.target as HTMLElement).style.display = 'none';
@@ -533,7 +562,7 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
                 // allow-same-origin: with it, the page's scripts would run as Ambiently and could read
                 // the board and the saved sign-in. A site loaded directly keeps its own origin.
                 sandbox={
-                  article?.canEmbedDirectly
+                  canDirectFrame
                     ? 'allow-scripts allow-same-origin allow-forms allow-popups'
                     : 'allow-scripts allow-forms allow-popups'
                 }

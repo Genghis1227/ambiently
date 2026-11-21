@@ -202,13 +202,21 @@ function deviceOwnSettings(settings?: AppSettings): Partial<AppSettings> {
   };
 }
 
-// Removes the previous board's tabs, widgets, notes, settings, chores, profiles, meals, kanban and photo catalog from this device
+// Removes the previous board's tabs, widgets, notes, settings, chores, profiles, meals, kanban,
+// photo catalog, board-scoped device vault credentials, and private feed caches from this device
 async function clearLocalBoard(): Promise<void> {
   const current = await db.settings.get('global');
   await db.transaction(
     'rw',
-    [db.tabs, db.widgets, db.notes, db.settings, db.chores, db.profiles, db.meals, db.kanbanBoards, db.kanbanCards, db.kanban, db.routines],
+    [db.tabs, db.widgets, db.notes, db.settings, db.vault, db.chores, db.profiles, db.meals, db.kanbanBoards, db.kanbanCards, db.kanban, db.routines],
     async () => {
+      const vaultKeys = (await db.vault.toCollection().primaryKeys()) as string[];
+      const boardScopedVaultKeys = vaultKeys.filter(
+        (k) =>
+          k.startsWith('wifi-cred:') ||
+          k.startsWith('homelab-cred:') ||
+          k.startsWith('local-media:')
+      );
       await Promise.all([
         db.tabs.clear(),
         db.widgets.clear(),
@@ -220,6 +228,7 @@ async function clearLocalBoard(): Promise<void> {
         db.kanbanCards.clear(),
         db.kanban.clear(),
         db.routines.clear(),
+        ...(boardScopedVaultKeys.length > 0 ? [db.vault.bulkDelete(boardScopedVaultKeys)] : []),
       ]);
       await db.settings.put({ ...DEFAULT_SETTINGS, ...deviceOwnSettings(current) });
       await db.chores.put(DEFAULT_CHORE_SNAPSHOT);
@@ -230,6 +239,24 @@ async function clearLocalBoard(): Promise<void> {
       await db.routines.put(DEFAULT_ROUTINES_SNAPSHOT);
     }
   );
+
+  if (typeof localStorage !== 'undefined') {
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+        const key = localStorage.key(i);
+        if (
+          key &&
+          (key.startsWith('ambiently_cal_url_') ||
+            key.startsWith('ambiently_homelab_status_v1_') ||
+            key.startsWith('ambiently_rss_cache_'))
+        ) {
+          localStorage.removeItem(key);
+        }
+      }
+    } catch {
+      // Ignore storage access errors
+    }
+  }
 }
 
 export function isRealtimeConnected(): boolean {

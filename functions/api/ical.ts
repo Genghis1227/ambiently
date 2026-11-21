@@ -142,10 +142,16 @@ function isCancelled(component: any): boolean {
 // A feed should define every time zone it names (VTIMEZONE), but some don't. ical.js then treats
 // "09:00 in Europe/Berlin" as 09:00 in the server's own zone (UTC on Cloudflare), so the event moves
 // by the zone's offset. When the name is a standard IANA zone, work out the real moment instead.
+const MAX_IANA_ZONE_CACHE = 256;
 const ianaZoneCache = new Map<string, Intl.DateTimeFormat | null>();
 
 function zoneFormatter(tzid: string): Intl.DateTimeFormat | null {
+  if (!tzid || tzid.length > 128) return null;
   if (!ianaZoneCache.has(tzid)) {
+    if (ianaZoneCache.size >= MAX_IANA_ZONE_CACHE) {
+      const oldestKey = ianaZoneCache.keys().next().value;
+      if (oldestKey !== undefined) ianaZoneCache.delete(oldestKey);
+    }
     try {
       ianaZoneCache.set(
         tzid,

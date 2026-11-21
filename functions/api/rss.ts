@@ -79,6 +79,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     const parser = new XMLParser({
       ignoreAttributes: false,
       attributeNamePrefix: '@_',
+      processEntities: false,
     });
     const parsed = parser.parse(xmlText);
 

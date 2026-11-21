@@ -198,6 +198,13 @@ services:
       - SUPABASE_URL=${SUPABASE_URL:-}
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
       - AMBIENTLY_ALLOW_PRIVATE_FEEDS=${AMBIENTLY_ALLOW_PRIVATE_FEEDS:-false}
+      - AMBIENTLY_API_KEY=${AMBIENTLY_API_KEY:-}
+      - AMBIENTLY_TRUST_PROXY=${AMBIENTLY_TRUST_PROXY:-false}
+    read_only: true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:size=16m,mode=1777
     security_opt:
       - no-new-privileges:true
 ```
@@ -237,6 +244,7 @@ All runtime variables in Docker take effect immediately on `docker compose up -d
 | `SUPABASE_ANON_KEY` | *(empty)* | Optional runtime Supabase publishable `anon` key (never use `service_role`). |
 | `AMBIENTLY_ALLOW_PRIVATE_FEEDS` | `false` | Set to `true` **only on trusted home networks** to allow `http://`, RFC1918 LAN (`192.168.x.x`, `10.x.x.x`, `172.16-31.x.x`), Tailscale (`100.64.0.0/10`), and `.local`/`.lan` URLs for **calendar (`.ics`), RSS feeds, and Home Lab / Home Assistant (`/api/homelab`) probes** (e.g., Plex, Pi-hole, Immich, Nextcloud, Home Assistant). The web preview, reader, and link previews never reach the home network, and Home Assistant Long-Lived Access Tokens remain isolated strictly inside your browser's device-local `db.vault` bound to their exact server origin (never synced to cloud or exported to JSON backups). Loopback (`127.0.0.1` / `localhost`) and cloud metadata (`169.254.169.254`) remain blocked at all times, including names that resolve to them (`server/addressGuard.ts`). |
 | `AMBIENTLY_API_KEY` | *(empty)* | Optional shared secret required on `/api/*` requests (`X-Ambiently-Key`, `Authorization: Bearer <key>`, or `ambiently_api_key` cookie) when exposing a self-hosted instance with `AMBIENTLY_ALLOW_PRIVATE_FEEDS=true` behind a reverse proxy. |
+| `AMBIENTLY_TRUST_PROXY` | `false` | Set to `true` **only** when running behind a trusted TLS reverse proxy (Caddy, Nginx, Tailscale Serve, Cloudflare Tunnel) so `X-Forwarded-Proto` and forwarded client IP headers are honored cleanly; when `false`, direct LAN socket peer IPs are used for rate limiting. |
 
 ---
 

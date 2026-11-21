@@ -267,6 +267,7 @@ export interface ExternalFetchResult {
   statusText: string;
   url: string; // the address the answer finally came from
   text: string; // empty unless ok
+  contentType?: string;
   canEmbedDirectly?: boolean; // true if no X-Frame-Options or CSP frame-ancestors header blocks iframes
   etag?: string;
   lastModified?: string;
@@ -414,6 +415,7 @@ export async function fetchExternal(rawUrl: string, options: ExternalFetchOption
       }
       const xfo = (res.headers.get('x-frame-options') || '').trim();
       const csp = (res.headers.get('content-security-policy') || '').trim();
+      const contentType = (res.headers.get('content-type') || '').trim() || undefined;
       const hasFrameBlock = Boolean(xfo) || /frame-ancestors/i.test(csp);
       const text = await readCapped(res, maxBytes, controller.signal);
       return {
@@ -422,6 +424,7 @@ export async function fetchExternal(rawUrl: string, options: ExternalFetchOption
         statusText: res.statusText,
         url: url.toString(),
         text,
+        contentType,
         canEmbedDirectly: !hasFrameBlock,
         etag,
         lastModified,

@@ -161,7 +161,17 @@ function loadHeaderRules(): HeaderRule[] {
   return headerRules;
 }
 
+function isTrustedProxyEnabled(): boolean {
+  return process.env.AMBIENTLY_TRUST_PROXY === 'true';
+}
+
 function isHttpsRequest(req?: IncomingMessage): boolean {
+  if ((req?.socket as { encrypted?: boolean } | undefined)?.encrypted) {
+    return true;
+  }
+  if (!isTrustedProxyEnabled()) {
+    return false;
+  }
   const rawProto = req?.headers['x-forwarded-proto'];
   const proto = Array.isArray(rawProto) ? rawProto[0] : rawProto;
   return (
@@ -335,17 +345,41 @@ async function handleApiRoute(
   }
 
   try {
-    const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
-    const protocol = forwardedProto === 'https' ? 'https' : 'http';
-    const host = req.headers.host || 'localhost';
-    const fullUrl = new URL(req.url || '/', `${protocol}://${host}`);
+    const protocol = isHttpsRequest(req) ? 'https' : 'http';
+    const host = String(req.headers.host || 'localhost').trim() || 'localhost';
+    let fullUrl: URL;
+    try {
+      fullUrl = new URL(req.url || '/', `${protocol}://${host}`);
+    } catch {
+      applyApiSecurityHeaders(res);
+      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: 'Bad Request: Invalid Host or URL' }));
+      return;
+    }
 
+    const trustProxy = isTrustedProxyEnabled();
     const headers = new Headers();
     for (const [key, value] of Object.entries(req.headers)) {
+      const lower = key.toLowerCase();
+      if (
+        !trustProxy &&
+        (lower === 'cf-connecting-ip' ||
+          lower === 'x-forwarded-for' ||
+          lower === 'x-real-ip' ||
+          lower === 'x-forwarded-proto')
+      ) {
+        continue;
+      }
       if (typeof value === 'string') {
         headers.set(key, value);
       } else if (Array.isArray(value)) {
         headers.set(key, value.join(', '));
+      }
+    }
+    if (!trustProxy) {
+      const peerIp = (req.socket?.remoteAddress || '').trim();
+      if (peerIp) {
+        headers.set('cf-connecting-ip', peerIp);
       }
     }
 

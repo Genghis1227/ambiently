@@ -63,3 +63,33 @@ export function safeCssBackgroundUrl(rawUrl: unknown): string | null {
   const escaped = safeCandidate.replace(/["'()\\]/g, (ch) => `\\${ch}`);
   return `url("${escaped}")`;
 }
+
+export interface ExternalEmbedUrlOptions {
+  requireHttps?: boolean;
+  disallowOrigin?: string | null;
+}
+
+/**
+ * Validates an external URL before mounting it inside an `<iframe>`, optionally requiring
+ * HTTPS and blocking self-framing against `disallowOrigin`.
+ */
+export function isSafeExternalEmbedUrl(
+  rawUrl: unknown,
+  options?: ExternalEmbedUrlOptions
+): string | null {
+  const sanitized = sanitizeExternalHttpUrl(rawUrl);
+  if (!sanitized) return null;
+  if (options?.requireHttps && !sanitized.startsWith('https://')) {
+    return null;
+  }
+  if (options?.disallowOrigin) {
+    try {
+      if (new URL(sanitized).origin.toLowerCase() === options.disallowOrigin.trim().toLowerCase()) {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+  }
+  return sanitized;
+}

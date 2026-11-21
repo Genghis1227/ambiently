@@ -25,6 +25,10 @@ export interface ExtractedUrlMetadata {
   recipe?: ExtractedRecipeMetadata;
 }
 
+function isValidCodePoint(code: number): boolean {
+  return Number.isInteger(code) && code >= 0 && code <= 0x10ffff && (code < 0xd800 || code > 0xdfff);
+}
+
 export function decodeHtmlEntities(input: string): string {
   return input
     .replace(/&amp;/gi, '&')
@@ -47,11 +51,11 @@ export function decodeHtmlEntities(input: string): string {
     .replace(/&frac23;/gi, '2/3')
     .replace(/&#(\d+);/g, (_, dec) => {
       const code = parseInt(dec, 10);
-      return Number.isNaN(code) ? _ : String.fromCodePoint(code);
+      return isValidCodePoint(code) ? String.fromCodePoint(code) : _;
     })
     .replace(/&#x([0-9a-f]+);/gi, (_, hex) => {
       const code = parseInt(hex, 16);
-      return Number.isNaN(code) ? _ : String.fromCodePoint(code);
+      return isValidCodePoint(code) ? String.fromCodePoint(code) : _;
     })
     .trim();
 }
@@ -185,15 +189,15 @@ function flattenRecipeInstructions(rawInstructions: unknown): string[] {
     }
   };
 
-  const visit = (node: unknown) => {
-    if (!node) return;
+  const visit = (node: unknown, depth = 0) => {
+    if (!node || depth > 16) return;
     if (typeof node === 'string') {
       pushCleanText(node);
       return;
     }
     if (Array.isArray(node)) {
       for (const item of node) {
-        visit(item);
+        visit(item, depth + 1);
       }
       return;
     }
@@ -201,11 +205,11 @@ function flattenRecipeInstructions(rawInstructions: unknown): string[] {
       const obj = node as Record<string, unknown>;
       // HowToSection or ItemList with nested itemListElement / steps
       if (Array.isArray(obj.itemListElement)) {
-        visit(obj.itemListElement);
+        visit(obj.itemListElement, depth + 1);
         return;
       }
       if (Array.isArray(obj.steps)) {
-        visit(obj.steps);
+        visit(obj.steps, depth + 1);
         return;
       }
       // HowToStep
@@ -291,20 +295,20 @@ function extractJsonLdEntities(
     /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
   let match: RegExpExecArray | null;
 
-  const inspectNode = (node: unknown) => {
-    if (!node || typeof node !== 'object') return;
+  const inspectNode = (node: unknown, depth = 0) => {
+    if (!node || typeof node !== 'object' || depth > 16) return;
     if (Array.isArray(node)) {
-      for (const child of node) inspectNode(child);
+      for (const child of node) inspectNode(child, depth + 1);
       return;
     }
 
     const obj = node as Record<string, unknown>;
 
     if (Array.isArray(obj['@graph'])) {
-      for (const graphNode of obj['@graph']) inspectNode(graphNode);
+      for (const graphNode of obj['@graph']) inspectNode(graphNode, depth + 1);
     }
     if (obj.mainEntity && typeof obj.mainEntity === 'object') {
-      inspectNode(obj.mainEntity);
+      inspectNode(obj.mainEntity, depth + 1);
     }
 
     const nodeType = obj['@type'];
@@ -457,10 +461,17 @@ export function extractMetadataFromHtml(html: string, finalUrl: string): Extract
 
 function buildJsonHeaders(request: Request, cacheControl = 'private, no-store'): HeadersInit {
   const origin = request.headers.get('Origin');
+  let reqOrigin = '';
+  try {
+    reqOrigin = new URL(request.url).origin;
+  } catch {
+    reqOrigin = '';
+  }
+  const allowSameOrigin = Boolean(origin && reqOrigin && origin === reqOrigin);
   return {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': cacheControl,
-    ...(origin ? { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' } : {}),
+    ...(allowSameOrigin ? { 'Access-Control-Allow-Origin': reqOrigin, Vary: 'Origin' } : {}),
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
   };
@@ -471,7 +482,7 @@ export async function onRequestOptions(context: { request: Request }): Promise<R
   if (crossSite) return crossSite;
   return new Response(null, {
     status: 204,
-    headers: buildJsonHeaders(context.request, 'public, max-age=600'),
+    headers: buildJsonHeaders(context.request, 'private, max-age=600'),
   });
 }
 
@@ -533,7 +544,7 @@ export async function onRequestGet(context: { request: Request }): Promise<Respo
 
     return new Response(JSON.stringify(payload), {
       status: 200,
-      headers: buildJsonHeaders(context.request, 'public, max-age=600'),
+      headers: buildJsonHeaders(context.request, 'private, max-age=600'),
     });
   } catch (err: unknown) {
     const safeResponse = externalFetchErrorResponse(err);
