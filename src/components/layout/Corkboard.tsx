@@ -131,7 +131,10 @@ import { useDashboardStore } from '../../store/dashboardStore';
 import { CANVAS_THEMES, isCanvasThemeLight } from '../../data/canvasThemes';
 import { findOpenCanvasSpot } from '../../utils/autoLayout';
 import { useIsCursorHidden } from '../../hooks/useIdleCursor';
-import { resolveWidgetToolbarPlacement } from '../../utils/widgetToolbarPlacement';
+import {
+  resolveWidgetToolbarPlacement,
+  shouldShowWidgetToolbarFullscreenButton,
+} from '../../utils/widgetToolbarPlacement';
 import { isWidgetStickerMode } from '../../utils/widgetStickerMode';
 import { inferCuratedCategoryId } from '../../services/photos';
 import {
@@ -710,6 +713,18 @@ const MemoizedCanvasWidgetCard: React.FC<MemoizedCanvasWidgetCardProps> = React.
   const isNarrowCardForToolbar = layout.effectiveWRatio < 0.3;
   const isCompactToolbar = toolbarPlacement === 'compact-pill';
   const showCompactExpanded = !isCompactToolbar || isCompactExpanded;
+  const showRotateAction = !isFullScreen && !isCanvasLocked && hasUpdateWidgetPos;
+  const showSettingsAction = !isCanvasLocked && canUpdateWidget;
+  const showLayersAction = !isCanvasLocked && hasUpdateWidgetPos && !isFullScreen;
+  const showFullScreenAction =
+    hasUpdateWidgetPos && shouldShowWidgetToolbarFullscreenButton(widget.type, isFullScreen);
+  const showRemoveAction = !isCanvasLocked && hasRemoveWidget;
+  const hasAnyToolbarActions =
+    showRotateAction ||
+    showSettingsAction ||
+    showLayersAction ||
+    showFullScreenAction ||
+    showRemoveAction;
 
   const cardSurfaceClasses = isFramelessWidget
     ? isWidgetLight
@@ -865,233 +880,235 @@ const MemoizedCanvasWidgetCard: React.FC<MemoizedCanvasWidgetCardProps> = React.
       )}
 
       {/* Floating Widget Controls: Outside-top, flipped outside-bottom near top edge, or compact pill */}
-      <div
-        data-no-drag="true"
-        data-kiosk-edit-chrome="true"
-        onPointerEnter={(e) => {
-          if (e.pointerType === 'mouse' && isCompactToolbar) {
-            onSetExpandedCompactToolbarId(widget.id);
-          }
-        }}
-        onPointerLeave={(e) => {
-          if (e.pointerType === 'mouse' && isCompactToolbar) {
-            onSetExpandedCompactToolbarId((prev) => (prev === widget.id ? null : prev));
-          }
-        }}
-        className={`absolute z-50 transition-opacity ${
-          isCursorHidden ? 'opacity-0 pointer-events-none' : 'opacity-0 group-hover:opacity-100'
-        } ${
-          toolbarPlacement === 'outside-top'
-            ? 'bottom-full right-2 pb-1.5'
-            : toolbarPlacement === 'outside-bottom'
-              ? 'top-full right-6 pt-1.5'
-              : `left-1/2 -translate-x-1/2 ${
-                  isFullScreen && dockPaddingClass === 'pt-20' ? 'top-20' : 'top-1.5'
-                }`
-        }`}
-      >
-        {!showCompactExpanded ? (
-          <button
-            type="button"
-            data-no-drag="true"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
+      {hasAnyToolbarActions && (
+        <div
+          data-no-drag="true"
+          data-kiosk-edit-chrome="true"
+          onPointerEnter={(e) => {
+            if (e.pointerType === 'mouse' && isCompactToolbar) {
               onSetExpandedCompactToolbarId(widget.id);
-            }}
-            title={isCursorHidden ? undefined : 'Tile actions'}
-            className={`flex items-center justify-center px-2 py-0.5 rounded-full backdrop-blur-md shadow-lg transition-colors cursor-pointer ${
-              isWidgetLight
-                ? 'bg-white/95 border border-slate-300/90 text-slate-600 hover:text-slate-900'
-                : 'bg-gray-950/90 border border-gray-700/80 text-gray-300 hover:text-white'
-            }`}
-          >
-            <MoreHorizontal className="w-3.5 h-3.5" />
-          </button>
-        ) : (
-          <div
-            className={`flex items-center gap-1 backdrop-blur-md px-1.5 py-1 rounded-xl shadow-xl ${
-              isWidgetLight
-                ? 'bg-white/95 border border-slate-300/90 text-slate-700'
-                : 'bg-gray-950/90 border border-gray-700/80 shadow-2xl text-gray-300'
-            }`}
-          >
-            {!isFullScreen && !isCanvasLocked && hasUpdateWidgetPos && (
-              <button
-                type="button"
-                data-no-canvas-swipe="true"
-                onPointerDown={(e) => handlersRef.current?.onRotatePointerDown(e, widget.id, 'widget', pos)}
-                onDoubleClick={(e) => {
-                  e.stopPropagation();
-                  handlersRef.current?.onUpdateWidgetPos?.(widget.id, widget.gridPos, { ...pos, rotation: 0 });
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (!isRotating && pos.rotation !== 0) {
+            }
+          }}
+          onPointerLeave={(e) => {
+            if (e.pointerType === 'mouse' && isCompactToolbar) {
+              onSetExpandedCompactToolbarId((prev) => (prev === widget.id ? null : prev));
+            }
+          }}
+          className={`absolute z-50 transition-opacity ${
+            isCursorHidden ? 'opacity-0 pointer-events-none' : 'opacity-0 group-hover:opacity-100'
+          } ${
+            toolbarPlacement === 'outside-top'
+              ? 'bottom-full right-2 pb-1.5'
+              : toolbarPlacement === 'outside-bottom'
+                ? 'top-full right-6 pt-1.5'
+                : `left-1/2 -translate-x-1/2 ${
+                    isFullScreen && dockPaddingClass === 'pt-20' ? 'top-20' : 'top-1.5'
+                  }`
+          }`}
+        >
+          {!showCompactExpanded ? (
+            <button
+              type="button"
+              data-no-drag="true"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSetExpandedCompactToolbarId(widget.id);
+              }}
+              title={isCursorHidden ? undefined : 'Tile actions'}
+              className={`flex items-center justify-center px-2 py-0.5 rounded-full backdrop-blur-md shadow-lg transition-colors cursor-pointer ${
+                isWidgetLight
+                  ? 'bg-white/95 border border-slate-300/90 text-slate-600 hover:text-slate-900'
+                  : 'bg-gray-950/90 border border-gray-700/80 text-gray-300 hover:text-white'
+              }`}
+            >
+              <MoreHorizontal className="w-3.5 h-3.5" />
+            </button>
+          ) : (
+            <div
+              className={`flex items-center gap-1 backdrop-blur-md px-1.5 py-1 rounded-xl shadow-xl ${
+                isWidgetLight
+                  ? 'bg-white/95 border border-slate-300/90 text-slate-700'
+                  : 'bg-gray-950/90 border border-gray-700/80 shadow-2xl text-gray-300'
+              }`}
+            >
+              {showRotateAction && (
+                <button
+                  type="button"
+                  data-no-canvas-swipe="true"
+                  onPointerDown={(e) => handlersRef.current?.onRotatePointerDown(e, widget.id, 'widget', pos)}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
                     handlersRef.current?.onUpdateWidgetPos?.(widget.id, widget.gridPos, { ...pos, rotation: 0 });
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!isRotating && pos.rotation !== 0) {
+                      handlersRef.current?.onUpdateWidgetPos?.(widget.id, widget.gridPos, { ...pos, rotation: 0 });
+                    }
+                  }}
+                  title={
+                    isCursorHidden
+                      ? undefined
+                      : pos.rotation !== 0
+                        ? `Rotated ${pos.rotation}° — drag to rotate or click to reset to 0°`
+                        : 'Drag in a circle to rotate tile'
                   }
-                }}
-                title={
-                  isCursorHidden
-                    ? undefined
-                    : pos.rotation !== 0
-                      ? `Rotated ${pos.rotation}° — drag to rotate or click to reset to 0°`
-                      : 'Drag in a circle to rotate tile'
-                }
-                className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold flex items-center gap-0.5 transition-all cursor-grab active:cursor-grabbing ${
-                  pos.rotation !== 0
-                    ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-600 hover:text-white'
-                    : isWidgetLight
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold flex items-center gap-0.5 transition-all cursor-grab active:cursor-grabbing ${
+                    pos.rotation !== 0
+                      ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-600 hover:text-white'
+                      : isWidgetLight
+                        ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
+                        : 'hover:bg-gray-800 text-gray-300 hover:text-white'
+                  }`}
+                >
+                  <RotateCw className="w-3 h-3" />
+                  {pos.rotation !== 0 && <span>{pos.rotation}°</span>}
+                </button>
+              )}
+              {showSettingsAction && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (isCompactToolbar) onSetExpandedCompactToolbarId(null);
+                    onOpenWidgetSettings(widget);
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  title={isCursorHidden ? undefined : 'Configure tile title and settings'}
+                  className={`p-1 rounded-lg transition-all cursor-pointer ${
+                    isWidgetLight
                       ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
                       : 'hover:bg-gray-800 text-gray-300 hover:text-white'
-                }`}
-              >
-                <RotateCw className="w-3 h-3" />
-                {pos.rotation !== 0 && <span>{pos.rotation}°</span>}
-              </button>
-            )}
-            {!isCanvasLocked && canUpdateWidget && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (isCompactToolbar) onSetExpandedCompactToolbarId(null);
-                  onOpenWidgetSettings(widget);
-                }}
-                onPointerDown={(e) => e.stopPropagation()}
-                title={isCursorHidden ? undefined : 'Configure tile title and settings'}
-                className={`p-1 rounded-lg transition-all cursor-pointer ${
-                  isWidgetLight
-                    ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
-                    : 'hover:bg-gray-800 text-gray-300 hover:text-white'
-                }`}
-              >
-                <Settings className="w-3.5 h-3.5" />
-              </button>
-            )}
-            {!isCanvasLocked && hasUpdateWidgetPos && !isFullScreen && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (isCompactToolbar) onSetExpandedCompactToolbarId(null);
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  onSetContextMenu({
-                    x: rect.left,
-                    y: rect.bottom + 6,
-                    id: widget.id,
-                    type: 'widget',
-                    title: widget.title,
-                    currentZ: pos.zIndex || 1,
-                    isBackground: Boolean(pos.isBackground),
-                    rotation: pos.rotation,
-                  });
-                }}
-                onPointerDown={(e) => e.stopPropagation()}
-                title={isCursorHidden ? undefined : 'Layer order & appearance'}
-                className={`p-1 rounded-lg transition-all cursor-pointer ${
-                  isWidgetLight
-                    ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
-                    : 'hover:bg-gray-800 text-gray-300 hover:text-white'
-                }`}
-              >
-                <Layers className="w-3.5 h-3.5" />
-              </button>
-            )}
-            {hasUpdateWidgetPos && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (isCompactToolbar) onSetExpandedCompactToolbarId(null);
-                  if (isFullScreen) {
-                    const nextPos = {
-                      ...pos,
-                      xRatio: 0.1,
-                      yRatio: 0.1,
-                      wRatio: 0.45,
-                      hRatio: 0.5,
-                      rotation: 0,
-                      isFullScreen: false,
-                    };
-                    if (widget.type === 'chores' && canUpdateWidget) {
-                      handlersRef.current?.onUpdateWidget?.(widget.id, {
-                        freeformPos: nextPos,
-                        config: { ...widget.config, displayMode: 'tile' },
-                      });
-                    } else if (widget.type === 'kanban' && canUpdateWidget) {
-                      handlersRef.current?.onUpdateWidget?.(widget.id, {
-                        freeformPos: nextPos,
-                        config: { ...widget.config, displayMode: 'tile' },
-                      });
+                  }`}
+                >
+                  <Settings className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {showLayersAction && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (isCompactToolbar) onSetExpandedCompactToolbarId(null);
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    onSetContextMenu({
+                      x: rect.left,
+                      y: rect.bottom + 6,
+                      id: widget.id,
+                      type: 'widget',
+                      title: widget.title,
+                      currentZ: pos.zIndex || 1,
+                      isBackground: Boolean(pos.isBackground),
+                      rotation: pos.rotation,
+                    });
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  title={isCursorHidden ? undefined : 'Layer order & appearance'}
+                  className={`p-1 rounded-lg transition-all cursor-pointer ${
+                    isWidgetLight
+                      ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
+                      : 'hover:bg-gray-800 text-gray-300 hover:text-white'
+                  }`}
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {showFullScreenAction && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (isCompactToolbar) onSetExpandedCompactToolbarId(null);
+                    if (isFullScreen) {
+                      const nextPos = {
+                        ...pos,
+                        xRatio: 0.1,
+                        yRatio: 0.1,
+                        wRatio: 0.45,
+                        hRatio: 0.5,
+                        rotation: 0,
+                        isFullScreen: false,
+                      };
+                      if (widget.type === 'chores' && canUpdateWidget) {
+                        handlersRef.current?.onUpdateWidget?.(widget.id, {
+                          freeformPos: nextPos,
+                          config: { ...widget.config, displayMode: 'tile' },
+                        });
+                      } else if (widget.type === 'kanban' && canUpdateWidget) {
+                        handlersRef.current?.onUpdateWidget?.(widget.id, {
+                          freeformPos: nextPos,
+                          config: { ...widget.config, displayMode: 'tile' },
+                        });
+                      } else {
+                        handlersRef.current?.onUpdateWidgetPos?.(widget.id, widget.gridPos, nextPos);
+                      }
                     } else {
-                      handlersRef.current?.onUpdateWidgetPos?.(widget.id, widget.gridPos, nextPos);
+                      const nextPos = {
+                        ...pos,
+                        xRatio: 0,
+                        yRatio: 0,
+                        wRatio: 1,
+                        hRatio: 1,
+                        rotation: 0,
+                        isFullScreen: true,
+                      };
+                      if (widget.type === 'chores' && canUpdateWidget) {
+                        handlersRef.current?.onUpdateWidget?.(widget.id, {
+                          freeformPos: nextPos,
+                          config: { ...widget.config, displayMode: 'hub' },
+                        });
+                      } else if (widget.type === 'kanban' && canUpdateWidget) {
+                        handlersRef.current?.onUpdateWidget?.(widget.id, {
+                          freeformPos: nextPos,
+                          config: { ...widget.config, displayMode: 'view' },
+                        });
+                      } else {
+                        handlersRef.current?.onUpdateWidgetPos?.(widget.id, widget.gridPos, nextPos);
+                      }
                     }
-                  } else {
-                    const nextPos = {
-                      ...pos,
-                      xRatio: 0,
-                      yRatio: 0,
-                      wRatio: 1,
-                      hRatio: 1,
-                      rotation: 0,
-                      isFullScreen: true,
-                    };
-                    if (widget.type === 'chores' && canUpdateWidget) {
-                      handlersRef.current?.onUpdateWidget?.(widget.id, {
-                        freeformPos: nextPos,
-                        config: { ...widget.config, displayMode: 'hub' },
-                      });
-                    } else if (widget.type === 'kanban' && canUpdateWidget) {
-                      handlersRef.current?.onUpdateWidget?.(widget.id, {
-                        freeformPos: nextPos,
-                        config: { ...widget.config, displayMode: 'view' },
-                      });
-                    } else {
-                      handlersRef.current?.onUpdateWidgetPos?.(widget.id, widget.gridPos, nextPos);
-                    }
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  title={
+                    isCursorHidden
+                      ? undefined
+                      : isFullScreen
+                        ? 'Restore card size'
+                        : 'Fill full screen / canvas'
                   }
-                }}
-                onPointerDown={(e) => e.stopPropagation()}
-                title={
-                  isCursorHidden
-                    ? undefined
-                    : isFullScreen
-                      ? 'Restore card size'
-                      : 'Fill full screen / canvas'
-                }
-                className={`p-1 rounded-lg transition-all cursor-pointer ${
-                  isWidgetLight
-                    ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
-                    : 'hover:bg-gray-800 text-gray-300 hover:text-white'
-                }`}
-              >
-                {isFullScreen ? (
-                  <Minimize2 className="w-3.5 h-3.5" />
-                ) : (
-                  <Maximize2 className="w-3.5 h-3.5" />
-                )}
-              </button>
-            )}
+                  className={`p-1 rounded-lg transition-all cursor-pointer ${
+                    isWidgetLight
+                      ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
+                      : 'hover:bg-gray-800 text-gray-300 hover:text-white'
+                  }`}
+                >
+                  {isFullScreen ? (
+                    <Minimize2 className="w-3.5 h-3.5" />
+                  ) : (
+                    <Maximize2 className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              )}
 
-            {!isCanvasLocked && hasRemoveWidget && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (isCompactToolbar) onSetExpandedCompactToolbarId(null);
-                  handlersRef.current?.onRemoveWidget?.(widget.id);
-                }}
-                onPointerDown={(e) => e.stopPropagation()}
-                title={isCursorHidden ? undefined : 'Remove widget'}
-                className="p-1 rounded-lg hover:bg-red-500/80 text-gray-400 hover:text-white transition-all cursor-pointer"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+              {showRemoveAction && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (isCompactToolbar) onSetExpandedCompactToolbarId(null);
+                    handlersRef.current?.onRemoveWidget?.(widget.id);
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  title={isCursorHidden ? undefined : 'Remove widget'}
+                  className="p-1 rounded-lg hover:bg-red-500/80 text-gray-400 hover:text-white transition-all cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Bottom Right Resize Handle */}
       {!isFullScreen && !isCanvasLocked && (

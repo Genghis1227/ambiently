@@ -1071,7 +1071,11 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
         </div>
 
         {/* Right Controls: 🛡️ X Review Pill & Maximize Hub Button */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div
+          data-no-drag="true"
+          onPointerDown={(e) => e.stopPropagation()}
+          className="flex items-center gap-1.5 shrink-0"
+        >
           {pendingParentActionsCount > 0 && (
             <button
               type="button"

@@ -32,3 +32,20 @@ export function resolveWidgetToolbarPlacement({
 
   return 'outside-top';
 }
+
+export const WIDGET_TYPES_WITH_INTERNAL_EXPAND = new Set<string>(['chores', 'kanban']);
+
+/**
+ * Returns whether a widget tile's floating canvas toolbar should render its
+ * Maximize / Minimize button. Widgets with a dedicated internal header expand
+ * button (`chores`, `kanban`) omit the duplicate Maximize icon in tile mode
+ * (persistent full-screen canvas modes remain available in Tile Settings), while
+ * keeping Minimize available whenever the tile is already fullscreen on the canvas.
+ */
+export function shouldShowWidgetToolbarFullscreenButton(
+  widgetType: string,
+  isFullScreen: boolean
+): boolean {
+  if (isFullScreen) return true;
+  return !WIDGET_TYPES_WITH_INTERNAL_EXPAND.has(widgetType);
+}
