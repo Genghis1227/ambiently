@@ -330,11 +330,20 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
   };
   const [isWebLoading, setIsWebLoading] = useState(false);
 
-  const loadSectionFolders = async (server: PlexServerResource, token: string, secKey: string) => {
+  const loadSectionFolders = async (
+    server: PlexServerResource,
+    token: string,
+    secKey: string,
+    preserveSavedFolders = false
+  ) => {
     const uri = getBestPlexConnectionUri(server);
     if (!uri || !secKey) return;
     setIsFoldersLoading(true);
-    setSelectedPlexFolderKeys(new Set());
+    setSelectedPlexFolderKeys(
+      preserveSavedFolders && savedPlexConfig?.sectionKey === secKey
+        ? new Set(savedPlexConfig.folderKeys || [])
+        : new Set()
+    );
     setSectionTotalPhotos(null);
     try {
       const [folders, years, totalCnt] = await Promise.all([
@@ -374,7 +383,12 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
           sections.find((s) => s.isPhoto) ||
           sections[0];
         setSelectedSectionKey(preferredSection.key);
-        loadSectionFolders(server, token, preferredSection.key);
+        loadSectionFolders(
+          server,
+          token,
+          preferredSection.key,
+          preferredSection.key === savedPlexConfig?.sectionKey
+        );
       } else {
         setStatusMessage("No libraries found on this Plex server.");
       }
@@ -544,7 +558,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
       minYear,
       sourceLabel,
       plexSyncConfig,
-      targetWidgetId: isCommonSource ? undefined : targetWidgetId,
+      targetWidgetId: applyToAll ? undefined : targetWidgetId,
       applyToAll,
       onInitialBatchReady: (initialBatch) => {
         onPhotosLoaded(initialBatch, sourceLabel, undefined, 'plex', applyToAll, plexSyncConfig);
@@ -621,7 +635,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
       includeRootPhotos,
       scanLimit,
       sourceLabel,
-      targetWidgetId: isCommonSource ? undefined : targetWidgetId,
+      targetWidgetId: applyToAll ? undefined : targetWidgetId,
       applyToAll,
       onInitialBatchReady: (initialBatch) => {
         onPhotosLoaded(initialBatch, sourceLabel, undefined, 'local', applyToAll);
@@ -778,7 +792,7 @@ export const PhotoSourcesModal: React.FC<PhotoSourcesModalProps> = ({
 
     photoSyncService.startWebBackgroundSync({
       webUrlsText,
-      targetWidgetId: isCommonSource ? undefined : targetWidgetId,
+      targetWidgetId: applyToAll ? undefined : targetWidgetId,
       applyToAll,
       onInitialBatchReady: (initialBatch, sourceTitle, totalAlbumCount) => {
         onPhotosLoaded(initialBatch, sourceTitle, webUrlsText, 'web', applyToAll);

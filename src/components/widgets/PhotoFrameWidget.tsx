@@ -369,11 +369,13 @@ export const PhotoFrameWidget: React.FC<PhotoFrameWidgetProps> = ({
     return generatePolaroidSlots(polaroidCount, polaroidSizeMode);
   }, [polaroidCount, polaroidSizeMode]);
 
-  // Initialize scattered polaroids when photos or slots change
+  // Initialize scattered polaroids when photos or slots change (and reset stale album photos)
   useEffect(() => {
     if (!photos || photos.length === 0 || polaroidSlots.length === 0) return;
+    const activeIds = new Set(photos.map((p) => p.id));
     setScatteredPolaroids((prev) => {
-      if (prev && prev.length === polaroidSlots.length) {
+      const hasStalePhoto = prev.some((item) => !activeIds.has(item.photo.id));
+      if (prev && prev.length === polaroidSlots.length && !hasStalePhoto) {
         return prev;
       }
       const initial: ActivePolaroidItem[] = polaroidSlots.map((slot, idx) => ({

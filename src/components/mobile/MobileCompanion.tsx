@@ -276,15 +276,19 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
   });
 
   const handleMoveWidget = (widgetId: string, direction: 'up' | 'down') => {
-    if (!onUpdateWidget) return;
+    if (isCanvasLocked || !onUpdateWidget) return;
     const currentIndex = sortedWidgets.findIndex((w) => w.id === widgetId);
     const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-    if (targetIndex < 0 || targetIndex >= sortedWidgets.length) return;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= sortedWidgets.length) return;
 
-    const targetWidget = sortedWidgets[targetIndex];
-    // Swap their independent mobile orders
-    onUpdateWidget(widgetId, { mobileOrder: targetIndex });
-    onUpdateWidget(targetWidget.id, { mobileOrder: currentIndex });
+    const reordered = [...sortedWidgets];
+    const [moved] = reordered.splice(currentIndex, 1);
+    reordered.splice(targetIndex, 0, moved);
+    reordered.forEach((w, idx) => {
+      if (w.mobileOrder !== idx) {
+        onUpdateWidget(w.id, { mobileOrder: idx });
+      }
+    });
   };
 
   const handleQuickAdd = () => {
@@ -517,8 +521,11 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
       case 'clock':
         return (
           <ClockWidget
+            title={widget.title}
             clockFace={widget.config?.clockFace || 'digital'}
             showSeconds={widget.config?.showSeconds ?? true}
+            timezone={widget.config?.timezone}
+            locationName={widget.config?.locationName}
             isLight={isLight}
           />
         );
@@ -615,6 +622,14 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
             muted={widget.config?.muted ?? true}
             latitude={widget.config?.latitude}
             longitude={widget.config?.longitude}
+            onUpdateConfig={
+              onUpdateWidget
+                ? (updates) =>
+                    onUpdateWidget(widget.id, {
+                      config: { ...widget.config, ...updates },
+                    })
+                : undefined
+            }
           />
         );
       case 'textbox': {
@@ -633,6 +648,14 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
             bgStyle={widget.config?.bgStyle}
             transparentBg={isFrameless}
             isLight={isLight}
+            onUpdateConfig={
+              !isCanvasLocked && onUpdateWidget
+                ? (updates) =>
+                    onUpdateWidget(widget.id, {
+                      config: { ...widget.config, ...updates },
+                    })
+                : undefined
+            }
           />
         );
       }
@@ -1099,7 +1122,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
                   <LayoutGrid className="w-3.5 h-3.5 text-blue-400" />
                   Canvas Widgets ({sortedWidgets.length})
                 </span>
-                {onAddWidget && (
+                {!isCanvasLocked && onAddWidget && (
                   <button
                     type="button"
                     onClick={() => setIsAddWidgetOpen(true)}
@@ -1113,8 +1136,12 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
 
               {sortedWidgets.length === 0 ? (
                 <div className="p-5 text-center text-xs text-gray-400 bg-gray-950/40 rounded-2xl border border-gray-800/40 space-y-3">
-                  <p>No widgets on this canvas. Tap &ldquo;+ Add Tile&rdquo; to add one!</p>
-                  {activeNotes.length === 0 && onAddWidget && (
+                  <p>
+                    {isCanvasLocked
+                      ? 'No widgets on this canvas.'
+                      : 'No widgets on this canvas. Tap “+ Add Tile” to add one!'}
+                  </p>
+                  {!isCanvasLocked && activeNotes.length === 0 && onAddWidget && (
                     <React.Suspense fallback={null}>
                       <CanvasBlueprintPicker activeTabId={activeTabId} variant="mobile" />
                     </React.Suspense>
@@ -1156,52 +1183,54 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
                           </div>
                         </div>
 
-                        {/* Controls: Reorder ▲ / ▼, Edit ⚙️, Delete 🗑️ */}
-                        <div className="flex items-center gap-1 shrink-0">
-                          {/* Move Up */}
-                          <button
-                            type="button"
-                            disabled={isFirst}
-                            onClick={() => handleMoveWidget(widget.id, 'up')}
-                            title="Move tile up in mobile order"
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 disabled:opacity-20 disabled:cursor-not-allowed transition-all cursor-pointer"
-                          >
-                            <ChevronUp className="w-3.5 h-3.5" />
-                          </button>
-
-                          {/* Move Down */}
-                          <button
-                            type="button"
-                            disabled={isLast}
-                            onClick={() => handleMoveWidget(widget.id, 'down')}
-                            title="Move tile down in mobile order"
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 disabled:opacity-20 disabled:cursor-not-allowed transition-all cursor-pointer"
-                          >
-                            <ChevronDown className="w-3.5 h-3.5" />
-                          </button>
-
-                          {/* Configure Settings ⚙️ */}
-                          <button
-                            type="button"
-                            onClick={() => setEditingWidget(widget)}
-                            title="Configure widget settings"
-                            className="p-1.5 rounded-lg text-blue-400 hover:text-white hover:bg-blue-600/30 transition-all cursor-pointer"
-                          >
-                            <Settings className="w-3.5 h-3.5" />
-                          </button>
-
-                          {/* Remove Widget 🗑️ */}
-                          {onRemoveWidget && (
+                        {/* Controls: Reorder ▲ / ▼, Edit ⚙️, Delete 🗑️ (gated behind PIN lock) */}
+                        {!isCanvasLocked && (
+                          <div className="flex items-center gap-1 shrink-0">
+                            {/* Move Up */}
                             <button
                               type="button"
-                              onClick={() => onRemoveWidget(widget.id)}
-                              title="Remove widget from canvas"
-                              className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/20 transition-all cursor-pointer"
+                              disabled={isFirst}
+                              onClick={() => handleMoveWidget(widget.id, 'up')}
+                              title="Move tile up in mobile order"
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 disabled:opacity-20 disabled:cursor-not-allowed transition-all cursor-pointer"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <ChevronUp className="w-3.5 h-3.5" />
                             </button>
-                          )}
-                        </div>
+
+                            {/* Move Down */}
+                            <button
+                              type="button"
+                              disabled={isLast}
+                              onClick={() => handleMoveWidget(widget.id, 'down')}
+                              title="Move tile down in mobile order"
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 disabled:opacity-20 disabled:cursor-not-allowed transition-all cursor-pointer"
+                            >
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Configure Settings ⚙️ */}
+                            <button
+                              type="button"
+                              onClick={() => setEditingWidget(widget)}
+                              title="Configure widget settings"
+                              className="p-1.5 rounded-lg text-blue-400 hover:text-white hover:bg-blue-600/30 transition-all cursor-pointer"
+                            >
+                              <Settings className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Remove Widget 🗑️ */}
+                            {onRemoveWidget && (
+                              <button
+                                type="button"
+                                onClick={() => onRemoveWidget(widget.id)}
+                                title="Remove widget from canvas"
+                                className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/20 transition-all cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {/* Widget Body Content */}
@@ -1465,7 +1494,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
             <PhotoSourcesModal
               isOpen={Boolean(photoSourcesTarget)}
               onClose={() => setPhotoSourcesTarget(null)}
-              targetWidgetId={isUsingCommon ? undefined : activePhotoWidget.id}
+              targetWidgetId={activePhotoWidget.id}
               isCommonSource={isUsingCommon}
               initialWebUrls={
                 (isUsingCommon

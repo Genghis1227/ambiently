@@ -962,8 +962,25 @@ export function mergeChoreSnapshotsAuthoritative(
     mergedLedgerMap.set(entry.id, entry);
   }
 
-  const mergedLedger = Array.from(mergedLedgerMap.values()).sort(
+  const sortedLedger = Array.from(mergedLedgerMap.values()).sort(
     (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  );
+
+  // Reversions and explicit canRevert=false locks must survive merges regardless of which side held parent authority.
+  const revertedIds = new Set(
+    sortedLedger.filter((e) => e.type === 'reversion' && e.refId).map((e) => e.refId)
+  );
+  const nonRevertibleIds = new Set<string>();
+  for (const e of local.ledger) {
+    if (e.canRevert === false) nonRevertibleIds.add(e.id);
+  }
+  for (const e of remote.ledger) {
+    if (e.canRevert === false) nonRevertibleIds.add(e.id);
+  }
+  const mergedLedger = sortedLedger.map((entry) =>
+    entry.canRevert && (revertedIds.has(entry.id) || nonRevertibleIds.has(entry.id))
+      ? { ...entry, canRevert: false }
+      : entry
   );
 
   // 2. Profiles & Templates & Household Settings: parent-authoritative source wins

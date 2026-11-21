@@ -1,3 +1,5 @@
+import { pruneLocalStorageCachePrefix } from './feeds';
+
 export type AirQualityBadgeTone = 'emerald' | 'amber' | 'orange' | 'rose' | 'purple';
 
 export interface AqiClassification {
@@ -305,15 +307,13 @@ function setCachedAqi(key: string, data: AirQualityData): void {
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
       localStorage.setItem(`${AQI_STORAGE_PREFIX}${key}`, JSON.stringify(data));
-      for (let i = localStorage.length - 1; i >= 0; i--) {
-        const k = localStorage.key(i);
-        if (k && k.startsWith(AQI_STORAGE_PREFIX)) {
-          const subKey = k.slice(AQI_STORAGE_PREFIX.length);
-          if (!memoryAqiCache.has(subKey)) {
-            localStorage.removeItem(k);
-          }
-        }
-      }
+      pruneLocalStorageCachePrefix(
+        AQI_STORAGE_PREFIX,
+        MAX_AQI_CACHE_KEYS,
+        memoryAqiCache,
+        key,
+        (parsed) => (parsed && typeof parsed.fetchedAt === 'number' ? parsed.fetchedAt : null)
+      );
     } catch {
       // ignore storage errors
     }

@@ -14,26 +14,6 @@ interface RssWidgetProps {
   isLight?: boolean;
 }
 
-function decodeHtmlEntities(str: string): string {
-  if (!str) return '';
-  return str
-    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(Number(dec)))
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&copy;/g, '©')
-    .replace(/&reg;/g, '®')
-    .replace(/&mdash;/g, '—')
-    .replace(/&ndash;/g, '–')
-    .replace(/&hellip;/g, '…')
-    .replace(/&bull;/g, '•')
-    .trim();
-}
-
 function formatArticleDate(dateStr?: string): string {
   if (!dateStr) return '';
   try {
@@ -104,18 +84,12 @@ export const RssWidget: React.FC<RssWidgetProps> = ({
     }
   }, []);
 
-  const loadFeed = useCallback(async () => {
+  const loadFeed = useCallback(async (forceRefresh = false) => {
     setLoading(true);
     try {
-      const data = await fetchRssFeed(feedUrl);
-      if (data.title) setFeedTitle(decodeHtmlEntities(data.title));
-      setArticles(
-        (data.items || []).map((item) => ({
-          ...item,
-          title: decodeHtmlEntities(item.title),
-          description: decodeHtmlEntities(item.description),
-        }))
-      );
+      const data = await fetchRssFeed(feedUrl, forceRefresh);
+      if (data.title) setFeedTitle(data.title);
+      setArticles(data.items || []);
     } catch (err) {
       console.warn('RSS load error:', err);
     } finally {
@@ -216,7 +190,7 @@ export const RssWidget: React.FC<RssWidgetProps> = ({
           </span>
         </div>
         <button
-          onClick={loadFeed}
+          onClick={() => void loadFeed(true)}
           disabled={loading}
           title="Refresh RSS feed"
           className={`p-1 rounded shrink-0 transition-colors cursor-pointer ${

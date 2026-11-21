@@ -38,8 +38,12 @@ const renderWeatherIcon = (code: number, isDay: boolean, size = 'w-10 h-10') => 
   if (code === 3) return <Cloud className={`${size} text-slate-300 drop-shadow`} />;
   if (code === 45 || code === 48) return <CloudFog className={`${size} text-slate-400 drop-shadow`} />;
   if (code >= 51 && code <= 55) return <CloudDrizzle className={`${size} text-blue-300 drop-shadow`} />;
-  if (code >= 61 && code <= 65) return <CloudRain className={`${size} text-blue-400 drop-shadow`} />;
-  if (code >= 71 && code <= 75) return <Snowflake className={`${size} text-cyan-200 drop-shadow`} />;
+  if ((code >= 61 && code <= 65) || (code >= 80 && code <= 82)) {
+    return <CloudRain className={`${size} text-blue-400 drop-shadow`} />;
+  }
+  if ((code >= 71 && code <= 75) || code === 85 || code === 86) {
+    return <Snowflake className={`${size} text-cyan-200 drop-shadow`} />;
+  }
   if (code >= 95) return <CloudLightning className={`${size} text-purple-400 drop-shadow`} />;
   return <CloudSun className={`${size} text-amber-300 drop-shadow`} />;
 };
@@ -61,17 +65,20 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({
   }, [isOledNightClock]);
   const wasOledRef = useRef(false);
 
-  const loadWeather = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await fetchWeatherData(latitude, longitude, locationName, unit);
-      setWeather(data);
-    } catch (err) {
-      console.warn('Weather fetch error:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [latitude, longitude, locationName, unit]);
+  const loadWeather = useCallback(
+    async (forceRefresh = false) => {
+      setLoading(true);
+      try {
+        const data = await fetchWeatherData(latitude, longitude, locationName, unit, forceRefresh);
+        setWeather(data);
+      } catch (err) {
+        console.warn('Weather fetch error:', err);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [latitude, longitude, locationName, unit]
+  );
 
   useEffect(() => {
     void loadWeather();
@@ -100,7 +107,7 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({
           <span className="truncate">{weather?.locationName || locationName}</span>
         </div>
         <button
-          onClick={loadWeather}
+          onClick={() => void loadWeather(true)}
           disabled={loading}
           className={`p-1 transition-colors ${isLight ? 'hover:text-slate-900 text-slate-500' : 'hover:text-white text-gray-400'}`}
           title="Refresh forecast"
@@ -138,7 +145,7 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({
               </div>
               <div className="flex items-center justify-end gap-1">
                 <Wind className="w-3 h-3 text-cyan-400/80" />
-                <span>{weather.windSpeed} mph</span>
+                <span>{weather.windSpeed} {weather.unit === 'C' ? 'km/h' : 'mph'}</span>
               </div>
             </div>
           </div>

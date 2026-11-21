@@ -19,6 +19,41 @@ function escapeHtmlText(text: string): string {
   );
 }
 
+/**
+ * Parses an HTML `srcset` attribute according to HTML §4.8.4.2.1 so CDN transform commas
+ * inside URLs (e.g. `/cdn-cgi/image/w=800,q=80/pic.jpg`) never split mid-URL.
+ */
+export function parseSrcsetUrls(srcset: string): string[] {
+  const urls: string[] = [];
+  let i = 0;
+  const n = srcset.length;
+  while (i < n) {
+    while (i < n && /[\t\n\f\r ,]/.test(srcset[i])) i += 1;
+    if (i >= n) break;
+    const start = i;
+    while (i < n && !/[\t\n\f\r ]/.test(srcset[i])) i += 1;
+    let urlToken = srcset.slice(start, i);
+    if (urlToken.endsWith(',')) {
+      urlToken = urlToken.replace(/,+$/, '');
+      if (urlToken) urls.push(urlToken);
+      continue;
+    }
+    if (urlToken) urls.push(urlToken);
+    let parenDepth = 0;
+    while (i < n) {
+      const ch = srcset[i];
+      if (ch === '(') parenDepth += 1;
+      else if (ch === ')' && parenDepth > 0) parenDepth -= 1;
+      else if (ch === ',' && parenDepth === 0) {
+        i += 1;
+        break;
+      }
+      i += 1;
+    }
+  }
+  return urls;
+}
+
 interface PagesContext {
   request: Request;
 }
@@ -237,10 +272,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       const srcset = img.getAttribute('srcset') || img.getAttribute('data-srcset') || '';
 
       if ((!src || src.startsWith('data:')) && srcset) {
-        const candidates = srcset
-          .split(',')
-          .map((part: string) => part.trim().split(/\s+/)[0])
-          .filter(Boolean);
+        const candidates = parseSrcsetUrls(srcset);
         if (candidates.length > 0) {
           src = candidates[candidates.length - 1];
         }

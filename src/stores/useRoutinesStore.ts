@@ -228,6 +228,7 @@ interface RoutinesStoreState {
   removeRoutineItem: (itemId: string) => Promise<void>;
   clearAllCompletions: () => Promise<void>;
   applyRemoteRoutinesSnapshot: (incoming: RoutinesSnapshot) => Promise<void>;
+  resetForBoardSwitch: () => void;
 }
 
 export const useRoutinesStore = create<RoutinesStoreState>((set, get) => {
@@ -433,6 +434,10 @@ export const useRoutinesStore = create<RoutinesStoreState>((set, get) => {
           console.warn('Failed to persist merged routines snapshot to IndexedDB:', err);
         }
       }
+    },
+
+    resetForBoardSwitch: () => {
+      commitRoutinesState(DEFAULT_ROUTINES_SNAPSHOT, { isInitialized: false });
     },
   };
 });

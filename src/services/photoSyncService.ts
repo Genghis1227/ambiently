@@ -527,12 +527,12 @@ class PhotoSyncService {
       const res = await resolveWebAndCloudPhotoUrls(params.webUrlsText, {
         maxPhotos: 10000,
         signal,
-        onBatch: async (batchPhotos, sourceTitle, isInitial, isDone) => {
+        onBatch: async (batchPhotos, sourceTitle, isInitial, isDone, totalAlbumCount) => {
           if (signal.aborted) return;
 
           const label = sourceTitle || 'Google Photos & Web';
 
-          if (isInitial && !initialBatchFired) {
+          if (isInitial && !initialBatchFired && batchPhotos.length > 0) {
             initialBatchFired = true;
             await store.appendPhotosToTarget(
               targetWidgetId,
@@ -543,22 +543,21 @@ class PhotoSyncService {
             );
             cachePhotosLocally(batchPhotos);
 
-            const hasMore = (res?.totalAlbumCount || 0) > batchPhotos.length;
+            const hasMore = (totalAlbumCount || 0) > batchPhotos.length && !isDone;
 
             store.setPhotoSyncState({
-              isActive: hasMore && !isDone,
+              isActive: hasMore,
               sourceType: 'web',
               sourceLabel: label,
               loadedCount: batchPhotos.length,
-              totalCount: res?.totalAlbumCount,
-              statusMessage:
-                hasMore && !isDone
-                  ? `Loaded first ${batchPhotos.length} photos (retrieving remaining album in background)...`
-                  : `Loaded ${batchPhotos.length} photos!`,
+              totalCount: totalAlbumCount,
+              statusMessage: hasMore
+                ? `Loaded first ${batchPhotos.length} photos (retrieving remaining album in background)...`
+                : `Loaded ${batchPhotos.length} photos!`,
               targetWidgetId,
             });
 
-            params.onInitialBatchReady?.(batchPhotos, label, res?.totalAlbumCount);
+            params.onInitialBatchReady?.(batchPhotos, label, totalAlbumCount);
             if (!hasMore || isDone) {
               completionRecorded = true;
               await this.recordSyncSuccess(
@@ -567,7 +566,7 @@ class PhotoSyncService {
               );
               this.scheduleStatusClear(3500);
             }
-          } else if (isDone) {
+          } else if (isDone && !signal.aborted && batchPhotos.length > 0) {
             await store.finalizePhotosToTarget(
               targetWidgetId,
               batchPhotos,
@@ -588,10 +587,15 @@ class PhotoSyncService {
               sourceType: 'web',
               sourceLabel: label,
               loadedCount: batchPhotos.length,
-              totalCount: batchPhotos.length,
+              totalCount: totalAlbumCount ?? batchPhotos.length,
               statusMessage: `Album sync complete (${batchPhotos.length.toLocaleString()} photos loaded)!`,
               targetWidgetId,
             });
+
+            if (!initialBatchFired) {
+              initialBatchFired = true;
+              params.onInitialBatchReady?.(batchPhotos, label, totalAlbumCount);
+            }
 
             this.scheduleStatusClear(4000);
           }

@@ -45,12 +45,15 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
   // Web View state
   const [isWebLoading, setIsWebLoading] = useState(true);
   const [iframeKey, setIframeKey] = useState(0);
+  const [reloadNonce, setReloadNonce] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const swRecoveryAttemptedRef = useRef(false);
+  const isAnchorTitlePlaceholderRef = useRef(false);
 
   // Synchronize when modal is opened with new props
   useEffect(() => {
     if (isOpen && initialUrl) {
+      isAnchorTitlePlaceholderRef.current = false;
       setCurrentUrl(initialUrl);
       setCurrentTitle(initialTitle);
       setViewMode('reader');
@@ -105,7 +108,9 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
       if (signal?.aborted) return;
       setArticle(data);
       if (data.title) {
-        setCurrentTitle((prev) => prev || data.title);
+        const wasAnchorPlaceholder = isAnchorTitlePlaceholderRef.current;
+        isAnchorTitlePlaceholderRef.current = false;
+        setCurrentTitle((prev) => (wasAnchorPlaceholder || !prev ? data.title : prev));
       }
     } catch (err) {
       if (signal?.aborted || (err instanceof Error && err.name === 'AbortError')) {
@@ -119,13 +124,13 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
     }
   }, []);
 
-  // Load reader article when url changes or modal opens
+  // Load reader article when url changes, modal opens, or user clicks reload
   useEffect(() => {
     if (!isOpen || !currentUrl) return;
     const controller = new AbortController();
     void loadReaderArticle(currentUrl, controller.signal);
     return () => controller.abort();
-  }, [isOpen, currentUrl, loadReaderArticle]);
+  }, [isOpen, currentUrl, reloadNonce, loadReaderArticle]);
 
   if (!isOpen || !currentUrl) return null;
 
@@ -139,7 +144,7 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
 
   const handleReload = () => {
     if (viewMode === 'reader') {
-      loadReaderArticle(currentUrl);
+      setReloadNonce((prev) => prev + 1);
     } else {
       setIsWebLoading(true);
       setIframeKey((prev) => prev + 1);
@@ -160,6 +165,7 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
     try {
       const safeNextUrl = sanitizeExternalHttpUrl(new URL(href, currentUrl).href);
       if (!safeNextUrl) return;
+      isAnchorTitlePlaceholderRef.current = true;
       setCurrentUrl(safeNextUrl);
       setCurrentTitle(anchor.innerText.trim() || undefined);
     } catch {

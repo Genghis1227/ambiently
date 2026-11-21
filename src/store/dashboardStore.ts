@@ -120,22 +120,28 @@ export async function flushPendingCloudPush(): Promise<void> {
   }
   if (!hasPendingCloudPush) return;
   hasPendingCloudPush = false;
+  const dirtySnapshot = { ...pendingDirtyScopes };
   pendingDirtyScopes = {};
   if (!hasSupabaseCredentials()) return;
 
   try {
-    const user = await getCachedSessionUser();
-    if (!user) return;
-
-    const state = (latestDashboardGet || (() => useDashboardStore.getState()))();
-    const runPush = Promise.resolve(
-      pushToCloud(state.settings, state.tabs, state.widgets, state.notes)
-    ).then(
-      () => undefined,
-      (err) => {
+    const runPush = Promise.resolve(getCachedSessionUser())
+      .then(async (user) => {
+        if (!user) return;
+        const state = (latestDashboardGet || (() => useDashboardStore.getState()))();
+        const res = await pushToCloud(state.settings, state.tabs, state.widgets, state.notes, {
+          dirtyScopes: Object.keys(dirtySnapshot).length > 0 ? dirtySnapshot : undefined,
+        });
+        if (res && !res.success) {
+          pendingDirtyScopes = mergeDirtySyncScopes(pendingDirtyScopes, dirtySnapshot);
+          hasPendingCloudPush = true;
+        }
+      })
+      .catch((err) => {
+        pendingDirtyScopes = mergeDirtySyncScopes(pendingDirtyScopes, dirtySnapshot);
+        hasPendingCloudPush = true;
         console.warn('Cloud flush push skipped:', err);
-      }
-    );
+      });
     activeCloudPushPromise = runPush;
     try {
       await runPush;
@@ -145,6 +151,8 @@ export async function flushPendingCloudPush(): Promise<void> {
       }
     }
   } catch (err) {
+    pendingDirtyScopes = mergeDirtySyncScopes(pendingDirtyScopes, dirtySnapshot);
+    hasPendingCloudPush = true;
     console.warn('Cloud flush push skipped:', err);
   }
 }
@@ -163,36 +171,29 @@ function scheduleCloudAutoPush(get: () => DashboardState, scope?: DirtySyncScope
     hasPendingCloudPush = false;
     const dirtySnapshot = { ...pendingDirtyScopes };
     pendingDirtyScopes = {};
-    void getCachedSessionUser()
-      .then((user) => {
+    const runPush = Promise.resolve(getCachedSessionUser())
+      .then(async (user) => {
         if (!user) return;
         const state = get();
-        const runPush = Promise.resolve(
-          pushToCloud(state.settings, state.tabs, state.widgets, state.notes, {
-            dirtyScopes: dirtySnapshot,
-          })
-        ).then(
-          (res) => {
-            if (res && !res.success) {
-              pendingDirtyScopes = mergeDirtySyncScopes(pendingDirtyScopes, dirtySnapshot);
-            }
-          },
-          (err) => {
-            pendingDirtyScopes = mergeDirtySyncScopes(pendingDirtyScopes, dirtySnapshot);
-            console.warn('Cloud auto-push skipped:', err);
-          }
-        );
-        activeCloudPushPromise = runPush;
-        void runPush.finally(() => {
-          if (activeCloudPushPromise === runPush) {
-            activeCloudPushPromise = null;
-          }
+        const res = await pushToCloud(state.settings, state.tabs, state.widgets, state.notes, {
+          dirtyScopes: dirtySnapshot,
         });
+        if (res && !res.success) {
+          pendingDirtyScopes = mergeDirtySyncScopes(pendingDirtyScopes, dirtySnapshot);
+          hasPendingCloudPush = true;
+        }
       })
       .catch((err) => {
         pendingDirtyScopes = mergeDirtySyncScopes(pendingDirtyScopes, dirtySnapshot);
+        hasPendingCloudPush = true;
         console.warn('Cloud auto-push skipped:', err);
       });
+    activeCloudPushPromise = runPush;
+    void runPush.finally(() => {
+      if (activeCloudPushPromise === runPush) {
+        activeCloudPushPromise = null;
+      }
+    });
   }, 2500);
 }
 
@@ -446,12 +447,16 @@ function getExistingBoxesForTab(
   notes: StickyNoteItem[]
 ) {
   const now = new Date();
+  const targetTab = useDashboardStore?.getState?.().tabs?.find?.((t) => t.id === tabId);
+  const hideUnpinned = Boolean(targetTab?.hideNotes);
   const tabWidgets = widgets.filter((w) => w.tabId === tabId);
   const tabNotes = notes.filter(
     (n) =>
       ((n.tabId || 'tab-corkboard') === tabId || n.tabId === 'all') &&
       !n.archivedAt &&
-      (!n.expiresAt || new Date(n.expiresAt) > now)
+      (!n.expiresAt || new Date(n.expiresAt) > now) &&
+      n.isPinnedToCanvas !== false &&
+      (!hideUnpinned || n.isPinnedToCanvas === true)
   );
 
   return [
@@ -1314,12 +1319,17 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   autoOrganizeCanvas: async (tabId, mode = 'bento') => {
     const state = get();
     const targetTab = state.tabs.find((t) => t.id === tabId);
+    const hideUnpinned = Boolean(targetTab?.hideNotes);
+    const now = new Date();
     const tabWidgets = state.widgets.filter((w) => w.tabId === tabId);
-    const tabNotes = targetTab?.hideNotes
-      ? []
-      : state.notes.filter(
-          (n) => (n.tabId || 'tab-corkboard') === tabId || n.tabId === 'all'
-        );
+    const tabNotes = state.notes.filter(
+      (n) =>
+        ((n.tabId || 'tab-corkboard') === tabId || n.tabId === 'all') &&
+        !n.archivedAt &&
+        (!n.expiresAt || new Date(n.expiresAt) > now) &&
+        n.isPinnedToCanvas !== false &&
+        (!hideUnpinned || n.isPinnedToCanvas === true)
+    );
 
     if (tabWidgets.length === 0 && tabNotes.length === 0) return;
 
@@ -2432,7 +2442,8 @@ registerMealPersistListener(() => {
   }
 });
 
-registerProfileSyncListener(() => {
+registerProfileSyncListener((_profiles, source) => {
+  if (source !== 'local') return;
   const dashState = useDashboardStore.getState();
   if (dashState.isInitialized) {
     dashState.saveLocalBackup({ householdStores: true });

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.3] - 2026-11-21
+
+### Fixed
+- **RSS / Atom / RDF Feed & Entity Parsing (`htmlEntities.ts`, `functions/api/rss.ts`, `feeds.ts`, `RssWidget.tsx`):**
+  - Fixed XML entity normalization (`decodeXmlEntities`) and HTML tag stripping (`stripHtmlToText`) so XML-escaped feeds (like Hugo) no longer leave `<p>`/`</p>` tags or `&rsquo;` literal in article snippets, while keeping `processEntities: false` active against DTD expansion and preserving prose with `<` / `</3` or `&lt;p&gt;`.
+  - Added recursive XHTML text extraction (`type="xhtml"`), RFC 4287 default `rel="alternate"` selection with relative URL resolution, RSS 1.0 (`rdf:RDF` / `dc:date`) support, uppercase `&#X` numeric entity support, and `http://` preservation for private/LAN feeds.
+  - Bumped RSS client cache version (`RSS_CACHE_VERSION = 2`) with `&v=2`/`&refresh=1` manual cache bypass and eliminated duplicate client entity decoding in `RssWidget.tsx`.
+- **Cloud Sync, Household Stores & Board-Switch Isolation (`supabase.ts`, `useProfileStore.ts`, `useChoreStore.ts`, `choreEngine.ts`, `useMealStore.ts`, `useKanbanStore.ts`, `useRoutinesStore.ts`, `dashboardStore.ts`, `feeds.ts`, `weather.ts`, `airQuality.ts`):**
+  - Reset all five initialized household Zustand stores (`resetForBoardSwitch`), `feeds.ts` memory caches, and `ambiently_cal_cache_*`/`ambiently_cal_ok_*` keys on board switch (`clearLocalBoard`), and applied authoritative remote replacement (`overwriteLocal || switchingBoards`) so Board A data never merges into or pushes to Board B.
+  - Stopped remote profile sync events from bumping `useChoreStore` `updated_at` / overwriting pending kid chore submissions, fixed `useChoreStore` reading `db.settings.get('global')`, preserved `canRevert: false` across reverted chore ledger merges, bumped `useMealStore` timestamps when offline meal edits merge cleanly, fixed Kanban direct table pull `latestIso` and un-awaited Dexie persistence, fixed Realtime `household_profiles` `DELETE` payload detection, preserved `keepLocalTabFields` / soft-deleted widget Trash configs, restored `hasPendingCloudPush` on failed auto-push retries, and replaced cold-boot `localStorage` cache pruning with LRU eviction.
+- **Photo Sync, Scrapers, Uploads, PIN Controls & Widgets:**
+  - Fixed `resolveWebAndCloudPhotoUrls` / `startWebBackgroundSync` TDZ `ReferenceError` and inline-awaited cancellable Google Photos deep pagination; preserved `targetWidgetId` when unchecking `"Apply to all shared photo frames"`, kept saved Plex folder checkmarks on modal open, and reset stale polaroids in `PhotoFrameWidget.tsx`.
+  - Fixed `SoundscapeWidget.tsx` sleep timer fade loop (`sleepFadingRef` + `clearInterval`), gated `MobileCompanion.tsx` edit/add/reorder/TextBox actions on `isCanvasLocked` alongside sequential `mobileOrder` swaps and missing `ClockWidget`/`MediaEmbedWidget` props, and disabled Lock Canvas Layout toggles in `SettingsModal.tsx` until a Parent PIN is active.
+  - Fixed apostrophe truncation in `/api/metadata`, comma-safe `srcset` parsing in `/api/reader`, Reader modal reload abort & anchor placeholder titles in `InAppWebViewerModal.tsx`, empty-MIME / `image/jpg` / `.heic` raster upload handling + inline error banners, sticker mode saving for `chalkboard`/`soundscape`/`homelab`, `WeatherWidget` `km/h`/refresh/WMO 80–86 icons, YouTube `postMessage` mute without iframe reload, Calendar timeline DST wall-clock placement, `x=0`/`y=0` resize cap, Shopping List duplication, unpinned note layout exclusion, and Settings/ticker live sync across `WifiQrWidget`, `DecisionMakerWidget`, `SportsWidget`, and `FinanceWidget`.
+
 ## [0.8.2] - 2026-11-20
 
 ### Security & Reliability

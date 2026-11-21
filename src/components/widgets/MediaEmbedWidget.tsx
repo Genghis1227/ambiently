@@ -70,10 +70,12 @@ export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
 }) => {
   const [preset, setPreset] = useState<EmbedPresetId>(initialPreset);
   const [muted, setMuted] = useState<boolean>(initialMuted);
+  const [iframeInitMuted, setIframeInitMuted] = useState<boolean>(initialMuted);
   const [reloadKey, setReloadKey] = useState<number>(0);
   const [urlDraft, setUrlDraft] = useState<string>(customUrl);
   const [isEditingCustom, setIsEditingCustom] = useState<boolean>(initialPreset === 'custom' && !customUrl.trim());
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const skipNextInitialMuteSyncRef = useRef(false);
 
   useEffect(() => {
     setPreset(initialPreset);
@@ -88,10 +90,16 @@ export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
 
   useEffect(() => {
     setMuted(initialMuted);
+    if (skipNextInitialMuteSyncRef.current) {
+      skipNextInitialMuteSyncRef.current = false;
+      return;
+    }
+    setIframeInitMuted(initialMuted);
   }, [initialMuted]);
 
   const handleSelectPreset = (nextPreset: EmbedPresetId) => {
     setPreset(nextPreset);
+    setIframeInitMuted(muted);
     if (nextPreset === 'custom' && !customUrl.trim()) {
       setIsEditingCustom(true);
     } else {
@@ -105,6 +113,7 @@ export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
   const handleSaveCustomUrl = () => {
     const trimmed = urlDraft.trim();
     if (!isEmbeddableUrl(trimmed)) return;
+    setIframeInitMuted(muted);
     if (onUpdateConfig) {
       onUpdateConfig({ preset: 'custom', customUrl: trimmed });
     }
@@ -116,20 +125,23 @@ export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
     const nextMuted = !muted;
     setMuted(nextMuted);
 
-    // Send postMessage to YouTube IFrame API to toggle sound without restarting video
+    // Send postMessage to YouTube IFrame API to toggle sound without reloading iframe src
     const iframeOrigin = iframeRef.current?.src || '';
-    if (
-      iframeRef.current?.contentWindow &&
-      iframeOrigin.startsWith('https://www.youtube-nocookie.com/')
-    ) {
+    const isYouTubeIframe =
+      Boolean(iframeRef.current?.contentWindow) &&
+      iframeOrigin.startsWith('https://www.youtube-nocookie.com/');
+    if (isYouTubeIframe) {
+      skipNextInitialMuteSyncRef.current = true;
       try {
-        iframeRef.current.contentWindow.postMessage(
+        iframeRef.current!.contentWindow!.postMessage(
           JSON.stringify({ event: 'command', func: nextMuted ? 'mute' : 'unMute', args: [] }),
           'https://www.youtube-nocookie.com'
         );
       } catch {
         // ignore cross-origin restrictions if non-YouTube embed
       }
+    } else {
+      setIframeInitMuted(nextMuted);
     }
 
     if (onUpdateConfig) {
@@ -177,7 +189,7 @@ export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
   };
 
   const getActiveIframeUrl = (): string => {
-    const m = muted ? 1 : 0;
+    const m = iframeInitMuted ? 1 : 0;
     switch (preset) {
       case 'lofi':
         // Pure live broadcast: let YouTube stay completely live
@@ -196,7 +208,7 @@ export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
       default: {
         if (!customUrl.trim()) return '';
         const savedTime = getSavedVideoTime(customUrl);
-        return normalizeEmbedUrl(customUrl, muted, savedTime);
+        return normalizeEmbedUrl(customUrl, iframeInitMuted, savedTime);
       }
     }
   };
@@ -257,7 +269,10 @@ export const MediaEmbedWidget: React.FC<MediaEmbedWidgetProps> = ({
           )}
           <button
             type="button"
-            onClick={() => setReloadKey((k) => k + 1)}
+            onClick={() => {
+              setIframeInitMuted(muted);
+              setReloadKey((k) => k + 1);
+            }}
             title="Reload stream"
             className="p-1 rounded-lg bg-gray-800/70 hover:bg-gray-700 text-gray-400 hover:text-white transition-all cursor-pointer"
           >

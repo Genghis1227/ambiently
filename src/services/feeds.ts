@@ -108,6 +108,59 @@ const MAX_URL_CACHE_KEYS = 16; // Shared per-URL cache across all canvases, colo
 const memoryCalendarCache = new Map<string, { timestamp: number; events: CalendarEvent[] }>();
 const memoryUrlEventCache = new Map<string, { timestamp: number; events: RawCalendarEvent[] }>();
 
+export function pruneLocalStorageCachePrefix(
+  prefix: string,
+  maxKeys: number,
+  activeMemoryMap: ReadonlyMap<string, unknown>,
+  keepKey: string,
+  extractTimestamp: (parsed: any) => number | null
+): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const entries: { fullKey: string; subKey: string; timestamp: number }[] = [];
+    for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+      const fullKey = localStorage.key(i);
+      if (!fullKey || !fullKey.startsWith(prefix)) continue;
+      const subKey = fullKey.slice(prefix.length);
+      if (subKey === keepKey) {
+        entries.push({ fullKey, subKey, timestamp: Number.MAX_SAFE_INTEGER });
+        continue;
+      }
+      try {
+        const parsed = JSON.parse(localStorage.getItem(fullKey) || 'null');
+        const ts = extractTimestamp(parsed);
+        if (ts === null || !Number.isFinite(ts)) {
+          localStorage.removeItem(fullKey);
+        } else {
+          entries.push({ fullKey, subKey, timestamp: ts });
+        }
+      } catch {
+        localStorage.removeItem(fullKey);
+      }
+    }
+    if (entries.length <= maxKeys) return;
+    entries.sort((a, b) => a.timestamp - b.timestamp);
+    let excess = entries.length - maxKeys;
+    for (const candidate of entries) {
+      if (excess <= 0) break;
+      if (candidate.subKey === keepKey || activeMemoryMap.has(candidate.subKey)) continue;
+      localStorage.removeItem(candidate.fullKey);
+      excess -= 1;
+    }
+    if (excess > 0) {
+      for (const candidate of entries) {
+        if (excess <= 0) break;
+        if (candidate.subKey === keepKey) continue;
+        if (!localStorage.getItem(candidate.fullKey)) continue;
+        localStorage.removeItem(candidate.fullKey);
+        excess -= 1;
+      }
+    }
+  } catch {
+    // Storage quota restriction
+  }
+}
+
 function sortCalendarEvents(events: CalendarEvent[]): CalendarEvent[] {
   return [...events].sort((a, b) => {
     const parseTime = (dateStr: string, isAllDay?: boolean) => {
@@ -172,15 +225,13 @@ function writeUrlCache(rawUrl: string, events: RawCalendarEvent[]): void {
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
       localStorage.setItem(`ambiently_cal_url_${hash}`, JSON.stringify(entry));
-      for (let i = localStorage.length - 1; i >= 0; i--) {
-        const k = localStorage.key(i);
-        if (k && k.startsWith('ambiently_cal_url_')) {
-          const subHash = k.slice('ambiently_cal_url_'.length);
-          if (!memoryUrlEventCache.has(subHash)) {
-            localStorage.removeItem(k);
-          }
-        }
-      }
+      pruneLocalStorageCachePrefix(
+        'ambiently_cal_url_',
+        MAX_URL_CACHE_KEYS,
+        memoryUrlEventCache,
+        hash,
+        (parsed) => (parsed && typeof parsed.timestamp === 'number' ? parsed.timestamp : null)
+      );
     } catch {
       // Storage quota restriction
     }
@@ -265,16 +316,13 @@ export function setCachedCalendarEvents(sources: CalendarSource[], events: Calen
     try {
       const targetStorageKey = `ambiently_cal_cache_${key}`;
       localStorage.setItem(targetStorageKey, JSON.stringify(entry));
-      // Prune stale or legacy unhashed calendar cache keys from localStorage to prevent quota bloat
-      for (let i = localStorage.length - 1; i >= 0; i--) {
-        const k = localStorage.key(i);
-        if (k && k.startsWith('ambiently_cal_cache_')) {
-          const subKey = k.slice('ambiently_cal_cache_'.length);
-          if (!memoryCalendarCache.has(subKey)) {
-            localStorage.removeItem(k);
-          }
-        }
-      }
+      pruneLocalStorageCachePrefix(
+        'ambiently_cal_cache_',
+        MAX_CALENDAR_CACHE_KEYS,
+        memoryCalendarCache,
+        key,
+        (parsed) => (parsed && typeof parsed.timestamp === 'number' ? parsed.timestamp : null)
+      );
     } catch {
       // Storage quota restriction
     }
@@ -555,8 +603,12 @@ export async function fetchCalendarEvents(
 }
 
 const RSS_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const RSS_CACHE_VERSION = 2;
 const MAX_RSS_CACHE_KEYS = 5;
-const memoryRssCache = new Map<string, { timestamp: number; title: string; items: RssArticle[] }>();
+const memoryRssCache = new Map<
+  string,
+  { v: number; timestamp: number; title: string; items: RssArticle[] }
+>();
 
 function getRssCacheKey(url: string): string {
   let hash = 0;
@@ -567,25 +619,33 @@ function getRssCacheKey(url: string): string {
   return Math.abs(hash).toString(36);
 }
 
+export function clearFeedMemoryCaches(): void {
+  memoryUrlEventCache.clear();
+  memoryCalendarCache.clear();
+  memoryRssCache.clear();
+  feedStatuses.clear();
+  urlBackoffState.clear();
+}
+
 export async function fetchRssFeed(
   feedUrl: string,
   forceRefresh: boolean = false
 ): Promise<{ title: string; items: RssArticle[] }> {
   if (!feedUrl || !feedUrl.trim()) return { title: '', items: [] };
 
-  let normalized = feedUrl.trim();
-  if (normalized.startsWith('http://')) {
-    normalized = 'https://' + normalized.slice(7);
-  }
+  const normalized = feedUrl.trim();
 
   const key = getRssCacheKey(normalized);
   let cached = memoryRssCache.get(key);
+  if (cached && cached.v !== RSS_CACHE_VERSION) {
+    cached = undefined;
+  }
   if (!cached && typeof window !== 'undefined' && window.localStorage) {
     try {
       const raw = localStorage.getItem(`ambiently_rss_cache_${key}`);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed && Array.isArray(parsed.items)) {
+        if (parsed && parsed.v === RSS_CACHE_VERSION && Array.isArray(parsed.items)) {
           cached = parsed;
           memoryRssCache.set(key, parsed);
         }
@@ -600,9 +660,11 @@ export async function fetchRssFeed(
   }
 
   try {
-    let res = await fetch(`/api/rss?url=${encodeURIComponent(normalized)}`);
+    const qs = `url=${encodeURIComponent(normalized)}&v=${RSS_CACHE_VERSION}${forceRefresh ? '&refresh=1' : ''}`;
+    const fetchInit: RequestInit | undefined = forceRefresh ? { cache: 'no-store' } : undefined;
+    let res = await fetch(`/api/rss?${qs}`, fetchInit);
     if (res.status === 404) {
-      res = await fetch(`/functions/api/rss?url=${encodeURIComponent(normalized)}`);
+      res = await fetch(`/functions/api/rss?${qs}`, fetchInit);
     }
     if (!res.ok) return cached ? { title: cached.title, items: cached.items } : { title: '', items: [] };
     const ct = res.headers.get('content-type') || '';
@@ -616,7 +678,7 @@ export async function fetchRssFeed(
     };
 
     if (result.items.length > 0) {
-      const entry = { timestamp: Date.now(), ...result };
+      const entry = { v: RSS_CACHE_VERSION, timestamp: Date.now(), ...result };
       if (memoryRssCache.has(key)) {
         memoryRssCache.delete(key);
       } else if (memoryRssCache.size >= MAX_RSS_CACHE_KEYS) {
@@ -628,15 +690,16 @@ export async function fetchRssFeed(
       if (typeof window !== 'undefined' && window.localStorage) {
         try {
           localStorage.setItem(`ambiently_rss_cache_${key}`, JSON.stringify(entry));
-          for (let i = localStorage.length - 1; i >= 0; i--) {
-            const k = localStorage.key(i);
-            if (k && k.startsWith('ambiently_rss_cache_')) {
-              const subKey = k.slice('ambiently_rss_cache_'.length);
-              if (!memoryRssCache.has(subKey)) {
-                localStorage.removeItem(k);
-              }
-            }
-          }
+          pruneLocalStorageCachePrefix(
+            'ambiently_rss_cache_',
+            MAX_RSS_CACHE_KEYS,
+            memoryRssCache,
+            key,
+            (parsed) =>
+              parsed && parsed.v === RSS_CACHE_VERSION && typeof parsed.timestamp === 'number'
+                ? parsed.timestamp
+                : null
+          );
         } catch {
           // ignore storage errors
         }

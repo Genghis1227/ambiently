@@ -246,7 +246,10 @@ export function computeNonOverlappingLayout(
 ): OrganizedLayoutResult {
   const now = new Date();
   const activeNotes = notes.filter(
-    (n) => !n.archivedAt && (!n.expiresAt || new Date(n.expiresAt) > now)
+    (n) =>
+      !n.archivedAt &&
+      (!n.expiresAt || new Date(n.expiresAt) > now) &&
+      n.isPinnedToCanvas !== false
   );
 
   const widgetBoxes: LayoutBox[] = widgets.map((w) => ({

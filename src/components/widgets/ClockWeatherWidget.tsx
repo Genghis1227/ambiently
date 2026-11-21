@@ -38,8 +38,12 @@ const renderWeatherIcon = (code: number, isDay: boolean) => {
   if (code === 3) return <Cloud className="w-8 h-8 text-slate-300" />;
   if (code === 45 || code === 48) return <CloudFog className="w-8 h-8 text-slate-400" />;
   if (code >= 51 && code <= 55) return <CloudDrizzle className="w-8 h-8 text-blue-300" />;
-  if (code >= 61 && code <= 65) return <CloudRain className="w-8 h-8 text-blue-400" />;
-  if (code >= 71 && code <= 75) return <Snowflake className="w-8 h-8 text-cyan-200" />;
+  if ((code >= 61 && code <= 65) || (code >= 80 && code <= 82)) {
+    return <CloudRain className="w-8 h-8 text-blue-400" />;
+  }
+  if ((code >= 71 && code <= 75) || code === 85 || code === 86) {
+    return <Snowflake className="w-8 h-8 text-cyan-200" />;
+  }
   if (code >= 95) return <CloudLightning className="w-8 h-8 text-purple-400" />;
   return <CloudSun className="w-8 h-8 text-amber-300" />;
 };

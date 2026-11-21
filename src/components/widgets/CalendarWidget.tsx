@@ -61,9 +61,31 @@ interface TimedEventLayout {
   endMs: number;
 }
 
+function getWallClockDayMinutes(
+  instantMs: number,
+  dayYear: number,
+  dayMonth: number,
+  dayDateNum: number,
+  dayMidnightKey: number
+): number {
+  const dt = new Date(instantMs);
+  const y = dt.getFullYear();
+  const m = dt.getMonth();
+  const d = dt.getDate();
+  if (y === dayYear && m === dayMonth && d === dayDateNum) {
+    return dt.getHours() * 60 + dt.getMinutes() + dt.getSeconds() / 60;
+  }
+  const dtDayKey = y * 10000 + m * 100 + d;
+  return dtDayKey < dayMidnightKey ? 0 : 24 * 60;
+}
+
 function layoutTimedEvents(dayEvents: CalendarEvent[], dayDate: Date): TimedEventLayout[] {
-  const dayStart = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), 0, 0, 0, 0).getTime();
-  const dayEnd = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), 23, 59, 59, 999).getTime();
+  const dayYear = dayDate.getFullYear();
+  const dayMonth = dayDate.getMonth();
+  const dayDateNum = dayDate.getDate();
+  const dayMidnightKey = dayYear * 10000 + dayMonth * 100 + dayDateNum;
+  const dayStart = new Date(dayYear, dayMonth, dayDateNum, 0, 0, 0, 0).getTime();
+  const dayEnd = new Date(dayYear, dayMonth, dayDateNum, 23, 59, 59, 999).getTime();
 
   const timed = dayEvents
     .filter((e) => !e.isAllDay)
@@ -72,8 +94,11 @@ function layoutTimedEvents(dayEvents: CalendarEvent[], dayDate: Date): TimedEven
       const rawEnd = e.end ? new Date(e.end).getTime() : rawStart + 30 * 60 * 1000;
       const startMs = Math.max(dayStart, rawStart);
       const endMs = Math.min(dayEnd, Math.max(startMs + 20 * 60 * 1000, rawEnd));
-      const startMin = (startMs - dayStart) / (60 * 1000);
-      const durationMin = Math.max(25, (endMs - startMs) / (60 * 1000));
+      const startMin = getWallClockDayMinutes(startMs, dayYear, dayMonth, dayDateNum, dayMidnightKey);
+      const durationMin = Math.max(
+        25,
+        Math.min(24 * 60 - startMin, (endMs - startMs) / (60 * 1000))
+      );
       const top = (startMin / 60) * HOUR_HEIGHT;
       const height = Math.max(24, Math.round((durationMin / 60) * HOUR_HEIGHT - 2));
 

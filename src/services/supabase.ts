@@ -1,5 +1,6 @@
 import type { SupabaseClient, User, RealtimeChannel } from '@supabase/supabase-js';
 import { db, DEFAULT_SETTINGS, DEFAULT_TABS, DEFAULT_WIDGETS, DEFAULT_NOTES, DEFAULT_CHORE_SNAPSHOT, DEFAULT_HOUSEHOLD_PROFILES, DEFAULT_MEAL_SNAPSHOT, DEFAULT_KANBAN_BOARDS, DEFAULT_KANBAN_SNAPSHOT, DEFAULT_ROUTINES_SNAPSHOT } from './db';
+import { clearFeedMemoryCaches } from './feeds';
 import { stripPlexTokens } from './plexLinks';
 import { isBoardFullError, setSyncRefusal } from './syncRefusal';
 import {
@@ -240,6 +241,13 @@ async function clearLocalBoard(): Promise<void> {
     }
   );
 
+  useProfileStore.getState().resetForBoardSwitch();
+  useChoreStore.getState().resetForBoardSwitch();
+  useMealStore.getState().resetForBoardSwitch();
+  useKanbanStore.getState().resetForBoardSwitch();
+  useRoutinesStore.getState().resetForBoardSwitch();
+  clearFeedMemoryCaches();
+
   if (typeof localStorage !== 'undefined') {
     try {
       for (let i = localStorage.length - 1; i >= 0; i -= 1) {
@@ -247,6 +255,8 @@ async function clearLocalBoard(): Promise<void> {
         if (
           key &&
           (key.startsWith('ambiently_cal_url_') ||
+            key.startsWith('ambiently_cal_cache_') ||
+            key.startsWith('ambiently_cal_ok_') ||
             key.startsWith('ambiently_homelab_status_v1_') ||
             key.startsWith('ambiently_rss_cache_'))
         ) {
@@ -569,7 +579,14 @@ function attachRealtimeChannel(
       },
       (payload) => {
         const eventType = payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE';
-        const raw = (payload.new || payload.old) as any;
+        const newRow = payload.new as Record<string, any> | null | undefined;
+        const raw = (
+          eventType === 'DELETE'
+            ? payload.old
+            : newRow && Object.keys(newRow).length > 0
+              ? newRow
+              : payload.old
+        ) as any;
         if (!raw || !raw.id) return;
         if (raw.dashboard_id && raw.dashboard_id !== boardId) return;
 
@@ -1670,12 +1687,12 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
           order: Number.isFinite(t.order_index) ? t.order_index : idx,
           layoutMode: t.layout_mode,
           autoRotateDurationSec: t.auto_rotate_duration_sec,
-          backgroundTheme: canvasThemes[t.id]?.backgroundTheme || t.background_theme || 'midnight_dots',
+          backgroundTheme: canvasThemes[t.id]?.backgroundTheme || t.background_theme || undefined,
           customWallpaperUrl: canvasThemes[t.id]?.customWallpaperUrl || t.custom_wallpaper_url,
-          backgroundDimLevel: canvasThemes[t.id]?.backgroundDimLevel ?? t.background_dim_level ?? 45,
-          hideNotes: canvasThemes[t.id]?.hideNotes ?? t.hide_notes ?? false,
-          isHome: canvasThemes[t.id]?.isHome ?? t.is_home ?? false,
-          enabled: t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false,
+          backgroundDimLevel: canvasThemes[t.id]?.backgroundDimLevel ?? t.background_dim_level ?? undefined,
+          hideNotes: canvasThemes[t.id]?.hideNotes ?? t.hide_notes ?? undefined,
+          isHome: canvasThemes[t.id]?.isHome ?? t.is_home ?? undefined,
+          enabled: typeof t.enabled === 'boolean' ? t.enabled : undefined,
           updated_at: t.updated_at,
           deleted_at: t.deleted_at,
         };
@@ -1695,7 +1712,16 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
             cloudDeletedOrArchived,
           })
         ) {
-          tabsToPut.push(!local || overwriteLocal ? mapped : keepLocalTabFields(mapped, local));
+          const mergedTab =
+            !local || overwriteLocal || switchingBoards ? mapped : keepLocalTabFields(mapped, local);
+          tabsToPut.push({
+            ...mergedTab,
+            backgroundTheme: mergedTab.backgroundTheme || 'midnight_dots',
+            backgroundDimLevel: mergedTab.backgroundDimLevel ?? 45,
+            hideNotes: mergedTab.hideNotes ?? false,
+            isHome: mergedTab.isHome ?? false,
+            enabled: mergedTab.enabled !== undefined ? mergedTab.enabled : t.id !== 'tab-overview',
+          });
         } else if (!switchingBoards && !overwriteLocal && local) {
           hasUnsyncedLocalChanges = true;
         }
@@ -1720,6 +1746,9 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
       }
     }
 
+    const replaceLocalHousehold = overwriteLocal || switchingBoards;
+    let kanbanSystemRowRestored = false;
+
     if (widgetsRes.data && widgetsRes.data.length > 0) {
       // Extract the Global Household Profiles system row if present
       const householdProfilesRow = widgetsRes.data.find((w: any) => w.id === HOUSEHOLD_PROFILES_CLOUD_ROW_ID);
@@ -1728,7 +1757,7 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
         !householdProfilesRow.deleted_at &&
         Array.isArray(householdProfilesRow.config?.profiles)
       ) {
-        if (overwriteLocal) {
+        if (replaceLocalHousehold) {
           await db.profiles.clear();
           await db.profiles.bulkPut(householdProfilesRow.config.profiles as HouseholdProfile[]);
           await useProfileStore.getState().initProfileStore();
@@ -1742,7 +1771,7 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
       // Extract the household Chore Engine system row if present
       const choreEngineRow = widgetsRes.data.find((w: any) => w.id === CHORE_ENGINE_CLOUD_ROW_ID);
       if (choreEngineRow && !choreEngineRow.deleted_at && choreEngineRow.config?.id === 'household_chores') {
-        if (overwriteLocal) {
+        if (replaceLocalHousehold) {
           await db.chores.put(choreEngineRow.config as ChoreEngineSnapshot);
           await useChoreStore.getState().initChoreStore();
         } else {
@@ -1753,7 +1782,7 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
       // Extract the Meal Planner & Smart Shopping List system row if present
       const mealPlannerRow = widgetsRes.data.find((w: any) => w.id === MEAL_PLANNER_CLOUD_ROW_ID);
       if (mealPlannerRow && !mealPlannerRow.deleted_at && mealPlannerRow.config?.id === 'household_meals') {
-        if (overwriteLocal) {
+        if (replaceLocalHousehold) {
           await db.meals.put(mealPlannerRow.config as MealPlannerSnapshot);
           await useMealStore.getState().initMealStore();
         } else {
@@ -1767,7 +1796,8 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
       const kanbanEngineRow = widgetsRes.data.find((w: any) => w.id === KANBAN_ENGINE_CLOUD_ROW_ID);
       if (kanbanEngineRow && !kanbanEngineRow.deleted_at && kanbanEngineRow.config?.id === 'household_kanban') {
         const snap = kanbanEngineRow.config as KanbanEngineSnapshot;
-        if (overwriteLocal) {
+        if (replaceLocalHousehold) {
+          kanbanSystemRowRestored = true;
           await db.transaction('rw', [db.kanbanBoards, db.kanbanCards, db.kanban], async () => {
             await Promise.all([db.kanbanBoards.clear(), db.kanbanCards.clear()]);
             if (snap.boards?.length > 0) await db.kanbanBoards.bulkPut(snap.boards);
@@ -1783,7 +1813,7 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
       // Extract the Home Check-Ins & Rhythms system row if present
       const routinesRow = widgetsRes.data.find((w: any) => w.id === ROUTINES_CLOUD_ROW_ID);
       if (routinesRow && !routinesRow.deleted_at && routinesRow.config?.id === 'household_routines') {
-        if (overwriteLocal) {
+        if (replaceLocalHousehold) {
           await db.routines.put(routinesRow.config as RoutinesSnapshot);
           await useRoutinesStore.getState().initRoutinesStore();
         } else {
@@ -1826,8 +1856,13 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
             : w.type === 'homelab'
               ? stripHomelabCredentialsFromConfig(w.config || {})
               : (w.config || {});
+        const isEmptyDeletedConfig = Boolean(w.deleted_at) && Object.keys(baseConfig).length === 0;
+        const hasAnyPhotos =
+          w.type === 'photo_frame' ||
+          Array.isArray(w.config?.customPhotos) ||
+          Boolean(local?.config?.customPhotos?.length);
         const config =
-          w.type === 'wifi_qr' || w.type === 'homelab'
+          w.type === 'wifi_qr' || w.type === 'homelab' || isEmptyDeletedConfig || !hasAnyPhotos
             ? baseConfig
             : {
                 ...baseConfig,
@@ -1961,26 +1996,48 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
     }
 
     // Best-effort direct pull from public.kanban_boards & public.kanban_cards tables
-    try {
-      const [kbBoardsRes, kbCardsRes] = await Promise.all([
-        sb.from('kanban_boards').select('*').eq('dashboard_id', dashboardId),
-        sb.from('kanban_cards').select('*').eq('dashboard_id', dashboardId),
-      ]);
-      if (!kbBoardsRes.error && !kbCardsRes.error && kbBoardsRes.data && kbBoardsRes.data.length > 0) {
-        const mappedBoards = kbBoardsRes.data.map(mapDbKanbanBoardRow);
-        const mappedCards = (kbCardsRes.data || []).map(mapDbKanbanCardRow);
-        const latestIso = [...mappedBoards, ...mappedCards].reduce((max, item) => {
-          return Date.parse(item.updatedAt) > Date.parse(max) ? item.updatedAt : max;
-        }, new Date().toISOString());
-        await useKanbanStore.getState().applyRemoteKanbanSnapshot({
-          id: 'household_kanban',
-          boards: mappedBoards,
-          cards: mappedCards,
-          updated_at: latestIso,
-        });
+    if (!kanbanSystemRowRestored) {
+      try {
+        const [kbBoardsRes, kbCardsRes] = await Promise.all([
+          sb.from('kanban_boards').select('*').eq('dashboard_id', dashboardId),
+          sb.from('kanban_cards').select('*').eq('dashboard_id', dashboardId),
+        ]);
+        if (!kbBoardsRes.error && !kbCardsRes.error && kbBoardsRes.data && kbBoardsRes.data.length > 0) {
+          const mappedBoards = kbBoardsRes.data.map(mapDbKanbanBoardRow);
+          const mappedCards = (kbCardsRes.data || []).map(mapDbKanbanCardRow);
+          let latestIso = '';
+          let latestMs = 0;
+          for (const item of [...mappedBoards, ...mappedCards]) {
+            const ms = Date.parse(item.updatedAt || '');
+            if (Number.isFinite(ms) && ms > latestMs) {
+              latestMs = ms;
+              latestIso = item.updatedAt;
+            }
+          }
+          if (!latestIso) {
+            latestIso = dashRes.data?.updated_at || new Date(0).toISOString();
+          }
+          const tableSnap: KanbanEngineSnapshot = {
+            id: 'household_kanban',
+            boards: mappedBoards,
+            cards: mappedCards,
+            updated_at: latestIso,
+          };
+          if (replaceLocalHousehold) {
+            await db.transaction('rw', [db.kanbanBoards, db.kanbanCards, db.kanban], async () => {
+              await Promise.all([db.kanbanBoards.clear(), db.kanbanCards.clear()]);
+              if (mappedBoards.length > 0) await db.kanbanBoards.bulkPut(mappedBoards);
+              if (mappedCards.length > 0) await db.kanbanCards.bulkPut(mappedCards);
+              await db.kanban.put(tableSnap);
+            });
+            await useKanbanStore.getState().initKanbanStore();
+          } else {
+            await useKanbanStore.getState().applyRemoteKanbanSnapshot(tableSnap);
+          }
+        }
+      } catch {
+        // Table may not be migrated yet; KANBAN_ENGINE_CLOUD_ROW_ID above already synced
       }
-    } catch {
-      // Table may not be migrated yet; KANBAN_ENGINE_CLOUD_ROW_ID above already synced
     }
 
     lastKnownCloudUpdatedAt = dashRes.data?.updated_at || null;

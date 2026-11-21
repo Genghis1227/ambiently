@@ -2431,8 +2431,8 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       const minW = resizingType === 'widget' ? 0.14 : 0.08;
       const minH = resizingType === 'widget' ? 0.14 : 0.08;
       const initialPos = dragTargetInitialPosRef.current;
-      const maxW = 1.0 - (initialPos?.xRatio || 0.1);
-      const maxH = 1.0 - (initialPos?.yRatio || 0.1);
+      const maxW = 1.0 - (initialPos?.xRatio ?? 0.1);
+      const maxH = 1.0 - (initialPos?.yRatio ?? 0.1);
 
       let newW = Math.max(minW, Math.min(maxW, resizeStart.startW + deltaWRatio));
       let newH = Math.max(minH, Math.min(maxH, resizeStart.startH + deltaHRatio));
@@ -2758,6 +2758,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       setNewTitle(original.title ? `${original.title} (Copy)` : '');
       setNewContent(clonedContent);
       setIsChecklist(Boolean(original.isChecklist));
+      setIsShoppingList(Boolean(original.isShoppingList));
       setChecklistItems(clonedChecklist ? [...clonedChecklist] : []);
       setSelectedColor(original.bgColor || COLOR_PALETTE[0]);
       setSelectedFontSize(original.fontSize || 'base');
@@ -2808,6 +2809,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       title: original.title ? `${original.title} (Copy)` : undefined,
       content: clonedContent,
       isChecklist: original.isChecklist,
+      isShoppingList: original.isShoppingList,
       checklistItems: clonedChecklist,
       bgColor: original.bgColor,
       fontSize: original.fontSize,
@@ -3173,7 +3175,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             <PhotoSourcesModal
               isOpen={true}
               onClose={() => setPhotoSourcesTarget(null)}
-              targetWidgetId={isUsingCommon ? undefined : activePhotoWidget.id}
+              targetWidgetId={activePhotoWidget.id}
               isCommonSource={isUsingCommon}
               initialWebUrls={
                 (isUsingCommon

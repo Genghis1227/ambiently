@@ -94,6 +94,7 @@ export const SoundscapeWidget: React.FC<SoundscapeWidgetProps> = ({
   const controllerRef = useRef<SoundscapeAudioController | null>(null);
   const persistTimerRef = useRef<number | null>(null);
   const wasNightModeRef = useRef<boolean>(isNightMode);
+  const sleepFadingRef = useRef<boolean>(false);
 
   const activePreset = useMemo(() => detectMatchingSoundscapePreset(channels), [channels]);
   const isAudible = useMemo(
@@ -119,6 +120,7 @@ export const SoundscapeWidget: React.FC<SoundscapeWidgetProps> = ({
     if (!triggerFade) return;
 
     controllerRef.current?.fadeOutAndStop(2.4, () => {
+      sleepFadingRef.current = false;
       setIsPlaying(false);
       setSleepRemainingSec(null);
       setNightFadeNotice(true);
@@ -127,14 +129,23 @@ export const SoundscapeWidget: React.FC<SoundscapeWidgetProps> = ({
 
   // Auto-fade when optional Sleep Timer expires
   useEffect(() => {
-    if (!isPlaying || sleepMin === 0 || typeof window === 'undefined') return;
+    if (!isPlaying || sleepMin === 0 || typeof window === 'undefined') {
+      sleepFadingRef.current = false;
+      return;
+    }
     const timer = window.setInterval(() => {
+      if (sleepFadingRef.current) return;
       setSleepRemainingSec((prev) => {
-        if (prev === null) return null;
+        if (prev === null || sleepFadingRef.current) return prev;
         if (prev <= 1) {
-          controllerRef.current?.fadeOutAndStop(2.0, () => {
-            setIsPlaying(false);
-            setSleepRemainingSec(null);
+          sleepFadingRef.current = true;
+          window.clearInterval(timer);
+          queueMicrotask(() => {
+            controllerRef.current?.fadeOutAndStop(2.0, () => {
+              sleepFadingRef.current = false;
+              setIsPlaying(false);
+              setSleepRemainingSec(null);
+            });
           });
           return 0;
         }
@@ -182,6 +193,7 @@ export const SoundscapeWidget: React.FC<SoundscapeWidgetProps> = ({
 
   const handleTogglePlay = (e: React.MouseEvent) => {
     e.stopPropagation();
+    sleepFadingRef.current = false;
     if (isPlaying) {
       controllerRef.current?.stopImmediate();
       setIsPlaying(false);
@@ -232,6 +244,7 @@ export const SoundscapeWidget: React.FC<SoundscapeWidgetProps> = ({
 
   const handleCycleSleepTimer = (e: React.MouseEvent) => {
     e.stopPropagation();
+    sleepFadingRef.current = false;
     const idx = SOUNDSCAPE_SLEEP_OPTIONS.indexOf(sleepMin);
     const nextMin = SOUNDSCAPE_SLEEP_OPTIONS[(idx + 1) % SOUNDSCAPE_SLEEP_OPTIONS.length];
     setSleepMin(nextMin);
