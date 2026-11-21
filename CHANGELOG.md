@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.4] - 2026-11-21
+
+### Fixed
+- **Canvas Widget Toolbar & Tile Expand Deduplication (`widgetToolbarPlacement.ts`, `Corkboard.tsx`, `ChoreWidget.tsx`):**
+  - Removed the duplicate floating canvas toolbar **Maximize** button for **Chores** (`chores`) and **Project Board (Kanban)** (`kanban`) tiles while in tile mode (`shouldShowWidgetToolbarFullscreenButton`), keeping their built-in 1-tap header expand buttons and preserving the compact-pill **Minimize** restore button when active in fullscreen canvas mode via Tile Settings.
+  - Guarded the floating canvas widget controls container (`hasAnyToolbarActions`) so locked `chores`/`kanban` tiles in tile mode no longer render an empty hover pill or `⋯` button.
+  - Added `data-no-drag="true"` and pointer-down propagation stop protection to `ChoreWidget` top-right header controls (Review pill and Maximize button) so tapping header controls never triggers a canvas card drag.
+
 ## [0.8.3] - 2026-11-21
 
 ### Fixed

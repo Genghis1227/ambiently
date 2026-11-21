@@ -11,6 +11,15 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.8.4",
+    date: "November 21, 2026",
+    title: "Remove Duplicate Expand Button on Chores & Project Board Tiles",
+    highlights: [
+      "Single Expand Control for Chores & Kanban Tiles: Removed the duplicate floating canvas toolbar Maximize button while in tile mode, keeping each widget's built-in 1-tap expand button as the primary control while retaining Minimize in the compact pill when fullscreen canvas mode is enabled in Tile Settings.",
+      "Locked Tile & Header Drag Polish: Hid empty floating toolbar pills on locked Chores and Kanban tiles and blocked accidental card drags when tapping the Chores header expand or Parent Review controls.",
+    ],
+  },
+  {
     version: "v0.8.3",
     date: "November 21, 2026",
     title: "RSS Parser Fix, Sync & Board-Switch Isolation & Multi-Widget Reliability",

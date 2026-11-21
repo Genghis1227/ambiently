@@ -4,6 +4,7 @@ import {
   BOTTOM_EDGE_CLEARANCE_RATIO,
   TOP_EDGE_CLEARANCE_RATIO,
   resolveWidgetToolbarPlacement,
+  shouldShowWidgetToolbarFullscreenButton,
 } from '../src/utils/widgetToolbarPlacement';
 
 describe('Widget floating action toolbar placement (widgetToolbarPlacement)', () => {
@@ -62,5 +63,17 @@ describe('Widget floating action toolbar placement (widgetToolbarPlacement)', ()
       }),
       'compact-pill'
     );
+  });
+
+  it('hides duplicate toolbar fullscreen button for chores and kanban only while in tile mode', () => {
+    assert.equal(shouldShowWidgetToolbarFullscreenButton('chores', false), false);
+    assert.equal(shouldShowWidgetToolbarFullscreenButton('kanban', false), false);
+    assert.equal(shouldShowWidgetToolbarFullscreenButton('chores', true), true);
+    assert.equal(shouldShowWidgetToolbarFullscreenButton('kanban', true), true);
+
+    for (const widgetType of ['clock', 'calendar', 'image', 'meals', 'rss']) {
+      assert.equal(shouldShowWidgetToolbarFullscreenButton(widgetType, false), true);
+      assert.equal(shouldShowWidgetToolbarFullscreenButton(widgetType, true), true);
+    }
   });
 });
