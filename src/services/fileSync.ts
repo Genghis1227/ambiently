@@ -1,16 +1,19 @@
 // Local JSON Backup, File System Access API & Universal Export/Restore helper
 import { useState, useEffect } from 'react';
-import { db, DEFAULT_ROUTINES_SNAPSHOT } from './db';
+import { db, DEFAULT_ROUTINES_SNAPSHOT, DEFAULT_CALENDAR_EVENTS_SNAPSHOT } from './db';
 import type { AppSettings, DashboardTab, DashboardWidget, StickyNoteItem } from '../types/dashboard';
 import type { ChoreEngineSnapshot } from '../types/chores';
 import type { HouseholdProfile } from '../types/profiles';
 import type { MealPlannerSnapshot } from '../types/meals';
 import type { RoutinesSnapshot } from '../types/phase2Widgets';
+import type { CalendarEventsSnapshot } from '../types/calendarEvents';
 import { useChoreStore } from '../store/choreStore';
 import { useProfileStore } from '../stores/useProfileStore';
 import { useMealStore } from '../stores/useMealStore';
 import { useKanbanStore } from '../stores/useKanbanStore';
 import { useRoutinesStore, pickMigratableRoutineWidget } from '../stores/useRoutinesStore';
+import { useCalendarEventsStore } from '../stores/useCalendarEventsStore';
+import { sanitizeCalendarEventsSnapshot } from '../utils/calendarEventsEngine';
 import { resolveRoutineItems } from '../utils/routinesEngine';
 import type { KanbanEngineSnapshot } from '../types/kanban';
 import { inferCuratedCategoryId } from '../data/curatedScenery';
@@ -80,6 +83,7 @@ export interface LocalExportPayload {
   meals?: MealPlannerSnapshot;
   kanban?: KanbanEngineSnapshot;
   routines?: RoutinesSnapshot;
+  calendarEvents?: CalendarEventsSnapshot;
 }
 
 export type FileSyncStatus = 'connected' | 'needs_permission' | 'unbound' | 'unsupported';
@@ -214,6 +218,7 @@ export async function downloadBackupFile(
     meals: useMealStore.getState().snapshot,
     kanban: useKanbanStore.getState().snapshot,
     routines: useRoutinesStore.getState().snapshot,
+    calendarEvents: useCalendarEventsStore.getState().snapshot,
   });
 
   const jsonStr = JSON.stringify(payload, null, 2);
@@ -372,6 +377,13 @@ export async function restoreBackupToDatabase(
       await db.routines.put(nextRoutinesSnapshot);
       await useRoutinesStore.getState().initRoutinesStore();
     }
+
+    if (payload.calendarEvents) {
+      await db.calendarEvents.put(sanitizeCalendarEventsSnapshot(payload.calendarEvents));
+    } else {
+      await db.calendarEvents.put(DEFAULT_CALENDAR_EVENTS_SNAPSHOT);
+    }
+    await useCalendarEventsStore.getState().initCalendarEventsStore();
 
     return { success: true };
   } catch (err: any) {

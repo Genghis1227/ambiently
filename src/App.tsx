@@ -7,6 +7,11 @@ import { NavigationDock } from './components/dock/NavigationDock';
 import { Corkboard } from './components/layout/Corkboard';
 import { PinOverlay } from './components/kiosk/PinOverlay';
 import { NightMode } from './components/kiosk/NightMode';
+const IdlePhotoScreensaver = lazy(() =>
+  import('./components/kiosk/IdlePhotoScreensaver').then((m) => ({
+    default: m.IdlePhotoScreensaver,
+  }))
+);
 import { openLocalFileBinding, useFileSync, checkFileBindingStatus } from './services/fileSync';
 import {
   subscribeToRealtimeBoard,
@@ -22,6 +27,11 @@ import {
 import { useIdleCursor } from './hooks/useIdleCursor';
 import { isCanvasThemeLight } from './data/canvasThemes';
 import { isTimeInNightWindow } from './utils/nightMode';
+import {
+  normalizeIdleScreensaverTimeoutMin,
+  resolveScreensaverWeatherLocation,
+  shouldBlockIdleScreensaver,
+} from './utils/idleScreensaver';
 import { initUpdateChecker } from './services/updateChecker';
 import { photoSyncService } from './services/photoSyncService';
 import { UpdateNotificationBanner } from './components/common/UpdateNotificationBanner';
@@ -151,6 +161,7 @@ export function App() {
   const isParentDrawerOpen = useChoreStore((s) => s.isParentDrawerOpen);
   const kanbanFullScreenOverlay = useKanbanStore((s) => s.fullScreenOverlay);
   const setKanbanFullScreenOverlay = useKanbanStore((s) => s.setFullScreenOverlay);
+  const [isIdleScreensaverActive, setIsIdleScreensaverActive] = useState(false);
 
   // Initialize and check persistent PC Auto-Sync file binding
   useEffect(() => {
@@ -627,6 +638,7 @@ export function App() {
 
   // Called when user taps to wake from Night Mode
   const handleWakeFromNightMode = useCallback(() => {
+    setIsIdleScreensaverActive(false);
     if (wakeTimeoutMin === 0) {
       setDismissedUntilMorning(true);
       setNightWakeSnoozeUntil(null);
@@ -644,6 +656,7 @@ export function App() {
   }, [wakeTimeoutMin, updateSettings]);
 
   const handleToggleNightMode = useCallback(() => {
+    setIsIdleScreensaverActive(false);
     if (settings.nightModeEnabled) {
       setDismissedUntilMorning(true);
       setNightWakeSnoozeUntil(null);
@@ -922,12 +935,121 @@ export function App() {
 
   const isMobileCompanionActive = isMobileViewport && !forceDesktopMode;
 
+  const idleScreensaverTimeoutMin = normalizeIdleScreensaverTimeoutMin(
+    settings.idleScreensaverTimeoutMin
+  );
+  const screensaverWeatherLocation = useMemo(
+    () => resolveScreensaverWeatherLocation(widgets),
+    [widgets]
+  );
+  const isIdleScreensaverBlocked = shouldBlockIdleScreensaver({
+    timeoutMin: idleScreensaverTimeoutMin,
+    isMobileCompanionActive,
+    nightModeEnabled: Boolean(settings.nightModeEnabled),
+    isAnyBlockingOverlayOpen: isAnyOverlayOpen || isFullscreenWidgetOverlayVisible,
+    hasActiveModalOrAlarmInDom: false,
+  });
+  const showIdleScreensaver = isIdleScreensaverActive && !isIdleScreensaverBlocked;
+
+  const handleWakeIdleScreensaver = useCallback(() => {
+    setIsIdleScreensaverActive(false);
+    if (settings.carouselEnabled) {
+      pauseCarouselTemporarily(20000);
+    }
+  }, [settings.carouselEnabled, pauseCarouselTemporarily]);
+
+  useEffect(() => {
+    if (isIdleScreensaverBlocked || isIdleScreensaverActive) {
+      return;
+    }
+
+    const timeoutMs = idleScreensaverTimeoutMin * 60 * 1000;
+    let timerId: number | null = null;
+    let lastMoveMs = 0;
+
+    const isUiBusyForScreensaver = () => {
+      if (typeof document === 'undefined') return false;
+      if (
+        document.querySelector('[role="dialog"], [aria-modal="true"], [data-carousel-lock="true"]')
+      ) {
+        return true;
+      }
+      const activeEl = document.activeElement as HTMLElement | null;
+      if (!activeEl) return false;
+      const tag = activeEl.tagName;
+      return (
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        activeEl.isContentEditable
+      );
+    };
+
+    const scheduleScreensaver = () => {
+      if (timerId !== null) {
+        window.clearTimeout(timerId);
+      }
+      timerId = window.setTimeout(() => {
+        if (isUiBusyForScreensaver()) {
+          scheduleScreensaver();
+          return;
+        }
+        setIsIdleScreensaverActive(true);
+      }, timeoutMs);
+    };
+
+    const handleActivity = () => {
+      scheduleScreensaver();
+    };
+
+    const handlePointerMove = () => {
+      const nowMs = Date.now();
+      if (nowMs - lastMoveMs < 1500) return;
+      lastMoveMs = nowMs;
+      scheduleScreensaver();
+    };
+
+    scheduleScreensaver();
+
+    const opts = { capture: true, passive: true } as const;
+    window.addEventListener('pointerdown', handleActivity, opts);
+    window.addEventListener('keydown', handleActivity, opts);
+    window.addEventListener('wheel', handleActivity, opts);
+    window.addEventListener('touchstart', handleActivity, opts);
+    window.addEventListener('pointermove', handlePointerMove, opts);
+
+    return () => {
+      if (timerId !== null) {
+        window.clearTimeout(timerId);
+      }
+      window.removeEventListener('pointerdown', handleActivity, opts);
+      window.removeEventListener('keydown', handleActivity, opts);
+      window.removeEventListener('wheel', handleActivity, opts);
+      window.removeEventListener('touchstart', handleActivity, opts);
+      window.removeEventListener('pointermove', handlePointerMove, opts);
+    };
+  }, [idleScreensaverTimeoutMin, isIdleScreensaverBlocked, isIdleScreensaverActive]);
+
+  useEffect(() => {
+    if (!showIdleScreensaver) return;
+    const interval = window.setInterval(() => {
+      if (
+        typeof document !== 'undefined' &&
+        document.querySelector('[role="dialog"], [aria-modal="true"], [data-carousel-lock="true"]')
+      ) {
+        setIsIdleScreensaverActive(false);
+      }
+    }, 2000);
+    return () => window.clearInterval(interval);
+  }, [showIdleScreensaver]);
+
   useEffect(() => {
     if (
       isMobileCompanionActive ||
       isCanvasLocked ||
       isAnyOverlayOpen ||
       isFullscreenWidgetOverlayVisible ||
+      showIdleScreensaver ||
       settings.nightModeEnabled
     ) {
       return;
@@ -962,6 +1084,7 @@ export function App() {
     activeTabIdResolved,
     isAnyOverlayOpen,
     isFullscreenWidgetOverlayVisible,
+    showIdleScreensaver,
     isCanvasLocked,
     isMobileCompanionActive,
     settings.nightModeEnabled,
@@ -976,7 +1099,7 @@ export function App() {
     enabled: settings.canvasSwipeEnabled !== false && visibleTabs.length >= 2,
     mode: isMobileCompanionActive ? 'mobile' : 'desktop',
     isCanvasLocked,
-    isBlocked: isAnyOverlayOpen || Boolean(settings.nightModeEnabled),
+    isBlocked: isAnyOverlayOpen || showIdleScreensaver || Boolean(settings.nightModeEnabled),
     dockPosition: settings.dockPosition,
     isDockHidden: Boolean(settings.isDockHidden),
     onSelectTab: handleSelectTab,
@@ -1036,7 +1159,15 @@ export function App() {
   // Tab auto-carousel rotation (pauses automatically when user interacts or any modal/hub/input is active)
   useEffect(() => {
     const tabIds = visibleTabIds.split('\n').filter(Boolean);
-    if (!settings.carouselEnabled || isCarouselPaused || isAnyOverlayOpen || tabIds.length <= 1) return;
+    if (
+      !settings.carouselEnabled ||
+      isCarouselPaused ||
+      isAnyOverlayOpen ||
+      showIdleScreensaver ||
+      tabIds.length <= 1
+    ) {
+      return;
+    }
 
     const interval = setInterval(() => {
       // Never rotate if any widget modal, dialog, or inline editor is open, or if an input is focused
@@ -1066,6 +1197,7 @@ export function App() {
     settings.carouselEnabled,
     isCarouselPaused,
     isAnyOverlayOpen,
+    showIdleScreensaver,
     rotateDurationSec,
     visibleTabIds,
     activeTabIdResolved,
@@ -1302,6 +1434,18 @@ export function App() {
         onToggleDockHidden={toggleDockHidden}
         isNightMode={settings.nightModeEnabled}
       />
+
+      {/* Idle Photo Screensaver Mode (yields automatically to Night Mode, dialogs & alarms) */}
+      {showIdleScreensaver && (
+        <Suspense fallback={null}>
+          <IdlePhotoScreensaver
+            onWake={handleWakeIdleScreensaver}
+            showClock={settings.idleScreensaverShowClock !== false}
+            showWeather={settings.idleScreensaverShowWeather !== false}
+            weatherLocation={screensaverWeatherLocation}
+          />
+        </Suspense>
+      )}
 
       {/* Night Mode Screen Overlay */}
       <NightMode

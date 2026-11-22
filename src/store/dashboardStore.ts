@@ -75,6 +75,14 @@ import {
 import type { KanbanEngineSnapshot } from '../types/kanban';
 import { useRoutinesStore, registerRoutinesPersistListener } from '../stores/useRoutinesStore';
 import { ROUTINES_CLOUD_ROW_ID, type RoutinesSnapshot } from '../types/phase2Widgets';
+import {
+  useCalendarEventsStore,
+  registerCalendarEventsPersistListener,
+} from '../stores/useCalendarEventsStore';
+import {
+  CALENDAR_EVENTS_CLOUD_ROW_ID,
+  type CalendarEventsSnapshot,
+} from '../types/calendarEvents';
 
 const CHORE_ENGINE_CLOUD_ROW_ID = '__ambiently_chore_engine__';
 const HOUSEHOLD_PROFILES_CLOUD_ROW_ID = '__ambiently_household_profiles__';
@@ -85,6 +93,7 @@ const SYSTEM_WIDGET_CLOUD_ROW_IDS = new Set([
   MEAL_PLANNER_CLOUD_ROW_ID,
   KANBAN_ENGINE_CLOUD_ROW_ID,
   ROUTINES_CLOUD_ROW_ID,
+  CALENDAR_EVENTS_CLOUD_ROW_ID,
 ]);
 
 let backupDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -631,12 +640,13 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       .filter((n) => !n.deleted_at)
       .map((n) => normalizeLoadedNote(n));
 
-    // Initialize Global Household Profile Store, Chore Engine Store, Meal Planner Store, Kanban Store & Routines Store
+    // Initialize Global Household Profile Store, Chore Engine Store, Meal Planner Store, Kanban Store, Routines Store & Calendar Events Store
     await useProfileStore.getState().initProfileStore();
     await useChoreStore.getState().initChoreStore();
     await useMealStore.getState().initMealStore();
     await useKanbanStore.getState().initKanbanStore();
     await useRoutinesStore.getState().initRoutinesStore();
+    await useCalendarEventsStore.getState().initCalendarEventsStore();
 
     const tabsToUse = loadedTabs.length > 0 ? loadedTabs : DEFAULT_TABS;
     const explicitHome = tabsToUse.find((t) => t.isHome && (t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false));
@@ -1289,6 +1299,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         meals: useMealStore.getState().snapshot,
         kanban: useKanbanStore.getState().snapshot,
         routines: useRoutinesStore.getState().snapshot,
+        calendarEvents: useCalendarEventsStore.getState().snapshot,
       });
     }, 400);
   },
@@ -1313,6 +1324,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       meals: useMealStore.getState().snapshot,
       kanban: useKanbanStore.getState().snapshot,
       routines: useRoutinesStore.getState().snapshot,
+      calendarEvents: useCalendarEventsStore.getState().snapshot,
     });
   },
 
@@ -1705,6 +1717,20 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         useRoutinesStore
           .getState()
           .applyRemoteRoutinesSnapshot(incomingWidget.config as RoutinesSnapshot)
+          .catch(() => {});
+      }
+      return;
+    }
+
+    if (incomingWidget.id === CALENDAR_EVENTS_CLOUD_ROW_ID) {
+      if (
+        eventType !== 'DELETE' &&
+        !incomingWidget.deleted_at &&
+        incomingWidget.config?.id === 'household_calendar_events'
+      ) {
+        useCalendarEventsStore
+          .getState()
+          .applyRemoteCalendarEventsSnapshot(incomingWidget.config as CalendarEventsSnapshot)
           .catch(() => {});
       }
       return;
@@ -2458,6 +2484,13 @@ registerKanbanPersistListener(() => {
 });
 
 registerRoutinesPersistListener(() => {
+  const dashState = useDashboardStore.getState();
+  if (dashState.isInitialized) {
+    dashState.saveLocalBackup({ householdStores: true });
+  }
+});
+
+registerCalendarEventsPersistListener(() => {
   const dashState = useDashboardStore.getState();
   if (dashState.isInitialized) {
     dashState.saveLocalBackup({ householdStores: true });

@@ -1,5 +1,16 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useDisplayActivity } from '../../utils/displayActivity';
+import { AlertTriangle } from 'lucide-react';
+import { useTimePrefs } from '../../utils/timePrefs';
+import {
+  fetchWeatherAlerts,
+  fetchWeatherData,
+  formatHourlyPointTime,
+  getAlertBadgeColors,
+  type WeatherAlert,
+  type WeatherData,
+} from '../../services/weather';
+import { WeatherAlertModal } from '../weather/WeatherAlertModal';
 import {
   Sun,
   Cloud,
@@ -15,7 +26,6 @@ import {
   Droplets,
   Thermometer,
 } from 'lucide-react';
-import { fetchWeatherData, type WeatherData } from '../../services/weather';
 
 interface WeatherWidgetProps {
   locationName?: string;
@@ -57,6 +67,11 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({
   transparentBg = false,
 }) => {
   const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [nwsAlerts, setNwsAlerts] = useState<WeatherAlert[]>([]);
+  const alertReqIdRef = useRef(0);
+  const { hour12 } = useTimePrefs();
+  const [forecastMode, setForecastMode] = useState<'daily' | 'hourly'>('daily');
+  const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const { isOledNightClock } = useDisplayActivity();
   const isOledRef = useRef(isOledNightClock);
@@ -68,6 +83,14 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({
   const loadWeather = useCallback(
     async (forceRefresh = false) => {
       setLoading(true);
+      const reqId = ++alertReqIdRef.current;
+      void fetchWeatherAlerts(latitude, longitude, forceRefresh)
+        .then((nextAlerts) => {
+          if (alertReqIdRef.current === reqId) {
+            setNwsAlerts(nextAlerts);
+          }
+        })
+        .catch(() => {});
       try {
         const data = await fetchWeatherData(latitude, longitude, locationName, unit, forceRefresh);
         setWeather(data);
@@ -98,6 +121,12 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({
 
   const stickerShadow = transparentBg && !isLight ? 'drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]' : '';
 
+  const alerts = nwsAlerts.length > 0 ? nwsAlerts : (weather?.alerts ?? []);
+  const topAlert = alerts[0] ?? null;
+  const hourlyPoints = weather?.hourly ?? [];
+  const hasHourly = hourlyPoints.length > 0;
+  const showHourlyStrip = forecastMode === 'hourly' && hasHourly;
+
   return (
     <div className={`w-full h-full flex flex-col justify-between select-none p-1 ${stickerShadow}`}>
       {/* Top Header: Location & Refresh */}
@@ -119,6 +148,25 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({
       {/* Main Condition & Temp Display */}
       {weather ? (
         <div className="my-auto py-2">
+          {topAlert && (
+            <button
+              type="button"
+              onClick={() => setIsAlertModalOpen(true)}
+              className={`w-full mb-2 px-2.5 py-1.5 rounded-lg border flex items-center justify-between gap-2 text-left text-[11px] font-semibold transition-colors cursor-pointer ${
+                getAlertBadgeColors(topAlert.severity, isLight).container
+              }`}
+              title="View active NOAA/NWS weather alert details"
+            >
+              <span className="flex items-center gap-1.5 min-w-0">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">{topAlert.event}</span>
+              </span>
+              <span className="text-[10px] opacity-85 shrink-0">
+                {alerts.length > 1 ? `+${alerts.length - 1} more` : topAlert.severity}
+              </span>
+            </button>
+          )}
+
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               {renderWeatherIcon(weather.conditionCode, weather.isDay, 'w-12 h-12 md:w-14 md:h-14')}
@@ -150,38 +198,154 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({
             </div>
           </div>
 
-          {/* 5-Day Daily Forecast Pill Strip */}
-          {weather.forecast && weather.forecast.length > 0 && (
-            <div className={`grid grid-cols-5 gap-1.5 mt-3 pt-3 border-t ${
-              transparentBg ? 'border-transparent' : isLight ? 'border-slate-200' : 'border-gray-800/80'
-            }`}>
-              {weather.forecast.slice(0, 5).map((day, idx) => (
-                <div
-                  key={day.date || idx}
-                  className={`flex flex-col items-center rounded-lg p-1.5 text-center border ${
-                    transparentBg
-                      ? 'bg-transparent border-transparent'
-                      : isLight
-                      ? 'bg-slate-100/90 border-slate-200/90'
-                      : 'bg-gray-950/40 border-white/5'
-                  }`}
-                >
-                  <span className={`text-[10px] font-semibold uppercase tracking-wider ${isLight ? 'text-slate-600' : 'text-gray-400'}`}>
-                    {idx === 0 ? 'Today' : day.dayName.slice(0, 3)}
+          {/* 5-Day Daily / Hourly Forecast Pill Strip */}
+          {((weather.forecast && weather.forecast.length > 0) || hasHourly) && (
+            <div
+              className={`mt-3 pt-2.5 border-t ${
+                transparentBg ? 'border-transparent' : isLight ? 'border-slate-200' : 'border-gray-800/80'
+              }`}
+            >
+              {hasHourly && (
+                <div className="flex items-center justify-between mb-1.5 px-0.5">
+                  <span
+                    className={`text-[10px] font-semibold uppercase tracking-wider ${
+                      isLight ? 'text-slate-500' : 'text-gray-400'
+                    }`}
+                  >
+                    {showHourlyStrip ? 'Next Hours' : '5-Day Outlook'}
                   </span>
-                  <div className="my-1">
-                    {renderWeatherIcon(day.conditionCode, true, 'w-5 h-5')}
-                  </div>
-                  <div className={`text-[11px] font-mono font-medium ${isLight ? 'text-slate-900' : 'text-white'}`}>
-                    {day.maxTemp}°
-                  </div>
-                  <div className={`text-[9px] font-mono ${isLight ? 'text-slate-500' : 'text-gray-500'}`}>
-                    {day.minTemp}°
+                  <div
+                    className={`inline-flex items-center rounded-lg p-0.5 border ${
+                      isLight
+                        ? 'bg-slate-100 border-slate-200'
+                        : 'bg-gray-950/60 border-white/10'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setForecastMode('daily')}
+                      className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-colors cursor-pointer ${
+                        !showHourlyStrip
+                          ? isLight
+                            ? 'bg-white text-slate-900 shadow-sm'
+                            : 'bg-white/15 text-white'
+                          : isLight
+                          ? 'text-slate-500 hover:text-slate-800'
+                          : 'text-gray-400 hover:text-gray-200'
+                      }`}
+                    >
+                      5-Day
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setForecastMode('hourly')}
+                      className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-colors cursor-pointer ${
+                        showHourlyStrip
+                          ? isLight
+                            ? 'bg-white text-slate-900 shadow-sm'
+                            : 'bg-white/15 text-white'
+                          : isLight
+                          ? 'text-slate-500 hover:text-slate-800'
+                          : 'text-gray-400 hover:text-gray-200'
+                      }`}
+                    >
+                      Hourly
+                    </button>
                   </div>
                 </div>
-              ))}
+              )}
+
+              {showHourlyStrip ? (
+                <div className="flex items-stretch gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
+                  {hourlyPoints.slice(0, 12).map((pt, idx) => (
+                    <div
+                      key={pt.time || idx}
+                      className={`flex-none min-w-[50px] flex flex-col items-center rounded-lg p-1.5 text-center border ${
+                        transparentBg
+                          ? 'bg-transparent border-transparent'
+                          : isLight
+                          ? 'bg-slate-100/90 border-slate-200/90'
+                          : 'bg-gray-950/40 border-white/5'
+                      }`}
+                    >
+                      <span
+                        className={`text-[10px] font-semibold tracking-tight ${
+                          isLight ? 'text-slate-600' : 'text-gray-400'
+                        }`}
+                      >
+                        {idx === 0 ? 'Now' : formatHourlyPointTime(pt.time, hour12)}
+                      </span>
+                      <div className="my-1">
+                        {renderWeatherIcon(pt.weatherCode, pt.isDay, 'w-4 h-4')}
+                      </div>
+                      <div
+                        className={`text-[11px] font-mono font-medium ${
+                          isLight ? 'text-slate-900' : 'text-white'
+                        }`}
+                      >
+                        {pt.temp}°
+                      </div>
+                      <div
+                        className={`flex items-center gap-0.5 text-[9px] font-mono ${
+                          pt.precipProb >= 20
+                            ? 'text-sky-400 font-semibold'
+                            : isLight
+                            ? 'text-slate-400'
+                            : 'text-gray-500'
+                        }`}
+                      >
+                        <Droplets className="w-2.5 h-2.5 shrink-0" />
+                        <span>{pt.precipProb}%</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-5 gap-1.5">
+                  {weather.forecast.slice(0, 5).map((day, idx) => (
+                    <div
+                      key={day.date || idx}
+                      className={`flex flex-col items-center rounded-lg p-1.5 text-center border ${
+                        transparentBg
+                          ? 'bg-transparent border-transparent'
+                          : isLight
+                          ? 'bg-slate-100/90 border-slate-200/90'
+                          : 'bg-gray-950/40 border-white/5'
+                      }`}
+                    >
+                      <span
+                        className={`text-[10px] font-semibold uppercase tracking-wider ${
+                          isLight ? 'text-slate-600' : 'text-gray-400'
+                        }`}
+                      >
+                        {idx === 0 ? 'Today' : day.dayName.slice(0, 3)}
+                      </span>
+                      <div className="my-1">
+                        {renderWeatherIcon(day.conditionCode, true, 'w-5 h-5')}
+                      </div>
+                      <div
+                        className={`text-[11px] font-mono font-medium ${
+                          isLight ? 'text-slate-900' : 'text-white'
+                        }`}
+                      >
+                        {day.maxTemp}°
+                      </div>
+                      <div className={`text-[9px] font-mono ${isLight ? 'text-slate-500' : 'text-gray-500'}`}>
+                        {day.minTemp}°
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
+
+          <WeatherAlertModal
+            isOpen={isAlertModalOpen}
+            onClose={() => setIsAlertModalOpen(false)}
+            alerts={alerts}
+            locationName={weather.locationName}
+          />
         </div>
       ) : (
         <div className={`flex flex-col items-center justify-center my-auto py-6 text-xs ${isLight ? 'text-slate-500' : 'text-gray-500'}`}>

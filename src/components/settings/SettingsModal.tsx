@@ -50,6 +50,10 @@ import { useUpdateChecker } from '../../services/updateChecker';
 import { db } from '../../services/db';
 import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 import {
+  IDLE_SCREENSAVER_TIMEOUT_OPTIONS,
+  normalizeIdleScreensaverTimeoutMin,
+} from '../../utils/idleScreensaver';
+import {
   cancelPendingCloudPush,
   flushPendingCloudPush,
   useDashboardStore,
@@ -1534,6 +1538,131 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   }`}
                 />
               </button>
+            </div>
+
+            {/* Idle Photo Screensaver Mode */}
+            <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4 text-teal-400 shrink-0" />
+                  <div>
+                    <span className="text-sm font-semibold text-white block">
+                      Idle Photo Screensaver
+                    </span>
+                    <span className="text-[11px] text-gray-400 block">
+                      Shows a fullscreen ambient photo slideshow after inactivity, yielding to Night Mode and alarms.
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
+                  Inactivity Timeout
+                </span>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {IDLE_SCREENSAVER_TIMEOUT_OPTIONS.map((optMin) => {
+                    const currentTimeout = normalizeIdleScreensaverTimeoutMin(
+                      settings.idleScreensaverTimeoutMin
+                    );
+                    const isSelected = currentTimeout === optMin;
+                    return (
+                      <button
+                        key={optMin}
+                        type="button"
+                        onClick={() => updateSettings({ idleScreensaverTimeoutMin: optMin })}
+                        aria-pressed={isSelected}
+                        className={`py-2 px-2 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
+                          isSelected
+                            ? 'bg-teal-600/30 border-teal-500 text-teal-200'
+                            : 'bg-gray-900/70 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'
+                        }`}
+                      >
+                        {optMin === 0 ? 'Off' : `${optMin}m`}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {normalizeIdleScreensaverTimeoutMin(settings.idleScreensaverTimeoutMin) > 0 && (
+                <div className="pt-2 border-t border-gray-800/80 space-y-2.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <span className="text-xs font-medium text-gray-200 block">
+                        Floating Clock Pill
+                      </span>
+                      <span className="text-[11px] text-gray-400 block">
+                        Subtle time & date overlay that shifts periodically to protect screens
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      aria-pressed={settings.idleScreensaverShowClock !== false}
+                      onClick={() =>
+                        updateSettings({
+                          idleScreensaverShowClock: settings.idleScreensaverShowClock === false,
+                        })
+                      }
+                      className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out cursor-pointer ${
+                        settings.idleScreensaverShowClock !== false ? 'bg-teal-600' : 'bg-gray-700'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          settings.idleScreensaverShowClock !== false
+                            ? 'translate-x-5'
+                            : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <span className="text-xs font-medium text-gray-200 block">
+                        Local Weather Pill
+                      </span>
+                      <span className="text-[11px] text-gray-400 block">
+                        Displays current conditions & active weather alerts from your Weather widget
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      aria-pressed={settings.idleScreensaverShowWeather !== false}
+                      onClick={() =>
+                        updateSettings({
+                          idleScreensaverShowWeather:
+                            settings.idleScreensaverShowWeather === false,
+                        })
+                      }
+                      className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out cursor-pointer ${
+                        settings.idleScreensaverShowWeather !== false ? 'bg-teal-600' : 'bg-gray-700'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          settings.idleScreensaverShowWeather !== false
+                            ? 'translate-x-5'
+                            : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  <p className="text-[11px] text-gray-500">
+                    Slideshow cycles photos from the{' '}
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('photos')}
+                      className="text-teal-400 hover:text-teal-300 underline cursor-pointer"
+                    >
+                      Shared Photos
+                    </button>{' '}
+                    library tab.
+                  </p>
+                </div>
+              )}
             </div>
             </>
             )}

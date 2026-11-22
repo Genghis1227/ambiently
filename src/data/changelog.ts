@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.8.6",
+    date: "November 22, 2026",
+    title: "Idle Photo Screensaver, Calendar Filters & Local Family Events, Hourly Weather & NWS Alerts",
+    highlights: [
+      "Idle Photo Screensaver Mode: Configure a 5m–30m inactivity timeout in Display & Kiosk settings to launch a fullscreen Shared Photos slideshow with a burn-in-safe floating clock & weather pill that yields automatically to Night Mode, modals, and timer alarms.",
+      "Calendar Header Filters & Synced Family Events: Filter calendar views in one tap by calendar source or household member avatar, and create, color-tag, member-assign, and edit local family events directly from any date across devices and Cloud Sync.",
+      "Hourly Weather Strip & Severe Weather Alerts: Toggle Weather tiles between 5-Day and 12-Hour temperature/precipitation forecasts, spot next-6h rain hints on Clock+Weather tiles, and inspect active US NOAA/NWS weather alerts without API keys.",
+    ],
+  },
+  {
     version: "v0.8.5",
     date: "November 21, 2026",
     title: "Fullscreen Chores, Kanban & Canvas Widget Rotation, Hotkeys, Dock Arrow & Restore Layout Fixes",

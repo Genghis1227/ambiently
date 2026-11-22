@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.6] - 2026-11-22
+
+### Added
+- **Idle Photo Screensaver Mode (`IdlePhotoScreensaver.tsx`, `idleScreensaver.ts`, `SettingsModal.tsx`, `App.tsx`):**
+  - Added configurable inactivity timeout options (`Off`, `5m`, `10m`, `15m`, `30m`) in **Settings → Display & Kiosk** along with independent toggles for the burn-in-safe floating **Clock Pill** and **Local Weather Pill** (including active severe alert badges).
+  - Fullscreen ambient slideshow cycles the household's **Shared Photos** library (`PhotoFrameWidget`, Ken Burns transition), pauses canvas auto-rotation / swipes / `Ctrl+Z` while active, yields automatically to Night Mode, modal dialogs, fullscreen overlays, and timer alarms, and wakes cleanly on any pointer or key event without clicking through to underlying tiles.
+- **Calendar Header Filters & Synced Local Family Events (`CalendarWidget.tsx`, `LocalEventModal.tsx`, `useCalendarEventsStore.ts`, `calendarEventsEngine.ts`, `db.ts`):**
+  - Added a 1-tap scrollable header filter chip strip across configured `.ics` / `webcal://` calendars, **Family Events**, **Meals**, and tagged household members (`ProfileAvatar` chips) plus an **All** quick reset chip across Agenda, 3-Day, Weekly, Monthly, and Timeline views.
+  - Added persistent offline-first local household events (`db.calendarEvents` Dexie v6, Cloud Sync via `__ambiently_calendar_events__`, Realtime updates, and JSON backup import/export) with `+ Event` header creation, click-any-day event entry, member tagging, multi-day all-day support, inline editing, and tombstone-aware concurrent LWW merge.
+- **Hourly Weather Strip & Zero-Key NOAA/NWS Severe Weather Alerts (`weather.ts`, `WeatherWidget.tsx`, `ClockWeatherWidget.tsx`, `WeatherAlertModal.tsx`):**
+  - Extended Open-Meteo forecasts with a `5-Day | Hourly` strip toggle in `WeatherWidget` displaying 12-hour temperature and precipitation probabilities alongside a 6-hour peak precipitation badge in `ClockWeatherWidget`.
+  - Added non-blocking zero-key **NOAA / National Weather Service** active weather alerts (`https://api.weather.gov/alerts/active` for US coordinates with silent international/offline fallback) surfaced via clickable severity banners and an expandable safety details modal (`WeatherAlertModal`).
+
 ## [0.8.5] - 2026-11-21
 
 ### Fixed
