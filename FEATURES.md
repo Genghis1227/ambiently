@@ -4,6 +4,27 @@
 
 ---
 
+## How Ambiently Compares
+
+| Capability | Ambiently (`v0.8.5`) | Skylight Calendar (+ Plus) | Hearth Display | DAKboard | Mango Display | Home Assistant |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Pricing & Open Source** | **$0 / Open-source (AGPLv3)** | ~$299–$599 hw + ~$79/yr Plus | ~$699 hw + ~$86/yr plan | $0 basic / ~$5–$8+/mo | $0 basic / ~$5.99/mo Pro | $0 self-hosted (+ optional Nabu Casa) |
+| **Hardware & Hosting** | Any browser, tablet, Pi kiosk, or Docker (`amd64`/`arm64`) | Proprietary wall touchscreen only | Proprietary 27" touchscreen only | BYO screen or DAKboard hardware | BYO TV, tablet, Fire Stick, or Echo Show | Self-hosted server + any tablet/browser |
+| **Offline-First & Local Privacy** | **0ms IndexedDB boot**, device-local `db.vault` secrets & local file/JSON sync | Cloud-dependent | Cloud-dependent | Cloud-rendered screens | Cloud-rendered screens | Local LAN execution |
+| **Layout & Wall UX** | Freeform multi-canvas corkboard (`360°` tilt, Bento/Pack/Split auto-layout, swipe, `Ctrl+Z` undo, Sticker Mode) | Fixed tabbed calendar UI | Fixed routine/calendar UI | Modular block editor (paid custom layouts) | Grid/widget layout builder | Lovelace dashboards (steep YAML/UI setup) |
+| **Calendars** | Multi-source `.ics` / `webcal://` (read-only) + Show Planned Meals + Agenda/3-Day/Week/Month/Timeline | 2-way Google, Apple, Outlook & Cozi sync | 2-way Google & Apple sync | Read-only multi-calendar feeds | 2-way calendar sync (Pro) | Local + 2-way calendar integrations |
+| **Chores, Routines & Rewards** | Append-only ledger, point splits, skip/vacation/overdue rules, Wishlist URL scraper, PIN lock & Trophy Case | Chore charts & star rewards (Plus) | Visual child routines & helpers | Basic via 3rd-party task lists | Basic chore/to-do widgets | Community cards / DIY helpers |
+| **Meal Planning & Kitchen** | Meal planner, Schema.org recipe scraper, distraction-free Cooking Mode (+ step timers), aisle Grocery Aggregator | Meal planner & grocery list (Plus) | Meal planner & shared lists | 3rd-party workarounds only | Notes/lists only | Community add-ons only |
+| **Kanban, Notes & Home Utilities** | Multi-board Kanban, aisle Shopping List, Chalkboard, Offline Soundscapes, Kitchen Multi-Timer, Guest Wi-Fi QR, Decision Wheel | Lists & to-dos only | Shared to-dos & routines | External lists / custom iframe blocks | Stickers, notes & basic lists | Custom cards & helpers |
+| **Photo Frames** | 7,500+ Google Photos, Google Drive, Local/NAS folders, Plex QR pairing, 128 curated photos; Ken Burns, Collage, Polaroids & Filmstrip | Cloud photo screensaver (Plus) | Limited photo features | Cloud photo slideshows (Google/Apple/Dropbox) | Cloud photo backgrounds & widgets | Media / gallery integrations |
+| **Weather, Feeds & Finance** | Zero-key Weather, US EPA AQI/Pollen/UV, offline NOAA Sun/Moon, Markets, Live Sports, Daily Discovery & 26 RSS + Reader Mode | Daily & 10-day forecast icons | Basic weather | Weather, radar, news/RSS, stocks & commute blocks | Weather, news, stocks & commute widgets | Broad weather & sensor integrations |
+| **Smart Home & AI Imports** | Home Lab latency probes & read-only Home Assistant entity glance (manual recipe/wishlist URL scrapers; no AI email import) | AI Magic Import for emails/flyers (Plus); no smart home | Hearth Helper AI parser; no smart home | Smart home / iframe blocks (varies by plan) | Health/smart-home widgets; no AI flyer import | Bidirectional device & camera control (no built-in family suite) |
+| **Portrait Layout & Screensaver** | Pi kiosk `--rotate` script; dedicated `9:16` layout & idle photo screensaver on roadmap | Native idle screensaver | Native idle screensaver | Native portrait & idle screensaver | Native portrait & idle screensaver | Via plugins / custom dashboards |
+
+<sub>*Competitor pricing and feature availability reflect publicly advertised consumer tiers and hardware bundles and can change over time.*</sub>
+
+---
+
 ## 1. Core Layout & Kiosk Shell (Phase 1)
 
 ### Pure Freeform Corkboard Multi-Canvas Engine
