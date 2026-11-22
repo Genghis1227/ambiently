@@ -12,6 +12,8 @@ export interface CalendarEvent {
   end?: string;  // ISO string
   isAllDay: boolean;
   mealSlot?: 'breakfast' | 'lunch' | 'dinner';
+  localEventId?: string;
+  profileIds?: string[];
 }
 
 export interface CalendarSource {

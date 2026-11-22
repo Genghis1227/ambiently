@@ -55,6 +55,7 @@ export const ALLOWED_API_HOSTS = new Set([
   'api.open-meteo.com',
   'geocoding-api.open-meteo.com',
   'air-quality-api.open-meteo.com',
+  'api.weather.gov', // Official zero-key NOAA/NWS public severe weather alerts API (approved in #176)
   'commons.wikimedia.org',
   'upload.wikimedia.org',
   'api.wikimedia.org',

@@ -1,5 +1,5 @@
 import type { SupabaseClient, User, RealtimeChannel } from '@supabase/supabase-js';
-import { db, DEFAULT_SETTINGS, DEFAULT_TABS, DEFAULT_WIDGETS, DEFAULT_NOTES, DEFAULT_CHORE_SNAPSHOT, DEFAULT_HOUSEHOLD_PROFILES, DEFAULT_MEAL_SNAPSHOT, DEFAULT_KANBAN_BOARDS, DEFAULT_KANBAN_SNAPSHOT, DEFAULT_ROUTINES_SNAPSHOT } from './db';
+import { db, DEFAULT_SETTINGS, DEFAULT_TABS, DEFAULT_WIDGETS, DEFAULT_NOTES, DEFAULT_CHORE_SNAPSHOT, DEFAULT_HOUSEHOLD_PROFILES, DEFAULT_MEAL_SNAPSHOT, DEFAULT_KANBAN_BOARDS, DEFAULT_KANBAN_SNAPSHOT, DEFAULT_ROUTINES_SNAPSHOT, DEFAULT_CALENDAR_EVENTS_SNAPSHOT } from './db';
 import { clearFeedMemoryCaches } from './feeds';
 import { stripPlexTokens } from './plexLinks';
 import { isBoardFullError, setSyncRefusal } from './syncRefusal';
@@ -37,11 +37,16 @@ import type { HouseholdProfile } from '../types/profiles';
 import type { MealPlannerSnapshot } from '../types/meals';
 import type { KanbanBoard, KanbanCard, KanbanChecklistItem, KanbanColumnId, KanbanEngineSnapshot } from '../types/kanban';
 import { ROUTINES_CLOUD_ROW_ID, type RoutinesSnapshot } from '../types/phase2Widgets';
+import {
+  CALENDAR_EVENTS_CLOUD_ROW_ID,
+  type CalendarEventsSnapshot,
+} from '../types/calendarEvents';
 import { useChoreStore } from '../store/choreStore';
 import { useProfileStore } from '../stores/useProfileStore';
 import { useMealStore } from '../stores/useMealStore';
 import { useKanbanStore, type KanbanRowSyncEvent } from '../stores/useKanbanStore';
 import { useRoutinesStore } from '../stores/useRoutinesStore';
+import { useCalendarEventsStore } from '../stores/useCalendarEventsStore';
 
 const CHORE_ENGINE_CLOUD_ROW_ID = '__ambiently_chore_engine__';
 const HOUSEHOLD_PROFILES_CLOUD_ROW_ID = '__ambiently_household_profiles__';
@@ -209,7 +214,7 @@ async function clearLocalBoard(): Promise<void> {
   const current = await db.settings.get('global');
   await db.transaction(
     'rw',
-    [db.tabs, db.widgets, db.notes, db.settings, db.vault, db.chores, db.profiles, db.meals, db.kanbanBoards, db.kanbanCards, db.kanban, db.routines],
+    [db.tabs, db.widgets, db.notes, db.settings, db.vault, db.chores, db.profiles, db.meals, db.kanbanBoards, db.kanbanCards, db.kanban, db.routines, db.calendarEvents],
     async () => {
       const vaultKeys = (await db.vault.toCollection().primaryKeys()) as string[];
       const boardScopedVaultKeys = vaultKeys.filter(
@@ -229,6 +234,7 @@ async function clearLocalBoard(): Promise<void> {
         db.kanbanCards.clear(),
         db.kanban.clear(),
         db.routines.clear(),
+        db.calendarEvents.clear(),
         ...(boardScopedVaultKeys.length > 0 ? [db.vault.bulkDelete(boardScopedVaultKeys)] : []),
       ]);
       await db.settings.put({ ...DEFAULT_SETTINGS, ...deviceOwnSettings(current) });
@@ -238,6 +244,7 @@ async function clearLocalBoard(): Promise<void> {
       await db.kanbanBoards.bulkPut(DEFAULT_KANBAN_BOARDS);
       await db.kanban.put(DEFAULT_KANBAN_SNAPSHOT);
       await db.routines.put(DEFAULT_ROUTINES_SNAPSHOT);
+      await db.calendarEvents.put(DEFAULT_CALENDAR_EVENTS_SNAPSHOT);
     }
   );
 
@@ -246,6 +253,7 @@ async function clearLocalBoard(): Promise<void> {
   useMealStore.getState().resetForBoardSwitch();
   useKanbanStore.getState().resetForBoardSwitch();
   useRoutinesStore.getState().resetForBoardSwitch();
+  useCalendarEventsStore.getState().resetForBoardSwitch();
   clearFeedMemoryCaches();
 
   if (typeof localStorage !== 'undefined') {
@@ -1021,6 +1029,7 @@ export async function pushToCloud(
       dbMealSnapshot,
       dbKanbanSnapshot,
       dbRoutinesSnapshot,
+      dbCalendarEventsSnapshot,
     ] = await Promise.all([
       scopes.settings ? db.settings.get('global') : Promise.resolve(undefined),
       scopes.tabs ? db.tabs.toArray() : Promise.resolve([]),
@@ -1031,6 +1040,7 @@ export async function pushToCloud(
       scopes.householdStores ? db.meals.get('household_meals') : Promise.resolve(undefined),
       scopes.householdStores ? db.kanban.get('household_kanban') : Promise.resolve(undefined),
       scopes.householdStores ? db.routines.get('household_routines') : Promise.resolve(undefined),
+      scopes.householdStores ? db.calendarEvents.get('household_calendar_events') : Promise.resolve(undefined),
     ]);
 
     const propSettingsTime = Date.parse(settings?.updated_at || '') || 0;
@@ -1314,6 +1324,41 @@ export async function pushToCloud(
           freeform_pos: {},
           config: activeRoutinesSnapshot,
           updated_at: activeRoutinesSnapshot.updated_at,
+          deleted_at: null,
+        });
+      }
+    }
+
+    // Sync Local Family Calendar Events singleton household snapshot via reserved system row
+    const activeCalendarEventsSnapshot = scopes.householdStores
+      ? dbCalendarEventsSnapshot || useCalendarEventsStore.getState().snapshot
+      : null;
+    if (
+      activeCalendarEventsSnapshot &&
+      activeCalendarEventsSnapshot.id === 'household_calendar_events'
+    ) {
+      const localCalendarEventsTime = new Date(
+        activeCalendarEventsSnapshot.updated_at || 0
+      ).getTime();
+      const remoteCalendarEventsTime = remoteWidgetsMap.get(CALENDAR_EVENTS_CLOUD_ROW_ID)?.time;
+      const shouldPushCalendarEvents =
+        Boolean(options?.force) ||
+        (remoteCalendarEventsTime === undefined
+          ? localCalendarEventsTime > 0
+          : localCalendarEventsTime > remoteCalendarEventsTime);
+
+      if (shouldPushCalendarEvents) {
+        widgetsToUpsert.push({
+          id: CALENDAR_EVENTS_CLOUD_ROW_ID,
+          dashboard_id: dashboardId,
+          tab_id: null,
+          user_id: ownerId,
+          type: 'calendar_events_store',
+          title: 'Household Calendar Events Store',
+          grid_pos: {},
+          freeform_pos: {},
+          config: activeCalendarEventsSnapshot,
+          updated_at: activeCalendarEventsSnapshot.updated_at,
           deleted_at: null,
         });
       }
@@ -1823,13 +1868,33 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
         }
       }
 
+      // Extract the Local Family Calendar Events system row if present
+      const calendarEventsRow = widgetsRes.data.find(
+        (w: any) => w.id === CALENDAR_EVENTS_CLOUD_ROW_ID
+      );
+      if (
+        calendarEventsRow &&
+        !calendarEventsRow.deleted_at &&
+        calendarEventsRow.config?.id === 'household_calendar_events'
+      ) {
+        if (replaceLocalHousehold) {
+          await db.calendarEvents.put(calendarEventsRow.config as CalendarEventsSnapshot);
+          await useCalendarEventsStore.getState().initCalendarEventsStore();
+        } else {
+          await useCalendarEventsStore
+            .getState()
+            .applyRemoteCalendarEventsSnapshot(calendarEventsRow.config as CalendarEventsSnapshot);
+        }
+      }
+
       const canvasWidgetRows = widgetsRes.data.filter(
         (w: any) =>
           w.id !== CHORE_ENGINE_CLOUD_ROW_ID &&
           w.id !== HOUSEHOLD_PROFILES_CLOUD_ROW_ID &&
           w.id !== MEAL_PLANNER_CLOUD_ROW_ID &&
           w.id !== KANBAN_ENGINE_CLOUD_ROW_ID &&
-          w.id !== ROUTINES_CLOUD_ROW_ID
+          w.id !== ROUTINES_CLOUD_ROW_ID &&
+          w.id !== CALENDAR_EVENTS_CLOUD_ROW_ID
       );
       const localWidgets = await db.widgets.toArray();
       const localMap = new Map(localWidgets.map((w) => [w.id, w]));

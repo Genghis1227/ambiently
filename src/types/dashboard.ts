@@ -266,6 +266,11 @@ export interface AppSettings {
   nightModeWakeTimeoutMin?: number; // Inactivity timeout in minutes before returning to night mode (0 = keep awake until morning)
   nightScheduleEnabled?: boolean; // false = night mode only starts by hand (unset counts as on)
 
+  // Idle Photo Screensaver
+  idleScreensaverTimeoutMin?: 0 | 5 | 10 | 15 | 30;
+  idleScreensaverShowClock?: boolean;
+  idleScreensaverShowWeather?: boolean;
+
   // Canvas & Dock Options
   snapToGrid?: boolean;
   canvasSwipeEnabled?: boolean; // default true (unset counts as true)

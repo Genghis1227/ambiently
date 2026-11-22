@@ -10,6 +10,8 @@ import {
   ChevronRight,
   X,
   HelpCircle,
+  Plus,
+  Pencil,
 } from 'lucide-react';
 import {
   fetchCalendarEvents,
@@ -20,6 +22,19 @@ import {
   type CalendarFeedStatus,
 } from '../../services/feeds';
 import { useMealStore } from '../../stores/useMealStore';
+import { useCalendarEventsStore } from '../../stores/useCalendarEventsStore';
+import { useProfileStore } from '../../stores/useProfileStore';
+import {
+  LOCAL_CALENDAR_ID,
+  LOCAL_CALENDAR_NAME,
+  type LocalFamilyEvent,
+} from '../../types/calendarEvents';
+import {
+  filterCalendarEvents,
+  localFamilyEventsToCalendarEvents,
+} from '../../utils/calendarEventsEngine';
+import { ProfileAvatar } from '../common/ProfileAvatar';
+import type { LocalEventFormInput } from '../calendar/LocalEventModal';
 import { localDateKey } from '../../utils/dateKey';
 import {
   MEAL_PLANNER_CALENDAR_ID,
@@ -30,6 +45,9 @@ import {
 
 const CalendarUrlGuideModal = React.lazy(() =>
   import('../calendar/CalendarUrlGuideModal').then((m) => ({ default: m.CalendarUrlGuideModal }))
+);
+const LocalEventModal = React.lazy(() =>
+  import('../calendar/LocalEventModal').then((m) => ({ default: m.LocalEventModal }))
 );
 
 export type CalendarViewMode = 'agenda' | '3day' | 'week' | 'month';
@@ -229,7 +247,7 @@ const TimelineGridView: React.FC<{
   isLight: boolean;
   now: Date;
   hour12: boolean;
-  onSelectDay: (detail: { date: Date; events: CalendarEvent[] }) => void;
+  onSelectDay: (date: Date) => void;
 }> = ({ days, colCount, hasAllDay, timeGridRef, isLight, now, hour12, onSelectDay }) => {
   return (
     <div
@@ -250,11 +268,7 @@ const TimelineGridView: React.FC<{
           {days.map((col, idx) => (
             <div
               key={idx}
-              onClick={() => {
-                if (col.events.length > 0) {
-                  onSelectDay({ date: col.date, events: col.events });
-                }
-              }}
+              onClick={() => onSelectDay(col.date)}
               className={`flex items-center justify-between p-2 md:p-2.5 border-r last:border-r-0 cursor-pointer ${
                 isLight ? 'border-slate-200' : 'border-gray-800/80'
               } ${col.isToday ? (isLight ? 'bg-blue-100/60' : 'bg-blue-950/30') : ''}`}
@@ -327,7 +341,7 @@ const TimelineGridView: React.FC<{
                   .map((evt) => (
                     <div
                       key={evt.uid}
-                      onClick={() => onSelectDay({ date: col.date, events: col.events })}
+                      onClick={() => onSelectDay(col.date)}
                       style={{ backgroundColor: evt.color || '#3b82f6' }}
                       className="text-[9.5px] md:text-[11px] font-bold text-white px-1.5 py-0.5 rounded truncate cursor-pointer shadow-xs hover:brightness-110"
                       title={evt.mealSlot ? `${MEAL_SLOT_CALENDAR_META[evt.mealSlot].label}: ${evt.summary}` : evt.summary}
@@ -408,7 +422,7 @@ const TimelineGridView: React.FC<{
                       return (
                         <div
                           key={item.event.uid}
-                          onClick={() => onSelectDay({ date: col.date, events: col.events })}
+                          onClick={() => onSelectDay(col.date)}
                           title={`${item.event.summary} (${formatTimeShort(new Date(item.event.start), hour12)}${
                             item.event.end ? ` - ${formatTimeShort(new Date(item.event.end), hour12)}` : ''
                           })${item.event.location ? ` • ${item.event.location}` : ''}`}
@@ -478,6 +492,13 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
   const { hour12, weekStartsOn } = useTimePrefs();
   const scheduledMeals = useMealStore((s) => s.scheduledMeals);
   const isMealStoreInitialized = useMealStore((s) => s.isInitialized);
+  const localFamilyEvents = useCalendarEventsStore((s) => s.events);
+  const isCalendarEventsInitialized = useCalendarEventsStore((s) => s.isInitialized);
+  const addLocalEvent = useCalendarEventsStore((s) => s.addEvent);
+  const updateLocalEvent = useCalendarEventsStore((s) => s.updateEvent);
+  const deleteLocalEvent = useCalendarEventsStore((s) => s.deleteEvent);
+  const profiles = useProfileStore((s) => s.profiles);
+  const isProfilesInitialized = useProfileStore((s) => s.isInitialized);
   const [view, setView] = useState<CalendarViewMode>(defaultView);
   const [multiDayLayout, setMultiDayLayout] = useState<MultiDayLayout>(multiDayLayoutProp);
   const timeGridRef = useRef<HTMLDivElement>(null);
@@ -491,14 +512,25 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
   );
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [baseDate, setBaseDate] = useState(new Date());
-  const [selectedDayDetail, setSelectedDayDetail] = useState<{ date: Date; events: CalendarEvent[] } | null>(null);
+  const [selectedDetailDate, setSelectedDetailDate] = useState<Date | null>(null);
+  const [selectedCalendarIds, setSelectedCalendarIds] = useState<string[]>([]);
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
+  const [isLocalEventModalOpen, setIsLocalEventModalOpen] = useState(false);
+  const [localEventInitialDate, setLocalEventInitialDate] = useState<Date | null>(null);
+  const [editingLocalEvent, setEditingLocalEvent] = useState<LocalFamilyEvent | null>(null);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
 
   useEffect(() => {
     if (!isMealStoreInitialized) {
       void useMealStore.getState().initMealStore();
     }
-  }, [isMealStoreInitialized]);
+    if (!isCalendarEventsInitialized) {
+      void useCalendarEventsStore.getState().initCalendarEventsStore();
+    }
+    if (!isProfilesInitialized) {
+      void useProfileStore.getState().initProfileStore();
+    }
+  }, [isMealStoreInitialized, isCalendarEventsInitialized, isProfilesInitialized]);
 
   useEffect(() => {
     setView(defaultView);
@@ -605,24 +637,149 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
 
   const now = new Date();
 
+  const activeProfiles = useMemo(
+    () => profiles.filter((p) => !p.deletedAt),
+    [profiles]
+  );
+  const profileMap = useMemo(
+    () => new Map(activeProfiles.map((p) => [p.id, p])),
+    [activeProfiles]
+  );
+
   const mealEvents = useMemo(
     () => (showMeals ? scheduledMealsToCalendarEvents(scheduledMeals) : []),
     [showMeals, scheduledMeals]
   );
-  const combinedEvents = useMemo(
-    () => [...events, ...mealEvents],
-    [events, mealEvents]
+  const localCalendarEvents = useMemo(
+    () => localFamilyEventsToCalendarEvents(localFamilyEvents, activeProfiles),
+    [localFamilyEvents, activeProfiles]
   );
+  const allCombinedEvents = useMemo(
+    () => [...events, ...localCalendarEvents, ...mealEvents],
+    [events, localCalendarEvents, mealEvents]
+  );
+
+  const activeCalendarFilterSet = useMemo(
+    () => (selectedCalendarIds.length > 0 ? new Set(selectedCalendarIds) : null),
+    [selectedCalendarIds]
+  );
+  const filteredEvents = useMemo(
+    () => filterCalendarEvents(allCombinedEvents, activeCalendarFilterSet, selectedProfileId),
+    [allCombinedEvents, activeCalendarFilterSet, selectedProfileId]
+  );
+
+  const sourceChips = useMemo(() => {
+    const list: { id: string; name: string; color: string }[] = [];
+    const seen = new Set<string>();
+    for (const s of sources || []) {
+      if (!s?.id || seen.has(s.id)) continue;
+      seen.add(s.id);
+      list.push({ id: s.id, name: s.name || 'Calendar', color: s.color || '#3b82f6' });
+    }
+    if (
+      !seen.has(LOCAL_CALENDAR_ID) &&
+      (localCalendarEvents.length > 0 ||
+        selectedCalendarIds.includes(LOCAL_CALENDAR_ID) ||
+        list.length > 0)
+    ) {
+      seen.add(LOCAL_CALENDAR_ID);
+      list.push({ id: LOCAL_CALENDAR_ID, name: LOCAL_CALENDAR_NAME, color: '#10b981' });
+    }
+    if (
+      !seen.has(MEAL_PLANNER_CALENDAR_ID) &&
+      ((showMeals && mealEvents.length > 0) ||
+        selectedCalendarIds.includes(MEAL_PLANNER_CALENDAR_ID))
+    ) {
+      seen.add(MEAL_PLANNER_CALENDAR_ID);
+      list.push({ id: MEAL_PLANNER_CALENDAR_ID, name: 'Meals', color: '#f97316' });
+    }
+    return list;
+  }, [sources, localCalendarEvents.length, showMeals, mealEvents.length, selectedCalendarIds]);
+
+  const memberChips = useMemo(() => {
+    const tagged = new Set<string>();
+    for (const evt of allCombinedEvents) {
+      for (const pid of evt.profileIds || []) {
+        tagged.add(pid);
+      }
+    }
+    if (selectedProfileId) {
+      tagged.add(selectedProfileId);
+    }
+    return activeProfiles.filter((p) => tagged.has(p.id));
+  }, [allCombinedEvents, activeProfiles, selectedProfileId]);
+
+  const openCreateLocalEvent = (date?: Date) => {
+    setEditingLocalEvent(null);
+    setLocalEventInitialDate(date || new Date());
+    setIsLocalEventModalOpen(true);
+  };
+
+  const openEditLocalEvent = (localEventId: string) => {
+    const found = localFamilyEvents.find((e) => e.id === localEventId);
+    if (!found) return;
+    setEditingLocalEvent(found);
+    setLocalEventInitialDate(null);
+    setIsLocalEventModalOpen(true);
+  };
+
+  const handleSaveLocalEvent = async (input: LocalEventFormInput) => {
+    if (input.id) {
+      await updateLocalEvent(input.id, {
+        title: input.title,
+        date: input.date,
+        endDate: input.endDate,
+        isAllDay: input.isAllDay,
+        startTime: input.startTime,
+        endTime: input.endTime,
+        color: input.color,
+        profileIds: input.profileIds,
+        location: input.location,
+        notes: input.notes,
+      });
+      return;
+    }
+    await addLocalEvent({
+      title: input.title,
+      date: input.date,
+      endDate: input.endDate,
+      isAllDay: input.isAllDay,
+      startTime: input.startTime,
+      endTime: input.endTime,
+      color: input.color,
+      profileIds: input.profileIds,
+      location: input.location,
+      notes: input.notes,
+    });
+  };
+
+  const handleDeleteLocalEvent = async (id: string) => {
+    await deleteLocalEvent(id);
+  };
+
+  const handleToggleSourceChip = (calendarId: string) => {
+    setSelectedCalendarIds((prev) =>
+      prev.includes(calendarId) ? prev.filter((id) => id !== calendarId) : [...prev, calendarId]
+    );
+  };
+
+  const handleResetFilters = () => {
+    setSelectedCalendarIds([]);
+    setSelectedProfileId(null);
+  };
 
   // Agenda view events (filtered from baseDate)
   const agendaStartMs = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate()).getTime() - 24 * 60 * 60 * 1000;
   // Also keeps events that started earlier and are still going on (a week-long trip, a holiday)
   const baseDayStartMs = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate()).getTime();
   const baseDateKey = localDateKey(baseDate);
-  const agendaEvents = combinedEvents
+  const agendaEvents = filteredEvents
     .filter((e) => {
       if (e.calendarId === MEAL_PLANNER_CALENDAR_ID) {
         return e.start >= baseDateKey;
+      }
+      if (e.calendarId === LOCAL_CALENDAR_ID && e.isAllDay) {
+        return e.start >= baseDateKey || (e.end ? e.end > baseDateKey : false);
       }
       return (
         parseEventLocalDate(e.start, e.isAllDay).getTime() >= agendaStartMs ||
@@ -654,7 +811,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
     return {
       date: d,
       isToday: d.toDateString() === now.toDateString(),
-      events: combinedEvents.filter((e) => isEventOnDate(e, d)),
+      events: filteredEvents.filter((e) => isEventOnDate(e, d)),
     };
   });
 
@@ -666,9 +823,17 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
     return {
       date: d,
       isToday: d.toDateString() === now.toDateString(),
-      events: combinedEvents.filter((e) => isEventOnDate(e, d)),
+      events: filteredEvents.filter((e) => isEventOnDate(e, d)),
     };
   });
+
+  const selectedDayEvents = useMemo(
+    () =>
+      selectedDetailDate
+        ? sortDayEvents(filteredEvents.filter((e) => isEventOnDate(e, selectedDetailDate)))
+        : [],
+    [filteredEvents, selectedDetailDate]
+  );
   const weekEnd = weekDays[6].date;
 
   const hasThreeDaysAllDay = threeDays.some((col) => col.events.some((e) => e.isAllDay));
@@ -822,6 +987,20 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
 
           <button
             type="button"
+            onClick={() => openCreateLocalEvent(baseDate)}
+            title="Add synced family event"
+            className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] md:text-xs font-bold border transition-colors cursor-pointer ${
+              isLight
+                ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-300'
+                : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border-emerald-500/35'
+            }`}
+          >
+            <Plus className="w-3.5 h-3.5 shrink-0" />
+            <span>Event</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setIsGuideOpen(true)}
             title="How to connect Google Calendar (.ics)"
             className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
@@ -851,6 +1030,87 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Quick Source & Household Member Filter Strip */}
+      {(sourceChips.length > 1 || memberChips.length > 0) && (
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 mb-1.5 shrink-0 no-scrollbar">
+          <button
+            type="button"
+            onClick={handleResetFilters}
+            aria-pressed={selectedCalendarIds.length === 0 && !selectedProfileId}
+            className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border whitespace-nowrap transition-colors cursor-pointer ${
+              selectedCalendarIds.length === 0 && !selectedProfileId
+                ? isLight
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-blue-600 text-white border-blue-500'
+                : isLight
+                ? 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                : 'bg-gray-900/80 text-gray-400 border-gray-800 hover:text-white'
+            }`}
+          >
+            All
+          </button>
+
+          {sourceChips.length > 1 &&
+            sourceChips.map((chip) => {
+              const isSelected = selectedCalendarIds.includes(chip.id);
+              return (
+                <button
+                  key={chip.id}
+                  type="button"
+                  onClick={() => handleToggleSourceChip(chip.id)}
+                  aria-pressed={isSelected}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border whitespace-nowrap transition-colors cursor-pointer ${
+                    isSelected
+                      ? isLight
+                        ? 'bg-slate-800 text-white border-slate-800'
+                        : 'bg-white/15 text-white border-white/30'
+                      : isLight
+                      ? 'bg-slate-100/90 text-slate-700 border-slate-200 hover:bg-slate-200/80'
+                      : 'bg-gray-900/70 text-gray-300 border-gray-800 hover:border-gray-700'
+                  }`}
+                >
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ backgroundColor: chip.color }}
+                  />
+                  <span>{chip.name}</span>
+                </button>
+              );
+            })}
+
+          {sourceChips.length > 1 && memberChips.length > 0 && (
+            <div
+              className={`w-px h-4 shrink-0 ${isLight ? 'bg-slate-200' : 'bg-gray-800'}`}
+              aria-hidden="true"
+            />
+          )}
+
+          {memberChips.map((profile) => {
+            const isSelected = selectedProfileId === profile.id;
+            return (
+              <button
+                key={profile.id}
+                type="button"
+                onClick={() =>
+                  setSelectedProfileId((prev) => (prev === profile.id ? null : profile.id))
+                }
+                aria-pressed={isSelected}
+                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold border whitespace-nowrap transition-colors cursor-pointer ${
+                  isSelected
+                    ? 'bg-teal-600 text-white border-teal-500'
+                    : isLight
+                    ? 'bg-slate-100/90 text-slate-700 border-slate-200 hover:bg-slate-200/80'
+                    : 'bg-gray-900/70 text-gray-300 border-gray-800 hover:border-gray-700'
+                }`}
+              >
+                <ProfileAvatar profile={profile} size="xs" />
+                <span>{profile.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* A calendar that can't be read says so, instead of quietly showing old or no events */}
       {feedProblems.length > 0 && (
@@ -883,14 +1143,24 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
             <div className="h-full flex flex-col items-center justify-center text-gray-500 text-xs py-8 text-center">
               <span>{loading ? 'Fetching calendar events...' : 'No upcoming events'}</span>
               {!loading && (
-                <button
-                  type="button"
-                  onClick={() => setIsGuideOpen(true)}
-                  className="mt-3 px-3 py-1.5 rounded-xl bg-blue-600/15 hover:bg-blue-600/25 border border-blue-500/30 text-blue-300 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow"
-                >
-                  <HelpCircle className="w-3.5 h-3.5" />
-                  <span>How to connect Google Calendar</span>
-                </button>
+                <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openCreateLocalEvent(baseDate)}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/35 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Family Event</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsGuideOpen(true)}
+                    className="px-3 py-1.5 rounded-xl bg-blue-600/15 hover:bg-blue-600/25 border border-blue-500/30 text-blue-300 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow"
+                  >
+                    <HelpCircle className="w-3.5 h-3.5" />
+                    <span>How to connect Google Calendar</span>
+                  </button>
+                </div>
               )}
             </div>
           ) : (
@@ -942,15 +1212,42 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                       <div className={`text-sm md:text-base font-bold truncate ${isLight ? 'text-slate-900' : 'text-gray-100'}`}>
                         {evt.summary}
                       </div>
-                      {isToday && (
-                        <span className={`text-[9px] uppercase font-extrabold px-2 py-0.5 rounded-md border shrink-0 ${
-                          isLight
-                            ? 'bg-blue-100 text-blue-700 border-blue-300'
-                            : 'bg-blue-500/20 text-blue-300 border-blue-500/30'
-                        }`}>
-                          Today
-                        </span>
-                      )}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {evt.profileIds && evt.profileIds.length > 0 && (
+                          <div className="flex items-center -space-x-1">
+                            {evt.profileIds.slice(0, 3).map((pid) => {
+                              const profile = profileMap.get(pid);
+                              return profile ? (
+                                <ProfileAvatar key={pid} profile={profile} size="xs" />
+                              ) : null;
+                            })}
+                          </div>
+                        )}
+                        {evt.localEventId && (
+                          <button
+                            type="button"
+                            onClick={() => openEditLocalEvent(evt.localEventId!)}
+                            title="Edit family event"
+                            aria-label={`Edit ${evt.summary}`}
+                            className={`p-1 rounded-lg transition-colors cursor-pointer ${
+                              isLight
+                                ? 'text-slate-500 hover:text-slate-900 hover:bg-slate-200'
+                                : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                            }`}
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {isToday && (
+                          <span className={`text-[9px] uppercase font-extrabold px-2 py-0.5 rounded-md border shrink-0 ${
+                            isLight
+                              ? 'bg-blue-100 text-blue-700 border-blue-300'
+                              : 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                          }`}>
+                            Today
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className={`flex items-center flex-wrap gap-x-3 gap-y-1 mt-1 text-xs font-medium ${isLight ? 'text-slate-600' : 'text-gray-300'}`}>
                       <span className={`flex items-center gap-1.5 font-mono ${isLight ? 'text-slate-700' : 'text-gray-300'}`}>
@@ -994,7 +1291,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
             isLight={isLight}
             now={now}
             hour12={hour12}
-            onSelectDay={setSelectedDayDetail}
+            onSelectDay={setSelectedDetailDate}
           />
         ) : (
           /* 3-Day View (Card-based Day Columns) */
@@ -1016,11 +1313,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                 >
                   {/* Day Column Header */}
                   <div
-                    onClick={() => {
-                      if (sortedEvents.length > 0) {
-                        setSelectedDayDetail({ date: col.date, events: sortedEvents });
-                      }
-                    }}
+                    onClick={() => setSelectedDetailDate(col.date)}
                     className={`p-2.5 md:p-3 border-b flex items-center justify-between shrink-0 cursor-pointer ${
                       col.isToday
                         ? isLight
@@ -1094,7 +1387,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                         return (
                           <div
                             key={evt.uid}
-                            onClick={() => setSelectedDayDetail({ date: col.date, events: sortedEvents })}
+                            onClick={() => setSelectedDetailDate(col.date)}
                             style={{
                               backgroundColor: `${evt.color || '#3b82f6'}15`,
                               borderLeftColor: evt.color || '#3b82f6',
@@ -1162,7 +1455,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
             isLight={isLight}
             now={now}
             hour12={hour12}
-            onSelectDay={setSelectedDayDetail}
+            onSelectDay={setSelectedDetailDate}
           />
         ) : (
           /* Weekly View (Card-based Day Columns) */
@@ -1184,11 +1477,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                 >
                   {/* Week Day Column Header */}
                   <div
-                    onClick={() => {
-                      if (sortedEvents.length > 0) {
-                        setSelectedDayDetail({ date: col.date, events: sortedEvents });
-                      }
-                    }}
+                    onClick={() => setSelectedDetailDate(col.date)}
                     className={`p-1.5 border-b flex flex-col items-center justify-center shrink-0 cursor-pointer ${
                       col.isToday
                         ? isLight
@@ -1240,7 +1529,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                         return (
                           <div
                             key={evt.uid}
-                            onClick={() => setSelectedDayDetail({ date: col.date, events: sortedEvents })}
+                            onClick={() => setSelectedDetailDate(col.date)}
                             style={{
                               backgroundColor: `${evt.color || '#3b82f6'}18`,
                               borderLeftColor: evt.color || '#3b82f6',
@@ -1306,18 +1595,14 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
               const day = i + 1;
               const dateObj = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
               const isToday = dateObj.toDateString() === now.toDateString();
-              const dayEvents = sortDayEvents(combinedEvents.filter((e) => isEventOnDate(e, dateObj)));
+              const dayEvents = sortDayEvents(filteredEvents.filter((e) => isEventOnDate(e, dateObj)));
 
               return (
                 <div
                   key={`day-${day}`}
-                  onClick={() => {
-                    if (dayEvents.length > 0) {
-                      setSelectedDayDetail({ date: dateObj, events: dayEvents });
-                    }
-                  }}
-                  className={`flex flex-col justify-start p-2 rounded-xl border transition-all overflow-hidden ${
-                    dayEvents.length > 0 ? isLight ? 'cursor-pointer hover:border-slate-400' : 'cursor-pointer hover:border-gray-600' : ''
+                  onClick={() => setSelectedDetailDate(dateObj)}
+                  className={`flex flex-col justify-start p-2 rounded-xl border transition-all overflow-hidden cursor-pointer ${
+                    isLight ? 'hover:border-slate-400' : 'hover:border-gray-600'
                   } ${
                     isToday
                       ? isLight
@@ -1392,7 +1677,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
       )}
 
       {/* Selected Day Agenda Detail Popover */}
-      {selectedDayDetail && (
+      {selectedDetailDate && (
         <div className={`absolute inset-0 z-40 backdrop-blur-md p-4 flex flex-col justify-between rounded-xl border shadow-2xl animate-in fade-in zoom-in-95 duration-150 ${
           isLight
             ? 'bg-white/95 border-slate-300'
@@ -1401,75 +1686,136 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
           <div className={`flex items-center justify-between border-b pb-2 mb-2 shrink-0 ${
             isLight ? 'border-slate-200' : 'border-gray-800'
           }`}>
-            <div className="flex items-center gap-2">
-              <CalendarIcon className="w-4 h-4 text-blue-500" />
-              <span className={`text-sm font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>
-                {selectedDayDetail.date.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+            <div className="flex items-center gap-2 min-w-0">
+              <CalendarIcon className="w-4 h-4 text-blue-500 shrink-0" />
+              <span className={`text-sm font-bold truncate ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                {selectedDetailDate.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
               </span>
             </div>
-            <button
-              type="button"
-              onClick={() => setSelectedDayDetail(null)}
-              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                isLight
-                  ? 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-800'
-              }`}
-            >
-              <X className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => openCreateLocalEvent(selectedDetailDate)}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
+                  isLight
+                    ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-300'
+                    : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border-emerald-500/35'
+                }`}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Event</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedDetailDate(null)}
+                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                  isLight
+                    ? 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                }`}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
-            {selectedDayDetail.events.map((evt) => (
-              <div
-                key={evt.uid}
-                style={{
-                  backgroundColor: evt.color ? `${evt.color}15` : isLight ? 'rgba(59, 130, 246, 0.08)' : 'rgba(59, 130, 246, 0.15)',
-                  borderLeftColor: evt.color || '#3b82f6',
-                }}
-                className={`p-3 rounded-xl border-l-4 space-y-1 ${
-                  isLight
-                    ? 'bg-slate-50/90 border-t border-r border-b border-slate-200 shadow-2xs'
-                    : 'bg-gray-900/60 border-t border-r border-b border-gray-800'
-                }`}
-              >
-                <div className="flex items-center justify-between text-xs font-mono">
-                  <span className={`flex items-center gap-1.5 font-semibold ${isLight ? 'text-blue-600' : 'text-blue-300'}`}>
-                    <Clock className="w-3.5 h-3.5 text-blue-500" />
-                    {formatEventTime(evt, hour12)}
-                    {evt.end && !evt.isAllDay && ` – ${new Date(evt.end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hourCycle: hour12 ? 'h12' : 'h23' })}`}
-                  </span>
-                  {evt.calendarName && (
-                    <span className={`text-[10px] px-2 py-0.5 rounded border ${
-                      isLight
-                        ? 'bg-slate-200/80 text-slate-700 border-slate-300'
-                        : 'bg-black/40 text-gray-300 border-white/5'
-                    }`}>
-                      {evt.calendarName}
+            {selectedDayEvents.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center py-8 text-center">
+                <p className={`text-xs mb-3 ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
+                  No events scheduled for this day
+                </p>
+                <button
+                  type="button"
+                  onClick={() => openCreateLocalEvent(selectedDetailDate)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors cursor-pointer ${
+                    isLight
+                      ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-300'
+                      : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border-emerald-500/35'
+                  }`}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Family Event</span>
+                </button>
+              </div>
+            ) : (
+              selectedDayEvents.map((evt) => (
+                <div
+                  key={evt.uid}
+                  style={{
+                    backgroundColor: evt.color ? `${evt.color}15` : isLight ? 'rgba(59, 130, 246, 0.08)' : 'rgba(59, 130, 246, 0.15)',
+                    borderLeftColor: evt.color || '#3b82f6',
+                  }}
+                  className={`p-3 rounded-xl border-l-4 space-y-1 ${
+                    isLight
+                      ? 'bg-slate-50/90 border-t border-r border-b border-slate-200 shadow-2xs'
+                      : 'bg-gray-900/60 border-t border-r border-b border-gray-800'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 text-xs font-mono">
+                    <span className={`flex items-center gap-1.5 font-semibold ${isLight ? 'text-blue-600' : 'text-blue-300'}`}>
+                      <Clock className="w-3.5 h-3.5 text-blue-500" />
+                      {formatEventTime(evt, hour12)}
+                      {evt.end && !evt.isAllDay && ` – ${new Date(evt.end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hourCycle: hour12 ? 'h12' : 'h23' })}`}
                     </span>
+                    <div className="flex items-center gap-1.5">
+                      {evt.profileIds && evt.profileIds.length > 0 && (
+                        <div className="flex items-center -space-x-1">
+                          {evt.profileIds.slice(0, 3).map((pid) => {
+                            const profile = profileMap.get(pid);
+                            return profile ? (
+                              <ProfileAvatar key={pid} profile={profile} size="xs" />
+                            ) : null;
+                          })}
+                        </div>
+                      )}
+                      {evt.calendarName && (
+                        <span className={`text-[10px] px-2 py-0.5 rounded border ${
+                          isLight
+                            ? 'bg-slate-200/80 text-slate-700 border-slate-300'
+                            : 'bg-black/40 text-gray-300 border-white/5'
+                        }`}>
+                          {evt.calendarName}
+                        </span>
+                      )}
+                      {evt.localEventId && (
+                        <button
+                          type="button"
+                          onClick={() => openEditLocalEvent(evt.localEventId!)}
+                          title="Edit family event"
+                          aria-label={`Edit ${evt.summary}`}
+                          className={`p-1 rounded-lg transition-colors cursor-pointer ${
+                            isLight
+                              ? 'text-slate-500 hover:text-slate-900 hover:bg-slate-200'
+                              : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                          }`}
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className={`text-sm md:text-base font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>{evt.summary}</div>
+                  {evt.description && (
+                    <div className={`text-xs line-clamp-3 leading-relaxed mt-1 ${isLight ? 'text-slate-600' : 'text-gray-300'}`}>
+                      {evt.description}
+                    </div>
+                  )}
+                  {evt.location && (
+                    <div className={`text-xs flex items-center gap-1.5 mt-1.5 ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
+                      <MapPin className="w-3.5 h-3.5 shrink-0 opacity-70" />
+                      <span>{evt.location}</span>
+                    </div>
                   )}
                 </div>
-                <div className={`text-sm md:text-base font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>{evt.summary}</div>
-                {evt.description && (
-                  <div className={`text-xs line-clamp-3 leading-relaxed mt-1 ${isLight ? 'text-slate-600' : 'text-gray-300'}`}>
-                    {evt.description}
-                  </div>
-                )}
-                {evt.location && (
-                  <div className={`text-xs flex items-center gap-1.5 mt-1.5 ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
-                    <MapPin className="w-3.5 h-3.5 shrink-0 opacity-70" />
-                    <span>{evt.location}</span>
-                  </div>
-                )}
-              </div>
-            ))}
+              ))
+            )}
           </div>
 
           <div className={`pt-2 border-t flex justify-end shrink-0 ${isLight ? 'border-slate-200' : 'border-gray-800/80'}`}>
             <button
               type="button"
-              onClick={() => setSelectedDayDetail(null)}
+              onClick={() => setSelectedDetailDate(null)}
               className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                 isLight
                   ? 'bg-slate-200 hover:bg-slate-300 text-slate-800'
@@ -1480,6 +1826,24 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
             </button>
           </div>
         </div>
+      )}
+
+      {/* Local Family Event Create/Edit Modal */}
+      {isLocalEventModalOpen && (
+        <React.Suspense fallback={null}>
+          <LocalEventModal
+            isOpen={isLocalEventModalOpen}
+            onClose={() => {
+              setIsLocalEventModalOpen(false);
+              setEditingLocalEvent(null);
+            }}
+            initialDate={localEventInitialDate}
+            editingEvent={editingLocalEvent}
+            profiles={activeProfiles}
+            onSave={handleSaveLocalEvent}
+            onDelete={handleDeleteLocalEvent}
+          />
+        </React.Suspense>
       )}
 
       {/* Google / Apple / Outlook Calendar URL Guide Modal */}

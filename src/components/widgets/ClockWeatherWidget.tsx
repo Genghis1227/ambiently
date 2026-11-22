@@ -1,5 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTimePrefs } from '../../utils/timePrefs';
+import { AlertTriangle, Droplets } from 'lucide-react';
+import {
+  fetchWeatherAlerts,
+  fetchWeatherData,
+  getAlertBadgeColors,
+  getPeakPrecipProb,
+  type WeatherAlert,
+  type WeatherData,
+} from '../../services/weather';
+import { WeatherAlertModal } from '../weather/WeatherAlertModal';
 import { useSharedClock } from '../../utils/sharedClock';
 import { useDisplayActivity } from '../../utils/displayActivity';
 import {
@@ -14,7 +24,6 @@ import {
   RefreshCw,
   MapPin,
 } from 'lucide-react';
-import { fetchWeatherData, type WeatherData } from '../../services/weather';
 import { getFormattedTimeForZone } from './WorldClockWidget';
 
 interface ClockWeatherWidgetProps {
@@ -69,11 +78,26 @@ export const ClockWeatherWidget: React.FC<ClockWeatherWidgetProps> = ({
   const wasOledRef = useRef(false);
   const time = useSharedClock(showSeconds ? 'second' : '10s', !isOledNightClock);
   const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [nwsAlerts, setNwsAlerts] = useState<WeatherAlert[]>([]);
+  const alertReqIdRef = useRef(0);
   const [loading, setLoading] = useState(false);
+  const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
+
+  const weatherAlerts = nwsAlerts.length > 0 ? nwsAlerts : (weather?.alerts ?? []);
+  const topWeatherAlert = weatherAlerts[0] ?? null;
+  const peakPrecip = getPeakPrecipProb(weather?.hourly, 6);
 
   // Fetch Weather
   const loadWeather = useCallback(async () => {
     setLoading(true);
+    const reqId = ++alertReqIdRef.current;
+    void fetchWeatherAlerts(latitude, longitude)
+      .then((nextAlerts) => {
+        if (alertReqIdRef.current === reqId) {
+          setNwsAlerts(nextAlerts);
+        }
+      })
+      .catch(() => {});
     try {
       const data = await fetchWeatherData(latitude, longitude, locationName, unit);
       setWeather(data);
@@ -196,8 +220,33 @@ export const ClockWeatherWidget: React.FC<ClockWeatherWidgetProps> = ({
               <div className={`text-[11px] mt-0.5 ${isLight ? 'text-slate-500' : 'text-gray-500'}`}>
                 H: {weather.highTemp}° • L: {weather.lowTemp}°
               </div>
+              {peakPrecip >= 15 && (
+                <div className="flex items-center justify-end gap-0.5 text-[10px] font-medium text-sky-400 mt-0.5">
+                  <Droplets className="w-2.5 h-2.5" />
+                  <span>{peakPrecip}% next 6h</span>
+                </div>
+              )}
             </div>
           </div>
+
+          {topWeatherAlert && (
+            <button
+              type="button"
+              onClick={() => setIsAlertModalOpen(true)}
+              className={`w-full px-2 py-1 rounded-lg border flex items-center justify-between gap-1.5 text-left text-[11px] font-semibold transition-colors cursor-pointer ${
+                getAlertBadgeColors(topWeatherAlert.severity, isLight).container
+              }`}
+              title="View active NOAA/NWS weather alert details"
+            >
+              <span className="flex items-center gap-1.5 min-w-0">
+                <AlertTriangle className="w-3 h-3 shrink-0" />
+                <span className="truncate">{topWeatherAlert.event}</span>
+              </span>
+              {weatherAlerts.length > 1 && (
+                <span className="text-[10px] opacity-85 shrink-0">+{weatherAlerts.length - 1}</span>
+              )}
+            </button>
+          )}
 
           {/* 3-day micro forecast strip */}
           <div className={`grid grid-cols-3 gap-1.5 pt-1.5 border-t ${
@@ -220,6 +269,13 @@ export const ClockWeatherWidget: React.FC<ClockWeatherWidgetProps> = ({
               </div>
             ))}
           </div>
+
+          <WeatherAlertModal
+            isOpen={isAlertModalOpen}
+            onClose={() => setIsAlertModalOpen(false)}
+            alerts={weatherAlerts}
+            locationName={weather.locationName}
+          />
         </div>
       ) : (
         <div className={`flex items-center justify-center py-4 text-xs gap-2 ${isLight ? 'text-slate-500' : 'text-gray-500'}`}>

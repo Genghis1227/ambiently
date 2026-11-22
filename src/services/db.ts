@@ -15,6 +15,7 @@ import {
 } from '../types/meals';
 import type { KanbanBoard, KanbanCard, KanbanEngineSnapshot } from '../types/kanban';
 import type { RoutinesSnapshot } from '../types/phase2Widgets';
+import type { CalendarEventsSnapshot } from '../types/calendarEvents';
 import { DEFAULT_ROUTINE_ITEMS } from '../utils/routinesEngine';
 
 export class AmbientlyDatabase extends Dexie {
@@ -30,6 +31,7 @@ export class AmbientlyDatabase extends Dexie {
   kanbanCards!: EntityTable<KanbanCard, 'id'>;
   kanban!: EntityTable<KanbanEngineSnapshot, 'id'>;
   routines!: EntityTable<RoutinesSnapshot, 'id'>;
+  calendarEvents!: EntityTable<CalendarEventsSnapshot, 'id'>;
 
   constructor() {
     super('AmbientlyDB');
@@ -86,6 +88,21 @@ export class AmbientlyDatabase extends Dexie {
       kanban: 'id, updated_at',
       routines: 'id, updated_at',
     });
+    this.version(6).stores({
+      tabs: 'id, order, updated_at, deleted_at',
+      widgets: 'id, tabId, type, updated_at, deleted_at',
+      notes: 'id, tabId, widgetId, expiresAt, archivedAt, updated_at, deleted_at',
+      settings: 'id, updated_at',
+      vault: 'key, updated_at',
+      chores: 'id, updated_at',
+      profiles: 'id, role, updatedAt, deletedAt',
+      meals: 'id, updated_at',
+      kanbanBoards: 'id, sortOrder, updatedAt',
+      kanbanCards: 'id, boardId, [boardId+columnId+isArchived+sortOrder], updatedAt',
+      kanban: 'id, updated_at',
+      routines: 'id, updated_at',
+      calendarEvents: 'id, updated_at',
+    });
   }
 }
 
@@ -107,6 +124,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   nightDimOpacity: 0.85,
   nightModeWakeTimeoutMin: 2,
   nightScheduleEnabled: true,
+  idleScreensaverTimeoutMin: 0,
+  idleScreensaverShowClock: true,
+  idleScreensaverShowWeather: true,
   snapToGrid: false,
   canvasSwipeEnabled: true,
   confirmWidgetDelete: true,
@@ -540,6 +560,13 @@ export const DEFAULT_ROUTINES_SNAPSHOT: RoutinesSnapshot = {
   id: 'household_routines',
   items: DEFAULT_ROUTINE_ITEMS.map((item) => ({ ...item, completions: [] })),
   deletedRoutineIds: [],
+  updated_at: '1970-01-01T00:00:00.000Z',
+};
+
+export const DEFAULT_CALENDAR_EVENTS_SNAPSHOT: CalendarEventsSnapshot = {
+  id: 'household_calendar_events',
+  events: [],
+  deletedEventIds: [],
   updated_at: '1970-01-01T00:00:00.000Z',
 };
 
