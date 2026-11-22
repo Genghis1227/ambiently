@@ -11,6 +11,15 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.8.5",
+    date: "November 21, 2026",
+    title: "Fullscreen Chores, Kanban & Canvas Widget Rotation, Hotkeys, Dock Arrow & Restore Layout Fixes",
+    highlights: [
+      "Canvas Rotation, Hotkeys & Hidden Dock Arrow in Fullscreen Chores / Kanban: Lowered expanded Chores Hub and Project Board overlays to non-modal tab-scoped regions below the Navigation Dock and edge expand arrow so auto-carousel rotation, 1–0 / \\ shortcuts, canvas swiping, and Night Mode work seamlessly while expanded.",
+      "Dock Clearance & Exact Tile Restore Geometry: Applied Navigation Dock clearance across fullscreen interactive widgets while keeping photos and media edge-to-edge, fixed 1–0 hotkeys when disabled tabs exist, and preserved exact prior size, position, and rotation when restoring maximized widgets.",
+    ],
+  },
+  {
     version: "v0.8.4",
     date: "November 21, 2026",
     title: "Remove Duplicate Expand Button on Chores & Project Board Tiles",
