@@ -28,7 +28,13 @@ import { useIdleCursor } from './hooks/useIdleCursor';
 import { isCanvasThemeLight } from './data/canvasThemes';
 import { isTimeInNightWindow } from './utils/nightMode';
 import {
+  normalizeIdleScreensaverPhotoOrder,
+  normalizeIdleScreensaverPhotoStyle,
+  normalizeIdleScreensaverPolaroidCount,
+  normalizeIdleScreensaverPolaroidSizeMode,
+  normalizeIdleScreensaverRotationSec,
   normalizeIdleScreensaverTimeoutMin,
+  resolveEffectiveIdleScreensaverTarget,
   resolveScreensaverWeatherLocation,
   shouldBlockIdleScreensaver,
 } from './utils/idleScreensaver';
@@ -950,6 +956,31 @@ export function App() {
     hasActiveModalOrAlarmInDom: false,
   });
   const showIdleScreensaver = isIdleScreensaverActive && !isIdleScreensaverBlocked;
+  const effectiveScreensaver = useMemo(
+    () => resolveEffectiveIdleScreensaverTarget(settings, tabs),
+    [settings, tabs]
+  );
+  const isCanvasScreensaverActive =
+    showIdleScreensaver && effectiveScreensaver.mode === 'canvas';
+  const isPhotoScreensaverActive =
+    showIdleScreensaver && effectiveScreensaver.mode === 'photos';
+  const screensaverCanvasTab = isCanvasScreensaverActive ? effectiveScreensaver.tab : null;
+  const screensaverCanvasWidgets = useMemo(
+    () =>
+      screensaverCanvasTab
+        ? widgets.filter((w) => w.tabId === screensaverCanvasTab.id)
+        : [],
+    [screensaverCanvasTab, widgets]
+  );
+  const screensaverCanvasNotes = useMemo(
+    () =>
+      screensaverCanvasTab
+        ? notes.filter(
+            (n) => (n.tabId || 'tab-corkboard') === screensaverCanvasTab.id || n.tabId === 'all'
+          )
+        : [],
+    [screensaverCanvasTab, notes]
+  );
 
   const handleWakeIdleScreensaver = useCallback(() => {
     setIsIdleScreensaverActive(false);
@@ -957,6 +988,12 @@ export function App() {
       pauseCarouselTemporarily(20000);
     }
   }, [settings.carouselEnabled, pauseCarouselTemporarily]);
+
+  const handlePreviewScreensaver = useCallback(() => {
+    setIsSettingsOpen(false);
+    lockKiosk();
+    setIsIdleScreensaverActive(true);
+  }, [lockKiosk]);
 
   useEffect(() => {
     if (isIdleScreensaverBlocked || isIdleScreensaverActive) {
@@ -1345,10 +1382,18 @@ export function App() {
         bottom: 'pb-20',
       }[settings.dockPosition];
 
-  const isCanvasLight = isCanvasThemeLight(activeTab?.backgroundTheme);
+  const displayedTab = screensaverCanvasTab || activeTab;
+  const displayedTabId = screensaverCanvasTab ? screensaverCanvasTab.id : activeTabIdResolved;
+  const displayedWidgets = screensaverCanvasTab ? screensaverCanvasWidgets : tabWidgets;
+  const displayedNotes = screensaverCanvasTab ? screensaverCanvasNotes : activeCanvasNotes;
+  const displayedDockPadding = isCanvasScreensaverActive ? '' : dockPaddingClasses;
+  const displayedIsCanvasLocked = isCanvasScreensaverActive ? true : isCanvasLocked;
+
+  const isCanvasLight = isCanvasThemeLight(displayedTab?.backgroundTheme);
   const isOledNightClock = Boolean(
     settings.nightModeEnabled && settings.nightModeStyle === 'oled_clock'
   );
+  const hideBackgroundCorkboard = isOledNightClock || isPhotoScreensaverActive;
 
   return (
     <div
@@ -1365,24 +1410,24 @@ export function App() {
         </p>
       </header>
 
-      {/* Full native 1:1 Canvas (visibility hidden under opaque OLED Night Clock to suspend background GIF/video decoding) */}
+      {/* Full native 1:1 Canvas (visibility hidden under opaque OLED Night Clock or Photo Slideshow Screensaver to suspend background decoding) */}
       <div
         className={
-          isOledNightClock
+          hideBackgroundCorkboard
             ? 'w-full h-full invisible pointer-events-none'
             : `w-full h-full${swipeTransitionClass ? ` ${swipeTransitionClass}` : ''}`
         }
       >
         <Corkboard
-          notes={activeCanvasNotes}
-          widgets={tabWidgets}
+          notes={displayedNotes}
+          widgets={displayedWidgets}
           tabs={visibleTabs}
-          activeTabId={activeTabIdResolved}
-          dockPaddingClass={dockPaddingClasses}
-          backgroundTheme={activeTab?.backgroundTheme || 'midnight_dots'}
-          customWallpaperUrl={activeTab?.customWallpaperUrl}
-          backgroundDimLevel={activeTab?.backgroundDimLevel ?? 45}
-          hideNotes={Boolean(activeTab?.hideNotes)}
+          activeTabId={displayedTabId}
+          dockPaddingClass={displayedDockPadding}
+          backgroundTheme={displayedTab?.backgroundTheme || 'midnight_dots'}
+          customWallpaperUrl={displayedTab?.customWallpaperUrl}
+          backgroundDimLevel={displayedTab?.backgroundDimLevel ?? 45}
+          hideNotes={Boolean(displayedTab?.hideNotes)}
           isCreatorOpen={isNoteCreatorOpen}
           onOpenCreator={handleOpenCreator}
           onCloseCreator={handleCloseCreator}
@@ -1401,47 +1446,74 @@ export function App() {
           onUpdateWidget={updateWidget}
           onUpdateTab={updateTab}
           snapToGrid={settings.snapToGrid}
-          isCanvasLocked={isCanvasLocked}
+          isCanvasLocked={displayedIsCanvasLocked}
         />
       </div>
 
-      {/* Navigation Dock - Pinned at Viewport Level (Never obscures canvas tiles) */}
-      <NavigationDock
-        tabs={visibleTabs}
-        activeTabId={activeTabIdResolved}
-        dockPosition={settings.dockPosition}
-        isLocked={isSettingsLocked}
-        isCanvasLocked={isCanvasLocked}
-        onSelectTab={handleSelectTab}
-        onOpenSettings={handleOpenSettings}
-        onOpenShare={handleOpenShare}
-        onToggleNightMode={handleToggleNightMode}
-        onToggleFullscreen={handleToggleFullscreen}
-        isFullscreen={isFullscreen}
-        onConnectFile={handleOpenBackupModal}
-        hasFileBound={hasFileBound}
-        onOpenAddWidget={handleOpenAddWidget}
-        onOpenAddCanvas={handleOpenAddCanvas}
-        onOpenCreateNote={handleOpenCreator}
-        onOpenQuickStart={handleOpenQuickStart}
-        onOpenTrash={handleOpenTrash}
-        trashCount={trashCount}
-        onAutoOrganize={handleAutoOrganizeActiveTab}
-        onUndoOrganize={handleUndoActiveTabLayout}
-        canUndoOrganize={canUndoActiveTabLayout}
-        onToggleMobileCompanion={isMobileViewport ? handleEnterMobileCompanion : undefined}
-        isDockHidden={settings.isDockHidden}
-        onToggleDockHidden={toggleDockHidden}
-        isNightMode={settings.nightModeEnabled}
-      />
+      {/* Navigation Dock - Pinned at Viewport Level (hidden during edge-to-edge Canvas Screensaver) */}
+      {!isCanvasScreensaverActive && (
+        <NavigationDock
+          tabs={visibleTabs}
+          activeTabId={activeTabIdResolved}
+          dockPosition={settings.dockPosition}
+          isLocked={isSettingsLocked}
+          isCanvasLocked={isCanvasLocked}
+          onSelectTab={handleSelectTab}
+          onOpenSettings={handleOpenSettings}
+          onOpenShare={handleOpenShare}
+          onToggleNightMode={handleToggleNightMode}
+          onToggleFullscreen={handleToggleFullscreen}
+          isFullscreen={isFullscreen}
+          onConnectFile={handleOpenBackupModal}
+          hasFileBound={hasFileBound}
+          onOpenAddWidget={handleOpenAddWidget}
+          onOpenAddCanvas={handleOpenAddCanvas}
+          onOpenCreateNote={handleOpenCreator}
+          onOpenQuickStart={handleOpenQuickStart}
+          onOpenTrash={handleOpenTrash}
+          trashCount={trashCount}
+          onAutoOrganize={handleAutoOrganizeActiveTab}
+          onUndoOrganize={handleUndoActiveTabLayout}
+          canUndoOrganize={canUndoActiveTabLayout}
+          onToggleMobileCompanion={isMobileViewport ? handleEnterMobileCompanion : undefined}
+          isDockHidden={settings.isDockHidden}
+          onToggleDockHidden={toggleDockHidden}
+          isNightMode={settings.nightModeEnabled}
+        />
+      )}
 
-      {/* Idle Photo Screensaver Mode (yields automatically to Night Mode, dialogs & alarms) */}
+      {/* Idle Photo / Canvas Screensaver Mode (yields automatically to Night Mode, dialogs & alarms) */}
       {showIdleScreensaver && (
         <Suspense fallback={null}>
           <IdlePhotoScreensaver
             onWake={handleWakeIdleScreensaver}
-            showClock={settings.idleScreensaverShowClock !== false}
-            showWeather={settings.idleScreensaverShowWeather !== false}
+            mode={effectiveScreensaver.mode}
+            photoStyle={normalizeIdleScreensaverPhotoStyle(settings.idleScreensaverPhotoStyle)}
+            mosaicKenBurns={Boolean(settings.idleScreensaverMosaicKenBurns)}
+            polaroidCount={normalizeIdleScreensaverPolaroidCount(
+              settings.idleScreensaverPolaroidCount
+            )}
+            polaroidSizeMode={normalizeIdleScreensaverPolaroidSizeMode(
+              settings.idleScreensaverPolaroidSizeMode
+            )}
+            rotationIntervalSec={normalizeIdleScreensaverRotationSec(
+              settings.idleScreensaverRotationIntervalSec
+            )}
+            photoOrder={normalizeIdleScreensaverPhotoOrder(settings.idleScreensaverPhotoOrder)}
+            showCaptions={settings.idleScreensaverShowCaptions !== false}
+            showDateTaken={settings.idleScreensaverShowDateTaken}
+            showClock={
+              effectiveScreensaver.mode === 'canvas'
+                ? Boolean(settings.idleScreensaverCanvasShowOverlay) &&
+                  settings.idleScreensaverShowClock !== false
+                : settings.idleScreensaverShowClock !== false
+            }
+            showWeather={
+              effectiveScreensaver.mode === 'canvas'
+                ? Boolean(settings.idleScreensaverCanvasShowOverlay) &&
+                  settings.idleScreensaverShowWeather !== false
+                : settings.idleScreensaverShowWeather !== false
+            }
             weatherLocation={screensaverWeatherLocation}
           />
         </Suspense>
@@ -1609,6 +1681,7 @@ export function App() {
               lockKiosk();
             }}
             onOpenQuickStart={() => setIsQuickStartOpen(true)}
+            onPreviewScreensaver={handlePreviewScreensaver}
           />
         )}
 
