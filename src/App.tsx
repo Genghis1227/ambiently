@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback, useMemo, lazy, Suspense } fro
 import { useDashboardStore, flushPendingCloudPush } from './store/dashboardStore';
 import type { AutoOrganizeMode } from './types/dashboard';
 import { useChoreStore } from './store/choreStore';
+import { useKanbanStore } from './stores/useKanbanStore';
 import { NavigationDock } from './components/dock/NavigationDock';
 import { Corkboard } from './components/layout/Corkboard';
 import { PinOverlay } from './components/kiosk/PinOverlay';
@@ -37,6 +38,10 @@ import {
   getBackgroundCanvasWidgetTypes,
   preloadWidgetChunksForTypes,
 } from './utils/widgetPreloader';
+import {
+  resolveVisibleChoreOverlay,
+  resolveVisibleKanbanOverlay,
+} from './utils/fullscreenWidgetOverlay';
 
 const SettingsModal = lazy(() =>
   import('./components/settings/SettingsModal').then((m) => ({ default: m.SettingsModal }))
@@ -64,6 +69,9 @@ const InAppWebViewerModal = lazy(() =>
 );
 const ChoreDashboardView = lazy(() =>
   import('./components/chores/ChoreDashboardView').then((m) => ({ default: m.ChoreDashboardView }))
+);
+const KanbanBoardView = lazy(() =>
+  import('./components/kanban/KanbanBoardView').then((m) => ({ default: m.KanbanBoardView }))
 );
 const ParentChoreDrawer = lazy(() =>
   import('./components/chores/ParentChoreDrawer').then((m) => ({ default: m.ParentChoreDrawer }))
@@ -138,8 +146,11 @@ export function App() {
   const syncRemoteTabChange = useDashboardStore((s) => s.syncRemoteTabChange);
   const applyCommonPhotosToAllWidgets = useDashboardStore((s) => s.applyCommonPhotosToAllWidgets);
   const isChoreFullScreenOpen = useChoreStore((s) => s.isFullScreenOpen);
+  const choreFullScreenContext = useChoreStore((s) => s.fullScreenContext);
   const setChoreFullScreenOpen = useChoreStore((s) => s.setFullScreenOpen);
   const isParentDrawerOpen = useChoreStore((s) => s.isParentDrawerOpen);
+  const kanbanFullScreenOverlay = useKanbanStore((s) => s.fullScreenOverlay);
+  const setKanbanFullScreenOverlay = useKanbanStore((s) => s.setFullScreenOverlay);
 
   // Initialize and check persistent PC Auto-Sync file binding
   useEffect(() => {
@@ -301,6 +312,53 @@ export function App() {
   const isSettingsLocked = isSettingsPinRequired(settings);
   const isCanvasLocked = isCanvasPinLocked(settings);
 
+  const visibleTabs = useMemo(
+    () =>
+      tabs.filter((t) =>
+        t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false
+      ),
+    [tabs]
+  );
+
+  const homeTab = visibleTabs.find((t) => t.isHome) || visibleTabs[0] || tabs[0];
+  const activeTab = visibleTabs.find((t) => t.id === activeTabId) || homeTab;
+  const activeTabIdResolved = activeTab?.id || 'tab-corkboard';
+
+  const tabWidgets = useMemo(
+    () => widgets.filter((w) => w.tabId === activeTabIdResolved),
+    [widgets, activeTabIdResolved]
+  );
+
+  const closeUnscopedOverlays = useCallback(() => {
+    const choreState = useChoreStore.getState();
+    if (
+      choreState.isFullScreenOpen &&
+      (!choreState.fullScreenContext || choreState.fullScreenContext.tabId === null)
+    ) {
+      choreState.setFullScreenOpen(false);
+    }
+    const kanbanState = useKanbanStore.getState();
+    if (kanbanState.fullScreenOverlay && kanbanState.fullScreenOverlay.tabId === null) {
+      kanbanState.setFullScreenOverlay(null);
+    }
+  }, []);
+
+  const handleSelectTab = useCallback(
+    (tabId: string) => {
+      closeUnscopedOverlays();
+      setActiveTabId(tabId);
+    },
+    [closeUnscopedOverlays, setActiveTabId]
+  );
+
+  const handleRotateToTab = useCallback(
+    (tabId: string) => {
+      closeUnscopedOverlays();
+      rotateToTab(tabId);
+    },
+    [closeUnscopedOverlays, rotateToTab]
+  );
+
   // Keyboard shortcuts:
   // '\' (backslash) to toggle toolbar visibility
   // '1'-'9' and '0' (for 10) to switch between canvases
@@ -325,11 +383,10 @@ export function App() {
         return;
       }
 
-      // Never trigger background canvas hotkeys when any modal, PIN pad, or full-screen hub is open
+      // Never trigger background canvas hotkeys when any modal or PIN pad is open
       if (
         pinChallenge ||
         isParentDrawerOpen ||
-        isChoreFullScreenOpen ||
         isSettingsOpen ||
         isShareOpen ||
         isQuickStartOpen ||
@@ -356,10 +413,9 @@ export function App() {
       // Hotkey numbers from 1 to 10 to flip through canvases
       if (/^[0-9]$/.test(e.key)) {
         const index = e.key === '0' ? 9 : parseInt(e.key, 10) - 1;
-        const activeTabs = tabs.filter((t) => !t.deleted_at);
-        if (activeTabs[index]) {
+        if (visibleTabs[index]) {
           e.preventDefault();
-          setActiveTabId(activeTabs[index].id);
+          handleSelectTab(visibleTabs[index].id);
         }
       }
     };
@@ -367,12 +423,11 @@ export function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
     toggleDockHidden,
-    tabs,
-    setActiveTabId,
+    visibleTabs,
+    handleSelectTab,
     activeWebModal,
     pinChallenge,
     isParentDrawerOpen,
-    isChoreFullScreenOpen,
     isSettingsOpen,
     isShareOpen,
     isQuickStartOpen,
@@ -763,18 +818,6 @@ export function App() {
     }
   }, [isInitialized, settings.nightModeEnabled]);
 
-  const visibleTabs = useMemo(
-    () =>
-      tabs.filter((t) =>
-        t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false
-      ),
-    [tabs]
-  );
-
-  const homeTab = visibleTabs.find((t) => t.isHome) || visibleTabs[0] || tabs[0];
-  const activeTab = visibleTabs.find((t) => t.id === activeTabId) || homeTab;
-  const activeTabIdResolved = activeTab?.id || 'tab-corkboard';
-
   // Low-Power Kiosk GPU Mode class sync on root element
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -849,8 +892,7 @@ export function App() {
     : 'this canvas';
 
   const isAnyOverlayOpen = Boolean(
-    isChoreFullScreenOpen ||
-      isParentDrawerOpen ||
+    isParentDrawerOpen ||
       isSettingsOpen ||
       isQuickStartOpen ||
       isAddWidgetOpen ||
@@ -863,10 +905,31 @@ export function App() {
       activeWebModal
   );
 
+  const activeChoreOverlay = resolveVisibleChoreOverlay({
+    isFullScreenOpen: isChoreFullScreenOpen,
+    fullScreenContext: choreFullScreenContext,
+    activeTabId: activeTabIdResolved,
+    activeTabWidgets: tabWidgets,
+  });
+
+  const activeKanbanOverlay = resolveVisibleKanbanOverlay({
+    fullScreenOverlay: kanbanFullScreenOverlay,
+    activeTabId: activeTabIdResolved,
+    activeTabWidgets: tabWidgets,
+  });
+
+  const isFullscreenWidgetOverlayVisible = Boolean(activeChoreOverlay || activeKanbanOverlay);
+
   const isMobileCompanionActive = isMobileViewport && !forceDesktopMode;
 
   useEffect(() => {
-    if (isMobileCompanionActive || isCanvasLocked || isAnyOverlayOpen || settings.nightModeEnabled) {
+    if (
+      isMobileCompanionActive ||
+      isCanvasLocked ||
+      isAnyOverlayOpen ||
+      isFullscreenWidgetOverlayVisible ||
+      settings.nightModeEnabled
+    ) {
       return;
     }
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -898,6 +961,7 @@ export function App() {
   }, [
     activeTabIdResolved,
     isAnyOverlayOpen,
+    isFullscreenWidgetOverlayVisible,
     isCanvasLocked,
     isMobileCompanionActive,
     settings.nightModeEnabled,
@@ -915,12 +979,12 @@ export function App() {
     isBlocked: isAnyOverlayOpen || Boolean(settings.nightModeEnabled),
     dockPosition: settings.dockPosition,
     isDockHidden: Boolean(settings.isDockHidden),
-    onSelectTab: setActiveTabId,
+    onSelectTab: handleSelectTab,
   });
 
   const widgetSafetyOverlays = (
     <>
-      <MovedWidgetToast onSelectTab={setActiveTabId} />
+      <MovedWidgetToast onSelectTab={handleSelectTab} />
       <LayoutUndoToast />
       <CanvasSwipePreviewPill preview={swipePreview} />
       {pendingDeleteWidget && (
@@ -994,7 +1058,7 @@ export function App() {
 
       const currentIndex = tabIds.indexOf(activeTabIdResolved);
       const nextIndex = (currentIndex === -1 ? 1 : currentIndex + 1) % tabIds.length;
-      rotateToTab(tabIds[nextIndex]);
+      handleRotateToTab(tabIds[nextIndex]);
     }, rotateDurationSec * 1000);
 
     return () => clearInterval(interval);
@@ -1005,13 +1069,8 @@ export function App() {
     rotateDurationSec,
     visibleTabIds,
     activeTabIdResolved,
-    rotateToTab,
+    handleRotateToTab,
   ]);
-
-  const tabWidgets = useMemo(
-    () => widgets.filter((w) => w.tabId === activeTabIdResolved),
-    [widgets, activeTabIdResolved]
-  );
 
   // Strict per-canvas sticky notes (plus notes explicitly pinned to 'all' canvases)
   const activeCanvasNotes = useMemo(
@@ -1054,7 +1113,7 @@ export function App() {
             activeTabId={activeTabIdResolved}
             notes={notes}
             widgets={tabWidgets}
-            onSelectTab={setActiveTabId}
+            onSelectTab={handleSelectTab}
             onAddNote={addNote}
             onUpdateNote={updateNote}
             onDeleteNote={deleteNote}
@@ -1066,10 +1125,34 @@ export function App() {
             onSwipePointerDown={handleCanvasSwipePointerDown}
             transitionClass={swipeTransitionClass}
           />
-          {isChoreFullScreenOpen && (
+          {activeChoreOverlay && (
             <ChoreDashboardView
-              isOpen={isChoreFullScreenOpen}
+              isOpen={true}
+              mode="overlay"
+              title={activeChoreOverlay.title}
+              config={activeChoreOverlay.config}
+              dockPaddingClass=""
               onClose={() => setChoreFullScreenOpen(false)}
+            />
+          )}
+          {activeKanbanOverlay && (
+            <KanbanBoardView
+              isOpen={true}
+              mode="overlay"
+              widgetId={activeKanbanOverlay.widgetId}
+              title={activeKanbanOverlay.title}
+              config={activeKanbanOverlay.config}
+              isLight={activeKanbanOverlay.isLight}
+              dockPaddingClass=""
+              onUpdateConfig={(updates) => {
+                const live = useDashboardStore
+                  .getState()
+                  .widgets.find((w) => w.id === activeKanbanOverlay.widgetId);
+                if (live) {
+                  void updateWidget(live.id, { config: { ...live.config, ...updates } });
+                }
+              }}
+              onClose={() => setKanbanFullScreenOverlay(null)}
             />
           )}
           {isParentDrawerOpen && <ParentChoreDrawer />}
@@ -1079,7 +1162,7 @@ export function App() {
           visibleTabs={visibleTabs}
           activeTabId={activeTabIdResolved}
           isAnyModalOpen={isAnyOverlayOpen}
-          onSelectTab={setActiveTabId}
+          onSelectTab={handleSelectTab}
         />
         {widgetSafetyOverlays}
         {isSettingsOpen && (
@@ -1100,7 +1183,10 @@ export function App() {
               isOpen={isQuickStartOpen}
               onClose={() => setIsQuickStartOpen(false)}
               onOpenSettings={handleOpenSettings}
-              onOpenChoresHub={() => setChoreFullScreenOpen(true)}
+              onOpenChoresHub={() => {
+                setKanbanFullScreenOverlay(null);
+                setChoreFullScreenOpen(true);
+              }}
             />
           </Suspense>
         )}
@@ -1194,7 +1280,7 @@ export function App() {
         dockPosition={settings.dockPosition}
         isLocked={isSettingsLocked}
         isCanvasLocked={isCanvasLocked}
-        onSelectTab={setActiveTabId}
+        onSelectTab={handleSelectTab}
         onOpenSettings={handleOpenSettings}
         onOpenShare={handleOpenShare}
         onToggleNightMode={handleToggleNightMode}
@@ -1239,7 +1325,7 @@ export function App() {
         visibleTabs={visibleTabs}
         activeTabId={activeTabIdResolved}
         isAnyModalOpen={isAnyOverlayOpen}
-        onSelectTab={setActiveTabId}
+        onSelectTab={handleSelectTab}
       />
 
       {/* Dedicated Plex Pairing Modal */}
@@ -1390,7 +1476,10 @@ export function App() {
             onOpenSettings={handleOpenSettings}
             onOpenAddWidget={isCanvasLocked ? undefined : () => setIsAddWidgetOpen(true)}
             onOpenCreateNote={isCanvasLocked ? undefined : () => setIsNoteCreatorOpen(true)}
-            onOpenChoresHub={() => setChoreFullScreenOpen(true)}
+            onOpenChoresHub={() => {
+              setKanbanFullScreenOverlay(null);
+              setChoreFullScreenOpen(true);
+            }}
           />
         )}
 
@@ -1405,10 +1494,36 @@ export function App() {
         )}
 
         {/* Full-Screen Chore & Reward Hub View */}
-        {isChoreFullScreenOpen && (
+        {activeChoreOverlay && (
           <ChoreDashboardView
-            isOpen={isChoreFullScreenOpen}
+            isOpen={true}
+            mode="overlay"
+            title={activeChoreOverlay.title}
+            config={activeChoreOverlay.config}
+            dockPaddingClass={dockPaddingClasses}
             onClose={() => setChoreFullScreenOpen(false)}
+          />
+        )}
+
+        {/* Full-Screen Kanban Board View */}
+        {activeKanbanOverlay && (
+          <KanbanBoardView
+            isOpen={true}
+            mode="overlay"
+            widgetId={activeKanbanOverlay.widgetId}
+            title={activeKanbanOverlay.title}
+            config={activeKanbanOverlay.config}
+            isLight={activeKanbanOverlay.isLight}
+            dockPaddingClass={dockPaddingClasses}
+            onUpdateConfig={(updates) => {
+              const live = useDashboardStore
+                .getState()
+                .widgets.find((w) => w.id === activeKanbanOverlay.widgetId);
+              if (live) {
+                void updateWidget(live.id, { config: { ...live.config, ...updates } });
+              }
+            }}
+            onClose={() => setKanbanFullScreenOverlay(null)}
           />
         )}
 

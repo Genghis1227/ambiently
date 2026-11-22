@@ -43,6 +43,10 @@ import {
 } from '../../utils/photoSyncPolicy';
 import { isStickerCapableWidget, isWidgetStickerMode } from '../../utils/widgetStickerMode';
 import {
+  buildMaximizedFreeformPos,
+  buildRestoredFreeformPos,
+} from '../../utils/fullscreenWidgetOverlay';
+import {
   MAX_CANVASES,
   type DashboardWidget,
   type ImageWidgetConfig,
@@ -1221,25 +1225,15 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
         Boolean(widget.freeformPos?.isFullScreen) || widget.config?.displayMode === 'hub';
 
       if (choreDisplayMode === 'hub') {
-        freeformPosUpdate = {
-          ...existingPos,
-          xRatio: 0,
-          yRatio: 0,
-          wRatio: 1,
-          hRatio: 1,
-          rotation: 0,
-          isFullScreen: true,
-        };
+        freeformPosUpdate = buildMaximizedFreeformPos(existingPos);
       } else if (wasFullScreen) {
-        freeformPosUpdate = {
-          ...existingPos,
+        freeformPosUpdate = buildRestoredFreeformPos(existingPos, {
           xRatio: 0.1,
           yRatio: 0.1,
           wRatio: 0.45,
           hRatio: 0.55,
           rotation: 0,
-          isFullScreen: false,
-        };
+        });
       }
     } else if (effectiveType === 'meals') {
       const orderedSlots: MealSlot[] = (['breakfast', 'lunch', 'dinner'] as const).filter((s) =>
@@ -1272,25 +1266,15 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
         Boolean(widget.freeformPos?.isFullScreen) || widget.config?.displayMode === 'view';
 
       if (kanbanDisplayMode === 'view') {
-        freeformPosUpdate = {
-          ...existingPos,
-          xRatio: 0,
-          yRatio: 0,
-          wRatio: 1,
-          hRatio: 1,
-          rotation: 0,
-          isFullScreen: true,
-        };
+        freeformPosUpdate = buildMaximizedFreeformPos(existingPos);
       } else if (wasFullScreen) {
-        freeformPosUpdate = {
-          ...existingPos,
+        freeformPosUpdate = buildRestoredFreeformPos(existingPos, {
           xRatio: 0.1,
           yRatio: 0.1,
           wRatio: 0.45,
           hRatio: 0.55,
           rotation: 0,
-          isFullScreen: false,
-        };
+        });
       }
     } else if (effectiveType === 'finance') {
       configUpdates.watchlist = resolveWatchlistItems(financeWatchlist);

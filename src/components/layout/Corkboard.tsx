@@ -135,6 +135,11 @@ import {
   resolveWidgetToolbarPlacement,
   shouldShowWidgetToolbarFullscreenButton,
 } from '../../utils/widgetToolbarPlacement';
+import {
+  buildMaximizedFreeformPos,
+  buildRestoredFreeformPos,
+  resolveFullScreenCardLayoutClasses,
+} from '../../utils/fullscreenWidgetOverlay';
 import { isWidgetStickerMode } from '../../utils/widgetStickerMode';
 import { inferCuratedCategoryId } from '../../services/photos';
 import {
@@ -425,6 +430,8 @@ const MemoizedCanvasWidgetBody: React.FC<CanvasWidgetBodyProps> = React.memo(({
           </React.Suspense>
         ) : (
           <ChoreWidget
+            widgetId={widget.id}
+            tabId={widget.tabId}
             title={widget.title}
             config={widget.config}
             isLight={isWidgetLight}
@@ -457,6 +464,7 @@ const MemoizedCanvasWidgetBody: React.FC<CanvasWidgetBodyProps> = React.memo(({
         ) : (
           <KanbanWidget
             widgetId={widget.id}
+            tabId={widget.tabId}
             title={widget.title}
             config={widget.config}
             isLight={isWidgetLight}
@@ -725,6 +733,9 @@ const MemoizedCanvasWidgetCard: React.FC<MemoizedCanvasWidgetCardProps> = React.
     showLayersAction ||
     showFullScreenAction ||
     showRemoveAction;
+  const fullScreenClasses = isFullScreen
+    ? resolveFullScreenCardLayoutClasses(widget.type, dockPaddingClass)
+    : null;
 
   const cardSurfaceClasses = isFramelessWidget
     ? isWidgetLight
@@ -812,10 +823,8 @@ const MemoizedCanvasWidgetCard: React.FC<MemoizedCanvasWidgetCardProps> = React.
             } as React.CSSProperties)
       }
       className={`group ${
-        isFullScreen
-          ? widget.type === 'meals'
-            ? 'rounded-none border-0 p-4 overflow-hidden'
-            : 'rounded-none border-0 p-0 overflow-hidden'
+        isFullScreen && fullScreenClasses
+          ? fullScreenClasses.outerClass
           : isFramelessWidget
           ? widget.type === 'photo_frame'
             ? 'rounded-2xl border-0 p-0'
@@ -1021,15 +1030,7 @@ const MemoizedCanvasWidgetCard: React.FC<MemoizedCanvasWidgetCardProps> = React.
                     e.stopPropagation();
                     if (isCompactToolbar) onSetExpandedCompactToolbarId(null);
                     if (isFullScreen) {
-                      const nextPos = {
-                        ...pos,
-                        xRatio: 0.1,
-                        yRatio: 0.1,
-                        wRatio: 0.45,
-                        hRatio: 0.5,
-                        rotation: 0,
-                        isFullScreen: false,
-                      };
+                      const nextPos = buildRestoredFreeformPos(pos);
                       if (widget.type === 'chores' && canUpdateWidget) {
                         handlersRef.current?.onUpdateWidget?.(widget.id, {
                           freeformPos: nextPos,
@@ -1044,15 +1045,7 @@ const MemoizedCanvasWidgetCard: React.FC<MemoizedCanvasWidgetCardProps> = React.
                         handlersRef.current?.onUpdateWidgetPos?.(widget.id, widget.gridPos, nextPos);
                       }
                     } else {
-                      const nextPos = {
-                        ...pos,
-                        xRatio: 0,
-                        yRatio: 0,
-                        wRatio: 1,
-                        hRatio: 1,
-                        rotation: 0,
-                        isFullScreen: true,
-                      };
+                      const nextPos = buildMaximizedFreeformPos(pos);
                       if (widget.type === 'chores' && canUpdateWidget) {
                         handlersRef.current?.onUpdateWidget?.(widget.id, {
                           freeformPos: nextPos,
@@ -1145,7 +1138,9 @@ const MemoizedCanvasWidgetCard: React.FC<MemoizedCanvasWidgetCardProps> = React.
           isFramelessWidget && widget.type === 'photo_frame' && widget.config?.displayStyle === 'polaroid'
             ? 'overflow-visible'
             : 'overflow-hidden'
-        } rounded-[inherit]`}
+        } rounded-[inherit]${
+          fullScreenClasses?.innerPaddingClass ? ` ${fullScreenClasses.innerPaddingClass}` : ''
+        }`}
       >
         <MemoizedCanvasWidgetBody
           widget={widget}

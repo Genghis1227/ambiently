@@ -171,6 +171,13 @@ export interface FreeformPosition {
   zIndex: number;
   rotation: number; // degrees (-60 to 60)
   isFullScreen?: boolean;
+  restorePos?: {
+    xRatio: number;
+    yRatio: number;
+    wRatio: number;
+    hRatio: number;
+    rotation: number;
+  };
   isBackground?: boolean;
   isShoppingList?: boolean;
   isPinnedToCanvas?: boolean;

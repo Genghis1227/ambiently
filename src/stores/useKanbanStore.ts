@@ -13,6 +13,7 @@ import {
   type KanbanChecklistItem,
   type KanbanColumnId,
   type KanbanEngineSnapshot,
+  type KanbanWidgetConfig,
 } from '../types/kanban';
 
 const MAX_TOMBSTONES = 500;
@@ -323,6 +324,14 @@ export interface UpdateKanbanCardInput {
   checklist?: KanbanChecklistItem[];
 }
 
+export interface KanbanFullScreenOverlayContext {
+  widgetId: string;
+  tabId: string | null;
+  title?: string;
+  config?: Partial<KanbanWidgetConfig>;
+  isLight?: boolean;
+}
+
 export interface KanbanStoreState {
   isInitialized: boolean;
   snapshot: KanbanEngineSnapshot;
@@ -383,6 +392,8 @@ export interface KanbanStoreState {
     eventType: 'INSERT' | 'UPDATE' | 'DELETE'
   ) => Promise<void>;
   applyRemoteKanbanSnapshot: (remote: KanbanEngineSnapshot) => Promise<void>;
+  fullScreenOverlay: KanbanFullScreenOverlayContext | null;
+  setFullScreenOverlay: (overlay: KanbanFullScreenOverlayContext | null) => void;
   resetForBoardSwitch: () => void;
 }
 
@@ -435,6 +446,9 @@ export const useKanbanStore = create<KanbanStoreState>((set, get) => ({
   snapshot: DEFAULT_KANBAN_SNAPSHOT,
   boards: DEFAULT_KANBAN_BOARDS,
   cards: DEFAULT_KANBAN_CARDS,
+  fullScreenOverlay: null,
+
+  setFullScreenOverlay: (overlay) => set({ fullScreenOverlay: overlay }),
 
   initKanbanStore: async () => {
     if (!hasIndexedDB()) {
@@ -1266,6 +1280,7 @@ export const useKanbanStore = create<KanbanStoreState>((set, get) => ({
       snapshot: DEFAULT_KANBAN_SNAPSHOT,
       boards: DEFAULT_KANBAN_BOARDS,
       cards: DEFAULT_KANBAN_CARDS,
+      fullScreenOverlay: null,
     });
   },
 }));

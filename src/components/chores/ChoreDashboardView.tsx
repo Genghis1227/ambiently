@@ -145,7 +145,8 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
         !editingProposal &&
         !isProposalsTrayOpen &&
         !isTrophyCaseOpen &&
-        !useChoreStore.getState().isParentDrawerOpen
+        !useChoreStore.getState().isParentDrawerOpen &&
+        !(typeof document !== 'undefined' && document.querySelector('[role="dialog"], [aria-modal="true"]'))
       ) {
         onClose();
       }
@@ -915,6 +916,9 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
 
   return (
     <div
+      role={mode === 'overlay' ? 'region' : undefined}
+      aria-label={mode === 'overlay' ? resolvedHeaderTitle : undefined}
+      data-fullscreen-widget-overlay={mode === 'overlay' ? 'true' : undefined}
       className={
         mode === 'canvas'
           ? `w-full h-full flex flex-col overflow-hidden select-none ${
@@ -922,7 +926,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
                 ? 'bg-slate-50/92 text-slate-800'
                 : 'bg-[#0c1118]/90 text-slate-100'
             } ${dockPaddingClass || ''}`
-          : 'fixed inset-0 z-[75] bg-[#0c1118]/98 backdrop-blur-xl text-slate-100 flex flex-col overflow-hidden select-none'
+          : `fixed inset-0 z-[60] bg-[#0c1118]/98 backdrop-blur-xl text-slate-100 flex flex-col overflow-hidden select-none ${dockPaddingClass || ''}`.trim()
       }
     >
       {/* Top Bar */}
