@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.5] - 2026-11-21
+
+### Fixed
+- **Fullscreen Widget Overlays, Rotation, Hotkeys & Dock Access (`App.tsx`, `fullscreenWidgetOverlay.ts`, `ChoreDashboardView.tsx`, `KanbanBoardView.tsx`, `useChoreStore.ts`, `useKanbanStore.ts`):**
+  - Converted expanded **Chores** (`ChoreDashboardView`) and **Project Board / Kanban** (`KanbanBoardView`) full-screen overlays from blocking `isAnyOverlayOpen` / `role="dialog"` layers into tab-scoped non-modal regions (`role="region"`, `z-[60]`) rendered cleanly below the **Navigation Dock** & hidden-toolbar expand arrow (`z-[65]`), swipe preview pill, Night Mode (`z-[70]`), and modal dialogs.
+  - Restored auto-carousel canvas rotation, `1`–`0` / `\` keyboard shortcuts (indexing `visibleTabs` cleanly even when disabled tabs exist), horizontal canvas swiping, cross-tab kitchen timer alarm switching, visible dock clearance (`dockPaddingClass`), and nested dialog `Escape` precedence while Chores or Kanban is expanded fullscreen.
+  - Cleared Chores/Kanban fullscreen overlays and parent drawer state cleanly inside `resetForBoardSwitch()` during board switches.
+- **Fullscreen Canvas Widget Padding & Geometry Restore (`Corkboard.tsx`, `WidgetSettingsModal.tsx`, `dashboard.ts`):**
+  - Added `resolveFullScreenCardLayoutClasses()` so maximized interactive widgets (`calendar`, `rss`, `finance`, `meals`, `chalkboard`, etc.) clear visible Navigation Dock rails without clipping while keeping `photo_frame`, `image`, and `embed` edge-to-edge full-bleed.
+  - Snapshotted `restorePos` on `FreeformPosition` (`buildMaximizedFreeformPos()` / `buildRestoredFreeformPos()`) so minimizing any maximized widget from the floating toolbar or Tile Settings restores its exact prior position, size, and rotation.
+
 ## [0.8.4] - 2026-11-21
 
 ### Fixed

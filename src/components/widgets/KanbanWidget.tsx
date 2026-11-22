@@ -8,6 +8,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useKanbanStore } from '../../stores/useKanbanStore';
+import { useChoreStore } from '../../stores/useChoreStore';
 import { useDashboardStore } from '../../store/dashboardStore';
 import {
   KANBAN_COLUMNS,
@@ -36,12 +37,10 @@ const KanbanArchiveDrawer = React.lazy(() =>
 const KanbanConfirmDialog = React.lazy(() =>
   import('../kanban/KanbanConfirmDialog').then((m) => ({ default: m.KanbanConfirmDialog }))
 );
-const KanbanBoardView = React.lazy(() =>
-  import('../kanban/KanbanBoardView').then((m) => ({ default: m.KanbanBoardView }))
-);
 
 export interface KanbanWidgetProps {
   widgetId: string;
+  tabId?: string;
   title?: string;
   config?: Partial<KanbanWidgetConfig>;
   isLight?: boolean;
@@ -52,6 +51,8 @@ export interface KanbanWidgetProps {
 
 export const KanbanWidget: React.FC<KanbanWidgetProps> = ({
   widgetId,
+  tabId,
+  title,
   config,
   isLight = false,
   onUpdateConfig,
@@ -166,7 +167,6 @@ export const KanbanWidget: React.FC<KanbanWidgetProps> = ({
   }>({ open: false, mode: 'create' });
   const [isArchiveOpen, setIsArchiveOpen] = useState(false);
   const [confirmClearDoneOpen, setConfirmClearDoneOpen] = useState(false);
-  const [isFullViewOpen, setIsFullViewOpen] = useState(false);
 
   const tileRootRef = useRef<HTMLDivElement>(null);
 
@@ -407,7 +407,18 @@ export const KanbanWidget: React.FC<KanbanWidgetProps> = ({
               if (onOpenFullScreen) {
                 onOpenFullScreen();
               } else {
-                setIsFullViewOpen(true);
+                useChoreStore.getState().setFullScreenOpen(false);
+                useKanbanStore.getState().setFullScreenOverlay({
+                  widgetId,
+                  tabId: tabId ?? null,
+                  title,
+                  config: {
+                    widgetInstanceId: widgetId,
+                    activeBoardId: effectiveBoardId,
+                    activeColumnId: localColumnId,
+                  },
+                  isLight,
+                });
               }
             }}
             title="Expand Full 3-Column Board View"
@@ -777,27 +788,6 @@ export const KanbanWidget: React.FC<KanbanWidgetProps> = ({
             onConfirm={async () => {
               setConfirmClearDoneOpen(false);
               await clearDoneCards(activeBoard.id);
-            }}
-          />
-        )}
-
-        {isFullViewOpen && (
-          <KanbanBoardView
-            isOpen={isFullViewOpen}
-            onClose={() => setIsFullViewOpen(false)}
-            mode="overlay"
-            widgetId={widgetId}
-            config={{
-              widgetInstanceId: widgetId,
-              activeBoardId: effectiveBoardId,
-              activeColumnId: localColumnId,
-            }}
-            isLight={isLight}
-            onUpdateConfig={(updates) => {
-              if (updates.activeBoardId) {
-                setLocalBoardId(updates.activeBoardId);
-              }
-              onUpdateConfig?.(updates);
             }}
           />
         )}

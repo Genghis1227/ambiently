@@ -681,6 +681,8 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return (
           <div className="max-h-96 overflow-y-auto">
             <ChoreWidget
+              widgetId={widget.id}
+              tabId={widget.tabId}
               title={widget.title}
               config={widget.config}
               isLight={isLight}
@@ -709,6 +711,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
           <div className="h-[26rem] overflow-hidden">
             <KanbanWidget
               widgetId={widget.id}
+              tabId={widget.tabId}
               title={widget.title}
               config={widget.config}
               isLight={isLight}

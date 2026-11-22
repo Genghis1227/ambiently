@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import {
   Archive,
   ArchiveRestore,
@@ -127,6 +126,12 @@ export const KanbanBoardView: React.FC<KanbanBoardViewProps> = ({
     if (!isOpen || mode !== 'overlay' || !onClose) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
+        typeof document !== 'undefined' &&
+        document.querySelector('[role="dialog"], [aria-modal="true"]')
+      ) {
+        return;
+      }
+      if (
         e.key === 'Escape' &&
         !editingCardId &&
         !boardModalState.open &&
@@ -206,9 +211,7 @@ export const KanbanBoardView: React.FC<KanbanBoardViewProps> = ({
     <div
       ref={boardRootRef}
       data-no-drag="true"
-      className={`w-full h-full flex flex-col overflow-hidden ${containerSurfaceClass} ${
-        mode === 'canvas' ? dockPaddingClass : ''
-      }`}
+      className={`w-full h-full flex flex-col overflow-hidden ${containerSurfaceClass} ${dockPaddingClass || ''}`}
     >
       {/* Top Bar */}
       <div
@@ -538,18 +541,15 @@ export const KanbanBoardView: React.FC<KanbanBoardViewProps> = ({
     return viewContent;
   }
 
-  if (typeof document === 'undefined') return null;
-
-  return createPortal(
+  return (
     <div
-      role="dialog"
-      aria-modal="true"
+      role="region"
+      aria-label={activeBoard?.name || 'Full-Screen Project Board'}
+      data-fullscreen-widget-overlay="true"
       data-no-drag="true"
-      onPointerDown={(e) => e.stopPropagation()}
-      className="fixed inset-0 z-[85] flex flex-col bg-black/80 backdrop-blur-md"
+      className="fixed inset-0 z-[60] flex flex-col bg-black/80 backdrop-blur-md"
     >
       {viewContent}
-    </div>,
-    document.body
+    </div>
   );
 };

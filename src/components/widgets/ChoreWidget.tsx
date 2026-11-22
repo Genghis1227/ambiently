@@ -18,6 +18,7 @@ import {
   Users,
 } from 'lucide-react';
 import { useChoreStore, getPendingParentActionCounts } from '../../stores/useChoreStore';
+import { useKanbanStore } from '../../stores/useKanbanStore';
 import { useProfileStore } from '../../stores/useProfileStore';
 import { useDashboardStore } from '../../store/dashboardStore';
 import type {
@@ -58,6 +59,8 @@ const TrophyCaseModal = React.lazy(() =>
 );
 
 export interface ChoreWidgetProps {
+  widgetId?: string;
+  tabId?: string;
   title?: string;
   config?: ChoreWidgetConfig & { includeParents?: boolean };
   isLight?: boolean;
@@ -77,6 +80,8 @@ interface ChildChoreRowItem {
 }
 
 export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
+  widgetId,
+  tabId,
   title = 'Family Chores',
   config,
   isLight = false,
@@ -508,7 +513,13 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
 
   const handleMaximizeFullScreen = (e: React.MouseEvent) => {
     e.stopPropagation();
-    useChoreStore.getState().setFullScreenOpen(true);
+    useKanbanStore.getState().setFullScreenOverlay(null);
+    useChoreStore.getState().setFullScreenOpen(true, {
+      tabId: tabId ?? null,
+      widgetId,
+      title,
+      config,
+    });
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ambiently:open-chores-fullscreen'));
     }

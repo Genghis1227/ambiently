@@ -5,6 +5,7 @@ import type {
   ChoreEngineSnapshot,
   ChoreHouseholdSettings,
   ChoreTemplate,
+  ChoreWidgetConfig,
   LedgerEntry,
   Profile,
   TrophyItem,
@@ -198,11 +199,19 @@ function scheduleNextMidnightTimeout(onMidnight: () => void): void {
   }, msUntilMidnight);
 }
 
+export interface ChoreFullScreenOverlayContext {
+  tabId: string | null;
+  widgetId?: string;
+  title?: string;
+  config?: ChoreWidgetConfig;
+}
+
 export interface ChoreStoreState {
   isInitialized: boolean;
   snapshot: ChoreEngineSnapshot;
   pendingParentActionsCount: number;
   isFullScreenOpen: boolean;
+  fullScreenContext: ChoreFullScreenOverlayContext | null;
   isParentDrawerOpen: boolean;
   activeParentTab: 'approvals' | 'pricing' | 'fulfillment' | 'ledger' | 'templates';
 
@@ -213,7 +222,10 @@ export interface ChoreStoreState {
   getProfileLifetimePoints: (profileId: string) => number;
 
   // UI Navigation Actions
-  setFullScreenOpen: (open: boolean) => void;
+  setFullScreenOpen: (
+    open: boolean,
+    context?: ChoreFullScreenOverlayContext | null
+  ) => void;
   setParentDrawerOpen: (
     open: boolean,
     initialTab?: 'approvals' | 'pricing' | 'fulfillment' | 'ledger' | 'templates'
@@ -323,6 +335,7 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => {
     snapshot: DEFAULT_CHORE_SNAPSHOT,
     pendingParentActionsCount: selectPendingParentActionsCount(DEFAULT_CHORE_SNAPSHOT),
     isFullScreenOpen: false,
+    fullScreenContext: null,
     isParentDrawerOpen: false,
     activeParentTab: 'approvals',
 
@@ -342,7 +355,11 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => {
     getProfileLifetimePoints: (profileId) =>
       selectProfilePointsFromLedger(get().snapshot.ledger, profileId).lifetimePoints,
 
-    setFullScreenOpen: (open) => set({ isFullScreenOpen: open }),
+    setFullScreenOpen: (open, context = null) =>
+      set({
+        isFullScreenOpen: open,
+        fullScreenContext: open ? (context ?? null) : null,
+      }),
     setParentDrawerOpen: (open, initialTab) =>
       set((state) => ({
         isParentDrawerOpen: open,
@@ -462,7 +479,12 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => {
     },
 
     resetForBoardSwitch: () => {
-      commitSnapshotState(DEFAULT_CHORE_SNAPSHOT, { isInitialized: false });
+      commitSnapshotState(DEFAULT_CHORE_SNAPSHOT, {
+        isInitialized: false,
+        isFullScreenOpen: false,
+        fullScreenContext: null,
+        isParentDrawerOpen: false,
+      });
     },
 
     completeChore: async (instanceId, completions, now = new Date()) => {
