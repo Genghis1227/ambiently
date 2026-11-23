@@ -25,6 +25,12 @@ import {
   findOpenCanvasSpot,
 } from '../utils/autoLayout';
 import type { CanvasBlueprintId } from '../utils/canvasBlueprints';
+import {
+  resolveCurrentDisplayOrientation,
+  resolveCurrentViewportAspectRatio,
+  resolvePortraitSpawnDimensions,
+  type DisplayOrientation,
+} from '../utils/displayOrientation';
 import { getDefaultWidgetStickerMode, isStickerCapableWidget } from '../utils/widgetStickerMode';
 import type { PhotoTargetSyncMeta, PlexPhotoSyncConfig } from '../utils/photoSyncPolicy';
 import type { PhotoItem } from '../services/photos';
@@ -410,7 +416,11 @@ interface DashboardState {
   syncRemoteTabChange: (tab: DashboardTab, eventType: 'INSERT' | 'UPDATE' | 'DELETE') => void;
 
   // Auto-Organize & Layout Undo Actions
-  autoOrganizeCanvas: (tabId: string, mode?: AutoOrganizeMode) => Promise<void>;
+  autoOrganizeCanvas: (
+    tabId: string,
+    mode?: AutoOrganizeMode,
+    orientation?: DisplayOrientation
+  ) => Promise<void>;
   undoAutoOrganize: () => Promise<void>;
   undoLayoutChange: (tabId?: string) => Promise<boolean>;
   dismissLayoutUndoToast: () => void;
@@ -733,6 +743,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         existingWidgets: state.widgets,
         defaultWidgetStyle: state.settings.defaultWidgetStyle || 'auto',
         nowMs,
+        orientation: resolveCurrentDisplayOrientation(),
       });
     }
 
@@ -787,6 +798,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       existingWidgets: state.widgets,
       defaultWidgetStyle: state.settings.defaultWidgetStyle || 'auto',
       nowMs,
+      orientation: resolveCurrentDisplayOrientation(),
     });
 
     const tabUpdates: Partial<DashboardTab> = {};
@@ -1346,7 +1358,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     });
   },
 
-  autoOrganizeCanvas: async (tabId, mode = 'bento') => {
+  autoOrganizeCanvas: async (tabId, mode = 'bento', orientation) => {
     const state = get();
     const targetTab = state.tabs.find((t) => t.id === tabId);
     const hideUnpinned = Boolean(targetTab?.hideNotes);
@@ -1373,10 +1385,15 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       if (n.freeformPos) prevNotePositions[n.id] = { ...n.freeformPos };
     }
 
+    const resolvedOrientation = orientation ?? resolveCurrentDisplayOrientation();
     const { widgetPositions, notePositions } = computeNonOverlappingLayout(
       tabWidgets,
       tabNotes,
-      mode
+      mode,
+      {
+        orientation: resolvedOrientation,
+        viewportAspectRatio: resolveCurrentViewportAspectRatio(),
+      }
     );
 
     const nowMs = Date.now();
@@ -1968,8 +1985,14 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const state = get();
     const id = partialWidget.id || 'widget-' + Date.now();
     const targetTabId = partialWidget.tabId || state.activeTabId;
-    const targetW = partialWidget.freeformPos?.wRatio || 0.35;
-    const targetH = partialWidget.freeformPos?.hRatio || 0.45;
+    const requestedW = partialWidget.freeformPos?.wRatio || 0.35;
+    const requestedH = partialWidget.freeformPos?.hRatio || 0.45;
+    const hasExplicitPlacement =
+      typeof partialWidget.freeformPos?.xRatio === 'number' &&
+      typeof partialWidget.freeformPos?.yRatio === 'number';
+    const { wRatio: targetW, hRatio: targetH } = hasExplicitPlacement
+      ? { wRatio: requestedW, hRatio: requestedH }
+      : resolvePortraitSpawnDimensions(resolveCurrentDisplayOrientation(), requestedW, requestedH);
     const existingBoxes = getExistingBoxesForTab(targetTabId, state.widgets, state.notes);
     const openPos = findOpenCanvasSpot(existingBoxes, targetW, targetH, 0);
 
@@ -1996,6 +2019,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         ? {
             ...openPos,
             ...partialWidget.freeformPos,
+            ...(!hasExplicitPlacement ? { wRatio: targetW, hRatio: targetH } : {}),
           }
         : openPos,
       config: resolvedConfig,

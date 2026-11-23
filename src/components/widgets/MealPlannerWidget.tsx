@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import {
   Utensils,
   Plus,
@@ -37,6 +37,7 @@ import {
 } from '../../utils/ingredientAggregator';
 import { isAmbientlyInNightMode } from '../../utils/confetti';
 import { localDateKey } from '../../utils/dateKey';
+import { resolveAdaptiveMealWeekColumns } from '../../utils/displayOrientation';
 import {
   ALL_MEAL_SLOTS,
   getDisplaySlotsForDay,
@@ -164,6 +165,23 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
       setClockTick(Date.now());
     }, 60_000);
     return () => window.clearInterval(id);
+  }, []);
+
+  // Auto-measure tile width for adaptive portrait Full-Week columns
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState<number>(0);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const w = Math.round(entry.contentRect.width);
+        setContainerWidth((prev) => (prev === w ? prev : w));
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
   // Ensure store hydration if mounted standalone
@@ -762,6 +780,7 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
 
   return (
     <div
+      ref={containerRef}
       className={`h-full flex flex-col overflow-hidden select-none p-3 md:p-4 ${
         isLight ? 'text-slate-800' : 'text-slate-100'
       }`}
@@ -1829,7 +1848,11 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
               className={
                 effectiveScope === 'three_day'
                   ? 'grid grid-cols-1 gap-2'
-                  : 'grid grid-cols-1 sm:grid-cols-2 gap-2'
+                  : resolveAdaptiveMealWeekColumns(containerWidth) === 1
+                    ? 'grid grid-cols-1 gap-2'
+                    : resolveAdaptiveMealWeekColumns(containerWidth) === 3
+                      ? 'grid grid-cols-3 gap-2'
+                      : 'grid grid-cols-2 gap-2'
               }
             >
               {dayBoxes.map((day) => {

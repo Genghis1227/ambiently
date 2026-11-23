@@ -7,6 +7,7 @@ import type {
 } from '../types/dashboard';
 import { extractHouseholdInheritedDefaults } from './widgetCatalog';
 import { getDefaultWidgetStickerMode, isStickerCapableWidget } from './widgetStickerMode';
+import type { DisplayOrientation } from './displayOrientation';
 
 export type CanvasBlueprintId = 'blank' | 'family_command' | 'kitchen_meals' | 'photo_gallery';
 
@@ -75,6 +76,7 @@ export interface MaterializeBlueprintOptions {
   existingWidgets: DashboardWidget[];
   defaultWidgetStyle?: DefaultWidgetFrameStyle;
   nowMs?: number;
+  orientation?: DisplayOrientation;
 }
 
 export function materializeCanvasBlueprint(
@@ -88,6 +90,8 @@ export function materializeCanvasBlueprint(
   const nowMs = options.nowMs ?? Date.now();
   const nowIso = new Date(nowMs).toISOString();
   const defaultStyle = options.defaultWidgetStyle || 'auto';
+  const orientation: DisplayOrientation = options.orientation ?? 'landscape';
+  const isPortrait = orientation === 'portrait';
   const inherited = extractHouseholdInheritedDefaults(options.existingWidgets);
   const { tabId } = options;
 
@@ -115,7 +119,9 @@ export function materializeCanvasBlueprint(
         type: 'clock_weather',
         title: 'Clock & Weather',
         gridPos: { x: 0, y: 0, w: 4, h: 4 },
-        freeformPos: { xRatio: 0.03, yRatio: 0.04, wRatio: 0.30, hRatio: 0.36, zIndex: 1, rotation: 0 },
+        freeformPos: isPortrait
+          ? { xRatio: 0.03, yRatio: 0.02, wRatio: 0.94, hRatio: 0.18, zIndex: 1, rotation: 0 }
+          : { xRatio: 0.03, yRatio: 0.04, wRatio: 0.30, hRatio: 0.36, zIndex: 1, rotation: 0 },
         config: {
           locationName: inherited.weather.locationName,
           latitude: inherited.weather.latitude,
@@ -133,7 +139,9 @@ export function materializeCanvasBlueprint(
         type: 'chores',
         title: 'Family Chores & Rewards',
         gridPos: { x: 0, y: 4, w: 4, h: 8 },
-        freeformPos: { xRatio: 0.03, yRatio: 0.43, wRatio: 0.30, hRatio: 0.53, zIndex: 2, rotation: 0 },
+        freeformPos: isPortrait
+          ? { xRatio: 0.03, yRatio: 0.66, wRatio: 0.94, hRatio: 0.31, zIndex: 2, rotation: 0 }
+          : { xRatio: 0.03, yRatio: 0.43, wRatio: 0.30, hRatio: 0.53, zIndex: 2, rotation: 0 },
         config: {
           scope: 'household',
           displayMode: 'tile',
@@ -146,7 +154,9 @@ export function materializeCanvasBlueprint(
         type: 'calendar',
         title: 'Family Calendar',
         gridPos: { x: 4, y: 0, w: 8, h: 12 },
-        freeformPos: { xRatio: 0.35, yRatio: 0.04, wRatio: 0.62, hRatio: 0.92, zIndex: 3, rotation: 0 },
+        freeformPos: isPortrait
+          ? { xRatio: 0.03, yRatio: 0.22, wRatio: 0.94, hRatio: 0.42, zIndex: 3, rotation: 0 }
+          : { xRatio: 0.35, yRatio: 0.04, wRatio: 0.62, hRatio: 0.92, zIndex: 3, rotation: 0 },
         config: {
           defaultView: 'agenda',
           showMeals: true,
@@ -176,15 +186,25 @@ export function materializeCanvasBlueprint(
       checklistItems: [],
       bgColor: '#bbf7d0',
       fontSize: 'base',
-      freeformPos: {
-        xRatio: 0.63,
-        yRatio: 0.04,
-        wRatio: 0.34,
-        hRatio: 0.48,
-        zIndex: 2,
-        rotation: 0,
-        isShoppingList: true,
-      },
+      freeformPos: isPortrait
+        ? {
+            xRatio: 0.03,
+            yRatio: 0.54,
+            wRatio: 0.46,
+            hRatio: 0.43,
+            zIndex: 2,
+            rotation: 0,
+            isShoppingList: true,
+          }
+        : {
+            xRatio: 0.63,
+            yRatio: 0.04,
+            wRatio: 0.34,
+            hRatio: 0.48,
+            zIndex: 2,
+            rotation: 0,
+            isShoppingList: true,
+          },
       updated_at: nowIso,
     };
 
@@ -195,7 +215,9 @@ export function materializeCanvasBlueprint(
         type: 'meals',
         title: 'Family Meal Planner',
         gridPos: { x: 0, y: 0, w: 7, h: 12 },
-        freeformPos: { xRatio: 0.03, yRatio: 0.04, wRatio: 0.58, hRatio: 0.92, zIndex: 1, rotation: 0 },
+        freeformPos: isPortrait
+          ? { xRatio: 0.03, yRatio: 0.02, wRatio: 0.94, hRatio: 0.50, zIndex: 1, rotation: 0 }
+          : { xRatio: 0.03, yRatio: 0.04, wRatio: 0.58, hRatio: 0.92, zIndex: 1, rotation: 0 },
         config: {
           scope: 'three_day',
           visibleSlots: ['breakfast', 'lunch', 'dinner'],
@@ -209,7 +231,9 @@ export function materializeCanvasBlueprint(
         type: 'embed',
         title: 'Ambient Stream',
         gridPos: { x: 7, y: 6, w: 5, h: 6 },
-        freeformPos: { xRatio: 0.63, yRatio: 0.55, wRatio: 0.34, hRatio: 0.41, zIndex: 3, rotation: 0 },
+        freeformPos: isPortrait
+          ? { xRatio: 0.51, yRatio: 0.54, wRatio: 0.46, hRatio: 0.43, zIndex: 3, rotation: 0 }
+          : { xRatio: 0.63, yRatio: 0.55, wRatio: 0.34, hRatio: 0.41, zIndex: 3, rotation: 0 },
         config: {
           preset: 'lofi',
           muted: true,
@@ -233,7 +257,9 @@ export function materializeCanvasBlueprint(
       type: 'photo_frame',
       title: 'Ambient Photo Frame',
       gridPos: { x: 0, y: 0, w: 12, h: 12 },
-      freeformPos: { xRatio: 0.02, yRatio: 0.03, wRatio: 0.96, hRatio: 0.94, zIndex: 1, rotation: 0 },
+      freeformPos: isPortrait
+        ? { xRatio: 0.02, yRatio: 0.02, wRatio: 0.96, hRatio: 0.96, zIndex: 1, rotation: 0 }
+        : { xRatio: 0.02, yRatio: 0.03, wRatio: 0.96, hRatio: 0.94, zIndex: 1, rotation: 0 },
       config: {
         displayStyle: 'ken_burns',
         rotationIntervalSec: 15,
@@ -247,7 +273,9 @@ export function materializeCanvasBlueprint(
       type: 'clock_weather',
       title: 'Clock & Weather',
       gridPos: { x: 0, y: 8, w: 4, h: 4 },
-      freeformPos: { xRatio: 0.05, yRatio: 0.70, wRatio: 0.28, hRatio: 0.23, zIndex: 5, rotation: 0 },
+      freeformPos: isPortrait
+        ? { xRatio: 0.06, yRatio: 0.78, wRatio: 0.88, hRatio: 0.17, zIndex: 5, rotation: 0 }
+        : { xRatio: 0.05, yRatio: 0.70, wRatio: 0.28, hRatio: 0.23, zIndex: 5, rotation: 0 },
       config: {
         locationName: inherited.weather.locationName,
         latitude: inherited.weather.latitude,

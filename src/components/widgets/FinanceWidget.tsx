@@ -32,6 +32,7 @@ import {
 } from '../../services/finance';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { isAmbientlyInNightMode } from '../../utils/confetti';
+import { resolveFinanceAutoMode } from '../../utils/displayOrientation';
 
 interface FinanceWidgetProps {
   title?: string;
@@ -383,10 +384,7 @@ export const FinanceWidget: React.FC<FinanceWidgetProps> = ({
 
   const effectiveMode: Exclude<FinanceDisplayMode, 'auto'> = useMemo(() => {
     if (configuredMode !== 'auto') return configuredMode;
-    const { width, height } = containerSize;
-    if (height > 0 && height < 135 && width >= 280) return 'ticker';
-    if (width >= 560 && height >= 175) return 'grid';
-    return 'list';
+    return resolveFinanceAutoMode(containerSize.width, containerSize.height);
   }, [configuredMode, containerSize]);
 
   // Re-measure ticker overflow once quotes/sparklines finish rendering on cold load
