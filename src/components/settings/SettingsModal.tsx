@@ -45,6 +45,7 @@ import {
   Users,
   Server,
   Gauge,
+  ExternalLink,
 } from 'lucide-react';
 import { useUpdateChecker } from '../../services/updateChecker';
 import { db } from '../../services/db';
@@ -62,6 +63,7 @@ import {
   normalizeIdleScreensaverTimeoutMin,
   pickDefaultScreensaverCanvasTabId,
 } from '../../utils/idleScreensaver';
+import { normalizeExternalBrowserLinksPolicy } from '../../utils/externalLinksPolicy';
 import {
   cancelPendingCloudPush,
   flushPendingCloudPush,
@@ -2206,6 +2208,61 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   )}
                 </div>
               )}
+            </div>
+
+            {/* External Browser Links (Device-Local Policy) */}
+            <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800 space-y-3">
+              <div className="flex items-start gap-2">
+                <ExternalLink className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+                <div>
+                  <span className="text-sm font-semibold text-white block">
+                    External Browser Links (This Device)
+                  </span>
+                  <span className="text-[11px] text-gray-400 block">
+                    Controls whether links in the in-app web viewer can open a full browser tab, or stay inside Kiosk QR / Copy handoff to avoid Kiosk Jail. Saved only for this display.
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {[
+                  {
+                    id: 'auto' as const,
+                    title: 'Auto (Kiosk-Safe)',
+                    desc: 'Allow on laptops & phones; hide when fullscreen or PIN-locked',
+                  },
+                  {
+                    id: 'always' as const,
+                    title: 'Always Allow',
+                    desc: 'Show Open in Browser (exits fullscreen automatically)',
+                  },
+                  {
+                    id: 'kiosk_qr_only' as const,
+                    title: 'Kiosk QR Only',
+                    desc: 'Always use Open on Phone (QR) & Copy Link on this screen',
+                  },
+                ].map((opt) => {
+                  const isSelected =
+                    normalizeExternalBrowserLinksPolicy(settings.externalBrowserLinksPolicy) ===
+                    opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      aria-pressed={isSelected}
+                      onClick={() => updateSettings({ externalBrowserLinksPolicy: opt.id })}
+                      className={`p-2.5 rounded-xl border text-left transition-colors cursor-pointer ${
+                        isSelected
+                          ? 'bg-blue-600/20 border-blue-500 text-blue-100'
+                          : 'bg-gray-950/70 border-gray-800 text-gray-300 hover:border-gray-700'
+                      }`}
+                    >
+                      <div className="text-xs font-semibold">{opt.title}</div>
+                      <div className="text-[10px] text-gray-400 mt-0.5 leading-snug">{opt.desc}</div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
             </>
             )}

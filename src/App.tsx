@@ -1359,6 +1359,16 @@ export function App() {
             />
           </Suspense>
         )}
+        {activeWebModal && (
+          <Suspense fallback={null}>
+            <InAppWebViewerModal
+              isOpen={Boolean(activeWebModal)}
+              url={activeWebModal.url}
+              title={activeWebModal.title}
+              onClose={() => setActiveWebModal(null)}
+            />
+          </Suspense>
+        )}
         {pinChallenge && (
           <PinOverlay
             title={pinChallenge.title}

@@ -16,6 +16,12 @@ import {
 } from '../src/utils/idleScreensaver.ts';
 import { DEFAULT_SETTINGS } from '../src/services/db.ts';
 import {
+  normalizeExternalBrowserLinksPolicy,
+  resolveExternalBrowserLinkAccess,
+} from '../src/utils/externalLinksPolicy.ts';
+import { mergeCloudSettingsForLocal } from '../src/services/syncMerge.ts';
+import { sanitizePayloadForBackupExport } from '../src/services/fileSync.ts';
+import {
   filterCalendarEvents,
   localFamilyEventsToCalendarEvents,
   mergeCalendarEventsSnapshots,
@@ -257,6 +263,126 @@ describe('Phase 1 — Idle Photo Screensaver helpers', () => {
       normalizeIdleScreensaverPhotoStyle(DEFAULT_SETTINGS.idleScreensaverPhotoStyle),
       'ken_burns'
     );
+  });
+});
+
+describe('Kiosk-Safe External Browser Links Policy', () => {
+  it('normalizes policy options cleanly and guards kiosk environments under auto', () => {
+    assert.equal(normalizeExternalBrowserLinksPolicy('always'), 'always');
+    assert.equal(normalizeExternalBrowserLinksPolicy('kiosk_qr_only'), 'kiosk_qr_only');
+    assert.equal(normalizeExternalBrowserLinksPolicy('auto'), 'auto');
+    assert.equal(normalizeExternalBrowserLinksPolicy('invalid'), 'auto');
+
+    assert.deepEqual(
+      resolveExternalBrowserLinkAccess({
+        policy: 'auto',
+        isDocumentFullscreen: false,
+        isDisplayModeFullscreen: false,
+        isKioskPinLocked: false,
+      }),
+      { canOpenInBrowser: true, shouldExitFullscreenBeforeOpen: false, kioskReason: null }
+    );
+
+    assert.deepEqual(
+      resolveExternalBrowserLinkAccess({
+        policy: 'auto',
+        isDocumentFullscreen: true,
+        isDisplayModeFullscreen: false,
+        isKioskPinLocked: false,
+      }),
+      {
+        canOpenInBrowser: false,
+        shouldExitFullscreenBeforeOpen: false,
+        kioskReason: 'fullscreen_kiosk',
+      }
+    );
+
+    assert.deepEqual(
+      resolveExternalBrowserLinkAccess({
+        policy: 'auto',
+        isDocumentFullscreen: false,
+        isDisplayModeFullscreen: true,
+        isKioskPinLocked: false,
+      }),
+      {
+        canOpenInBrowser: false,
+        shouldExitFullscreenBeforeOpen: false,
+        kioskReason: 'fullscreen_kiosk',
+      }
+    );
+
+    assert.deepEqual(
+      resolveExternalBrowserLinkAccess({
+        policy: 'auto',
+        isDocumentFullscreen: false,
+        isDisplayModeFullscreen: false,
+        isKioskPinLocked: true,
+      }),
+      {
+        canOpenInBrowser: false,
+        shouldExitFullscreenBeforeOpen: false,
+        kioskReason: 'pin_locked',
+      }
+    );
+
+    assert.deepEqual(
+      resolveExternalBrowserLinkAccess({
+        policy: 'always',
+        isDocumentFullscreen: true,
+        isDisplayModeFullscreen: false,
+        isKioskPinLocked: true,
+      }),
+      {
+        canOpenInBrowser: true,
+        shouldExitFullscreenBeforeOpen: true,
+        kioskReason: null,
+      }
+    );
+
+    assert.deepEqual(
+      resolveExternalBrowserLinkAccess({
+        policy: 'kiosk_qr_only',
+        isDocumentFullscreen: false,
+        isDisplayModeFullscreen: false,
+        isKioskPinLocked: false,
+      }),
+      {
+        canOpenInBrowser: false,
+        shouldExitFullscreenBeforeOpen: false,
+        kioskReason: 'policy_locked',
+      }
+    );
+  });
+
+  it('keeps externalBrowserLinksPolicy isolated per device during cloud merge and backup export', () => {
+    const merged = mergeCloudSettingsForLocal({
+      defaultSettings: DEFAULT_SETTINGS,
+      cloudSettings: {
+        ...DEFAULT_SETTINGS,
+        externalBrowserLinksPolicy: 'always',
+      },
+      currentSettings: {
+        ...DEFAULT_SETTINGS,
+        externalBrowserLinksPolicy: 'kiosk_qr_only',
+      },
+      resolvedCommonPhotos: [],
+      cloudSettingsAt: '2026-11-22T18:00:00.000Z',
+      preserveDeviceLocks: true,
+    });
+    assert.equal(merged.externalBrowserLinksPolicy, 'kiosk_qr_only');
+
+    const exported = sanitizePayloadForBackupExport({
+      version: 1,
+      exportedAt: '2026-11-22T18:00:00.000Z',
+      settings: {
+        ...DEFAULT_SETTINGS,
+        externalBrowserLinksPolicy: 'kiosk_qr_only',
+      },
+      tabs: [],
+      widgets: [],
+      notes: [],
+    });
+    assert.equal(exported.settings.externalBrowserLinksPolicy, 'auto');
   });
 });
 

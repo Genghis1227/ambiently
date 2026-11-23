@@ -23,7 +23,7 @@
 
 ## ⚖️ How Ambiently Compares
 
-| Capability | Ambiently (`v0.8.6`) | Skylight Calendar (+ Plus) | Hearth Display | DAKboard | Mango Display | Home Assistant |
+| Capability | Ambiently (`v0.8.7`) | Skylight Calendar (+ Plus) | Hearth Display | DAKboard | Mango Display | Home Assistant |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Pricing & Open Source** | **$0 / Open-source (AGPLv3)** | ~$299–$599 hw + ~$79/yr Plus | ~$699 hw + ~$86/yr plan | $0 basic / ~$5–$8+/mo | $0 basic / ~$5.99/mo Pro | $0 self-hosted (+ optional Nabu Casa) |
 | **Hardware & Hosting** | Any browser, tablet, Pi kiosk, or Docker (`amd64`/`arm64`) | Proprietary wall touchscreen only | Proprietary 27" touchscreen only | BYO screen or DAKboard hardware | BYO TV, tablet, Fire Stick, or Echo Show | Self-hosted server + any tablet/browser |
@@ -69,7 +69,7 @@
   * **Responsive Kiosk Tile + Full 3-Column View:** Compact tiles default to `To Do` with `←`/`→` column steppers, 1-tap card chevrons, and unified mouse/touch drag reordering with ~350ms **Drag-to-Edge** column flipping; widening a tile automatically adapts it into a side-by-side **3-column swimlane layout** on the canvas, plus a 1-tap fullscreen 3-column view.
   * **Done Auto-Archive & Reusable Archive Drawer:** Configurable per-board `autoArchiveDays` sweeps, **Archive All Done**, confirmation-gated **Clear Done**, and a searchable per-board **Archive Drawer** that restores cards with checklists intact.
 * **📰 In-App Kiosk Reader Mode, Web Preview & 26 Curated RSS Feeds:**
-  * **Distraction-Free Article Reader (`/api/reader`):** Powered by Mozilla Readability and Linkedom with client-side `DOMPurify` HTML sanitization, paired with an anonymous CSP-sandboxed edge **Web Preview (`/api/web-proxy`)** fallback and a 26-feed curated directory across 6 categories.
+  * **Distraction-Free Article Reader (`/api/reader`):** Powered by Mozilla Readability and Linkedom with client-side `DOMPurify` HTML sanitization, paired with an anonymous CSP-sandboxed edge **Web Preview (`/api/web-proxy`)** fallback, kiosk-safe **Open in Browser** / **Open on Phone (QR)** / **Copy Link** handoff (`externalBrowserLinksPolicy`), and a 26-feed curated directory across 6 categories.
 * **📈 Live Markets & Watchlist (`/api/finance`):**
   * Track stocks, ETFs, market indices, and crypto with zero API keys required—featuring `1D` / `5D` / `1M` SVG sparklines, adaptive row/grid/ticker-strip layouts, preset bundles, live symbol search, offline quote caching, and Sticker Mode support.
 * **🏆 Live Sports Scoreboard (`/api/sports`) & 💡 Daily Discovery (`/api/discovery`):**

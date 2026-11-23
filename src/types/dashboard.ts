@@ -245,6 +245,7 @@ export interface StickyNoteItem {
 }
 
 export type DefaultWidgetFrameStyle = 'auto' | 'sticker' | 'bordered';
+export type ExternalBrowserLinksPolicy = 'auto' | 'always' | 'kiosk_qr_only';
 export type IdleScreensaverMode = 'photos' | 'canvas';
 export type IdleScreensaverPhotoStyle = 'ken_burns' | 'mosaic' | 'polaroid' | 'filmstrip';
 export type IdleScreensaverPolaroidSizeMode = 'mixed' | 'uniform' | 'small' | 'large';
@@ -313,6 +314,7 @@ export interface AppSettings {
   lockCanvasEditing?: boolean;   // Disable modifying canvases (freezes moving, resizing, rotating & organizing)
   lockSettingsAccess?: boolean;  // Require PIN to open settings
   settingsPinOptOut?: boolean;   // True only when user explicitly toggles off PIN requirement for Settings
+  externalBrowserLinksPolicy?: ExternalBrowserLinksPolicy; // Per-device setting controlling "Open in Browser" in web modal
 
   updated_at: string;
 }

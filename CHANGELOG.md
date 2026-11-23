@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.7] - 2026-11-22
+
+### Added
+- **Configurable Idle Photo Screensaver Layouts & Canvas-Based Mode (`IdlePhotoScreensaver.tsx`, `idleScreensaver.ts`, `SettingsModal.tsx`, `App.tsx`, `dashboard.ts`, `db.ts`):**
+  - Added full presentation parity to the standalone **Photo Slideshow** screensaver: choose **Single Photo (Ken Burns)**, **Mosaic Collage (4-Grid)** (with optional Ken Burns pan & zoom), **Scattered Polaroids** (with density `4`–`36` presets/slider and card size variation), or **Cinematic Filmstrip**, plus configurable rotation speed (`5s`–`1m`), Shuffle/Sequential playback order, captions, and EXIF date-taken toggles.
+  - Added **Use a Canvas** screensaver mode (`idleScreensaverTabId`) allowing any non-deleted board—including hidden-from-dock boards—to serve as the edge-to-edge idle screensaver via the single root `<Corkboard>` (hiding `<NavigationDock />` cleanly while idle, suspending background rendering in photo slideshow mode, offering an independent default-off overlay toggle for Canvas clock/weather pills, and falling back to Photo Slideshow if the selected board is deleted), plus a 1-click **Preview** button in **Settings → Display & Kiosk**.
+- **Kiosk-Safe External Browser Links & Phone QR Handoff (`InAppWebViewerModal.tsx`, `externalLinksPolicy.ts`, `SettingsModal.tsx`, `App.tsx`):**
+  - Added **Copy Link**, **Open on Phone (QR)** (`QRCodeSVG` handoff overlay), and kiosk-aware **Open in Browser** (`data-native-link="true"`) actions in the in-app web viewer header as well as the reader-unavailable and summary-only panels (including Mobile Companion mounts).
+  - Automatically hides external browser tab escapes when running in document fullscreen, Chromium `--kiosk` / fullscreen display mode, or when Parent PIN Fullscreen Kiosk Lock is active so locked wall displays never enter "Kiosk Jail", paired with a device-local **External Browser Links** policy (`Auto (Kiosk-Safe)`, `Always Allow`, `Kiosk QR Only`) isolated from Cloud Sync and JSON restores.
+
 ## [0.8.6] - 2026-11-22
 
 ### Added

@@ -158,6 +158,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lockCanvasEditing: false,
   lockSettingsAccess: true,
   settingsPinOptOut: false,
+  externalBrowserLinksPolicy: 'auto',
   updated_at: '1970-01-01T00:00:00.000Z',
 };
 
