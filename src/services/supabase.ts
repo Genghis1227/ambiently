@@ -205,6 +205,7 @@ function deviceOwnSettings(settings?: AppSettings): Partial<AppSettings> {
     lockSettingsAccess: settings.lockSettingsAccess,
     settingsPinOptOut: settings.settingsPinOptOut,
     displayDensity: settings.displayDensity,
+    externalBrowserLinksPolicy: settings.externalBrowserLinksPolicy,
   };
 }
 
@@ -1464,6 +1465,7 @@ export async function pushToCloud(
         lockFullscreenKiosk: false,
         lockSettingsAccess: true,
         settingsPinOptOut: false,
+        externalBrowserLinksPolicy: 'auto',
         canvasThemes: tabThemeMeta,
       });
 

@@ -1,5 +1,26 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { X, RotateCw, Globe, BookOpen, Loader2, Calendar, User, Clock, AlertCircle } from 'lucide-react';
+import {
+  X,
+  RotateCw,
+  Globe,
+  BookOpen,
+  Loader2,
+  Calendar,
+  User,
+  Clock,
+  AlertCircle,
+  ExternalLink,
+  QrCode,
+  Copy,
+  Check,
+  Shield,
+} from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
+import { useDashboardStore } from '../../store/dashboardStore';
+import {
+  detectDisplayModeFullscreen,
+  resolveExternalBrowserLinkAccess,
+} from '../../utils/externalLinksPolicy';
 import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 import { sanitizeReaderHtml } from '../../utils/readerSanitize';
 import { isSafeExternalEmbedUrl, sanitizeExternalHttpUrl } from '../../utils/urlSecurity';
@@ -50,6 +71,37 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
   const swRecoveryAttemptedRef = useRef(false);
   const isAnchorTitlePlaceholderRef = useRef(false);
 
+  const [showQrPopover, setShowQrPopover] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isDocumentFullscreen, setIsDocumentFullscreen] = useState<boolean>(() =>
+    typeof document !== 'undefined' ? Boolean(document.fullscreenElement) : false
+  );
+
+  const externalBrowserLinksPolicy = useDashboardStore(
+    (s) => s.settings.externalBrowserLinksPolicy
+  );
+  const pinLockEnabled = useDashboardStore((s) => s.settings.pinLockEnabled);
+  const pinHash = useDashboardStore((s) => s.settings.pinHash);
+  const lockFullscreenKiosk = useDashboardStore((s) => s.settings.lockFullscreenKiosk);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const handleFsChange = () => {
+      setIsDocumentFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener('fullscreenchange', handleFsChange);
+    return () => document.removeEventListener('fullscreenchange', handleFsChange);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) {
+        clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
+
   // Synchronize when modal is opened with new props
   useEffect(() => {
     if (isOpen && initialUrl) {
@@ -59,6 +111,11 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
       setViewMode('reader');
       setArticle(null);
       setReaderError(null);
+      setShowQrPopover(false);
+      setCopiedLink(false);
+    } else if (!isOpen) {
+      setShowQrPopover(false);
+      setCopiedLink(false);
     }
   }, [isOpen, initialUrl, initialTitle]);
 
@@ -69,13 +126,17 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
+        if (showQrPopover) {
+          setShowQrPopover(false);
+          return;
+        }
         onClose();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, showQrPopover, onClose]);
 
   // Fetch article for Reader Mode
   const loadReaderArticle = useCallback(async (targetUrl: string, signal?: AbortSignal) => {
@@ -166,6 +227,8 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
       const safeNextUrl = sanitizeExternalHttpUrl(new URL(href, currentUrl).href);
       if (!safeNextUrl) return;
       isAnchorTitlePlaceholderRef.current = true;
+      setShowQrPopover(false);
+      setCopiedLink(false);
       setCurrentUrl(safeNextUrl);
       setCurrentTitle(anchor.innerText.trim() || undefined);
     } catch {
@@ -177,6 +240,26 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
   // load it directly when it is an external HTTPS page; otherwise route through /api/web-proxy.
   const appOrigin = typeof window !== 'undefined' ? window.location.origin : null;
   const safeCurrentUrl = sanitizeExternalHttpUrl(currentUrl);
+  const linkAccess = resolveExternalBrowserLinkAccess({
+    policy: externalBrowserLinksPolicy,
+    isDocumentFullscreen,
+    isDisplayModeFullscreen: detectDisplayModeFullscreen(),
+    isKioskPinLocked: Boolean(pinLockEnabled && pinHash && lockFullscreenKiosk),
+  });
+
+  const handleCopyCurrentLink = () => {
+    if (!safeCurrentUrl || typeof navigator === 'undefined' || !navigator.clipboard) return;
+    void navigator.clipboard.writeText(safeCurrentUrl).then(() => {
+      setCopiedLink(true);
+      if (copyTimerRef.current !== null) {
+        clearTimeout(copyTimerRef.current);
+      }
+      copyTimerRef.current = setTimeout(() => {
+        setCopiedLink(false);
+      }, 2000);
+    }).catch(() => {});
+  };
+
   const canDirectFrame = Boolean(
     article?.canEmbedDirectly &&
       safeCurrentUrl &&
@@ -387,8 +470,77 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
             </button>
           </div>
 
-          {/* Right: Actions (Reload, Close) */}
+          {/* Right: Actions (Copy, Phone QR / Open in Browser, Reload, Close) */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {safeCurrentUrl && (
+              <button
+                type="button"
+                onClick={handleCopyCurrentLink}
+                title="Copy link URL"
+                className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-gray-800/90 hover:bg-gray-700 active:scale-95 text-gray-300 hover:text-white text-xs font-semibold border border-gray-700/60 transition-all cursor-pointer"
+              >
+                {copiedLink ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="text-emerald-300">Copied</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span className="hidden lg:inline">Copy</span>
+                  </>
+                )}
+              </button>
+            )}
+
+            {safeCurrentUrl && (
+              <button
+                type="button"
+                onClick={() => setShowQrPopover((prev) => !prev)}
+                aria-pressed={showQrPopover}
+                title={
+                  linkAccess.canOpenInBrowser
+                    ? 'Show QR code to open on phone'
+                    : 'Scan QR code to open safely on your phone (Kiosk Protection active)'
+                }
+                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                  showQrPopover
+                    ? 'bg-teal-600/30 border-teal-500 text-teal-200'
+                    : !linkAccess.canOpenInBrowser
+                    ? 'bg-teal-600/20 hover:bg-teal-600/35 border-teal-500/40 text-teal-200'
+                    : 'bg-gray-800/90 hover:bg-gray-700 border-gray-700/60 text-gray-300 hover:text-white'
+                }`}
+              >
+                <QrCode className="w-3.5 h-3.5 shrink-0" />
+                {!linkAccess.canOpenInBrowser && (
+                  <span className="hidden sm:inline">Open on Phone</span>
+                )}
+              </button>
+            )}
+
+            {safeCurrentUrl && linkAccess.canOpenInBrowser && (
+              <a
+                href={safeCurrentUrl}
+                data-native-link="true"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => {
+                  if (
+                    linkAccess.shouldExitFullscreenBeforeOpen &&
+                    typeof document !== 'undefined' &&
+                    document.fullscreenElement
+                  ) {
+                    document.exitFullscreen?.().catch(() => {});
+                  }
+                }}
+                title="Open page in browser tab"
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/35 active:scale-95 text-blue-200 hover:text-white border border-blue-500/40 text-xs font-semibold transition-all cursor-pointer"
+              >
+                <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">Open in Browser</span>
+              </a>
+            )}
+
             <button
               type="button"
               onClick={handleReload}
@@ -412,6 +564,85 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
 
         {/* Content Viewport Container */}
         <div className="flex-1 w-full bg-neutral-950 relative overflow-hidden flex flex-col">
+          {showQrPopover && safeCurrentUrl && (
+            <div
+              onClick={() => setShowQrPopover(false)}
+              className="absolute inset-0 z-30 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150 cursor-pointer"
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-sm rounded-2xl bg-gray-900 border border-gray-800 p-5 shadow-2xl space-y-4 text-center cursor-default"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-teal-300 uppercase tracking-wider">
+                    <QrCode className="w-4 h-4" />
+                    <span>Open on Your Phone</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowQrPopover(false)}
+                    className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 cursor-pointer"
+                    aria-label="Close QR handoff"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="inline-flex p-3.5 rounded-2xl bg-white shadow-inner mx-auto">
+                  <QRCodeSVG value={safeCurrentUrl} size={184} level="M" />
+                </div>
+
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-white truncate">{domain}</p>
+                  <p className="text-[11px] text-gray-400 leading-relaxed">
+                    {linkAccess.canOpenInBrowser
+                      ? 'Point your phone camera at the QR code to view this link on mobile.'
+                      : 'Browser tabs are hidden to prevent Kiosk Jail. Scan with your phone camera to open safely.'}
+                  </p>
+                </div>
+
+                {!linkAccess.canOpenInBrowser && (
+                  <div className="flex items-center justify-center gap-1.5 text-[10px] text-amber-300/90 bg-amber-500/10 border border-amber-500/25 rounded-lg px-2.5 py-1.5">
+                    <Shield className="w-3 h-3 shrink-0" />
+                    <span>
+                      {linkAccess.kioskReason === 'pin_locked'
+                        ? 'Kiosk Fullscreen PIN Lock active on this display'
+                        : linkAccess.kioskReason === 'policy_locked'
+                        ? 'This display is configured for Kiosk QR Only links'
+                        : 'Fullscreen Kiosk mode detected (adjust under Settings → Display)'}
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCopyCurrentLink}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-semibold text-white transition-colors cursor-pointer"
+                  >
+                    {copiedLink ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Link Copied</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Copy Link</span>
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowQrPopover(false)}
+                    className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-xs font-semibold text-white transition-colors cursor-pointer"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           {viewMode === 'reader' ? (
             /* Reader View Body */
             <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-8 sm:py-10 md:px-12 select-text">
@@ -432,17 +663,50 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
                   <p className="text-xs text-gray-400 leading-relaxed">
                     {readerError} Some sites require a full browser layout or have paywalled access.
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setViewMode('web');
-                      setIsWebLoading(true);
-                    }}
-                    className="mt-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white flex items-center gap-2 transition-all cursor-pointer shadow-md"
-                  >
-                    <Globe className="w-4 h-4" />
-                    <span>Try Web Preview Instead</span>
-                  </button>
+                  <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setViewMode('web');
+                        setIsWebLoading(true);
+                      }}
+                      className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white flex items-center gap-2 transition-all cursor-pointer shadow-md"
+                    >
+                      <Globe className="w-4 h-4" />
+                      <span>Try Web Preview Instead</span>
+                    </button>
+
+                    {safeCurrentUrl && linkAccess.canOpenInBrowser ? (
+                      <a
+                        href={safeCurrentUrl}
+                        data-native-link="true"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => {
+                          if (
+                            linkAccess.shouldExitFullscreenBeforeOpen &&
+                            typeof document !== 'undefined' &&
+                            document.fullscreenElement
+                          ) {
+                            document.exitFullscreen?.().catch(() => {});
+                          }
+                        }}
+                        className="px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs font-bold text-white flex items-center gap-2 transition-all cursor-pointer shadow-md"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        <span>Open in Browser</span>
+                      </a>
+                    ) : safeCurrentUrl ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowQrPopover(true)}
+                        className="px-4 py-2 rounded-xl bg-teal-600/25 hover:bg-teal-600/40 border border-teal-500/40 text-xs font-bold text-teal-200 flex items-center gap-2 transition-all cursor-pointer shadow-md"
+                      >
+                        <QrCode className="w-4 h-4" />
+                        <span>Open on Phone (QR)</span>
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               )}
 
@@ -532,17 +796,49 @@ export const InAppWebViewerModal: React.FC<InAppWebViewerModalProps> = ({
                         </span>
                         This publisher restricts full-text extraction or serves multimedia content.
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setViewMode('web');
-                          setIsWebLoading(true);
-                        }}
-                        className="shrink-0 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white flex items-center gap-2 transition-all cursor-pointer shadow-md"
-                      >
-                        <Globe className="w-4 h-4" />
-                        <span>Open Web Preview</span>
-                      </button>
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setViewMode('web');
+                            setIsWebLoading(true);
+                          }}
+                          className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white flex items-center gap-2 transition-all cursor-pointer shadow-md"
+                        >
+                          <Globe className="w-4 h-4" />
+                          <span>Open Web Preview</span>
+                        </button>
+                        {safeCurrentUrl && linkAccess.canOpenInBrowser ? (
+                          <a
+                            href={safeCurrentUrl}
+                            data-native-link="true"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => {
+                              if (
+                                linkAccess.shouldExitFullscreenBeforeOpen &&
+                                typeof document !== 'undefined' &&
+                                document.fullscreenElement
+                              ) {
+                                document.exitFullscreen?.().catch(() => {});
+                              }
+                            }}
+                            className="px-3.5 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs font-bold text-white flex items-center gap-1.5 transition-all cursor-pointer"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                            <span>Browser</span>
+                          </a>
+                        ) : safeCurrentUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => setShowQrPopover(true)}
+                            className="px-3.5 py-2 rounded-xl bg-teal-600/25 hover:bg-teal-600/40 border border-teal-500/40 text-xs font-bold text-teal-200 flex items-center gap-1.5 transition-all cursor-pointer"
+                          >
+                            <QrCode className="w-4 h-4" />
+                            <span>Phone QR</span>
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   )}
                 </article>

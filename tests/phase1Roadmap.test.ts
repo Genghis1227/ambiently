@@ -2,10 +2,25 @@ import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  normalizeIdleScreensaverMode,
+  normalizeIdleScreensaverPhotoOrder,
+  normalizeIdleScreensaverPhotoStyle,
+  normalizeIdleScreensaverPolaroidCount,
+  normalizeIdleScreensaverPolaroidSizeMode,
+  normalizeIdleScreensaverRotationSec,
   normalizeIdleScreensaverTimeoutMin,
+  pickDefaultScreensaverCanvasTabId,
+  resolveEffectiveIdleScreensaverTarget,
   resolveScreensaverWeatherLocation,
   shouldBlockIdleScreensaver,
 } from '../src/utils/idleScreensaver.ts';
+import { DEFAULT_SETTINGS } from '../src/services/db.ts';
+import {
+  normalizeExternalBrowserLinksPolicy,
+  resolveExternalBrowserLinkAccess,
+} from '../src/utils/externalLinksPolicy.ts';
+import { mergeCloudSettingsForLocal } from '../src/services/syncMerge.ts';
+import { sanitizePayloadForBackupExport } from '../src/services/fileSync.ts';
 import {
   filterCalendarEvents,
   localFamilyEventsToCalendarEvents,
@@ -27,7 +42,7 @@ import {
   isWithinUsNwsBounds,
   parseNwsAlertsResponse,
 } from '../src/services/weather.ts';
-import type { DashboardWidget } from '../src/types/dashboard.ts';
+import type { DashboardTab, DashboardWidget } from '../src/types/dashboard.ts';
 import type { HouseholdProfile } from '../src/types/profiles.ts';
 import type { CalendarEvent } from '../src/services/feeds.ts';
 
@@ -142,6 +157,232 @@ describe('Phase 1 — Idle Photo Screensaver helpers', () => {
       longitude: -122.33,
       unit: 'C',
     });
+  });
+
+  it('normalizes standalone slideshow options (mode, style, polaroids, speed, order) safely', () => {
+    assert.equal(normalizeIdleScreensaverMode('canvas'), 'canvas');
+    assert.equal(normalizeIdleScreensaverMode('photos'), 'photos');
+    assert.equal(normalizeIdleScreensaverMode('invalid'), 'photos');
+
+    assert.equal(normalizeIdleScreensaverPhotoStyle('mosaic'), 'mosaic');
+    assert.equal(normalizeIdleScreensaverPhotoStyle('polaroid'), 'polaroid');
+    assert.equal(normalizeIdleScreensaverPhotoStyle('filmstrip'), 'filmstrip');
+    assert.equal(normalizeIdleScreensaverPhotoStyle('ken_burns'), 'ken_burns');
+    assert.equal(normalizeIdleScreensaverPhotoStyle('unknown'), 'ken_burns');
+
+    assert.equal(normalizeIdleScreensaverPolaroidCount(24), 24);
+    assert.equal(normalizeIdleScreensaverPolaroidCount(2), 4);
+    assert.equal(normalizeIdleScreensaverPolaroidCount(99), 36);
+    assert.equal(normalizeIdleScreensaverPolaroidCount('bad'), 12);
+
+    assert.equal(normalizeIdleScreensaverPolaroidSizeMode('uniform'), 'uniform');
+    assert.equal(normalizeIdleScreensaverPolaroidSizeMode('small'), 'small');
+    assert.equal(normalizeIdleScreensaverPolaroidSizeMode('large'), 'large');
+    assert.equal(normalizeIdleScreensaverPolaroidSizeMode('other'), 'mixed');
+
+    assert.equal(normalizeIdleScreensaverRotationSec(5), 5);
+    assert.equal(normalizeIdleScreensaverRotationSec(60), 60);
+    assert.equal(normalizeIdleScreensaverRotationSec(22), 15);
+
+    assert.equal(normalizeIdleScreensaverPhotoOrder('sequential'), 'sequential');
+    assert.equal(normalizeIdleScreensaverPhotoOrder('random'), 'random');
+    assert.equal(normalizeIdleScreensaverPhotoOrder(undefined), 'random');
+  });
+
+  it('resolves canvas screensaver target including hidden-from-dock tabs and falls back when deleted or missing', () => {
+    const tabs: DashboardTab[] = [
+      {
+        id: 'tab-home',
+        name: 'Home',
+        icon: 'Home',
+        order: 0,
+        autoRotateDurationSec: 30,
+        enabled: true,
+        updated_at: '2026-11-22T00:00:00.000Z',
+      },
+      {
+        id: 'tab-photo-hidden',
+        name: 'Photo Gallery',
+        icon: 'Image',
+        order: 1,
+        autoRotateDurationSec: 30,
+        enabled: false, // Hidden from Dock / Carousel
+        updated_at: '2026-11-22T00:00:00.000Z',
+      },
+      {
+        id: 'tab-deleted',
+        name: 'Deleted Board',
+        icon: 'Image',
+        order: 2,
+        autoRotateDurationSec: 30,
+        enabled: true,
+        updated_at: '2026-11-22T00:00:00.000Z',
+        deleted_at: '2026-11-22T01:00:00.000Z',
+      },
+    ];
+
+    assert.deepEqual(
+      resolveEffectiveIdleScreensaverTarget(
+        { idleScreensaverMode: 'photos', idleScreensaverTabId: 'tab-home' },
+        tabs
+      ),
+      { mode: 'photos', tab: null }
+    );
+
+    const hiddenCanvasTarget = resolveEffectiveIdleScreensaverTarget(
+      { idleScreensaverMode: 'canvas', idleScreensaverTabId: 'tab-photo-hidden' },
+      tabs
+    );
+    assert.equal(hiddenCanvasTarget.mode, 'canvas');
+    assert.equal(hiddenCanvasTarget.tab?.id, 'tab-photo-hidden');
+
+    assert.deepEqual(
+      resolveEffectiveIdleScreensaverTarget(
+        { idleScreensaverMode: 'canvas', idleScreensaverTabId: 'tab-deleted' },
+        tabs
+      ),
+      { mode: 'photos', tab: null }
+    );
+
+    assert.deepEqual(
+      resolveEffectiveIdleScreensaverTarget(
+        { idleScreensaverMode: 'canvas', idleScreensaverTabId: null },
+        tabs
+      ),
+      { mode: 'photos', tab: null }
+    );
+
+    const defaultPicked = pickDefaultScreensaverCanvasTabId(tabs, [
+      makeWidget({ id: 'pf-1', tabId: 'tab-photo-hidden', type: 'photo_frame' }),
+    ]);
+    assert.equal(defaultPicked, 'tab-photo-hidden');
+
+    assert.equal(normalizeIdleScreensaverMode(DEFAULT_SETTINGS.idleScreensaverMode), 'photos');
+    assert.equal(DEFAULT_SETTINGS.idleScreensaverCanvasShowOverlay, false);
+    assert.equal(
+      normalizeIdleScreensaverPhotoStyle(DEFAULT_SETTINGS.idleScreensaverPhotoStyle),
+      'ken_burns'
+    );
+  });
+});
+
+describe('Kiosk-Safe External Browser Links Policy', () => {
+  it('normalizes policy options cleanly and guards kiosk environments under auto', () => {
+    assert.equal(normalizeExternalBrowserLinksPolicy('always'), 'always');
+    assert.equal(normalizeExternalBrowserLinksPolicy('kiosk_qr_only'), 'kiosk_qr_only');
+    assert.equal(normalizeExternalBrowserLinksPolicy('auto'), 'auto');
+    assert.equal(normalizeExternalBrowserLinksPolicy('invalid'), 'auto');
+
+    assert.deepEqual(
+      resolveExternalBrowserLinkAccess({
+        policy: 'auto',
+        isDocumentFullscreen: false,
+        isDisplayModeFullscreen: false,
+        isKioskPinLocked: false,
+      }),
+      { canOpenInBrowser: true, shouldExitFullscreenBeforeOpen: false, kioskReason: null }
+    );
+
+    assert.deepEqual(
+      resolveExternalBrowserLinkAccess({
+        policy: 'auto',
+        isDocumentFullscreen: true,
+        isDisplayModeFullscreen: false,
+        isKioskPinLocked: false,
+      }),
+      {
+        canOpenInBrowser: false,
+        shouldExitFullscreenBeforeOpen: false,
+        kioskReason: 'fullscreen_kiosk',
+      }
+    );
+
+    assert.deepEqual(
+      resolveExternalBrowserLinkAccess({
+        policy: 'auto',
+        isDocumentFullscreen: false,
+        isDisplayModeFullscreen: true,
+        isKioskPinLocked: false,
+      }),
+      {
+        canOpenInBrowser: false,
+        shouldExitFullscreenBeforeOpen: false,
+        kioskReason: 'fullscreen_kiosk',
+      }
+    );
+
+    assert.deepEqual(
+      resolveExternalBrowserLinkAccess({
+        policy: 'auto',
+        isDocumentFullscreen: false,
+        isDisplayModeFullscreen: false,
+        isKioskPinLocked: true,
+      }),
+      {
+        canOpenInBrowser: false,
+        shouldExitFullscreenBeforeOpen: false,
+        kioskReason: 'pin_locked',
+      }
+    );
+
+    assert.deepEqual(
+      resolveExternalBrowserLinkAccess({
+        policy: 'always',
+        isDocumentFullscreen: true,
+        isDisplayModeFullscreen: false,
+        isKioskPinLocked: true,
+      }),
+      {
+        canOpenInBrowser: true,
+        shouldExitFullscreenBeforeOpen: true,
+        kioskReason: null,
+      }
+    );
+
+    assert.deepEqual(
+      resolveExternalBrowserLinkAccess({
+        policy: 'kiosk_qr_only',
+        isDocumentFullscreen: false,
+        isDisplayModeFullscreen: false,
+        isKioskPinLocked: false,
+      }),
+      {
+        canOpenInBrowser: false,
+        shouldExitFullscreenBeforeOpen: false,
+        kioskReason: 'policy_locked',
+      }
+    );
+  });
+
+  it('keeps externalBrowserLinksPolicy isolated per device during cloud merge and backup export', () => {
+    const merged = mergeCloudSettingsForLocal({
+      defaultSettings: DEFAULT_SETTINGS,
+      cloudSettings: {
+        ...DEFAULT_SETTINGS,
+        externalBrowserLinksPolicy: 'always',
+      },
+      currentSettings: {
+        ...DEFAULT_SETTINGS,
+        externalBrowserLinksPolicy: 'kiosk_qr_only',
+      },
+      resolvedCommonPhotos: [],
+      cloudSettingsAt: '2026-11-22T18:00:00.000Z',
+      preserveDeviceLocks: true,
+    });
+    assert.equal(merged.externalBrowserLinksPolicy, 'kiosk_qr_only');
+
+    const exported = sanitizePayloadForBackupExport({
+      version: 1,
+      exportedAt: '2026-11-22T18:00:00.000Z',
+      settings: {
+        ...DEFAULT_SETTINGS,
+        externalBrowserLinksPolicy: 'kiosk_qr_only',
+      },
+      tabs: [],
+      widgets: [],
+      notes: [],
+    });
+    assert.equal(exported.settings.externalBrowserLinksPolicy, 'auto');
   });
 });
 

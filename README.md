@@ -23,7 +23,7 @@
 
 ## ⚖️ How Ambiently Compares
 
-| Capability | Ambiently (`v0.8.6`) | Skylight Calendar (+ Plus) | Hearth Display | DAKboard | Mango Display | Home Assistant |
+| Capability | Ambiently (`v0.8.7`) | Skylight Calendar (+ Plus) | Hearth Display | DAKboard | Mango Display | Home Assistant |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Pricing & Open Source** | **$0 / Open-source (AGPLv3)** | ~$299–$599 hw + ~$79/yr Plus | ~$699 hw + ~$86/yr plan | $0 basic / ~$5–$8+/mo | $0 basic / ~$5.99/mo Pro | $0 self-hosted (+ optional Nabu Casa) |
 | **Hardware & Hosting** | Any browser, tablet, Pi kiosk, or Docker (`amd64`/`arm64`) | Proprietary wall touchscreen only | Proprietary 27" touchscreen only | BYO screen or DAKboard hardware | BYO TV, tablet, Fire Stick, or Echo Show | Self-hosted server + any tablet/browser |
@@ -36,7 +36,7 @@
 | **Photo Frames** | 7,500+ Google Photos, Google Drive, Local/NAS folders, Plex QR pairing, 128 curated photos; Ken Burns, Collage, Polaroids & Filmstrip | Cloud photo screensaver (Plus) | Limited photo features | Cloud photo slideshows (Google/Apple/Dropbox) | Cloud photo backgrounds & widgets | Media / gallery integrations |
 | **Weather, Feeds & Finance** | Zero-key Weather (12h hourly precip + NOAA/NWS alerts), US EPA AQI/Pollen/UV, offline NOAA Sun/Moon, Markets, Live Sports, Daily Discovery & 26 RSS + Reader Mode | Daily & 10-day forecast icons | Basic weather | Weather, radar, news/RSS, stocks & commute blocks | Weather, news, stocks & commute widgets | Broad weather & sensor integrations |
 | **Smart Home & AI Imports** | Home Lab latency probes & read-only Home Assistant entity glance (manual recipe/wishlist URL scrapers; no AI email import) | AI Magic Import for emails/flyers (Plus); no smart home | Hearth Helper AI parser; no smart home | Smart home / iframe blocks (varies by plan) | Health/smart-home widgets; no AI flyer import | Bidirectional device & camera control (no built-in family suite) |
-| **Portrait Layout & Screensaver** | **Idle Photo Screensaver** (`5m`–`30m` clock/weather overlay) + Pi `--rotate`; dedicated `9:16` layout planned | Native idle screensaver | Native idle screensaver | Native portrait & idle screensaver | Native portrait & idle screensaver | Via plugins / custom dashboards |
+| **Portrait Layout & Screensaver** | **Idle Photo Screensaver** (Single / 4-Grid Collage / Polaroids / Filmstrip OR any configured Canvas) + Pi `--rotate`; `9:16` planned | Native idle screensaver | Native idle screensaver | Native portrait & idle screensaver | Native portrait & idle screensaver | Via plugins / custom dashboards |
 
 <sub>*Competitor pricing and feature availability reflect publicly advertised consumer tiers and hardware bundles and can change over time.*</sub>
 
@@ -69,7 +69,7 @@
   * **Responsive Kiosk Tile + Full 3-Column View:** Compact tiles default to `To Do` with `←`/`→` column steppers, 1-tap card chevrons, and unified mouse/touch drag reordering with ~350ms **Drag-to-Edge** column flipping; widening a tile automatically adapts it into a side-by-side **3-column swimlane layout** on the canvas, plus a 1-tap fullscreen 3-column view.
   * **Done Auto-Archive & Reusable Archive Drawer:** Configurable per-board `autoArchiveDays` sweeps, **Archive All Done**, confirmation-gated **Clear Done**, and a searchable per-board **Archive Drawer** that restores cards with checklists intact.
 * **📰 In-App Kiosk Reader Mode, Web Preview & 26 Curated RSS Feeds:**
-  * **Distraction-Free Article Reader (`/api/reader`):** Powered by Mozilla Readability and Linkedom with client-side `DOMPurify` HTML sanitization, paired with an anonymous CSP-sandboxed edge **Web Preview (`/api/web-proxy`)** fallback and a 26-feed curated directory across 6 categories.
+  * **Distraction-Free Article Reader (`/api/reader`):** Powered by Mozilla Readability and Linkedom with client-side `DOMPurify` HTML sanitization, paired with an anonymous CSP-sandboxed edge **Web Preview (`/api/web-proxy`)** fallback, kiosk-safe **Open in Browser** / **Open on Phone (QR)** / **Copy Link** handoff (`externalBrowserLinksPolicy`), and a 26-feed curated directory across 6 categories.
 * **📈 Live Markets & Watchlist (`/api/finance`):**
   * Track stocks, ETFs, market indices, and crypto with zero API keys required—featuring `1D` / `5D` / `1M` SVG sparklines, adaptive row/grid/ticker-strip layouts, preset bundles, live symbol search, offline quote caching, and Sticker Mode support.
 * **🏆 Live Sports Scoreboard (`/api/sports`) & 💡 Daily Discovery (`/api/discovery`):**
@@ -94,7 +94,7 @@
 * **📅 Multi-Calendar Feeds, Filters, Local Family Events & Meals Overlay:** Unified agenda, 3-day, weekly, and monthly views combining multiple `webcal://` and `.ics` feeds, **synced local Family Events** tagged to household profiles, 1-tap header **source & family member filter chips**, an optional **Show Planned Family Meals** overlay, per-calendar color tags, smart rate-limit protection, and a built-in US Holidays fallback.
 * **🌦️ Hourly Forecast & Severe Weather Alerts:** Zero-key Open-Meteo `5-Day | Hourly` strip (`12h` temperature + precipitation probabilities) and automatic US **NOAA/NWS Severe Weather Alerts** (`api.weather.gov`) with expandable safety detail modals inside **Weather** and **Clock & Weather** tiles.
 * **🔒 Kiosk Security & Hardware Polish:**
-  * Screen Wake Lock API, Fullscreen Mode, **Idle Photo Screensaver Mode** (`5m`–`30m` inactivity timer with burn-in-safe floating Clock & Weather overlay yielding automatically to Night Mode and alarms), **Reduce Blur & GPU Effects** low-power mode (`reduceVisualEffects`) for smooth 60fps rendering on Raspberry Pi and 4K displays, idle-cursor tooltip/edit-chrome auto-hiding, Scheduled Night Mode with pixel-shifting OLED clock, Kid-Proof 4-digit PIN lock with salted PBKDF2 hashing, exponential failed-attempt lockout, and double-entry confirmation on setup/change (plus email recovery when signed in), and Display Density scaling (`75%` to `150%`).
+  * Screen Wake Lock API, Fullscreen Mode, **Idle Photo Screensaver Mode** (`5m`–`30m` inactivity timer with live **Preview**, selectable **Photo Slideshow** styles—*Single Photo Ken Burns*, *4-Photo Mosaic Collage*, *Scattered Polaroids*, and *Cinematic Filmstrip*—or **Use a Canvas** edge-to-edge board mode, plus burn-in-safe floating Clock & Weather overlay yielding automatically to Night Mode and alarms), **Reduce Blur & GPU Effects** low-power mode (`reduceVisualEffects`) for smooth 60fps rendering on Raspberry Pi and 4K displays, idle-cursor tooltip/edit-chrome auto-hiding, Scheduled Night Mode with pixel-shifting OLED clock, Kid-Proof 4-digit PIN lock with salted PBKDF2 hashing, exponential failed-attempt lockout, and double-entry confirmation on setup/change (plus email recovery when signed in), and Display Density scaling (`75%` to `150%`).
 
 ---
 

@@ -19,11 +19,25 @@ import {
   type WeatherAlert,
   type WeatherData,
 } from '../../services/weather';
+import type {
+  IdleScreensaverMode,
+  IdleScreensaverPhotoStyle,
+  IdleScreensaverPolaroidSizeMode,
+} from '../../types/dashboard';
 import type { ScreensaverWeatherLocation } from '../../utils/idleScreensaver';
 import { formatTime, useTimePrefs } from '../../utils/timePrefs';
 
 interface IdlePhotoScreensaverProps {
   onWake: () => void;
+  mode: IdleScreensaverMode;
+  photoStyle: IdleScreensaverPhotoStyle;
+  mosaicKenBurns: boolean;
+  polaroidCount: number;
+  polaroidSizeMode: IdleScreensaverPolaroidSizeMode;
+  rotationIntervalSec: number;
+  photoOrder: 'random' | 'sequential';
+  showCaptions: boolean;
+  showDateTaken?: boolean;
   showClock: boolean;
   showWeather: boolean;
   weatherLocation: ScreensaverWeatherLocation | null;
@@ -82,6 +96,15 @@ function renderPillWeatherIcon(code: number, isDay: boolean) {
 
 export const IdlePhotoScreensaver: React.FC<IdlePhotoScreensaverProps> = ({
   onWake,
+  mode,
+  photoStyle,
+  mosaicKenBurns,
+  polaroidCount,
+  polaroidSizeMode,
+  rotationIntervalSec,
+  photoOrder,
+  showCaptions,
+  showDateTaken,
   showClock,
   showWeather,
   weatherLocation,
@@ -193,12 +216,15 @@ export const IdlePhotoScreensaver: React.FC<IdlePhotoScreensaverProps> = ({
   const activeWeather =
     showWeather && weatherLat !== null && weatherLon !== null ? weather : null;
   const topAlert = activeWeather && alerts.length > 0 ? alerts[0] : null;
+  const showFloatingPill = showClock || Boolean(activeWeather);
 
   return (
     <div
       role="presentation"
       data-testid="idle-photo-screensaver"
-      className={`fixed inset-0 z-[68] bg-black select-none overflow-hidden transition-opacity duration-150 ${
+      className={`fixed inset-0 z-[68] ${
+        mode === 'canvas' ? 'bg-transparent' : 'bg-black'
+      } select-none overflow-hidden transition-opacity duration-150 ${
         isWaking ? 'opacity-0' : 'opacity-100'
       }`}
     >
@@ -217,27 +243,39 @@ export const IdlePhotoScreensaver: React.FC<IdlePhotoScreensaverProps> = ({
         }}
         className="absolute inset-0 z-10 cursor-pointer"
       />
-      {/* Fullscreen Photo Slideshow (non-interactive so taps wake cleanly without triggering inner chevrons) */}
-      <div className="absolute inset-0 pointer-events-none">
-        <PhotoFrameWidget
-          useCommonSource={true}
-          initialStyle="ken_burns"
-          rotationIntervalSec={15}
-          showCaptions={true}
-          transparentBg={false}
-        />
-      </div>
 
-      {/* Subtle corner readability vignette */}
-      <div
-        className="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-black/65 via-black/20 to-transparent pointer-events-none"
-        aria-hidden="true"
-      />
+      {/* Standalone Photo Slideshow (non-interactive so taps wake cleanly without triggering inner chevrons) */}
+      {mode === 'photos' && (
+        <div className="absolute inset-0 pointer-events-none">
+          <PhotoFrameWidget
+            key={`${photoStyle}-${photoOrder}-${rotationIntervalSec}`}
+            widgetId={`__idle_screensaver_photo__:${photoStyle}`}
+            useCommonSource={true}
+            initialStyle={photoStyle}
+            mosaicKenBurns={mosaicKenBurns}
+            initialPolaroidCount={polaroidCount}
+            initialPolaroidSizeMode={polaroidSizeMode}
+            rotationIntervalSec={rotationIntervalSec}
+            photoOrder={photoOrder}
+            showCaptions={showCaptions}
+            showDateTaken={showDateTaken}
+            transparentBg={false}
+          />
+        </div>
+      )}
+
+      {/* Subtle bottom readability vignette (omitted in clean Canvas mode without overlay pills) */}
+      {(mode === 'photos' || showFloatingPill) && (
+        <div
+          className="absolute inset-x-0 bottom-0 z-[15] h-44 bg-gradient-to-t from-black/65 via-black/20 to-transparent pointer-events-none"
+          aria-hidden="true"
+        />
+      )}
 
       {/* Floating ambient clock & weather corner pill */}
-      {(showClock || activeWeather) && (
+      {showFloatingPill && (
         <div
-          className="absolute bottom-6 left-6 sm:bottom-8 sm:left-8 pointer-events-none transition-transform duration-1000 ease-out"
+          className="absolute bottom-6 left-6 sm:bottom-8 sm:left-8 z-20 pointer-events-none transition-transform duration-1000 ease-out"
           style={{ transform: `translate3d(${shift.x}px, ${shift.y}px, 0)` }}
         >
           <div className="flex flex-wrap items-center gap-4 px-5 py-3.5 rounded-2xl bg-black/45 backdrop-blur-md border border-white/15 shadow-2xl text-white">
@@ -292,7 +330,7 @@ export const IdlePhotoScreensaver: React.FC<IdlePhotoScreensaverProps> = ({
       )}
 
       {/* Quiet wake hint */}
-      <div className="absolute bottom-6 right-6 sm:bottom-8 sm:right-8 pointer-events-none hidden sm:block">
+      <div className="absolute bottom-6 right-6 sm:bottom-8 sm:right-8 z-20 pointer-events-none hidden sm:block">
         <span className="text-[11px] font-medium tracking-wide text-white/45 bg-black/30 backdrop-blur-sm px-3 py-1.5 rounded-full border border-white/10">
           Tap or press any key to wake
         </span>

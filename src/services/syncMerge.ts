@@ -162,6 +162,9 @@ export function mergeCloudSettingsForLocal(params: MergeCloudSettingsParams): Ap
       keepLocalLocks && currentSettings ? Boolean(currentSettings.lockFullscreenKiosk ?? true) : false,
     lockSettingsAccess: settingsPinOptOut ? false : true,
     settingsPinOptOut,
+    externalBrowserLinksPolicy: preserveDeviceLocks
+      ? currentSettings?.externalBrowserLinksPolicy || defaultSettings.externalBrowserLinksPolicy || 'auto'
+      : defaultSettings.externalBrowserLinksPolicy || 'auto',
     id: 'global',
     updated_at: cloudSettingsAt,
   };

@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.8.7",
+    date: "November 22, 2026",
+    title: "Configurable Screensaver Photo Layouts & Canvas Mode, plus Kiosk-Safe External Links & Phone QR Handoff",
+    highlights: [
+      "Screensaver Photo Layouts & Live Preview: Choose Single Photo (Ken Burns), Mosaic Collage (4-Grid), Scattered Polaroids (configurable density & size), or Cinematic Filmstrip with speed, shuffle/sequential order, captions, date-taken toggles, and 1-click Preview in Settings.",
+      "Canvas-Based Screensaver Mode: Designate any non-deleted canvas (even one hidden from the Navigation Dock) to run edge-to-edge as the idle screensaver with the dock hidden, an independent Clock/Weather overlay toggle, and automatic fallback to Photo Slideshow if deleted.",
+      "Kiosk-Safe Chore/Web Links & Phone QR Handoff: Added Copy Link, Open on Phone (QR), and kiosk-aware Open in Browser controls inside the in-app link viewer—allowing full browser tabs on laptops/phones while preventing Kiosk Jail on fullscreen/PIN-locked wall displays via a per-device Display setting.",
+    ],
+  },
+  {
     version: "v0.8.6",
     date: "November 22, 2026",
     title: "Idle Photo Screensaver, Calendar Filters & Local Family Events, Hourly Weather & NWS Alerts",

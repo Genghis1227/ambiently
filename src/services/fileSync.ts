@@ -54,6 +54,7 @@ export function sanitizePayloadForBackupExport(payload: LocalExportPayload): Loc
     lockFullscreenKiosk: false,
     lockSettingsAccess: true,
     settingsPinOptOut: false,
+    externalBrowserLinksPolicy: 'auto',
   };
 
   const safeWidgets = Array.isArray(payload.widgets)
@@ -268,7 +269,13 @@ export async function restoreBackupToDatabase(
   try {
     // 1. Restore Settings
     if (payload.settings) {
+      const existingSettings = await db.settings.get('global');
       let settingsToSave: AppSettings = stripPlexTokens({ ...payload.settings });
+      // Keep this device's external browser link policy intact across cross-device restores
+      settingsToSave.externalBrowserLinksPolicy =
+        existingSettings?.externalBrowserLinksPolicy ||
+        settingsToSave.externalBrowserLinksPolicy ||
+        'auto';
       // If clearPinLock is enabled or if PIN was not active in backup, purge all PIN lock residue
       if (options?.clearPinLock || !settingsToSave.pinLockEnabled || !settingsToSave.pinHash) {
         settingsToSave.pinLockEnabled = false;

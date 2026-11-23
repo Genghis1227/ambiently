@@ -45,14 +45,25 @@ import {
   Users,
   Server,
   Gauge,
+  ExternalLink,
 } from 'lucide-react';
 import { useUpdateChecker } from '../../services/updateChecker';
 import { db } from '../../services/db';
 import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 import {
+  IDLE_SCREENSAVER_POLAROID_PRESETS,
+  IDLE_SCREENSAVER_ROTATION_OPTIONS,
   IDLE_SCREENSAVER_TIMEOUT_OPTIONS,
+  normalizeIdleScreensaverMode,
+  normalizeIdleScreensaverPhotoOrder,
+  normalizeIdleScreensaverPhotoStyle,
+  normalizeIdleScreensaverPolaroidCount,
+  normalizeIdleScreensaverPolaroidSizeMode,
+  normalizeIdleScreensaverRotationSec,
   normalizeIdleScreensaverTimeoutMin,
+  pickDefaultScreensaverCanvasTabId,
 } from '../../utils/idleScreensaver';
+import { normalizeExternalBrowserLinksPolicy } from '../../utils/externalLinksPolicy';
 import {
   cancelPendingCloudPush,
   flushPendingCloudPush,
@@ -121,6 +132,7 @@ interface SettingsModalProps {
   onClose: () => void;
   initialTab?: SettingsTabId;
   onOpenQuickStart?: () => void;
+  onPreviewScreensaver?: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -128,6 +140,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   initialTab = 'boards',
   onOpenQuickStart,
+  onPreviewScreensaver,
 }) => {
   const {
     settings,
@@ -154,6 +167,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const [activeTab, setActiveTab] = useState<SettingsTabId>(initialTab);
   const fileSync = useFileSync();
+
+  const screensaverTimeoutMin = normalizeIdleScreensaverTimeoutMin(settings.idleScreensaverTimeoutMin);
+  const screensaverMode = normalizeIdleScreensaverMode(settings.idleScreensaverMode);
+  const screensaverPhotoStyle = normalizeIdleScreensaverPhotoStyle(settings.idleScreensaverPhotoStyle);
+  const screensaverPolaroidCount = normalizeIdleScreensaverPolaroidCount(
+    settings.idleScreensaverPolaroidCount
+  );
+  const screensaverPolaroidSizeMode = normalizeIdleScreensaverPolaroidSizeMode(
+    settings.idleScreensaverPolaroidSizeMode
+  );
+  const screensaverRotationSec = normalizeIdleScreensaverRotationSec(
+    settings.idleScreensaverRotationIntervalSec
+  );
+  const screensaverPhotoOrder = normalizeIdleScreensaverPhotoOrder(
+    settings.idleScreensaverPhotoOrder
+  );
+  const screensaverShowDateTaken =
+    settings.idleScreensaverShowDateTaken ?? Boolean(settings.commonPhotoShowDateTaken);
+  const screensaverNonDeletedTabs = tabs
+    .filter((t) => !t.deleted_at)
+    .slice()
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const screensaverTabExists = Boolean(
+    settings.idleScreensaverTabId &&
+      screensaverNonDeletedTabs.some((t) => t.id === settings.idleScreensaverTabId)
+  );
+  const screensaverSelectedTabId = screensaverTabExists
+    ? settings.idleScreensaverTabId || null
+    : pickDefaultScreensaverCanvasTabId(screensaverNonDeletedTabs, widgets);
+  const photoCanvasTabIds = new Set(
+    widgets.filter((w) => !w.deleted_at && w.type === 'photo_frame').map((w) => w.tabId)
+  );
 
   const [pinInput, setPinInput] = useState('');
   const [pinConfirmInput, setPinConfirmInput] = useState('');
@@ -1550,10 +1595,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       Idle Photo Screensaver
                     </span>
                     <span className="text-[11px] text-gray-400 block">
-                      Shows a fullscreen ambient photo slideshow after inactivity, yielding to Night Mode and alarms.
+                      Shows a fullscreen slideshow or designated Photo Canvas after inactivity, yielding to Night Mode and alarms.
                     </span>
                   </div>
                 </div>
+                {screensaverTimeoutMin > 0 && onPreviewScreensaver && (
+                  <button
+                    type="button"
+                    onClick={onPreviewScreensaver}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-teal-600/20 hover:bg-teal-600/35 border border-teal-500/40 text-xs font-semibold text-teal-200 transition-colors cursor-pointer shrink-0"
+                    title="Preview configured screensaver now"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Preview</span>
+                  </button>
+                )}
               </div>
 
               <div>
@@ -1562,10 +1618,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </span>
                 <div className="grid grid-cols-5 gap-1.5">
                   {IDLE_SCREENSAVER_TIMEOUT_OPTIONS.map((optMin) => {
-                    const currentTimeout = normalizeIdleScreensaverTimeoutMin(
-                      settings.idleScreensaverTimeoutMin
-                    );
-                    const isSelected = currentTimeout === optMin;
+                    const isSelected = screensaverTimeoutMin === optMin;
                     return (
                       <button
                         key={optMin}
@@ -1585,84 +1638,631 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
-              {normalizeIdleScreensaverTimeoutMin(settings.idleScreensaverTimeoutMin) > 0 && (
-                <div className="pt-2 border-t border-gray-800/80 space-y-2.5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <span className="text-xs font-medium text-gray-200 block">
-                        Floating Clock Pill
-                      </span>
-                      <span className="text-[11px] text-gray-400 block">
-                        Subtle time & date overlay that shifts periodically to protect screens
-                      </span>
+              {screensaverTimeoutMin > 0 && (
+                <div className="pt-2.5 border-t border-gray-800/80 space-y-3.5">
+                  {/* Screensaver Source Mode */}
+                  <div>
+                    <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
+                      Screensaver Source
+                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        {
+                          id: 'photos' as const,
+                          title: 'Photo Slideshow',
+                          desc: 'Use Shared Photos with selectable display style',
+                        },
+                        {
+                          id: 'canvas' as const,
+                          title: 'Use a Canvas',
+                          desc: 'Display a full-bleed configured board (dock hidden)',
+                        },
+                      ].map((opt) => {
+                        const isSelected = screensaverMode === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            aria-pressed={isSelected}
+                            onClick={() => {
+                              if (opt.id === 'canvas') {
+                                updateSettings({
+                                  idleScreensaverMode: 'canvas',
+                                  ...(screensaverTabExists
+                                    ? {}
+                                    : {
+                                        idleScreensaverTabId: pickDefaultScreensaverCanvasTabId(
+                                          screensaverNonDeletedTabs,
+                                          widgets
+                                        ),
+                                      }),
+                                });
+                              } else {
+                                updateSettings({ idleScreensaverMode: 'photos' });
+                              }
+                            }}
+                            className={`p-2.5 rounded-xl border text-left transition-colors cursor-pointer ${
+                              isSelected
+                                ? 'bg-teal-600/20 border-teal-500 text-teal-100'
+                                : 'bg-gray-950/70 border-gray-800 text-gray-300 hover:border-gray-700'
+                            }`}
+                          >
+                            <div className="text-xs font-semibold">{opt.title}</div>
+                            <div className="text-[10px] text-gray-400 mt-0.5">{opt.desc}</div>
+                          </button>
+                        );
+                      })}
                     </div>
-                    <button
-                      type="button"
-                      aria-pressed={settings.idleScreensaverShowClock !== false}
-                      onClick={() =>
-                        updateSettings({
-                          idleScreensaverShowClock: settings.idleScreensaverShowClock === false,
-                        })
-                      }
-                      className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out cursor-pointer ${
-                        settings.idleScreensaverShowClock !== false ? 'bg-teal-600' : 'bg-gray-700'
-                      }`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                          settings.idleScreensaverShowClock !== false
-                            ? 'translate-x-5'
-                            : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
                   </div>
 
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <span className="text-xs font-medium text-gray-200 block">
-                        Local Weather Pill
-                      </span>
-                      <span className="text-[11px] text-gray-400 block">
-                        Displays current conditions & active weather alerts from your Weather widget
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      aria-pressed={settings.idleScreensaverShowWeather !== false}
-                      onClick={() =>
-                        updateSettings({
-                          idleScreensaverShowWeather:
-                            settings.idleScreensaverShowWeather === false,
-                        })
-                      }
-                      className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out cursor-pointer ${
-                        settings.idleScreensaverShowWeather !== false ? 'bg-teal-600' : 'bg-gray-700'
-                      }`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                          settings.idleScreensaverShowWeather !== false
-                            ? 'translate-x-5'
-                            : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
-                  </div>
+                  {screensaverMode === 'photos' ? (
+                    <div className="space-y-3">
+                      {/* Standalone Photo Presentation Mode */}
+                      <div>
+                        <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
+                          Photo Layout Style
+                        </span>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { id: 'ken_burns' as const, label: 'Single Photo (Ken Burns Pan & Zoom)' },
+                            { id: 'mosaic' as const, label: 'Mosaic Collage (4-Grid)' },
+                            { id: 'polaroid' as const, label: 'Scattered Polaroids' },
+                            { id: 'filmstrip' as const, label: 'Cinematic Filmstrip' },
+                          ].map((styleOpt) => {
+                            const isSelected = screensaverPhotoStyle === styleOpt.id;
+                            return (
+                              <button
+                                key={styleOpt.id}
+                                type="button"
+                                aria-pressed={isSelected}
+                                onClick={() =>
+                                  updateSettings({ idleScreensaverPhotoStyle: styleOpt.id })
+                                }
+                                className={`p-2.5 rounded-xl border text-xs font-medium text-left transition-colors cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-teal-600/25 border-teal-500 text-teal-200'
+                                    : 'bg-gray-950/70 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'
+                                }`}
+                              >
+                                {styleOpt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
 
-                  <p className="text-[11px] text-gray-500">
-                    Slideshow cycles photos from the{' '}
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('photos')}
-                      className="text-teal-400 hover:text-teal-300 underline cursor-pointer"
-                    >
-                      Shared Photos
-                    </button>{' '}
-                    library tab.
-                  </p>
+                      {screensaverPhotoStyle === 'mosaic' && (
+                        <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-gray-950/70 border border-gray-800">
+                          <div>
+                            <span className="text-xs font-semibold text-gray-200 flex items-center gap-1.5">
+                              <Sparkles className="w-3.5 h-3.5 text-teal-400" />
+                              <span>Ken Burns Pan & Zoom Effect</span>
+                            </span>
+                            <span className="text-[11px] text-gray-400 block">
+                              Gentle pan & zoom focus motion on the active quadrant
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            aria-pressed={Boolean(settings.idleScreensaverMosaicKenBurns)}
+                            onClick={() =>
+                              updateSettings({
+                                idleScreensaverMosaicKenBurns:
+                                  !settings.idleScreensaverMosaicKenBurns,
+                              })
+                            }
+                            className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out cursor-pointer ${
+                              settings.idleScreensaverMosaicKenBurns ? 'bg-teal-600' : 'bg-gray-700'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                settings.idleScreensaverMosaicKenBurns
+                                  ? 'translate-x-5'
+                                  : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      )}
+
+                      {screensaverPhotoStyle === 'polaroid' && (
+                        <div className="p-3 rounded-xl bg-gray-950/70 border border-gray-800 space-y-3">
+                          <div>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-xs font-semibold text-gray-300">
+                                Polaroids Density ({screensaverPolaroidCount} Photos)
+                              </span>
+                              <span className="text-[10px] font-mono text-teal-400">
+                                {screensaverPolaroidCount >= 30
+                                  ? 'Fill Complete Screen'
+                                  : `${screensaverPolaroidCount} Scattered`}
+                              </span>
+                            </div>
+                            <div className="flex gap-1.5 mb-2">
+                              {IDLE_SCREENSAVER_POLAROID_PRESETS.map((count) => {
+                                const isSelected = screensaverPolaroidCount === count;
+                                return (
+                                  <button
+                                    key={count}
+                                    type="button"
+                                    aria-pressed={isSelected}
+                                    onClick={() =>
+                                      updateSettings({ idleScreensaverPolaroidCount: count })
+                                    }
+                                    className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer ${
+                                      isSelected
+                                        ? 'bg-teal-600 text-white'
+                                        : 'bg-gray-900 border border-gray-800 text-gray-400 hover:text-white'
+                                    }`}
+                                  >
+                                    {count}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <input
+                              type="range"
+                              min="4"
+                              max="36"
+                              step="2"
+                              value={screensaverPolaroidCount}
+                              onChange={(e) =>
+                                updateSettings({
+                                  idleScreensaverPolaroidCount: Number(e.target.value),
+                                })
+                              }
+                              className="w-full accent-teal-500 cursor-pointer"
+                            />
+                          </div>
+
+                          <div>
+                            <span className="text-xs font-semibold text-gray-300 block mb-1.5">
+                              Card Size Variation
+                            </span>
+                            <div className="grid grid-cols-2 gap-1.5">
+                              {[
+                                { id: 'mixed' as const, label: 'Random / Mixed Sizes' },
+                                { id: 'uniform' as const, label: 'Uniform Medium' },
+                                { id: 'small' as const, label: 'Compact Snapshots' },
+                                { id: 'large' as const, label: 'Large Hero Prints' },
+                              ].map((sz) => {
+                                const isSelected = screensaverPolaroidSizeMode === sz.id;
+                                return (
+                                  <button
+                                    key={sz.id}
+                                    type="button"
+                                    aria-pressed={isSelected}
+                                    onClick={() =>
+                                      updateSettings({ idleScreensaverPolaroidSizeMode: sz.id })
+                                    }
+                                    className={`p-2 rounded-lg border text-left text-[11px] font-medium transition-colors cursor-pointer ${
+                                      isSelected
+                                        ? 'bg-teal-600/25 border-teal-500 text-teal-200'
+                                        : 'bg-gray-900 border-gray-800 text-gray-400 hover:text-white'
+                                    }`}
+                                  >
+                                    {sz.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Rotation Speed & Order */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
+                            Rotation Speed
+                          </span>
+                          <div className="flex gap-1">
+                            {IDLE_SCREENSAVER_ROTATION_OPTIONS.map((sec) => {
+                              const isSelected = screensaverRotationSec === sec;
+                              return (
+                                <button
+                                  key={sec}
+                                  type="button"
+                                  aria-pressed={isSelected}
+                                  onClick={() =>
+                                    updateSettings({ idleScreensaverRotationIntervalSec: sec })
+                                  }
+                                  className={`flex-1 py-1.5 rounded-lg text-[11px] font-mono font-bold border transition-colors cursor-pointer ${
+                                    isSelected
+                                      ? 'bg-teal-600/30 border-teal-500 text-teal-200'
+                                      : 'bg-gray-950/70 border-gray-800 text-gray-400 hover:text-white'
+                                  }`}
+                                >
+                                  {sec >= 60 ? `${sec / 60}m` : `${sec}s`}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
+                            Playback Order
+                          </span>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {[
+                              { id: 'random' as const, label: 'Shuffle' },
+                              { id: 'sequential' as const, label: 'Sequential' },
+                            ].map((ord) => {
+                              const isSelected = screensaverPhotoOrder === ord.id;
+                              return (
+                                <button
+                                  key={ord.id}
+                                  type="button"
+                                  aria-pressed={isSelected}
+                                  onClick={() =>
+                                    updateSettings({ idleScreensaverPhotoOrder: ord.id })
+                                  }
+                                  className={`py-1.5 px-2 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                                    isSelected
+                                      ? 'bg-teal-600/30 border-teal-500 text-teal-200'
+                                      : 'bg-gray-950/70 border-gray-800 text-gray-400 hover:text-white'
+                                  }`}
+                                >
+                                  {ord.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Captions & Date Taken */}
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <span className="text-xs font-medium text-gray-200 block">
+                            Album Name & Captions
+                          </span>
+                          <span className="text-[11px] text-gray-400 block">
+                            Show photo captions, album title, and slide counter
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          aria-pressed={settings.idleScreensaverShowCaptions !== false}
+                          onClick={() =>
+                            updateSettings({
+                              idleScreensaverShowCaptions:
+                                settings.idleScreensaverShowCaptions === false,
+                            })
+                          }
+                          className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out cursor-pointer ${
+                            settings.idleScreensaverShowCaptions !== false
+                              ? 'bg-teal-600'
+                              : 'bg-gray-700'
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                              settings.idleScreensaverShowCaptions !== false
+                                ? 'translate-x-5'
+                                : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <span className="text-xs font-medium text-gray-200 block">
+                            Show Date Taken
+                          </span>
+                          <span className="text-[11px] text-gray-400 block">
+                            Display capture date or year when available in EXIF metadata
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          aria-pressed={screensaverShowDateTaken}
+                          onClick={() =>
+                            updateSettings({
+                              idleScreensaverShowDateTaken: !screensaverShowDateTaken,
+                            })
+                          }
+                          className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out cursor-pointer ${
+                            screensaverShowDateTaken ? 'bg-teal-600' : 'bg-gray-700'
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                              screensaverShowDateTaken ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* Clock & Weather Pills */}
+                      <div className="pt-2 border-t border-gray-800/80 space-y-2.5">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <span className="text-xs font-medium text-gray-200 block">
+                              Floating Clock Pill
+                            </span>
+                            <span className="text-[11px] text-gray-400 block">
+                              Subtle time & date overlay that shifts periodically to protect screens
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            aria-pressed={settings.idleScreensaverShowClock !== false}
+                            onClick={() =>
+                              updateSettings({
+                                idleScreensaverShowClock:
+                                  settings.idleScreensaverShowClock === false,
+                              })
+                            }
+                            className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out cursor-pointer ${
+                              settings.idleScreensaverShowClock !== false
+                                ? 'bg-teal-600'
+                                : 'bg-gray-700'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                settings.idleScreensaverShowClock !== false
+                                  ? 'translate-x-5'
+                                  : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <span className="text-xs font-medium text-gray-200 block">
+                              Local Weather Pill
+                            </span>
+                            <span className="text-[11px] text-gray-400 block">
+                              Displays current conditions & active weather alerts from your Weather widget
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            aria-pressed={settings.idleScreensaverShowWeather !== false}
+                            onClick={() =>
+                              updateSettings({
+                                idleScreensaverShowWeather:
+                                  settings.idleScreensaverShowWeather === false,
+                              })
+                            }
+                            className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out cursor-pointer ${
+                              settings.idleScreensaverShowWeather !== false
+                                ? 'bg-teal-600'
+                                : 'bg-gray-700'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                settings.idleScreensaverShowWeather !== false
+                                  ? 'translate-x-5'
+                                  : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      </div>
+
+                      <p className="text-[11px] text-gray-500">
+                        Slideshow cycles photos from the{' '}
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('photos')}
+                          className="text-teal-400 hover:text-teal-300 underline cursor-pointer"
+                        >
+                          Shared Photos
+                        </button>{' '}
+                        library tab.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div>
+                        <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
+                          Designated Screensaver Canvas
+                        </span>
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                          {screensaverNonDeletedTabs.map((t) => {
+                            const matchedIcon =
+                              CANVAS_ICONS.find((i) => i.id === t.icon) || CANVAS_ICONS[0];
+                            const TabIcon = matchedIcon.icon;
+                            const isSelected = screensaverSelectedTabId === t.id;
+                            const isHiddenFromDock =
+                              t.id === 'tab-overview' ? !t.enabled : t.enabled === false;
+                            const hasPhotoTile = photoCanvasTabIds.has(t.id);
+                            return (
+                              <button
+                                key={t.id}
+                                type="button"
+                                aria-pressed={isSelected}
+                                onClick={() => updateSettings({ idleScreensaverTabId: t.id })}
+                                className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl border text-left transition-colors cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-teal-600/20 border-teal-500 text-teal-100'
+                                    : 'bg-gray-950/70 border-gray-800 text-gray-300 hover:border-gray-700'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <TabIcon className="w-4 h-4 text-teal-400 shrink-0" />
+                                  <span className="text-xs font-semibold truncate">{t.name}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {hasPhotoTile && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                                      Photos
+                                    </span>
+                                  )}
+                                  {isHiddenFromDock && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700">
+                                      Hidden from Dock
+                                    </span>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <p className="text-[11px] text-gray-500 mt-1.5">
+                          Hides the Navigation Dock while idle and restores your prior board on wake. Falls back to Photo Slideshow automatically if this canvas is deleted.
+                        </p>
+                      </div>
+
+                      <div className="pt-2 border-t border-gray-800/80 space-y-2.5">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <span className="text-xs font-medium text-gray-200 block">
+                              Show Floating Clock & Weather Overlay
+                            </span>
+                            <span className="text-[11px] text-gray-400 block">
+                              Optional corner pill over Canvas mode (off by default to avoid duplicate clocks)
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            aria-pressed={Boolean(settings.idleScreensaverCanvasShowOverlay)}
+                            onClick={() =>
+                              updateSettings({
+                                idleScreensaverCanvasShowOverlay:
+                                  !settings.idleScreensaverCanvasShowOverlay,
+                              })
+                            }
+                            className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out cursor-pointer ${
+                              settings.idleScreensaverCanvasShowOverlay
+                                ? 'bg-teal-600'
+                                : 'bg-gray-700'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                settings.idleScreensaverCanvasShowOverlay
+                                  ? 'translate-x-5'
+                                  : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        {Boolean(settings.idleScreensaverCanvasShowOverlay) && (
+                          <div className="pl-3 border-l border-gray-800 space-y-2">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-xs text-gray-300">Floating Clock Pill</span>
+                              <button
+                                type="button"
+                                aria-pressed={settings.idleScreensaverShowClock !== false}
+                                onClick={() =>
+                                  updateSettings({
+                                    idleScreensaverShowClock:
+                                      settings.idleScreensaverShowClock === false,
+                                  })
+                                }
+                                className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out cursor-pointer ${
+                                  settings.idleScreensaverShowClock !== false
+                                    ? 'bg-teal-600'
+                                    : 'bg-gray-700'
+                                }`}
+                              >
+                                <span
+                                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                    settings.idleScreensaverShowClock !== false
+                                      ? 'translate-x-4'
+                                      : 'translate-x-0'
+                                  }`}
+                                />
+                              </button>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-xs text-gray-300">Local Weather Pill</span>
+                              <button
+                                type="button"
+                                aria-pressed={settings.idleScreensaverShowWeather !== false}
+                                onClick={() =>
+                                  updateSettings({
+                                    idleScreensaverShowWeather:
+                                      settings.idleScreensaverShowWeather === false,
+                                  })
+                                }
+                                className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out cursor-pointer ${
+                                  settings.idleScreensaverShowWeather !== false
+                                    ? 'bg-teal-600'
+                                    : 'bg-gray-700'
+                                }`}
+                              >
+                                <span
+                                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                    settings.idleScreensaverShowWeather !== false
+                                      ? 'translate-x-4'
+                                      : 'translate-x-0'
+                                  }`}
+                                />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
+            </div>
+
+            {/* External Browser Links (Device-Local Policy) */}
+            <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800 space-y-3">
+              <div className="flex items-start gap-2">
+                <ExternalLink className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+                <div>
+                  <span className="text-sm font-semibold text-white block">
+                    External Browser Links (This Device)
+                  </span>
+                  <span className="text-[11px] text-gray-400 block">
+                    Controls whether links in the in-app web viewer can open a full browser tab, or stay inside Kiosk QR / Copy handoff to avoid Kiosk Jail. Saved only for this display.
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {[
+                  {
+                    id: 'auto' as const,
+                    title: 'Auto (Kiosk-Safe)',
+                    desc: 'Allow on laptops & phones; hide when fullscreen or PIN-locked',
+                  },
+                  {
+                    id: 'always' as const,
+                    title: 'Always Allow',
+                    desc: 'Show Open in Browser (exits fullscreen automatically)',
+                  },
+                  {
+                    id: 'kiosk_qr_only' as const,
+                    title: 'Kiosk QR Only',
+                    desc: 'Always use Open on Phone (QR) & Copy Link on this screen',
+                  },
+                ].map((opt) => {
+                  const isSelected =
+                    normalizeExternalBrowserLinksPolicy(settings.externalBrowserLinksPolicy) ===
+                    opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      aria-pressed={isSelected}
+                      onClick={() => updateSettings({ externalBrowserLinksPolicy: opt.id })}
+                      className={`p-2.5 rounded-xl border text-left transition-colors cursor-pointer ${
+                        isSelected
+                          ? 'bg-blue-600/20 border-blue-500 text-blue-100'
+                          : 'bg-gray-950/70 border-gray-800 text-gray-300 hover:border-gray-700'
+                      }`}
+                    >
+                      <div className="text-xs font-semibold">{opt.title}</div>
+                      <div className="text-[10px] text-gray-400 mt-0.5 leading-snug">{opt.desc}</div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
             </>
             )}
