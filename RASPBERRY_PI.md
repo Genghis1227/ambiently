@@ -119,7 +119,7 @@ sudo reboot
 | `--mode` | `kiosk` \| `standalone` | *(Interactive prompt)* | `kiosk` connects to a URL; `standalone` installs Docker, starts the local server, and launches Kiosk. |
 | `--url` | Any `http://` or `https://` URL | `https://dashboard.trinhism.com` | Target dashboard URL when `--mode kiosk` is selected. |
 | `--port` | `1024`–`65535` | `8080` | Local HTTP port for the Docker container in `--mode standalone`. |
-| `--rotate` | `0` \| `90` \| `180` \| `270` | `0` | Rotates the display output on boot via `wlr-randr` (Wayland) or `xrandr` (X11). |
+| `--rotate` | `0` \| `90` \| `180` \| `270` | `0` | Rotates the display output on boot via `wlr-randr` (Wayland) or `xrandr` (X11); Ambiently automatically switches to True Portrait (`9:16`) wall layouts (`1080×1920`, or choose **Desktop View** once on `720×1280` panels and it stays persisted per device). |
 | `--uninstall` | *(None)* | — | Removes the kiosk launcher and autostart hooks cleanly. |
 
 **Useful Keyboard Shortcuts (when a USB/Bluetooth keyboard is attached):**

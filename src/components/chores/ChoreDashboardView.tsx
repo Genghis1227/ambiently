@@ -46,6 +46,8 @@ import { ProposalsTrayModal } from './ProposalsTrayModal';
 import { TrophyCaseModal } from './TrophyCaseModal';
 import { RewardStorePanel } from './RewardStorePanel';
 import { triggerChoreCelebration } from '../../utils/confetti';
+import { useDisplayOrientation } from '../../hooks/useDisplayOrientation';
+import { readPersistedForceDesktopMode } from '../../utils/displayOrientation';
 
 export interface ChoreDashboardViewProps {
   isOpen: boolean;
@@ -95,6 +97,8 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
 
   const [activeScope, setActiveScope] = useState<string>(config?.scope || 'household');
   const [mobileColumnTab, setMobileColumnTab] = useState<'chores' | 'rewards' | 'profiles'>('chores');
+  const [forceDesktopOverride] = useState<boolean>(readPersistedForceDesktopMode);
+  const { isPortraitDesktop } = useDisplayOrientation(forceDesktopOverride);
 
   useEffect(() => {
     if (mode === 'canvas') {
@@ -914,6 +918,109 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
       ? title.trim()
       : 'Family Chore & Reward Hub';
 
+  const dailyChoresContent = (
+    <>
+      <div
+        className={`flex items-center justify-between pb-3 mb-3 border-b shrink-0 ${
+          isLight ? 'border-slate-200' : 'border-slate-800/80'
+        }`}
+      >
+        <div>
+          <h2 className={`text-sm font-semibold ${isLight ? 'text-slate-800' : 'text-slate-100'}`}>
+            Daily Chores & Bounties
+          </h2>
+          <p className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+            Single tap to complete • Same-day undo supported
+          </p>
+        </div>
+        {effectiveScope !== 'household' && (
+          <button
+            type="button"
+            onClick={() => setActiveScope('household')}
+            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium cursor-pointer ${
+              isLight
+                ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+            }`}
+          >
+            <X className="w-3 h-3" />
+            <span>Show Everyone</span>
+          </button>
+        )}
+      </div>
+
+      <div className="flex-1 overflow-y-auto overflow-x-hidden pr-1 space-y-3">
+        {sections.map((sec) => {
+          const isExpanded = expandedSections[sec.id];
+          return (
+            <div
+              key={sec.id}
+              className={`rounded-xl border overflow-hidden ${
+                isLight
+                  ? 'border-slate-200/90 bg-slate-50/40'
+                  : 'border-slate-800/80 bg-slate-950/35'
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => toggleSection(sec.id)}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 text-left transition-colors cursor-pointer ${
+                  isLight ? 'hover:bg-slate-100/70' : 'hover:bg-slate-900/50'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  {isExpanded ? (
+                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  )}
+                  <span
+                    className={`text-xs font-semibold tracking-tight ${
+                      isLight ? 'text-slate-800' : 'text-slate-100'
+                    }`}
+                  >
+                    {sec.label}
+                  </span>
+                </div>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[11px] font-semibold tabular-nums ${sec.badgeTone}`}
+                >
+                  {sec.count}
+                </span>
+              </button>
+
+              {isExpanded && (
+                <div className="px-3 pb-3 pt-1">{sec.renderContent()}</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+
+  const rewardStorePanel = (
+    <RewardStorePanel
+      profiles={snapshot.profiles}
+      rewards={snapshot.rewards}
+      trophies={snapshot.trophies}
+      activeScope={effectiveScope}
+      isLight={isLight}
+      onClaimReward={claimUnlockedReward}
+      onUnclaimReward={unclaimPendingReward}
+      onOpenProposeModal={() => {
+        setEditingProposal(null);
+        setIsProposeModalOpen(true);
+      }}
+      onOpenProposalsTray={() => {
+        setProposalsTrayScope(effectiveScope);
+        setIsProposalsTrayOpen(true);
+      }}
+      onOpenTrophyCase={() => setIsTrophyCaseOpen(true)}
+      onOpenParentFulfillment={() => setParentDrawerOpen(true, 'fulfillment')}
+    />
+  );
+
   return (
     <div
       role={mode === 'overlay' ? 'region' : undefined}
@@ -1053,38 +1160,201 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
         </div>
       </header>
 
-      {/* Mobile Column Switcher (< 1024px) */}
-      <div
-        className={`flex lg:hidden items-center gap-1.5 px-4 py-2 border-b shrink-0 ${
-          isLight ? 'border-slate-200 bg-white/60' : 'border-slate-800/80 bg-slate-950/40'
-        }`}
-      >
-        {[
-          { id: 'profiles' as const, label: 'Profiles & Wallet' },
-          { id: 'chores' as const, label: `Chores (${todayTotalCount})` },
-          { id: 'rewards' as const, label: 'Reward Store' },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setMobileColumnTab(tab.id)}
-            className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-              mobileColumnTab === tab.id
-                ? isLight
-                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                  : 'bg-emerald-600/25 text-emerald-300 border border-emerald-500/40'
-                : isLight
-                  ? 'text-slate-500 hover:text-slate-800'
-                  : 'text-slate-400 hover:text-slate-200'
+      {/* Mobile Column Switcher (< 1024px non-portrait) */}
+      {!isPortraitDesktop && (
+        <div
+          className={`flex lg:hidden items-center gap-1.5 px-4 py-2 border-b shrink-0 ${
+            isLight ? 'border-slate-200 bg-white/60' : 'border-slate-800/80 bg-slate-950/40'
+          }`}
+        >
+          {[
+            { id: 'profiles' as const, label: 'Profiles & Wallet' },
+            { id: 'chores' as const, label: `Chores (${todayTotalCount})` },
+            { id: 'rewards' as const, label: 'Reward Store' },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setMobileColumnTab(tab.id)}
+              className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                mobileColumnTab === tab.id
+                  ? isLight
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    : 'bg-emerald-600/25 text-emerald-300 border border-emerald-500/40'
+                  : isLight
+                    ? 'text-slate-500 hover:text-slate-800'
+                    : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Main Content Layout: Portrait Vertical Stack vs Landscape 3-Column Grid */}
+      {isPortraitDesktop ? (
+        <div className="flex-1 min-h-0 flex flex-col gap-3.5 p-4 sm:p-5 overflow-hidden">
+          {/* TOP STRIP: Compact Horizontal Profile & Point Bank Pills + Quick Trays */}
+          <aside
+            className={`shrink-0 p-3.5 rounded-2xl border space-y-2.5 ${
+              isLight
+                ? 'bg-white/90 border-slate-200/90 shadow-sm'
+                : 'bg-slate-900/55 border-slate-800/80'
             }`}
           >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span
+                  className={`text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 ${
+                    isLight ? 'text-slate-500' : 'text-slate-400'
+                  }`}
+                >
+                  <Wallet className="w-3.5 h-3.5 text-emerald-500" />
+                  Point Banks
+                </span>
+                <span className={`text-[11px] tabular-nums ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                  Total: {totalHouseholdAvailable} pts
+                  {totalHouseholdPending > 0 ? ` • ${totalHouseholdPending} pending` : ''}
+                </span>
+              </div>
 
-      {/* Main 3-Column Content Grid */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 p-4 sm:p-6 overflow-hidden">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setIsProposeModalOpen(true)}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
+                    isLight
+                      ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-900'
+                      : 'bg-emerald-600/20 hover:bg-emerald-600/30 border-emerald-500/35 text-emerald-200'
+                  }`}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Wish</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProposalsTrayScope('household');
+                    setIsProposalsTrayOpen(true);
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-medium transition-colors cursor-pointer ${
+                    isLight
+                      ? 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
+                      : 'bg-slate-950/60 hover:bg-slate-800/70 border-slate-800 text-slate-200'
+                  }`}
+                >
+                  <Inbox className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Proposals ({pendingCounts.needsPricingCount})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsTrophyCaseOpen(true)}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-medium transition-colors cursor-pointer ${
+                    isLight
+                      ? 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
+                      : 'bg-slate-950/60 hover:bg-slate-800/70 border-slate-800 text-slate-200'
+                  }`}
+                >
+                  <Trophy className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Trophies ({snapshot.trophies.length})</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 overflow-x-auto overflow-y-hidden no-scrollbar pb-0.5">
+              <button
+                type="button"
+                onClick={() => setActiveScope('household')}
+                className={`flex items-center gap-2.5 px-3 py-2 rounded-xl border text-left transition-all shrink-0 cursor-pointer ${
+                  effectiveScope === 'household'
+                    ? isLight
+                      ? 'bg-emerald-50/80 border-emerald-400 ring-1 ring-emerald-400/25'
+                      : 'bg-slate-800/90 border-emerald-500/50 ring-1 ring-emerald-500/25'
+                    : isLight
+                      ? 'bg-slate-50/70 border-slate-200 hover:border-slate-300'
+                      : 'bg-slate-950/50 border-slate-800/80 hover:border-slate-700'
+                }`}
+              >
+                <span className="text-sm">🏠</span>
+                <div className="leading-tight">
+                  <div className={`text-xs font-semibold ${isLight ? 'text-slate-800' : 'text-slate-100'}`}>
+                    Everyone
+                  </div>
+                  <div className={`text-[10px] font-bold tabular-nums ${isLight ? 'text-emerald-700' : 'text-emerald-300'}`}>
+                    {totalHouseholdAvailable} pts
+                  </div>
+                </div>
+              </button>
+
+              {snapshot.profiles.map((profile) => {
+                const isSelected = effectiveScope === profile.id;
+                const pendingPts = pendingByProfile.get(profile.id) || 0;
+                const availablePts = Math.max(0, profile.balance - pendingPts);
+                return (
+                  <button
+                    key={profile.id}
+                    type="button"
+                    onClick={() => setActiveScope(profile.id)}
+                    className={`flex items-center gap-2.5 px-3 py-2 rounded-xl border text-left transition-all shrink-0 cursor-pointer ${
+                      isSelected
+                        ? isLight
+                          ? 'bg-emerald-50/80 border-emerald-400 ring-1 ring-emerald-400/25'
+                          : 'bg-slate-800/90 border-emerald-500/50 ring-1 ring-emerald-500/25'
+                        : isLight
+                          ? 'bg-slate-50/70 border-slate-200 hover:border-slate-300'
+                          : 'bg-slate-950/50 border-slate-800/80 hover:border-slate-700'
+                    }`}
+                    style={{
+                      borderLeftWidth: '3px',
+                      borderLeftColor: profile.color || '#6B8E7B',
+                    }}
+                  >
+                    <HouseholdAvatar profile={profile} size="sm" />
+                    <div className="leading-tight">
+                      <div className={`text-xs font-semibold ${isLight ? 'text-slate-800' : 'text-slate-100'}`}>
+                        {profile.name}
+                      </div>
+                      <div
+                        className="text-[11px] font-bold tabular-nums"
+                        style={{ color: profile.color || '#8FA89B' }}
+                      >
+                        {availablePts} pts
+                        {pendingPts > 0 ? ` (-${pendingPts})` : ''}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
+
+          {/* MIDDLE: Daily Chores & Bounties */}
+          <main
+            className={`flex-[1.15] min-h-0 flex flex-col overflow-hidden rounded-2xl border p-4 ${
+              isLight
+                ? 'bg-white/90 border-slate-200/90 shadow-sm'
+                : 'bg-slate-900/55 border-slate-800/80'
+            }`}
+          >
+            {dailyChoresContent}
+          </main>
+
+          {/* BOTTOM: Visual Reward Store */}
+          <section
+            className={`flex-1 min-h-0 flex flex-col overflow-hidden rounded-2xl border p-4 ${
+              isLight
+                ? 'bg-white/90 border-slate-200/90 shadow-sm'
+                : 'bg-slate-900/55 border-slate-800/80'
+            }`}
+          >
+            {rewardStorePanel}
+          </section>
+        </div>
+      ) : (
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 p-4 sm:p-6 overflow-hidden">
         {/* LEFT COLUMN: Profile Switcher, Point Banks & Quick Access Trays */}
         <aside
           className={`lg:col-span-3 min-w-0 flex flex-col gap-4 overflow-y-auto overflow-x-hidden pr-1 ${
@@ -1364,82 +1634,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
               : 'bg-slate-900/55 border-slate-800/80'
           } ${mobileColumnTab === 'chores' ? 'flex' : 'hidden lg:flex'}`}
         >
-          <div
-            className={`flex items-center justify-between pb-3 mb-3 border-b shrink-0 ${
-              isLight ? 'border-slate-200' : 'border-slate-800/80'
-            }`}
-          >
-            <div>
-              <h2 className={`text-sm font-semibold ${isLight ? 'text-slate-800' : 'text-slate-100'}`}>
-                Daily Chores & Bounties
-              </h2>
-              <p className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                Single tap to complete • Same-day undo supported
-              </p>
-            </div>
-            {effectiveScope !== 'household' && (
-              <button
-                type="button"
-                onClick={() => setActiveScope('household')}
-                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium cursor-pointer ${
-                  isLight
-                    ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                    : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
-                }`}
-              >
-                <X className="w-3 h-3" />
-                <span>Show Everyone</span>
-              </button>
-            )}
-          </div>
-
-          <div className="flex-1 overflow-y-auto overflow-x-hidden pr-1 space-y-3">
-            {sections.map((sec) => {
-              const isExpanded = expandedSections[sec.id];
-              return (
-                <div
-                  key={sec.id}
-                  className={`rounded-xl border overflow-hidden ${
-                    isLight
-                      ? 'border-slate-200/90 bg-slate-50/40'
-                      : 'border-slate-800/80 bg-slate-950/35'
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => toggleSection(sec.id)}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 text-left transition-colors cursor-pointer ${
-                      isLight ? 'hover:bg-slate-100/70' : 'hover:bg-slate-900/50'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      {isExpanded ? (
-                        <ChevronDown className="w-4 h-4 text-slate-400" />
-                      ) : (
-                        <ChevronRight className="w-4 h-4 text-slate-400" />
-                      )}
-                      <span
-                        className={`text-xs font-semibold tracking-tight ${
-                          isLight ? 'text-slate-800' : 'text-slate-100'
-                        }`}
-                      >
-                        {sec.label}
-                      </span>
-                    </div>
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[11px] font-semibold tabular-nums ${sec.badgeTone}`}
-                    >
-                      {sec.count}
-                    </span>
-                  </button>
-
-                  {isExpanded && (
-                    <div className="px-3 pb-3 pt-1">{sec.renderContent()}</div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+          {dailyChoresContent}
         </main>
 
         {/* RIGHT COLUMN: Visual Reward Store */}
@@ -1450,27 +1645,10 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
               : 'bg-slate-900/55 border-slate-800/80'
           } ${mobileColumnTab === 'rewards' ? 'flex' : 'hidden lg:flex'}`}
         >
-          <RewardStorePanel
-            profiles={snapshot.profiles}
-            rewards={snapshot.rewards}
-            trophies={snapshot.trophies}
-            activeScope={effectiveScope}
-            isLight={isLight}
-            onClaimReward={claimUnlockedReward}
-            onUnclaimReward={unclaimPendingReward}
-            onOpenProposeModal={() => {
-              setEditingProposal(null);
-              setIsProposeModalOpen(true);
-            }}
-            onOpenProposalsTray={() => {
-              setProposalsTrayScope(effectiveScope);
-              setIsProposalsTrayOpen(true);
-            }}
-            onOpenTrophyCase={() => setIsTrophyCaseOpen(true)}
-            onOpenParentFulfillment={() => setParentDrawerOpen(true, 'fulfillment')}
-          />
+          {rewardStorePanel}
         </section>
       </div>
+      )}
 
       {/* Modals */}
       {splitTarget && (

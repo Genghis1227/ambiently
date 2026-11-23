@@ -4,6 +4,12 @@ import type {
   FreeformPosition,
   StickyNoteItem,
 } from '../types/dashboard';
+import type { DisplayOrientation } from './displayOrientation';
+
+export interface AutoLayoutOptions {
+  orientation?: DisplayOrientation;
+  viewportAspectRatio?: number;
+}
 
 export interface OrganizedLayoutResult {
   widgetPositions: Record<string, FreeformPosition>;
@@ -53,7 +59,9 @@ function tileBentoInZone(
   zoneY: number,
   zoneW: number,
   zoneH: number,
-  gap: number
+  gap: number,
+  orientation: DisplayOrientation = 'landscape',
+  viewportAspectRatio = orientation === 'portrait' ? 9 / 16 : 16 / 9
 ): Map<string, FreeformPosition> {
   const result = new Map<string, FreeformPosition>();
   const n = items.length;
@@ -72,56 +80,160 @@ function tileBentoInZone(
     return result;
   }
 
-  if (n === 2 && zoneW >= zoneH * 0.85) {
-    // Side-by-side 50/50 split
-    const colW = (zoneW - gap) / 2;
-    items.forEach((item, idx) => {
-      result.set(item.id, {
-        xRatio: Number((zoneX + idx * (colW + gap)).toFixed(4)),
+  const safeAspect =
+    Number.isFinite(viewportAspectRatio) && viewportAspectRatio > 0
+      ? viewportAspectRatio
+      : orientation === 'portrait'
+        ? 9 / 16
+        : 16 / 9;
+  const visualW = zoneW * safeAspect;
+  const visualH = zoneH;
+  const isTallZone = orientation === 'portrait' && visualH > visualW;
+
+  if (n === 2) {
+    if (isTallZone) {
+      // Portrait tall zone: stack vertically full-width
+      const rowH = (zoneH - gap) / 2;
+      items.forEach((item, idx) => {
+        result.set(item.id, {
+          xRatio: Number(zoneX.toFixed(4)),
+          yRatio: Number((zoneY + idx * (rowH + gap)).toFixed(4)),
+          wRatio: Number(zoneW.toFixed(4)),
+          hRatio: Number(rowH.toFixed(4)),
+          zIndex: 10 + idx,
+          rotation: 0,
+          isFullScreen: false,
+        });
+      });
+      return result;
+    }
+    if (orientation === 'portrait' || zoneW >= zoneH * 0.85) {
+      // Side-by-side 50/50 split
+      const colW = (zoneW - gap) / 2;
+      items.forEach((item, idx) => {
+        result.set(item.id, {
+          xRatio: Number((zoneX + idx * (colW + gap)).toFixed(4)),
+          yRatio: Number(zoneY.toFixed(4)),
+          wRatio: Number(colW.toFixed(4)),
+          hRatio: Number(zoneH.toFixed(4)),
+          zIndex: 10 + idx,
+          rotation: 0,
+          isFullScreen: false,
+        });
+      });
+      return result;
+    }
+  }
+
+  if (n === 3) {
+    if (orientation === 'portrait') {
+      if (isTallZone && zoneW >= 0.65) {
+        // 1 Full-width Top Hero (44% height) + 2 Side-by-Side cards below (56% height)
+        const topH = zoneH * 0.44 - gap / 2;
+        const bottomH = zoneH - topH - gap;
+        const colW = (zoneW - gap) / 2;
+
+        result.set(items[0].id, {
+          xRatio: Number(zoneX.toFixed(4)),
+          yRatio: Number(zoneY.toFixed(4)),
+          wRatio: Number(zoneW.toFixed(4)),
+          hRatio: Number(topH.toFixed(4)),
+          zIndex: 10,
+          rotation: 0,
+          isFullScreen: false,
+        });
+
+        [items[1], items[2]].forEach((item, idx) => {
+          result.set(item.id, {
+            xRatio: Number((zoneX + idx * (colW + gap)).toFixed(4)),
+            yRatio: Number((zoneY + topH + gap).toFixed(4)),
+            wRatio: Number(colW.toFixed(4)),
+            hRatio: Number(bottomH.toFixed(4)),
+            zIndex: 11 + idx,
+            rotation: 0,
+            isFullScreen: false,
+          });
+        });
+        return result;
+      }
+
+      if (isTallZone) {
+        // Narrow portrait zone: stack 3 cards vertically
+        const rowH = (zoneH - gap * 2) / 3;
+        items.forEach((item, idx) => {
+          result.set(item.id, {
+            xRatio: Number(zoneX.toFixed(4)),
+            yRatio: Number((zoneY + idx * (rowH + gap)).toFixed(4)),
+            wRatio: Number(zoneW.toFixed(4)),
+            hRatio: Number(rowH.toFixed(4)),
+            zIndex: 10 + idx,
+            rotation: 0,
+            isFullScreen: false,
+          });
+        });
+        return result;
+      }
+
+      // Wide horizontal bottom note strip in portrait split mode
+      const colW = (zoneW - gap * 2) / 3;
+      items.forEach((item, idx) => {
+        result.set(item.id, {
+          xRatio: Number((zoneX + idx * (colW + gap)).toFixed(4)),
+          yRatio: Number(zoneY.toFixed(4)),
+          wRatio: Number(colW.toFixed(4)),
+          hRatio: Number(zoneH.toFixed(4)),
+          zIndex: 10 + idx,
+          rotation: 0,
+          isFullScreen: false,
+        });
+      });
+      return result;
+    }
+
+    if (zoneW >= 0.55) {
+      // Landscape: 1 Hero on Left (52% width) + 2 Stacked on Right (48% width)
+      const leftW = zoneW * 0.52 - gap / 2;
+      const rightW = zoneW - leftW - gap;
+      const rightH = (zoneH - gap) / 2;
+
+      result.set(items[0].id, {
+        xRatio: Number(zoneX.toFixed(4)),
         yRatio: Number(zoneY.toFixed(4)),
-        wRatio: Number(colW.toFixed(4)),
+        wRatio: Number(leftW.toFixed(4)),
         hRatio: Number(zoneH.toFixed(4)),
-        zIndex: 10 + idx,
+        zIndex: 10,
         rotation: 0,
         isFullScreen: false,
       });
-    });
-    return result;
-  }
 
-  if (n === 3 && zoneW >= 0.55) {
-    // 1 Hero on Left (52% width) + 2 Stacked on Right (48% width)
-    const leftW = zoneW * 0.52 - gap / 2;
-    const rightW = zoneW - leftW - gap;
-    const rightH = (zoneH - gap) / 2;
-
-    result.set(items[0].id, {
-      xRatio: Number(zoneX.toFixed(4)),
-      yRatio: Number(zoneY.toFixed(4)),
-      wRatio: Number(leftW.toFixed(4)),
-      hRatio: Number(zoneH.toFixed(4)),
-      zIndex: 10,
-      rotation: 0,
-      isFullScreen: false,
-    });
-
-    [items[1], items[2]].forEach((item, idx) => {
-      result.set(item.id, {
-        xRatio: Number((zoneX + leftW + gap).toFixed(4)),
-        yRatio: Number((zoneY + idx * (rightH + gap)).toFixed(4)),
-        wRatio: Number(rightW.toFixed(4)),
-        hRatio: Number(rightH.toFixed(4)),
-        zIndex: 11 + idx,
-        rotation: 0,
-        isFullScreen: false,
+      [items[1], items[2]].forEach((item, idx) => {
+        result.set(item.id, {
+          xRatio: Number((zoneX + leftW + gap).toFixed(4)),
+          yRatio: Number((zoneY + idx * (rightH + gap)).toFixed(4)),
+          wRatio: Number(rightW.toFixed(4)),
+          hRatio: Number(rightH.toFixed(4)),
+          zIndex: 11 + idx,
+          rotation: 0,
+          isFullScreen: false,
+        });
       });
-    });
-    return result;
+      return result;
+    }
   }
 
-  // General N >= 2 Bento Grid
-  const aspectRatio = zoneW / Math.max(0.2, zoneH);
-  const cols = Math.max(1, Math.ceil(Math.sqrt(n * aspectRatio)));
+  // General N Bento Grid
+  const aspectRatio =
+    orientation === 'portrait'
+      ? visualW / Math.max(0.2, visualH)
+      : zoneW / Math.max(0.2, zoneH);
+  const cols =
+    orientation === 'portrait'
+      ? isTallZone
+        ? zoneW < 0.55
+          ? 1
+          : Math.max(1, Math.min(2, Math.round(Math.sqrt(n * aspectRatio))))
+        : Math.max(1, Math.min(n, Math.ceil(Math.sqrt(n * aspectRatio))))
+      : Math.max(1, Math.ceil(Math.sqrt(n * aspectRatio)));
   const rows = Math.max(1, Math.ceil(n / cols));
   const rowH = (zoneH - gap * (rows - 1)) / rows;
 
@@ -164,10 +276,14 @@ function packPreservingSizes(
   zoneY: number,
   zoneW: number,
   zoneH: number,
-  gap: number
+  gap: number,
+  orientation: DisplayOrientation = 'landscape'
 ): Map<string, FreeformPosition> {
   const result = new Map<string, FreeformPosition>();
   if (items.length === 0) return result;
+
+  const minW = orientation === 'portrait' ? 0.28 : 0.11;
+  const minH = orientation === 'portrait' ? 0.08 : 0.11;
 
   // Sort tallest-first for clean shelf rows
   const sorted = [...items].sort((a, b) => b.hRatio - a.hRatio || b.wRatio - a.wRatio);
@@ -181,8 +297,8 @@ function packPreservingSizes(
     let fits = true;
 
     for (const item of sorted) {
-      const w = Math.min(zoneW, Math.max(0.11, item.wRatio * scale));
-      const h = Math.min(zoneH, Math.max(0.11, item.hRatio * scale));
+      const w = Math.min(zoneW, Math.max(minW, item.wRatio * scale));
+      const h = Math.min(zoneH, Math.max(minH, item.hRatio * scale));
 
       if (curX + w > zoneX + zoneW + 0.001 && curX > zoneX) {
         curX = zoneX;
@@ -209,8 +325,8 @@ function packPreservingSizes(
   let shelfH = 0;
 
   sorted.forEach((item, idx) => {
-    const w = Math.min(zoneW, Math.max(0.11, item.wRatio * chosenScale));
-    const h = Math.min(zoneH, Math.max(0.11, item.hRatio * chosenScale));
+    const w = Math.min(zoneW, Math.max(minW, item.wRatio * chosenScale));
+    const h = Math.min(zoneH, Math.max(minH, item.hRatio * chosenScale));
 
     if (curX + w > zoneX + zoneW + 0.001 && curX > zoneX) {
       curX = zoneX;
@@ -242,8 +358,17 @@ function packPreservingSizes(
 export function computeNonOverlappingLayout(
   widgets: DashboardWidget[],
   notes: StickyNoteItem[],
-  mode: AutoOrganizeMode = 'bento'
+  mode: AutoOrganizeMode = 'bento',
+  options?: AutoLayoutOptions
 ): OrganizedLayoutResult {
+  const orientation: DisplayOrientation = options?.orientation ?? 'landscape';
+  const viewportAspectRatio =
+    options?.viewportAspectRatio && options.viewportAspectRatio > 0
+      ? options.viewportAspectRatio
+      : orientation === 'portrait'
+        ? 9 / 16
+        : 16 / 9;
+
   const now = new Date();
   const activeNotes = notes.filter(
     (n) =>
@@ -283,15 +408,63 @@ export function computeNonOverlappingLayout(
   let combinedMap = new Map<string, FreeformPosition>();
 
   if (mode === 'split' && widgetBoxes.length > 0 && noteBoxes.length > 0) {
-    // Left 63% for Live Widgets, Right 31% for Sticky Notes
-    const leftW = 0.63;
-    const rightX = zoneX + leftW + gap;
-    const rightW = zoneW - leftW - gap;
+    if (orientation === 'portrait') {
+      // Top ~68% for Live Widgets, Bottom ~26% strip for Sticky Notes
+      const topH = Number((zoneH * 0.68 - gap / 2).toFixed(4));
+      const bottomY = Number((zoneY + topH + gap).toFixed(4));
+      const bottomH = Number((zoneH - topH - gap).toFixed(4));
 
-    const wMap = tileBentoInZone(widgetBoxes, zoneX, zoneY, leftW, zoneH, gap);
-    const nMap = tileBentoInZone(noteBoxes, rightX, zoneY, rightW, zoneH, gap);
-    wMap.forEach((v, k) => combinedMap.set(k, v));
-    nMap.forEach((v, k) => combinedMap.set(k, v));
+      const wMap = tileBentoInZone(
+        widgetBoxes,
+        zoneX,
+        zoneY,
+        zoneW,
+        topH,
+        gap,
+        orientation,
+        viewportAspectRatio
+      );
+      const nMap = tileBentoInZone(
+        noteBoxes,
+        zoneX,
+        bottomY,
+        zoneW,
+        bottomH,
+        gap,
+        orientation,
+        viewportAspectRatio
+      );
+      wMap.forEach((v, k) => combinedMap.set(k, v));
+      nMap.forEach((v, k) => combinedMap.set(k, v));
+    } else {
+      // Landscape: Left 63% for Live Widgets, Right 31% for Sticky Notes
+      const leftW = 0.63;
+      const rightX = zoneX + leftW + gap;
+      const rightW = zoneW - leftW - gap;
+
+      const wMap = tileBentoInZone(
+        widgetBoxes,
+        zoneX,
+        zoneY,
+        leftW,
+        zoneH,
+        gap,
+        orientation,
+        viewportAspectRatio
+      );
+      const nMap = tileBentoInZone(
+        noteBoxes,
+        rightX,
+        zoneY,
+        rightW,
+        zoneH,
+        gap,
+        orientation,
+        viewportAspectRatio
+      );
+      wMap.forEach((v, k) => combinedMap.set(k, v));
+      nMap.forEach((v, k) => combinedMap.set(k, v));
+    }
   } else if (mode === 'pack') {
     combinedMap = packPreservingSizes(
       [...widgetBoxes, ...noteBoxes],
@@ -299,7 +472,8 @@ export function computeNonOverlappingLayout(
       zoneY,
       zoneW,
       zoneH,
-      gap
+      gap,
+      orientation
     );
   } else {
     // Default 'bento' mode
@@ -309,7 +483,9 @@ export function computeNonOverlappingLayout(
       zoneY,
       zoneW,
       zoneH,
-      gap
+      gap,
+      orientation,
+      viewportAspectRatio
     );
   }
 

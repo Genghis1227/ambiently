@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.9] - 2026-11-23
+
+### Added
+- **Phase 2 — True Portrait (`9:16`) Wall Display Layout Support (`displayOrientation.ts`, `useDisplayOrientation.ts`, `autoLayout.ts`, `canvasBlueprints.ts`, `dashboardStore.ts`, `App.tsx`, `Closes #177`):**
+  - Added desktop portrait orientation detection (`useDisplayOrientation` + `resolveViewportLayoutMode`, tagging `data-display-orientation`) and device-local persistence for the **Desktop View** override (`ambiently_force_desktop_mode`) so rotated `720×1280` displays keep Desktop Portrait mode across reloads without changing phone Mobile Companion defaults.
+  - Added portrait-aware placement algorithms across **Smart Bento Grid** (vertical stacking for `n = 2`, full-width top hero over 2 side-by-side cards for `n = 3`, capped `<= 2`-column visual aspect grids for `n >= 4`), **Split Zones** (top live widgets `68%` above a bottom horizontal sticky-note strip `26%`), and **Keep Sizes & Pack** (readable `>= 0.28` width floor), plus dedicated portrait starter geometries in `materializeCanvasBlueprint` (`family_command`, `kitchen_meals`, `photo_gallery`) and widened portrait default tile spawn ratios.
+- **Vertical Hubs & Container-Measured Multi-Column Widgets (`ChoreDashboardView.tsx`, `KanbanBoardView.tsx`, `CalendarWidget.tsx`, `MealPlannerWidget.tsx`, `FinanceWidget.tsx`):**
+  - Rendered **ChoreDashboardView** as a simultaneously visible 3-tier vertical wall stack on desktop portrait displays (compact horizontal Point Bank pills + quick trays over stacked **Daily Chores** and **Reward Store**) and stacked **KanbanBoardView** swimlanes vertically in portrait viewports.
+  - Added `ResizeObserver`-measured container responsiveness in `CalendarWidget` (vertical stacking / horizontal scrolling for narrow **3-Day** and **Weekly** views), `MealPlannerWidget` (`1` / `2` / `3` column Full-Week adaptation), and `FinanceWidget` (list preference on tall narrow portrait cards).
+
 ## [0.8.8] - 2026-11-22
 
 ### Fixed

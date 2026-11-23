@@ -6,7 +6,7 @@
 
 ## How Ambiently Compares
 
-| Capability | Ambiently (`v0.8.8`) | Skylight Calendar (+ Plus) | Hearth Display | DAKboard | Mango Display | Home Assistant |
+| Capability | Ambiently (`v0.8.9`) | Skylight Calendar (+ Plus) | Hearth Display | DAKboard | Mango Display | Home Assistant |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Pricing & Open Source** | **$0 / Open-source (AGPLv3)** | ~$299–$599 hw + ~$79/yr Plus | ~$699 hw + ~$86/yr plan | $0 basic / ~$5–$8+/mo | $0 basic / ~$5.99/mo Pro | $0 self-hosted (+ optional Nabu Casa) |
 | **Hardware & Hosting** | Any browser, tablet, Pi kiosk, or Docker (`amd64`/`arm64`) | Proprietary wall touchscreen only | Proprietary 27" touchscreen only | BYO screen or DAKboard hardware | BYO TV, tablet, Fire Stick, or Echo Show | Self-hosted server + any tablet/browser |
@@ -19,7 +19,7 @@
 | **Photo Frames** | 7,500+ Google Photos, Google Drive, Local/NAS folders, Plex QR pairing, 128 curated photos; Ken Burns, Collage, Polaroids & Filmstrip | Cloud photo screensaver (Plus) | Limited photo features | Cloud photo slideshows (Google/Apple/Dropbox) | Cloud photo backgrounds & widgets | Media / gallery integrations |
 | **Weather, Feeds & Finance** | Zero-key Weather (12h hourly precip + NOAA/NWS alerts), US EPA AQI/Pollen/UV, offline NOAA Sun/Moon, Markets, Live Sports, Daily Discovery & 26 RSS + Reader Mode | Daily & 10-day forecast icons | Basic weather | Weather, radar, news/RSS, stocks & commute blocks | Weather, news, stocks & commute widgets | Broad weather & sensor integrations |
 | **Smart Home & AI Imports** | Home Lab latency probes & read-only Home Assistant entity glance (manual recipe/wishlist URL scrapers; no AI email import) | AI Magic Import for emails/flyers (Plus); no smart home | Hearth Helper AI parser; no smart home | Smart home / iframe blocks (varies by plan) | Health/smart-home widgets; no AI flyer import | Bidirectional device & camera control (no built-in family suite) |
-| **Portrait Layout & Screensaver** | **Idle Photo Screensaver** (Single / 4-Grid Collage / Polaroids / Filmstrip OR any configured Canvas) + Pi `--rotate`; `9:16` planned | Native idle screensaver | Native idle screensaver | Native portrait & idle screensaver | Native portrait & idle screensaver | Via plugins / custom dashboards |
+| **Portrait Layout & Screensaver** | **True Portrait (`9:16`) Wall Display** (vertical Bento/Pack/Split, vertical Chore Hub & Kanban, adaptive tiles, Pi `--rotate`) + **Idle Photo / Canvas Screensaver** | Native portrait & idle screensaver | Native idle screensaver | Native portrait & idle screensaver | Native portrait & idle screensaver | Via plugins / custom dashboards |
 
 <sub>*Competitor pricing and feature availability reflect publicly advertised consumer tiers and hardware bundles and can change over time.*</sub>
 
@@ -30,10 +30,11 @@
 ### Pure Freeform Corkboard Multi-Canvas Engine
 * **Unified Corkboard Canvas Architecture:** Every tab is an independent, customizable freeform pinboard canvas (`Corkboard.tsx`) where both Sticky Notes and Live Widgets coexist with normalized coordinates (`xRatio`, `yRatio`, `wRatio`, `hRatio`), continuous `360°` rotation, and automatic bring-to-front (`zIndex`) layering.
 * **1-Click Auto-Organize & Auto-Tile Engine (`autoLayout.ts`):**
-  * Click the **Auto-Organize (`Wand2`)** button in the Navigation Dock to smoothly animate all widgets and sticky notes on the active canvas into a zero-overlap layout across **3 selectable modes**:
-    1. **Smart Bento Grid (`bento`):** Full-canvas zero-overlap Bento grid prioritizing primary widgets in hero slots.
+  * Click the **Auto-Organize (`Wand2`)** button in the Navigation Dock to smoothly animate all widgets and sticky notes on the active canvas into a zero-overlap layout across **3 selectable modes** (automatically adapting between landscape column grids and portrait `9:16` vertical stacks via `displayOrientation.ts`):
+    1. **Smart Bento Grid (`bento`):** Full-canvas zero-overlap Bento grid prioritizing primary widgets in hero slots (landscape side-by-side heroes vs. portrait top hero + vertical/2-column stacks).
     2. **Keep Sizes & Pack (`pack`):** 2D shelf-packing that preserves each card's user-chosen dimensions and aspect ratio without overlapping.
-    3. **Split Zones (`split`):** Tiles all Live Widgets on the left (`63%`) and organizes Sticky Notes into a clean corkboard column on the right (`31%`).
+    3. **Split Zones (`split`):** Places Live Widgets on the left (`63%`) and Sticky Notes on the right (`31%`) in landscape, or Live Widgets on top (`68%`) above a Sticky Notes bottom strip (`26%`) in portrait.
+  * Includes **True Portrait (`9:16`) Wall Display Support** (`useDisplayOrientation.ts`, `displayOrientation.ts`): desktop portrait monitors (`>= 768px` with `height > width`, or rotated `720×1280` displays with persisted device-local Desktop View) automatically receive portrait starter blueprints, portrait spawn sizing, vertically stacked full-screen Chore Hub and Project Board views, and container-measured responsive Calendar/Meals/Markets widgets.
   * Includes **1-Click Undo (`RotateCcw`)** to restore your previous manual layout, plus **Smart Open-Space Spawning** so newly created tiles and notes automatically place themselves in unoccupied areas of the board.
 * **Interactive Corner Drag Resizing (`↘`), Grab-and-Rotate Handle (`↻`), Non-Overlapping Floating Tile Controls & 1-Click Fullscreen (`⛶`):**
   * Drag any widget or sticky note's bottom-right grip handle to resize it smoothly (with sticky notes scaling from compact `110px × 90px` mini post-it tags up to `100%` full-board posters).

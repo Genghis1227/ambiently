@@ -36,6 +36,7 @@ import {
 import { ProfileAvatar } from '../common/ProfileAvatar';
 import type { LocalEventFormInput } from '../calendar/LocalEventModal';
 import { localDateKey } from '../../utils/dateKey';
+import { resolveAdaptiveCalendarColumns } from '../../utils/displayOrientation';
 import {
   MEAL_PLANNER_CALENDAR_ID,
   MEAL_SLOT_CALENDAR_META,
@@ -501,6 +502,8 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
   const isProfilesInitialized = useProfileStore((s) => s.isInitialized);
   const [view, setView] = useState<CalendarViewMode>(defaultView);
   const [multiDayLayout, setMultiDayLayout] = useState<MultiDayLayout>(multiDayLayoutProp);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState<number>(0);
   const timeGridRef = useRef<HTMLDivElement>(null);
   // Initialize immediately from cache so canvas carousel/tab switching renders instantly with 0 blank wait
   const [events, setEvents] = useState<CalendarEvent[]>(() => getCachedCalendarEvents(sources)?.events || []);
@@ -541,6 +544,20 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
       setMultiDayLayout(multiDayLayoutProp);
     }
   }, [multiDayLayoutProp]);
+
+  // Auto-measure widget width so portrait 3-Day and Week views stack/adapt by container size
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const w = Math.round(entry.contentRect.width);
+        setContainerWidth((prev) => (prev === w ? prev : w));
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Auto-scroll timeline grid to current hour
   useEffect(() => {
@@ -860,10 +877,14 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
     }
   };
 
+  const threeDayLayout = resolveAdaptiveCalendarColumns('3day', containerWidth);
+  const weekLayout = resolveAdaptiveCalendarColumns('week', containerWidth);
+  const isNarrowHeader = containerWidth > 0 && containerWidth < 520;
+
   return (
-    <div className="w-full h-full flex flex-col justify-between overflow-hidden select-none relative">
+    <div ref={rootRef} className="w-full h-full flex flex-col justify-between overflow-hidden select-none relative">
       {/* Widget Header with Prominent Top Navigation */}
-      <div className={`flex flex-wrap items-center justify-between gap-2 border-b pb-2 mb-2 pr-28 shrink-0 ${isLight ? 'border-slate-200' : 'border-gray-800/80'}`}>
+      <div className={`flex flex-wrap items-center justify-between gap-2 border-b pb-2 mb-2 ${isNarrowHeader ? 'pr-2' : 'pr-28'} shrink-0 ${isLight ? 'border-slate-200' : 'border-gray-800/80'}`}>
         {/* Left: Title + Prominent Navigation Buttons */}
         <div className="flex items-center gap-2 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
@@ -1295,7 +1316,13 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
           />
         ) : (
           /* 3-Day View (Card-based Day Columns) */
-          <div className="grid grid-cols-3 gap-2 md:gap-3 flex-1 min-h-0 overflow-hidden">
+          <div
+            className={
+              threeDayLayout.stacked
+                ? 'grid grid-cols-1 gap-2 flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-0.5'
+                : 'grid grid-cols-3 gap-2 md:gap-3 flex-1 min-h-0 overflow-hidden'
+            }
+          >
             {threeDays.map((col, idx) => {
               const sortedEvents = sortDayEvents(col.events);
               return (
@@ -1457,9 +1484,96 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
             hour12={hour12}
             onSelectDay={setSelectedDetailDate}
           />
+        ) : weekLayout.stacked ? (
+          /* Weekly View Stacked Vertically for Narrow Portrait Tiles */
+          <div className="grid grid-cols-1 gap-2 flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-0.5">
+            {weekDays.map((col, idx) => {
+              const sortedEvents = sortDayEvents(col.events);
+              return (
+                <div
+                  key={idx}
+                  className={`flex flex-col rounded-xl border transition-all overflow-hidden shrink-0 ${
+                    col.isToday
+                      ? isLight
+                        ? 'bg-blue-50/70 border-blue-400/80 shadow-xs ring-1 ring-blue-400/30'
+                        : 'bg-blue-950/20 border-blue-500/60 shadow-md ring-1 ring-blue-500/20'
+                      : isLight
+                      ? 'bg-slate-100/80 border-slate-200/90'
+                      : 'bg-gray-950/50 border-gray-800/80'
+                  }`}
+                >
+                  <div
+                    onClick={() => setSelectedDetailDate(col.date)}
+                    className={`px-3 py-2 border-b flex items-center justify-between shrink-0 cursor-pointer ${
+                      col.isToday
+                        ? isLight
+                          ? 'bg-blue-100/50 border-blue-200'
+                          : 'bg-blue-950/40 border-blue-900/50'
+                        : isLight
+                        ? 'bg-slate-200/40 border-slate-200 hover:bg-slate-200/60'
+                        : 'bg-gray-900/40 border-gray-800/80 hover:bg-gray-900/60'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[11px] font-black uppercase tracking-wider ${col.isToday ? 'text-blue-400' : isLight ? 'text-slate-600' : 'text-gray-400'}`}>
+                        {col.date.toLocaleDateString([], { weekday: 'short' })}
+                      </span>
+                      <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded-full ${col.isToday ? 'bg-blue-600 text-white' : isLight ? 'bg-white text-slate-800' : 'bg-gray-800 text-gray-200'}`}>
+                        {col.date.toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                      </span>
+                    </div>
+                    <span className={`text-[10px] font-semibold ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
+                      {sortedEvents.length} {sortedEvents.length === 1 ? 'event' : 'events'}
+                    </span>
+                  </div>
+                  <div className="p-2 space-y-1.5">
+                    {sortedEvents.length === 0 ? (
+                      <div className={`text-[11px] italic px-1 py-0.5 ${isLight ? 'text-slate-400' : 'text-gray-500'}`}>
+                        No events
+                      </div>
+                    ) : (
+                      sortedEvents.map((evt) => (
+                        <button
+                          key={evt.uid}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedDetailDate(col.date);
+                          }}
+                          style={{
+                            borderLeftColor: evt.color || '#3b82f6',
+                            backgroundColor: isLight ? `${evt.color || '#3b82f6'}14` : `${evt.color || '#3b82f6'}20`,
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-lg border-l-4 flex items-center justify-between gap-2 text-xs cursor-pointer ${
+                            isLight ? 'text-slate-800 hover:bg-slate-200/70' : 'text-gray-100 hover:bg-gray-800/70'
+                          }`}
+                        >
+                          <span className="font-semibold truncate">{evt.summary}</span>
+                          <span className="text-[10px] font-mono opacity-75 shrink-0">
+                            {evt.mealSlot
+                              ? MEAL_SLOT_CALENDAR_META[evt.mealSlot].shortLabel
+                              : evt.isAllDay
+                              ? 'All Day'
+                              : formatTimeShort(parseEventLocalDate(evt.start, false), hour12)}
+                          </span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         ) : (
           /* Weekly View (Card-based Day Columns) */
-          <div className="grid grid-cols-7 gap-1.5 flex-1 min-h-0 overflow-x-auto md:overflow-x-hidden min-w-[560px] md:min-w-0">
+          <div
+            className={
+              weekLayout.scrollHorizontally
+                ? 'flex-1 min-h-0 overflow-x-auto overflow-y-hidden'
+                : 'flex-1 min-h-0 flex flex-col'
+            }
+          >
+          <div className={weekLayout.scrollHorizontally ? 'grid grid-cols-7 gap-1.5 min-w-[640px] h-full' : 'grid grid-cols-7 gap-1.5 flex-1 min-h-0 overflow-hidden'}>
             {weekDays.map((col, idx) => {
               const sortedEvents = sortDayEvents(col.events);
               return (
@@ -1569,6 +1683,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
                 </div>
               );
             })}
+          </div>
           </div>
         )
       ) : (

@@ -17,6 +17,8 @@ import {
   type KanbanWidgetConfig,
 } from '../../types/kanban';
 import { isAmbientlyInNightMode } from '../../utils/confetti';
+import { useDisplayOrientation } from '../../hooks/useDisplayOrientation';
+import { readPersistedForceDesktopMode } from '../../utils/displayOrientation';
 import { KanbanBoardSelectorPill } from './KanbanBoardSelectorPill';
 import { KanbanCardItem } from './KanbanCardItem';
 import { KanbanInlineAdd } from './KanbanInlineAdd';
@@ -60,6 +62,8 @@ export const KanbanBoardView: React.FC<KanbanBoardViewProps> = ({
   const clearDoneCards = useKanbanStore((s) => s.clearDoneCards);
 
   const dashboardSettings = useDashboardStore((s) => s.settings);
+  const [forceDesktopOverride] = useState<boolean>(readPersistedForceDesktopMode);
+  const { isPortraitViewport } = useDisplayOrientation(forceDesktopOverride);
   const isNightMode =
     Boolean(dashboardSettings?.nightModeEnabled) ||
     isAmbientlyInNightMode(dashboardSettings);
@@ -325,7 +329,13 @@ export const KanbanBoardView: React.FC<KanbanBoardViewProps> = ({
           </button>
         </div>
       ) : (
-        <div className="flex-1 min-h-0 p-3 sm:p-4 overflow-y-auto overflow-x-hidden md:overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
+        <div
+          className={
+            isPortraitViewport
+              ? 'flex-1 min-h-0 p-3 sm:p-4 overflow-y-auto overflow-x-hidden grid grid-cols-1 gap-3 sm:gap-4'
+              : 'flex-1 min-h-0 p-3 sm:p-4 overflow-y-auto overflow-x-hidden md:overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4'
+          }
+        >
           {KANBAN_COLUMNS.map((col, colIndex) => {
             const colCards = columnsMap[col.id];
             const isHovered = dragState?.hoverColumnId === col.id;
@@ -339,7 +349,9 @@ export const KanbanBoardView: React.FC<KanbanBoardViewProps> = ({
                 key={col.id}
                 data-kanban-column={col.id}
                 data-no-drag="true"
-                className={`flex flex-col min-h-[260px] md:min-h-0 rounded-2xl border transition-colors overflow-hidden ${columnSurfaceClass(
+                className={`flex flex-col min-h-[260px] ${
+                  isPortraitViewport ? '' : 'md:min-h-0 '
+                }rounded-2xl border transition-colors overflow-hidden ${columnSurfaceClass(
                   Boolean(isHovered)
                 )}`}
               >

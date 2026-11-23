@@ -49,6 +49,11 @@ import { CanvasSwipePreviewPill } from './components/common/CanvasSwipePreviewPi
 import { GlobalTimerAlarmOverlay } from './components/common/GlobalTimerAlarmOverlay';
 import { isCanvasPinLocked, isSettingsPinRequired } from './utils/pinValidation';
 import { useCanvasSwipe } from './hooks/useCanvasSwipe';
+import { useDisplayOrientation } from './hooks/useDisplayOrientation';
+import {
+  readPersistedForceDesktopMode,
+  writePersistedForceDesktopMode,
+} from './utils/displayOrientation';
 import { useSharedClock } from './utils/sharedClock';
 import {
   getBackgroundCanvasWidgetTypes,
@@ -296,11 +301,14 @@ export function App() {
     };
   }, [initStore]);
 
-  // Responsive Mobile Detection (< 768px) with manual toggle override
-  const [isMobileViewport, setIsMobileViewport] = useState(
-    typeof window !== 'undefined' ? window.innerWidth < 768 : false
-  );
-  const [forceDesktopMode, setForceDesktopMode] = useState(false);
+  // Responsive Mobile & Portrait Wall-Display Detection with persisted Desktop View override
+  const [forceDesktopMode, setForceDesktopMode] = useState<boolean>(readPersistedForceDesktopMode);
+  const {
+    isMobileViewport,
+    isMobileCompanionActive,
+    isPortraitDesktop,
+    orientation,
+  } = useDisplayOrientation(forceDesktopMode);
 
   // In-App Web Viewer Modal for external links (prevents full-screen kiosk escape in Edge/PWA)
   const [activeWebModal, setActiveWebModal] = useState<{ url: string; title?: string } | null>(null);
@@ -316,14 +324,6 @@ export function App() {
     nightModeTimeoutMs: 1200,
     isNightMode: settings.nightModeEnabled,
   });
-
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobileViewport(window.innerWidth < 768);
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   // Granular protection controls (Settings/Share/Plex verify PIN on each open; Canvas locks stay enforced whenever active)
   const isSettingsLocked = isSettingsPinRequired(settings);
@@ -881,10 +881,17 @@ export function App() {
   const handleOpenAddCanvas = useCallback(() => setIsCreateCanvasOpen(true), []);
   const handleOpenQuickStart = useCallback(() => setIsQuickStartOpen(true), []);
   const handleOpenBackupModal = useCallback(() => setIsBackupModalOpen(true), []);
-  const handleEnterMobileCompanion = useCallback(() => setForceDesktopMode(false), []);
+  const handleEnterDesktopMode = useCallback(() => {
+    writePersistedForceDesktopMode(true);
+    setForceDesktopMode(true);
+  }, []);
+  const handleEnterMobileCompanion = useCallback(() => {
+    writePersistedForceDesktopMode(false);
+    setForceDesktopMode(false);
+  }, []);
   const handleAutoOrganizeActiveTab = useCallback(
-    (mode: AutoOrganizeMode) => autoOrganizeCanvas(activeTabIdResolved, mode),
-    [autoOrganizeCanvas, activeTabIdResolved]
+    (mode: AutoOrganizeMode) => autoOrganizeCanvas(activeTabIdResolved, mode, orientation),
+    [autoOrganizeCanvas, activeTabIdResolved, orientation]
   );
   const handleUndoActiveTabLayout = useCallback(() => {
     void useDashboardStore.getState().undoLayoutChange();
@@ -938,8 +945,6 @@ export function App() {
   });
 
   const isFullscreenWidgetOverlayVisible = Boolean(activeChoreOverlay || activeKanbanOverlay);
-
-  const isMobileCompanionActive = isMobileViewport && !forceDesktopMode;
 
   const idleScreensaverTimeoutMin = normalizeIdleScreensaverTimeoutMin(
     settings.idleScreensaverTimeoutMin
@@ -1273,7 +1278,7 @@ export function App() {
   }
 
   // 1. Mobile Companion Mode on small screens unless user specifically toggled Desktop
-  if (isMobileViewport && !forceDesktopMode) {
+  if (isMobileCompanionActive) {
     return (
       <>
         <Suspense fallback={null}>
@@ -1289,7 +1294,7 @@ export function App() {
             onUpdateWidget={updateWidget}
             onRemoveWidget={handleRequestRemoveWidget}
             onAddWidget={addWidget}
-            onToggleDesktopView={() => setForceDesktopMode(true)}
+            onToggleDesktopView={handleEnterDesktopMode}
             onOpenSettings={handleOpenSettings}
             onSwipePointerDown={handleCanvasSwipePointerDown}
             transitionClass={swipeTransitionClass}
@@ -1409,6 +1414,7 @@ export function App() {
 
   return (
     <div
+      data-display-orientation={isPortraitDesktop ? 'portrait' : 'landscape'}
       onPointerDownCapture={handleCanvasSwipePointerDown}
       className={`relative w-screen h-screen overflow-hidden ${
         isCanvasLight ? 'bg-slate-100 text-slate-800' : 'bg-[#090d16] text-white'

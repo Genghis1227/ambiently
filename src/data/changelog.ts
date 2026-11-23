@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.8.9",
+    date: "November 23, 2026",
+    title: "Phase 2: True Portrait (9:16) Wall Display Layout Support",
+    highlights: [
+      "Portrait Auto-Organize & Starter Blueprints: Detects vertical wall monitors and rotated tablets (1080×1920, 768×1366, or persisted Desktop View on 720×1280) with vertical Bento stacking, top-vs-bottom Split Zones, readable Pack card widths, portrait tile spawn sizing, and vertical starter blueprints.",
+      "Portrait Chore Hub & Kanban Swimlanes: Displays Chores on vertical wall screens as a compact top Profile/Wallet strip above stacked Daily Chores and Reward Store panels, and stacks Project Board (Kanban) swimlanes vertically in portrait viewports.",
+      "Container-Responsive Multi-Column Widgets: Calendar 3-Day/Weekly card views, Full-Week Meal Planner grids, and Markets & Watchlist auto-modes now adapt directly to each tile's measured width instead of shrinking into narrow strips.",
+    ],
+  },
+  {
     version: "v0.8.8",
     date: "November 22, 2026",
     title: "Persist Full-Screen Chores & Project Boards + Full-Screen Horizontal Canvas Swipe",
