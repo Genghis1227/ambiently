@@ -187,7 +187,7 @@ export const RewardStorePanel: React.FC<RewardStorePanelProps> = ({
       </div>
 
       {/* Scrollable Active Goals List */}
-      <div className="flex-1 overflow-y-auto pr-1 space-y-3">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden pr-1 space-y-3">
         {sortedRewards.length === 0 ? (
           <div
             className={`p-6 rounded-2xl border border-dashed text-center space-y-2 ${
