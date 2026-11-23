@@ -11,6 +11,15 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.8.8",
+    date: "November 22, 2026",
+    title: "Persist Full-Screen Chores & Project Boards + Full-Screen Horizontal Canvas Swipe",
+    highlights: [
+      "Persistent Full-Screen Chores & Project Boards: Clicking the tile header Maximize button on an unlocked desktop canvas now saves full-screen Hub/View mode cleanly to IndexedDB and Cloud Sync (with a matching Tile restore button in the canvas Hub header), and moving a Chores or Kanban tile to another canvas while Full-Screen is selected in Tile Settings preserves full-screen mode.",
+      "Full-Screen Chores & Kanban Canvas Swipe: Enabled uninterrupted horizontal canvas swiping across expanded Chores and Project Board overlays (both touchscreens and Mobile Companion overlays) by fixing overlay touch-action/overscroll rules, capturing pointerdown on mobile overlays, and preventing vertical scroll columns from blocking horizontal swipes.",
+    ],
+  },
+  {
     version: "v0.8.7",
     date: "November 22, 2026",
     title: "Configurable Screensaver Photo Layouts & Canvas Mode, plus Kiosk-Safe External Links & Phone QR Handoff",
