@@ -241,6 +241,7 @@ interface CanvasWidgetBodyProps {
   canUpdateWidget: boolean;
   onUpdateWidgetConfig: (widgetId: string, config: Record<string, any>) => void;
   onOpenWidgetSettings: (widget: DashboardWidget) => void;
+  onToggleWidgetFullScreen: (widget: DashboardWidget, makeFullScreen: boolean) => void;
   stickyNotes?: StickyNoteItem[];
   stickyActions?: StickyCanvasActions;
 }
@@ -255,6 +256,7 @@ const MemoizedCanvasWidgetBody: React.FC<CanvasWidgetBodyProps> = React.memo(({
   canUpdateWidget,
   onUpdateWidgetConfig,
   onOpenWidgetSettings,
+  onToggleWidgetFullScreen,
   stickyNotes,
   stickyActions,
 }) => {
@@ -269,6 +271,22 @@ const MemoizedCanvasWidgetBody: React.FC<CanvasWidgetBodyProps> = React.memo(({
   const handleOpenSettings = useMemo(
     () => (!isCanvasLocked && canUpdateWidget ? () => onOpenWidgetSettings(widget) : undefined),
     [isCanvasLocked, canUpdateWidget, onOpenWidgetSettings, widget]
+  );
+
+  const handleMaximizeToCanvas = useMemo(
+    () =>
+      !isCanvasLocked && canUpdateWidget
+        ? () => onToggleWidgetFullScreen(widget, true)
+        : undefined,
+    [isCanvasLocked, canUpdateWidget, onToggleWidgetFullScreen, widget]
+  );
+
+  const handleMinimizeFromCanvas = useMemo(
+    () =>
+      !isCanvasLocked && canUpdateWidget
+        ? () => onToggleWidgetFullScreen(widget, false)
+        : undefined,
+    [isCanvasLocked, canUpdateWidget, onToggleWidgetFullScreen, widget]
   );
 
   const imageWidgetConfig = useMemo(
@@ -425,6 +443,7 @@ const MemoizedCanvasWidgetBody: React.FC<CanvasWidgetBodyProps> = React.memo(({
               config={widget.config}
               isLight={isWidgetLight}
               dockPaddingClass={dockPaddingClass}
+              onClose={handleMinimizeFromCanvas}
               onOpenWidgetSettings={handleOpenSettings}
             />
           </React.Suspense>
@@ -437,6 +456,7 @@ const MemoizedCanvasWidgetBody: React.FC<CanvasWidgetBodyProps> = React.memo(({
             isLight={isWidgetLight}
             variant="tile"
             onUpdateConfig={handleConfigUpdate}
+            onMaximizeToCanvas={handleMaximizeToCanvas}
           />
         )
       ) : widget.type === 'meals' ? (
@@ -457,6 +477,7 @@ const MemoizedCanvasWidgetBody: React.FC<CanvasWidgetBodyProps> = React.memo(({
               config={widget.config}
               isLight={isWidgetLight}
               dockPaddingClass={dockPaddingClass}
+              onClose={handleMinimizeFromCanvas}
               onUpdateConfig={handleConfigUpdate}
               onOpenWidgetSettings={handleOpenSettings}
             />
@@ -470,6 +491,7 @@ const MemoizedCanvasWidgetBody: React.FC<CanvasWidgetBodyProps> = React.memo(({
             isLight={isWidgetLight}
             variant="tile"
             onUpdateConfig={handleConfigUpdate}
+            onOpenFullScreen={handleMaximizeToCanvas}
           />
         )
       ) : widget.type === 'finance' ? (
@@ -644,6 +666,7 @@ interface MemoizedCanvasWidgetCardProps {
   stickyActions?: StickyCanvasActions;
   onUpdateWidgetConfig: (widgetId: string, config: Record<string, any>) => void;
   onOpenWidgetSettings: (widget: DashboardWidget) => void;
+  onToggleWidgetFullScreen: (widget: DashboardWidget, makeFullScreen: boolean) => void;
   onSetExpandedCompactToolbarId: React.Dispatch<React.SetStateAction<string | null>>;
   onSetContextMenu: React.Dispatch<React.SetStateAction<CorkboardContextMenuState | null>>;
   handlersRef: React.RefObject<CanvasCardEventHandlers | null>;
@@ -683,6 +706,7 @@ const MemoizedCanvasWidgetCard: React.FC<MemoizedCanvasWidgetCardProps> = React.
   stickyActions,
   onUpdateWidgetConfig,
   onOpenWidgetSettings,
+  onToggleWidgetFullScreen,
   onSetExpandedCompactToolbarId,
   onSetContextMenu,
   handlersRef,
@@ -1029,37 +1053,7 @@ const MemoizedCanvasWidgetCard: React.FC<MemoizedCanvasWidgetCardProps> = React.
                   onClick={(e) => {
                     e.stopPropagation();
                     if (isCompactToolbar) onSetExpandedCompactToolbarId(null);
-                    if (isFullScreen) {
-                      const nextPos = buildRestoredFreeformPos(pos);
-                      if (widget.type === 'chores' && canUpdateWidget) {
-                        handlersRef.current?.onUpdateWidget?.(widget.id, {
-                          freeformPos: nextPos,
-                          config: { ...widget.config, displayMode: 'tile' },
-                        });
-                      } else if (widget.type === 'kanban' && canUpdateWidget) {
-                        handlersRef.current?.onUpdateWidget?.(widget.id, {
-                          freeformPos: nextPos,
-                          config: { ...widget.config, displayMode: 'tile' },
-                        });
-                      } else {
-                        handlersRef.current?.onUpdateWidgetPos?.(widget.id, widget.gridPos, nextPos);
-                      }
-                    } else {
-                      const nextPos = buildMaximizedFreeformPos(pos);
-                      if (widget.type === 'chores' && canUpdateWidget) {
-                        handlersRef.current?.onUpdateWidget?.(widget.id, {
-                          freeformPos: nextPos,
-                          config: { ...widget.config, displayMode: 'hub' },
-                        });
-                      } else if (widget.type === 'kanban' && canUpdateWidget) {
-                        handlersRef.current?.onUpdateWidget?.(widget.id, {
-                          freeformPos: nextPos,
-                          config: { ...widget.config, displayMode: 'view' },
-                        });
-                      } else {
-                        handlersRef.current?.onUpdateWidgetPos?.(widget.id, widget.gridPos, nextPos);
-                      }
-                    }
+                    onToggleWidgetFullScreen(widget, !isFullScreen);
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
                   title={
@@ -1152,6 +1146,7 @@ const MemoizedCanvasWidgetCard: React.FC<MemoizedCanvasWidgetCardProps> = React.
           canUpdateWidget={canUpdateWidget}
           onUpdateWidgetConfig={onUpdateWidgetConfig}
           onOpenWidgetSettings={onOpenWidgetSettings}
+          onToggleWidgetFullScreen={onToggleWidgetFullScreen}
           stickyNotes={widget.type === 'sticky_notes' ? stickyNotes : undefined}
           stickyActions={widget.type === 'sticky_notes' ? stickyActions : undefined}
         />
@@ -1705,6 +1700,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   const widgetsRef = useRef(widgets);
   const actionsRef = useRef({
     onUpdateWidget,
+    onUpdateWidgetPos,
     onAddNote,
     onUpdateNote,
     onDeleteNote,
@@ -1720,6 +1716,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   useEffect(() => {
     actionsRef.current = {
       onUpdateWidget,
+      onUpdateWidgetPos,
       onAddNote,
       onUpdateNote,
       onDeleteNote,
@@ -1728,6 +1725,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     };
   }, [
     onUpdateWidget,
+    onUpdateWidgetPos,
     onAddNote,
     onUpdateNote,
     onDeleteNote,
@@ -2133,6 +2131,28 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   const handleOpenWidgetSettings = useCallback((target: DashboardWidget) => {
     setEditingWidget(target);
   }, []);
+
+  const handleToggleWidgetFullScreen = useCallback(
+    (target: DashboardWidget, makeFullScreen: boolean) => {
+      const pos = target.freeformPos || DEFAULT_WIDGET_FREEFORM_POS;
+      const nextPos = makeFullScreen
+        ? buildMaximizedFreeformPos(pos)
+        : buildRestoredFreeformPos(pos);
+
+      if ((target.type === 'chores' || target.type === 'kanban') && actionsRef.current.onUpdateWidget) {
+        actionsRef.current.onUpdateWidget(target.id, {
+          freeformPos: nextPos,
+          config: {
+            ...target.config,
+            displayMode: makeFullScreen ? (target.type === 'chores' ? 'hub' : 'view') : 'tile',
+          },
+        });
+      } else {
+        actionsRef.current.onUpdateWidgetPos?.(target.id, target.gridPos, nextPos);
+      }
+    },
+    []
+  );
 
   const stickyActions = useMemo<StickyCanvasActions>(
     () => ({
@@ -3061,6 +3081,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             stickyActions={widget.type === 'sticky_notes' ? stickyActions : undefined}
             onUpdateWidgetConfig={handleUpdateWidgetConfig}
             onOpenWidgetSettings={handleOpenWidgetSettings}
+            onToggleWidgetFullScreen={handleToggleWidgetFullScreen}
             onSetExpandedCompactToolbarId={setExpandedCompactToolbarId}
             onSetContextMenu={setContextMenu}
             handlersRef={cardHandlersRef}

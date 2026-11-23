@@ -713,7 +713,9 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       const allBoards = useKanbanStore.getState().boards;
       setKanbanBoardId(resolveWidgetActiveBoardId(widget.config, allBoards));
       setKanbanColumnId(resolveWidgetActiveColumnId(widget.config));
-      setKanbanDisplayMode(widget.config?.displayMode === 'view' ? 'view' : 'tile');
+      setKanbanDisplayMode(
+        widget.config?.displayMode === 'view' || widget.freeformPos?.isFullScreen ? 'view' : 'tile'
+      );
     } else if (widget.type === 'finance') {
       setFinanceWatchlist(resolveWatchlistItems(widget.config?.watchlist));
       const cfgRange = widget.config?.range;

@@ -66,6 +66,7 @@ export interface ChoreWidgetProps {
   isLight?: boolean;
   variant?: 'tile' | 'view';
   onUpdateConfig?: (updates: Partial<ChoreWidgetConfig> & { includeParents?: boolean }) => void;
+  onMaximizeToCanvas?: () => void;
 }
 
 type AccordionSectionId = 'today' | 'review' | 'completed';
@@ -87,6 +88,7 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
   isLight = false,
   variant = 'tile',
   onUpdateConfig,
+  onMaximizeToCanvas,
 }) => {
   const snapshot = useChoreStore((s) => s.snapshot);
   const pendingParentActionsCount = useChoreStore((s) => s.pendingParentActionsCount);
@@ -513,6 +515,12 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
 
   const handleMaximizeFullScreen = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (onMaximizeToCanvas) {
+      useKanbanStore.getState().setFullScreenOverlay(null);
+      useChoreStore.getState().setFullScreenOpen(false);
+      onMaximizeToCanvas();
+      return;
+    }
     useKanbanStore.getState().setFullScreenOverlay(null);
     useChoreStore.getState().setFullScreenOpen(true, {
       tabId: tabId ?? null,
@@ -1105,7 +1113,11 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
           <button
             type="button"
             onClick={handleMaximizeFullScreen}
-            title="Open Full-Screen Chore & Reward Hub"
+            title={
+              onMaximizeToCanvas
+                ? 'Fill full screen on canvas (saves layout)'
+                : 'Open Full-Screen Chore & Reward Hub'
+            }
             aria-label="Maximize Chore Hub"
             className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
               isLight
