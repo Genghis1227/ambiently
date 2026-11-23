@@ -405,6 +405,8 @@ export const KanbanWidget: React.FC<KanbanWidgetProps> = ({
             type="button"
             onClick={() => {
               if (onOpenFullScreen) {
+                useChoreStore.getState().setFullScreenOpen(false);
+                useKanbanStore.getState().setFullScreenOverlay(null);
                 onOpenFullScreen();
               } else {
                 useChoreStore.getState().setFullScreenOpen(false);
@@ -421,7 +423,11 @@ export const KanbanWidget: React.FC<KanbanWidgetProps> = ({
                 });
               }
             }}
-            title="Expand Full 3-Column Board View"
+            title={
+              onOpenFullScreen
+                ? 'Fill full screen on canvas (saves layout)'
+                : 'Expand Full 3-Column Board View'
+            }
             aria-label="Expand Full 3-Column Board View"
             className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
               isLight

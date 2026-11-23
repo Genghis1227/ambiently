@@ -325,7 +325,7 @@ export const KanbanBoardView: React.FC<KanbanBoardViewProps> = ({
           </button>
         </div>
       ) : (
-        <div className="flex-1 min-h-0 p-3 sm:p-4 overflow-y-auto md:overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
+        <div className="flex-1 min-h-0 p-3 sm:p-4 overflow-y-auto overflow-x-hidden md:overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
           {KANBAN_COLUMNS.map((col, colIndex) => {
             const colCards = columnsMap[col.id];
             const isHovered = dragState?.hoverColumnId === col.id;
@@ -417,7 +417,7 @@ export const KanbanBoardView: React.FC<KanbanBoardViewProps> = ({
                 {/* Scrollable Cards List */}
                 <div
                   data-no-drag="true"
-                  className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-2"
+                  className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 py-2 space-y-2"
                 >
                   {colCards.length === 0 && !isHovered && (
                     <div

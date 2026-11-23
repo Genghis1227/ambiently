@@ -402,7 +402,8 @@ export function findOpenCanvasSpot(
  * Computes destination freeform coordinates when moving a widget to another canvas.
  * Preserves unobstructed in-bounds placement, relocates to an open spot via `findOpenCanvasSpot`
  * when overlapping existing tiles/notes, elevates zIndex above destination items, and resets
- * fullscreen widgets (`chores`/`kanban` hub/view modes) cleanly to tile dimensions.
+ * fullscreen widgets (`chores`/`kanban` hub/view modes) cleanly to tile dimensions unless an
+ * explicit `overrideFreeformPos.isFullScreen === true` override preserves fullscreen placement.
  */
 export function computeMovedWidgetPosition(
   widget: Pick<DashboardWidget, 'freeformPos' | 'type'>,
@@ -441,6 +442,21 @@ export function computeMovedWidgetPosition(
     ...targetTabNotes.map((n) => n.freeformPos?.zIndex || 1)
   );
   const nextZ = maxZ + 1;
+
+  if (overrideFreeformPos?.isFullScreen) {
+    return {
+      freeformPos: {
+        ...overrideFreeformPos,
+        xRatio: 0,
+        yRatio: 0,
+        wRatio: 1,
+        hRatio: 1,
+        rotation: 0,
+        zIndex: nextZ,
+        isFullScreen: true,
+      },
+    };
+  }
 
   if (basePos.isFullScreen) {
     const tileW = 0.45;

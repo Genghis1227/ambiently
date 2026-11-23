@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.8] - 2026-11-22
+
+### Fixed
+- **Full-Screen Chores & Kanban Persistence (`Corkboard.tsx`, `ChoreWidget.tsx`, `KanbanWidget.tsx`, `ChoreDashboardView.tsx`, `WidgetSettingsModal.tsx`, `autoLayout.ts`, `dashboardStore.ts`):**
+  - Wired the header **Maximize (`Maximize2`)** button on unlocked desktop Chores and Project Board tiles (and a **Tile (`Minimize2`)** restore button inside canvas-mode `ChoreDashboardView`) to persist `freeformPos.isFullScreen` and `config.displayMode` (`'hub'` / `'view'` <-> `'tile'`) to IndexedDB and Cloud Sync, while locked canvases and Mobile Companion continue opening temporary overlays.
+  - Preserved explicit `overrideFreeformPos.isFullScreen` selections in `computeMovedWidgetPosition` when moving Chores or Kanban widgets to an existing or new canvas via Tile Settings, initialized Kanban display mode from `freeformPos.isFullScreen` alongside `displayMode`, and synchronized `displayMode` in `autoOrganizeCanvas` and `undoLayoutChange`.
+- **Horizontal Canvas Swipe on Full-Screen Chores & Kanban Overlays (`index.css`, `ChoreDashboardView.tsx`, `RewardStorePanel.tsx`, `KanbanBoardView.tsx`, `App.tsx`):**
+  - Added `overscroll-behavior-x: none` on `body` and extended `touch-action: pan-y pinch-zoom; overscroll-behavior-x: none;` to `[data-fullscreen-widget-overlay="true"]` and its descendants so horizontal canvas swipes are not canceled by browser panning or history navigation.
+  - Constrained vertical scroll columns (`overflow-y-auto overflow-x-hidden min-w-0`) in `ChoreDashboardView`, `RewardStorePanel`, and `KanbanBoardView` so vertical scroll panes never compute `overflowX: 'auto'` and suppress canvas swipes, and wrapped Mobile Companion overlay renders in `onPointerDownCapture={handleCanvasSwipePointerDown}`.
+
 ## [0.8.7] - 2026-11-22
 
 ### Added

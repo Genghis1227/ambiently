@@ -1026,16 +1026,28 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
             </button>
           )}
 
-          {/* Minimize / Close Full-Screen Overlay View */}
-          {mode === 'overlay' && onClose && (
+          {/* Minimize / Close Full-Screen View */}
+          {onClose && (
             <button
               type="button"
+              data-no-drag="true"
               onClick={onClose}
-              title="Return to Dashboard Canvas (Esc)"
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 transition-colors cursor-pointer"
+              title={
+                mode === 'canvas'
+                  ? 'Restore card size on canvas'
+                  : 'Return to Dashboard Canvas (Esc)'
+              }
+              aria-label={
+                mode === 'canvas' ? 'Restore card size on canvas' : 'Return to Dashboard Canvas'
+              }
+              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border transition-colors cursor-pointer ${
+                mode === 'canvas' && isLight
+                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                  : 'bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border-slate-800'
+              }`}
             >
               <Minimize2 className="w-4 h-4" />
-              <span className="hidden sm:inline">Canvas</span>
+              <span className="hidden sm:inline">{mode === 'canvas' ? 'Tile' : 'Canvas'}</span>
             </button>
           )}
         </div>
@@ -1075,7 +1087,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 p-4 sm:p-6 overflow-hidden">
         {/* LEFT COLUMN: Profile Switcher, Point Banks & Quick Access Trays */}
         <aside
-          className={`lg:col-span-3 flex flex-col gap-4 overflow-y-auto pr-1 ${
+          className={`lg:col-span-3 min-w-0 flex flex-col gap-4 overflow-y-auto overflow-x-hidden pr-1 ${
             mobileColumnTab === 'profiles' ? 'flex' : 'hidden lg:flex'
           }`}
         >
@@ -1346,7 +1358,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
 
         {/* CENTER COLUMN: Active Daily Chores, Subtle Overdue Carry-Overs & Shared Bounties */}
         <main
-          className={`lg:col-span-5 flex flex-col overflow-hidden rounded-2xl border p-4 ${
+          className={`lg:col-span-5 min-w-0 flex flex-col overflow-hidden rounded-2xl border p-4 ${
             isLight
               ? 'bg-white/90 border-slate-200/90 shadow-sm'
               : 'bg-slate-900/55 border-slate-800/80'
@@ -1381,7 +1393,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
             )}
           </div>
 
-          <div className="flex-1 overflow-y-auto pr-1 space-y-3">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden pr-1 space-y-3">
             {sections.map((sec) => {
               const isExpanded = expandedSections[sec.id];
               return (
@@ -1432,7 +1444,7 @@ export const ChoreDashboardView: React.FC<ChoreDashboardViewProps> = ({
 
         {/* RIGHT COLUMN: Visual Reward Store */}
         <section
-          className={`lg:col-span-4 flex flex-col overflow-hidden rounded-2xl border p-4 ${
+          className={`lg:col-span-4 min-w-0 flex flex-col overflow-hidden rounded-2xl border p-4 ${
             isLight
               ? 'bg-white/90 border-slate-200/90 shadow-sm'
               : 'bg-slate-900/55 border-slate-800/80'

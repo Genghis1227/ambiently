@@ -494,6 +494,24 @@ function resolveTombstoneIso(updatedAt?: string | null, deletedAt?: string | nul
   return updatedAt || new Date().toISOString();
 }
 
+function syncHubDisplayModeForFullScreen(
+  widget: DashboardWidget,
+  isFullScreen: boolean
+): Record<string, any> | undefined {
+  if (widget.type === 'chores') {
+    const nextMode = isFullScreen ? 'hub' : 'tile';
+    if (isFullScreen || widget.config?.displayMode === 'hub') {
+      return { ...widget.config, displayMode: nextMode };
+    }
+  } else if (widget.type === 'kanban') {
+    const nextMode = isFullScreen ? 'view' : 'tile';
+    if (isFullScreen || widget.config?.displayMode === 'view') {
+      return { ...widget.config, displayMode: nextMode };
+    }
+  }
+  return undefined;
+}
+
 function sortDeletedWidgetsNewestFirst(list: DashboardWidget[]): DashboardWidget[] {
   return [...list].sort((a, b) => {
     const aMs = Date.parse(a.deleted_at || a.updated_at || '') || 0;
@@ -1366,7 +1384,13 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const nextWidgets = state.widgets.map((w) => {
       const nextPos = widgetPositions[w.id];
       if (!nextPos) return w;
-      const updated = { ...w, freeformPos: nextPos, updated_at: nextMonotonicIso(w.updated_at, nowMs) };
+      const syncedConfig = syncHubDisplayModeForFullScreen(w, Boolean(nextPos.isFullScreen));
+      const updated: DashboardWidget = {
+        ...w,
+        freeformPos: nextPos,
+        ...(syncedConfig ? { config: syncedConfig } : {}),
+        updated_at: nextMonotonicIso(w.updated_at, nowMs),
+      };
       updatedWidgets.push(updated);
       return updated;
     });
@@ -1447,9 +1471,14 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         if (w.deleted_at) return w;
         const prevPos = entry.widgetPositions[w.id];
         if (!prevPos) return w;
+        const didFullScreenChange = Boolean(prevPos.isFullScreen) !== Boolean(w.freeformPos?.isFullScreen);
+        const syncedConfig = didFullScreenChange
+          ? syncHubDisplayModeForFullScreen(w, Boolean(prevPos.isFullScreen))
+          : undefined;
         const updated: DashboardWidget = {
           ...w,
           freeformPos: { ...prevPos },
+          ...(syncedConfig ? { config: syncedConfig } : {}),
           updated_at: nextMonotonicIso(w.updated_at, nowMs),
         };
         updatedWidgets.push(updated);

@@ -10,6 +10,8 @@ import {
 } from '../src/utils/fullscreenWidgetOverlay';
 import { useChoreStore } from '../src/stores/useChoreStore';
 import { useKanbanStore } from '../src/stores/useKanbanStore';
+import { useDashboardStore } from '../src/store/dashboardStore';
+import { DEFAULT_SETTINGS } from '../src/services/db';
 
 describe('Fullscreen widget overlays & canvas fullscreen layout (fullscreenWidgetOverlay)', () => {
   it('resolves dock clearance and internal padding cleanly across media, hubs, and padded tiles', () => {
@@ -247,5 +249,88 @@ describe('Fullscreen widget overlays & canvas fullscreen layout (fullscreenWidge
     assert.equal(useChoreStore.getState().fullScreenContext, null);
     assert.equal(useChoreStore.getState().isParentDrawerOpen, false);
     assert.equal(useKanbanStore.getState().fullScreenOverlay, null);
+  });
+
+  it('keeps chores displayMode and kanban displayMode synchronized across autoOrganizeCanvas and undoLayoutChange', async () => {
+    useDashboardStore.setState({
+      isInitialized: true,
+      settings: { ...DEFAULT_SETTINGS },
+      activeTabId: 'tab-sync',
+      tabs: [
+        {
+          id: 'tab-sync',
+          name: 'Chores Sync Board',
+          icon: 'Sparkles',
+          order: 0,
+          autoRotateDurationSec: 30,
+          backgroundTheme: 'midnight_dots',
+          enabled: true,
+          updated_at: '2026-11-22T12:00:00.000Z',
+        },
+      ],
+      widgets: [
+        {
+          id: 'w-chores-sync',
+          tabId: 'tab-sync',
+          type: 'chores',
+          title: 'Family Chores',
+          gridPos: { x: 0, y: 0, w: 4, h: 4 },
+          freeformPos: {
+            xRatio: 0,
+            yRatio: 0,
+            wRatio: 1,
+            hRatio: 1,
+            zIndex: 10,
+            rotation: 0,
+            isFullScreen: true,
+          },
+          config: { displayMode: 'hub', scope: 'household' },
+          updated_at: '2026-11-22T12:00:00.000Z',
+        },
+        {
+          id: 'w-kanban-sync',
+          tabId: 'tab-sync',
+          type: 'kanban',
+          title: 'Project Board',
+          gridPos: { x: 0, y: 0, w: 4, h: 4 },
+          freeformPos: {
+            xRatio: 0,
+            yRatio: 0,
+            wRatio: 1,
+            hRatio: 1,
+            zIndex: 11,
+            rotation: 0,
+            isFullScreen: true,
+          },
+          config: { displayMode: 'view', activeBoardId: 'board-1' },
+          updated_at: '2026-11-22T12:00:00.000Z',
+        },
+      ],
+      notes: [],
+      layoutUndoStack: [],
+      lastLayoutSnapshot: null,
+      layoutUndoToast: null,
+      movedWidgetToast: null,
+    });
+
+    await useDashboardStore.getState().autoOrganizeCanvas('tab-sync', 'bento');
+
+    const afterOrganizeWidgets = useDashboardStore.getState().widgets;
+    const choresAfterOrganize = afterOrganizeWidgets.find((w) => w.id === 'w-chores-sync');
+    const kanbanAfterOrganize = afterOrganizeWidgets.find((w) => w.id === 'w-kanban-sync');
+    assert.equal(choresAfterOrganize?.freeformPos?.isFullScreen, false);
+    assert.equal(choresAfterOrganize?.config?.displayMode, 'tile');
+    assert.equal(kanbanAfterOrganize?.freeformPos?.isFullScreen, false);
+    assert.equal(kanbanAfterOrganize?.config?.displayMode, 'tile');
+
+    await useDashboardStore.getState().undoLayoutChange('tab-sync');
+
+    const afterUndoWidgets = useDashboardStore.getState().widgets;
+    const choresAfterUndo = afterUndoWidgets.find((w) => w.id === 'w-chores-sync');
+    const kanbanAfterUndo = afterUndoWidgets.find((w) => w.id === 'w-kanban-sync');
+    assert.equal(choresAfterUndo?.freeformPos?.isFullScreen, true);
+    assert.equal(choresAfterUndo?.config?.displayMode, 'hub');
+    assert.equal(kanbanAfterUndo?.freeformPos?.isFullScreen, true);
+    assert.equal(kanbanAfterUndo?.config?.displayMode, 'view');
   });
 });

@@ -189,6 +189,51 @@ describe('computeMovedWidgetPosition', () => {
     assert.equal(result.freeformPos.hRatio, 0.5);
     assert.deepEqual(result.configPatch, { displayMode: 'tile' });
   });
+
+  it('preserves explicit fullscreen mode when overrideFreeformPos.isFullScreen is true', () => {
+    const tileChores = makeWidget({
+      id: 'chores-tile',
+      type: 'chores',
+      freeformPos: {
+        xRatio: 0.12,
+        yRatio: 0.18,
+        wRatio: 0.42,
+        hRatio: 0.5,
+        zIndex: 4,
+        rotation: -4,
+        isFullScreen: false,
+      },
+      config: { displayMode: 'tile' },
+    });
+
+    const explicitFullPos = {
+      xRatio: 0,
+      yRatio: 0,
+      wRatio: 1,
+      hRatio: 1,
+      zIndex: 4,
+      rotation: 0,
+      isFullScreen: true,
+      restorePos: {
+        xRatio: 0.12,
+        yRatio: 0.18,
+        wRatio: 0.42,
+        hRatio: 0.5,
+        rotation: -4,
+      },
+    };
+
+    const result = computeMovedWidgetPosition(tileChores, [], [], explicitFullPos);
+    assert.equal(result.freeformPos.isFullScreen, true);
+    assert.equal(result.freeformPos.xRatio, 0);
+    assert.equal(result.freeformPos.yRatio, 0);
+    assert.equal(result.freeformPos.wRatio, 1);
+    assert.equal(result.freeformPos.hRatio, 1);
+    assert.equal(result.freeformPos.rotation, 0);
+    assert.equal(result.freeformPos.zIndex, 11);
+    assert.deepEqual(result.freeformPos.restorePos, explicitFullPos.restorePos);
+    assert.equal(result.configPatch, undefined);
+  });
 });
 
 describe('useDashboardStore moveWidgetToTab and moveWidgetToNewTab', () => {
@@ -281,5 +326,66 @@ describe('useDashboardStore moveWidgetToTab and moveWidgetToNewTab', () => {
       .moveWidgetToNewTab('w-wifi-1', 'Overflow Canvas');
     assert.equal(blockedTabId, null);
     assert.equal(useDashboardStore.getState().tabs.length, MAX_CANVASES);
+  });
+
+  it('preserves full-screen Chores hub and Kanban view when moved with explicit fullscreen extraUpdates', async () => {
+    useDashboardStore.setState({
+      widgets: [
+        makeWidget({
+          id: 'w-chores-move',
+          tabId: 'tab-home',
+          type: 'chores',
+          title: 'Family Chores',
+          config: { displayMode: 'tile', scope: 'household' },
+        }),
+        makeWidget({
+          id: 'w-kanban-move',
+          tabId: 'tab-home',
+          type: 'kanban',
+          title: 'Project Board',
+          config: { displayMode: 'tile', activeBoardId: 'board-1' },
+        }),
+      ],
+    });
+
+    const movedChores = await useDashboardStore.getState().moveWidgetToTab('w-chores-move', 'tab-kitchen', {
+      config: { displayMode: 'hub', scope: 'household' },
+      freeformPos: {
+        xRatio: 0,
+        yRatio: 0,
+        wRatio: 1,
+        hRatio: 1,
+        zIndex: 5,
+        rotation: 0,
+        isFullScreen: true,
+        restorePos: { xRatio: 0.05, yRatio: 0.08, wRatio: 0.3, hRatio: 0.35, rotation: -3 },
+      },
+    });
+    assert.equal(movedChores, true);
+
+    const updatedChores = useDashboardStore.getState().widgets.find((w) => w.id === 'w-chores-move');
+    assert.equal(updatedChores?.tabId, 'tab-kitchen');
+    assert.equal(updatedChores?.freeformPos?.isFullScreen, true);
+    assert.equal(updatedChores?.config?.displayMode, 'hub');
+
+    const newTabId = await useDashboardStore.getState().moveWidgetToNewTab('w-kanban-move', 'Projects', {
+      config: { displayMode: 'view', activeBoardId: 'board-1' },
+      freeformPos: {
+        xRatio: 0,
+        yRatio: 0,
+        wRatio: 1,
+        hRatio: 1,
+        zIndex: 5,
+        rotation: 0,
+        isFullScreen: true,
+        restorePos: { xRatio: 0.05, yRatio: 0.08, wRatio: 0.3, hRatio: 0.35, rotation: -3 },
+      },
+    });
+    assert.ok(newTabId);
+
+    const updatedKanban = useDashboardStore.getState().widgets.find((w) => w.id === 'w-kanban-move');
+    assert.equal(updatedKanban?.tabId, newTabId);
+    assert.equal(updatedKanban?.freeformPos?.isFullScreen, true);
+    assert.equal(updatedKanban?.config?.displayMode, 'view');
   });
 });

@@ -1294,36 +1294,38 @@ export function App() {
             onSwipePointerDown={handleCanvasSwipePointerDown}
             transitionClass={swipeTransitionClass}
           />
-          {activeChoreOverlay && (
-            <ChoreDashboardView
-              isOpen={true}
-              mode="overlay"
-              title={activeChoreOverlay.title}
-              config={activeChoreOverlay.config}
-              dockPaddingClass=""
-              onClose={() => setChoreFullScreenOpen(false)}
-            />
-          )}
-          {activeKanbanOverlay && (
-            <KanbanBoardView
-              isOpen={true}
-              mode="overlay"
-              widgetId={activeKanbanOverlay.widgetId}
-              title={activeKanbanOverlay.title}
-              config={activeKanbanOverlay.config}
-              isLight={activeKanbanOverlay.isLight}
-              dockPaddingClass=""
-              onUpdateConfig={(updates) => {
-                const live = useDashboardStore
-                  .getState()
-                  .widgets.find((w) => w.id === activeKanbanOverlay.widgetId);
-                if (live) {
-                  void updateWidget(live.id, { config: { ...live.config, ...updates } });
-                }
-              }}
-              onClose={() => setKanbanFullScreenOverlay(null)}
-            />
-          )}
+          <div className="contents" onPointerDownCapture={handleCanvasSwipePointerDown}>
+            {activeChoreOverlay && (
+              <ChoreDashboardView
+                isOpen={true}
+                mode="overlay"
+                title={activeChoreOverlay.title}
+                config={activeChoreOverlay.config}
+                dockPaddingClass=""
+                onClose={() => setChoreFullScreenOpen(false)}
+              />
+            )}
+            {activeKanbanOverlay && (
+              <KanbanBoardView
+                isOpen={true}
+                mode="overlay"
+                widgetId={activeKanbanOverlay.widgetId}
+                title={activeKanbanOverlay.title}
+                config={activeKanbanOverlay.config}
+                isLight={activeKanbanOverlay.isLight}
+                dockPaddingClass=""
+                onUpdateConfig={(updates) => {
+                  const live = useDashboardStore
+                    .getState()
+                    .widgets.find((w) => w.id === activeKanbanOverlay.widgetId);
+                  if (live) {
+                    void updateWidget(live.id, { config: { ...live.config, ...updates } });
+                  }
+                }}
+                onClose={() => setKanbanFullScreenOverlay(null)}
+              />
+            )}
+          </div>
           {isParentDrawerOpen && <ParentChoreDrawer />}
         </Suspense>
         <SyncRefusedBanner withDock={false} />

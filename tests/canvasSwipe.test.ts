@@ -1,5 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import { DEFAULT_SETTINGS } from '../src/services/db.ts';
 import {
@@ -752,5 +754,117 @@ describe('dock-aware edge zones, fullscreen classification, and long-swipe overr
     unsubscribeSwipe();
     requestCancelActiveCanvasSwipe();
     assert.equal(swipeCalls, 1);
+  });
+
+  it('keeps full-screen Chores and Kanban overlays swipeable across touch CSS, scroll columns, and mobile capture', () => {
+    const g = globalThis as Record<string, unknown>;
+    const prevWindow = g.window;
+    g.window = {
+      getComputedStyle: (el: MockElementNode) => ({ overflowX: el.overflowX }),
+    };
+
+    try {
+      const verticalHiddenColChild = makeMockElement('DIV', {
+        parentElement: makeMockElement('DIV', {
+          scrollWidth: 420,
+          clientWidth: 320,
+          overflowX: 'hidden',
+        }),
+      });
+      assert.equal(
+        classifyCanvasSwipeStartTarget(verticalHiddenColChild as unknown as EventTarget, {
+          mode: 'desktop',
+          isCanvasLocked: false,
+          clientX: 400,
+          viewportWidth: 1280,
+        }),
+        'standard'
+      );
+
+      const trueHorizontalScrollerChild = makeMockElement('DIV', {
+        parentElement: makeMockElement('DIV', {
+          scrollWidth: 420,
+          clientWidth: 320,
+          overflowX: 'auto',
+        }),
+      });
+      assert.equal(
+        classifyCanvasSwipeStartTarget(trueHorizontalScrollerChild as unknown as EventTarget, {
+          mode: 'desktop',
+          isCanvasLocked: false,
+          clientX: 400,
+          viewportWidth: 1280,
+        }),
+        'ignore'
+      );
+    } finally {
+      if (prevWindow === undefined) {
+        delete g.window;
+      } else {
+        g.window = prevWindow;
+      }
+    }
+
+    const indexCss = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/index.css'),
+      'utf8'
+    );
+    assert.equal(indexCss.includes('[data-fullscreen-widget-overlay="true"],'), true);
+    assert.equal(indexCss.includes('[data-fullscreen-widget-overlay="true"] *,'), true);
+    assert.equal(indexCss.includes('touch-action: pan-y pinch-zoom;'), true);
+    assert.equal(indexCss.includes('overscroll-behavior-x: none;'), true);
+
+    const choreViewSource = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/components/chores/ChoreDashboardView.tsx'),
+      'utf8'
+    );
+    assert.equal(
+      choreViewSource.includes('lg:col-span-3 min-w-0 flex flex-col gap-4 overflow-y-auto overflow-x-hidden pr-1'),
+      true
+    );
+    assert.equal(
+      choreViewSource.includes('lg:col-span-5 min-w-0 flex flex-col overflow-hidden'),
+      true
+    );
+    assert.equal(
+      choreViewSource.includes('flex-1 overflow-y-auto overflow-x-hidden pr-1 space-y-3'),
+      true
+    );
+    assert.equal(
+      choreViewSource.includes('lg:col-span-4 min-w-0 flex flex-col overflow-hidden'),
+      true
+    );
+
+    const rewardStoreSource = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/components/chores/RewardStorePanel.tsx'),
+      'utf8'
+    );
+    assert.equal(
+      rewardStoreSource.includes('flex-1 overflow-y-auto overflow-x-hidden pr-1 space-y-3'),
+      true
+    );
+
+    const kanbanViewSource = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/components/kanban/KanbanBoardView.tsx'),
+      'utf8'
+    );
+    assert.equal(
+      kanbanViewSource.includes('overflow-y-auto overflow-x-hidden md:overflow-hidden grid'),
+      true
+    );
+    assert.equal(
+      kanbanViewSource.includes('flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 py-2 space-y-2'),
+      true
+    );
+
+    const appSource = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/App.tsx'),
+      'utf8'
+    );
+    assert.equal(
+      appSource.includes('<div className="contents" onPointerDownCapture={handleCanvasSwipePointerDown}>\n            {activeChoreOverlay &&') ||
+        appSource.includes('<div className="contents" onPointerDownCapture={handleCanvasSwipePointerDown}>\r\n            {activeChoreOverlay &&'),
+      true
+    );
   });
 });
