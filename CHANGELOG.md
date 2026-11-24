@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.11] - 2026-11-24
+
+### Security
+- **Supabase Household Invite & Secret-Trigger Hardening (`supabase/schema.sql`, `supabase/migrations/20261124_harden_members_and_nested_secrets.sql`, `supabase.ts`):** Restricted `dashboard_members` `INSERT` grants to `(dashboard_id, email, role)` with RLS preventing self-invites and owner invitation self-acceptance, added runtime ownership/member validation in `resolveActiveDashboardId()`, and extended `private.strip_plex_tokens_from_config()` to strip nested `homeAssistant` and `services[*]` credentials.
+- **Proxy IP Trust Modes, Private RSS Caching, Plex Path Validation & Parser Hardening (`server/index.ts`, `functions/api/*`, `plex.ts`, `photoSyncService.ts`, `fileSync.ts`, `plexLinks.ts`, `syncMerge.ts`, `htmlEntities.ts`):** Added `resolveClientIpFromRequest()` supporting `AMBIENTLY_TRUST_PROXY` (`false`, `true`, `cloudflare`) with incoming proxy header stripping, switched `/api/rss` responses to `Cache-Control: private`, enforced strict `serverClientIdentifier` matching (`matchPlexServerFromList`) and path-segment/traversal checks (`sanitizePlexKeySegment`, `buildPlexItemUrl`), eliminated ReDoS patterns in metadata/proxy/HTML stripping, capped JSON backup imports at 50 MB (`MAX_BACKUP_FILE_BYTES`), and stripped `__proto__`/`constructor`/`prototype` keys across backup/sync parsers.
+- **Expanded Parent PIN Kiosk Gating (`App.tsx`, `Corkboard.tsx`, `NavigationDock.tsx`, `AmbientQuickMenu.tsx`, `MobileCompanion.tsx`):** Gated Widget Settings, Photo Sources, Canvas Carousel toggle, Snap to Grid, and Dock Visibility behind `handleAuthorizeSettingsAction` across desktop and Mobile Companion viewports with automatic re-lock on close.
+
+### Changed
+- **Bundle Reduction, Synchronous Canvas Batching & 24/7 Kiosk Hibernation (`PhotoFrameWidget.tsx`, `IdlePhotoScreensaver.tsx`, `index.css`, `dashboardStore.ts`, `Corkboard.tsx`, `timezoneFormat.ts`, `photos.ts`, `feeds.ts`, `displayActivity.ts`, `vite.config.ts`):** Replaced `framer-motion` transitions with GPU CSS keyframes and removed `framer-motion` from runtime dependencies, lazy-loaded `Corkboard`, split timezone formatting into `timezoneFormat.ts`, added async gzip ETag static streaming in `server/index.ts` and Workbox `NetworkFirst` caching for `/config.js`, parallelized `initStore()` Dexie reads, batched canvas z-order and mobile ordering updates synchronously (`applyCanvasZOrderUpdates`, `reorderMobileWidgets`), eliminated idle-cursor React prop cascades via CSS (`data-kiosk-edit-chrome`), capped local folder scans at 1,500 photos while pruning dead cross-session `blob:` URLs, deduplicated concurrent in-flight RSS requests, and paused background widget clocks/pollers when occluded by `photo_screensaver`.
+
 ## [0.8.10] - 2026-11-23
 
 ### Fixed
