@@ -18,6 +18,8 @@ export function stripPlexToken(url: string): string {
   }
 }
 
+const DANGEROUS_PROTO_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 /** Returns a copy of any settings or config value with X-Plex-Token removed from every string in it. */
 export function stripPlexTokens<T>(value: T): T {
   if (typeof value === 'string') {
@@ -29,6 +31,7 @@ export function stripPlexTokens<T>(value: T): T {
   if (value && typeof value === 'object') {
     const copy: Record<string, unknown> = {};
     for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      if (DANGEROUS_PROTO_KEYS.has(key)) continue;
       copy[key] = stripPlexTokens(item);
     }
     return copy as T;

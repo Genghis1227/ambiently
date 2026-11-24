@@ -67,14 +67,14 @@ export const TimerWidget: React.FC<TimerWidgetProps> = ({
   const timers = useMemo(() => resolveWidgetTimers(config?.timers), [config?.timers]);
   const chimeEnabled = config?.chimeEnabled !== false;
 
+  const { isNightMode, isCanvasOccluded } = useDisplayActivity();
+  const nightModeSetting = useDashboardStore((s) => Boolean(s.settings?.nightModeEnabled));
+  const nightActive = isNightMode || nightModeSetting || isAmbientlyInNightMode();
+
   const hasRunning = timers.some((t) => t.status === 'running');
   const hasCompleted = timers.some((t) => t.status === 'completed');
-  const nowDate = useSharedClock(hasRunning || hasCompleted ? 'second' : '10s');
+  const nowDate = useSharedClock(hasRunning || hasCompleted ? 'second' : '10s', !isCanvasOccluded);
   const nowMs = nowDate.getTime() > 0 ? nowDate.getTime() : Date.now();
-
-  const { isNightMode } = useDisplayActivity();
-  const dashboardSettings = useDashboardStore((s) => s.settings);
-  const nightActive = isNightMode || isAmbientlyInNightMode(dashboardSettings);
 
   const [panelMode, setPanelMode] = useState<TimerPanelMode>('closed');
   const [editingTimerId, setEditingTimerId] = useState<string | null>(null);
@@ -116,6 +116,41 @@ export const TimerWidget: React.FC<TimerWidgetProps> = ({
       onUpdateConfig({ timers: nextTimers });
     }
   }, [timers, nowMs, onUpdateConfig]);
+
+  // Wake once at the earliest running timer deadline when occluded so completion fires on timestamp without 1s ticks
+  useEffect(() => {
+    if (!isCanvasOccluded || !onUpdateConfig) return;
+    let earliestEndMs = Infinity;
+    for (const t of timers) {
+      if (t.status === 'running' && t.endsAt) {
+        const endMs = Date.parse(t.endsAt);
+        if (Number.isFinite(endMs) && endMs < earliestEndMs) {
+          earliestEndMs = endMs;
+        }
+      }
+    }
+    if (!Number.isFinite(earliestEndMs)) return;
+    const delayMs = Math.max(0, earliestEndMs - Date.now() + 25);
+    const timeoutId = window.setTimeout(() => {
+      const fireMs = Date.now();
+      let changed = false;
+      const nextTimers = timers.map((t) => {
+        if (t.status !== 'running' || !getTimerLiveState(t, fireMs).isExpired) return t;
+        changed = true;
+        return {
+          ...t,
+          status: 'completed' as const,
+          remainingSec: 0,
+          endsAt: null,
+          completedAt: new Date(fireMs).toISOString(),
+        };
+      });
+      if (changed) {
+        onUpdateConfig({ timers: nextTimers });
+      }
+    }, delayMs);
+    return () => window.clearTimeout(timeoutId);
+  }, [isCanvasOccluded, timers, onUpdateConfig]);
 
   // Repeat urgent piezo kitchen alarm continuously while any timer is un-dismissed within MAX_ALARM_RING_MS
   const hasRingingAlarm =

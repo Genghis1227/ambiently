@@ -359,6 +359,18 @@ function hasAsciiControlChars(value: string): boolean {
   return false;
 }
 
+/**
+ * Validates and encodes a single Plex path segment (`sectionKey`, `ratingKey`, etc.) so
+ * path-traversal payloads (`../..`) cannot escape into unrelated authenticated endpoints.
+ */
+export function sanitizePlexKeySegment(raw: string, label = 'key'): string {
+  const trimmed = String(raw || '').trim();
+  if (!/^[A-Za-z0-9_-]+$/.test(trimmed)) {
+    throw new Error(`Invalid Plex ${label}.`);
+  }
+  return encodeURIComponent(trimmed);
+}
+
 export function buildPlexItemUrl(
   cleanUri: string,
   key: string,
@@ -408,9 +420,12 @@ export function buildPlexItemUrl(
     }
   }
   if (/^\d+$/.test(trimmedKey) && fallbackSectionKey) {
-    return `${cleanUri}/library/sections/${encodeURIComponent(fallbackSectionKey)}/folder?parent=${trimmedKey}&${combinedParam}`;
+    if (!/^[A-Za-z0-9_-]+$/.test(fallbackSectionKey.trim())) {
+      return null;
+    }
+    return `${cleanUri}/library/sections/${encodeURIComponent(fallbackSectionKey.trim())}/folder?parent=${trimmedKey}&${combinedParam}`;
   }
-  if (/^[A-Za-z0-9/_?=&.-]+$/.test(trimmedKey)) {
+  if (/^[A-Za-z0-9/_?=&.-]+$/.test(trimmedKey) && !/(^|\/)\.\.($|\/|\?)/.test(trimmedKey)) {
     const rel = trimmedKey.replace(/^\/+/, '');
     return `${cleanUri}/${rel}${rel.includes('?') ? '&' : '?'}${combinedParam}`;
   }
@@ -470,7 +485,8 @@ async function enrichPlexPhotoItemsWithParts(
       item &&
       !isPlexDirectoryItem(item) &&
       !item.Media?.[0]?.Part?.[0]?.key &&
-      Boolean(item.ratingKey)
+      Boolean(item.ratingKey) &&
+      /^[A-Za-z0-9_-]+$/.test(String(item.ratingKey).trim())
   );
 
   if (needsEnrichment.length === 0) {
@@ -482,7 +498,9 @@ async function enrichPlexPhotoItemsWithParts(
 
   for (let i = 0; i < needsEnrichment.length; i += BATCH_SIZE) {
     const batch = needsEnrichment.slice(i, i + BATCH_SIZE);
-    const ids = batch.map((item) => item.ratingKey).join(',');
+    const ids = batch
+      .map((item) => sanitizePlexKeySegment(String(item.ratingKey), 'ratingKey'))
+      .join(',');
 
     try {
       const batchUrl = `${cleanUri}/library/metadata/${ids}?includeDetails=1&checkFiles=1&${tokenParam}`;
@@ -500,7 +518,8 @@ async function enrichPlexPhotoItemsWithParts(
         await Promise.allSettled(
           batch.map(async (item) => {
             try {
-              const singleUrl = `${cleanUri}/library/metadata/${item.ratingKey}?includeDetails=1&checkFiles=1&${tokenParam}`;
+              const safeRatingKey = sanitizePlexKeySegment(String(item.ratingKey), 'ratingKey');
+              const singleUrl = `${cleanUri}/library/metadata/${safeRatingKey}?includeDetails=1&checkFiles=1&${tokenParam}`;
               const sRes = await fetch(singleUrl, { headers: { Accept: 'application/json' } });
               if (sRes.ok) {
                 const sData = await sRes.json();
@@ -519,7 +538,8 @@ async function enrichPlexPhotoItemsWithParts(
       await Promise.allSettled(
         batch.map(async (item) => {
           try {
-            const singleUrl = `${cleanUri}/library/metadata/${item.ratingKey}?includeDetails=1&checkFiles=1&${tokenParam}`;
+            const safeRatingKey = sanitizePlexKeySegment(String(item.ratingKey), 'ratingKey');
+            const singleUrl = `${cleanUri}/library/metadata/${safeRatingKey}?includeDetails=1&checkFiles=1&${tokenParam}`;
             const sRes = await fetch(singleUrl, { headers: { Accept: 'application/json' } });
             if (sRes.ok) {
               const sData = await sRes.json();
@@ -664,13 +684,14 @@ export async function getPlexSectionFolders(
   sectionKey: string
 ): Promise<PlexFolderItem[]> {
   const cleanUri = serverUri.replace(/\/$/, '');
+  const safeSectionKey = sanitizePlexKeySegment(sectionKey, 'sectionKey');
   const tokenParam = `X-Plex-Token=${encodeURIComponent(serverAccessToken)}`;
   const folders: PlexFolderItem[] = [];
   const seenKeys = new Set<string>();
 
   // 1. Try folder hierarchy endpoint: /library/sections/{id}/folder
   try {
-    const folderRes = await fetch(`${cleanUri}/library/sections/${sectionKey}/folder?${tokenParam}`, {
+    const folderRes = await fetch(`${cleanUri}/library/sections/${safeSectionKey}/folder?${tokenParam}`, {
       headers: { Accept: 'application/json' },
     });
     if (folderRes.ok) {
@@ -691,7 +712,7 @@ export async function getPlexSectionFolders(
 
         const subItems: PlexFolderItem[] = [];
         try {
-          const childUrl = buildPlexItemUrl(cleanUri, rootKey, tokenParam, sectionKey);
+          const childUrl = buildPlexItemUrl(cleanUri, rootKey, tokenParam, safeSectionKey);
           const childRes = childUrl ? await fetch(childUrl, { headers: { Accept: 'application/json' } }) : null;
           if (childRes?.ok) {
             const childData = await childRes.json();
@@ -740,7 +761,7 @@ export async function getPlexSectionFolders(
   // 2. Also try albums endpoint if no folders found or to complement: /library/sections/{id}/all?type=14
   if (folders.length === 0) {
     try {
-      const albumRes = await fetch(`${cleanUri}/library/sections/${sectionKey}/all?type=14&${tokenParam}`, {
+      const albumRes = await fetch(`${cleanUri}/library/sections/${safeSectionKey}/all?type=14&${tokenParam}`, {
         headers: { Accept: 'application/json' },
       });
       if (albumRes.ok) {
@@ -775,9 +796,10 @@ export async function getPlexSectionYears(
   sectionKey: string
 ): Promise<number[]> {
   const cleanUri = serverUri.replace(/\/$/, '');
+  const safeSectionKey = sanitizePlexKeySegment(sectionKey, 'sectionKey');
   const tokenParam = `X-Plex-Token=${encodeURIComponent(serverAccessToken)}`;
   try {
-    const res = await fetch(`${cleanUri}/library/sections/${sectionKey}/year?${tokenParam}`, {
+    const res = await fetch(`${cleanUri}/library/sections/${safeSectionKey}/year?${tokenParam}`, {
       headers: { Accept: 'application/json' },
     });
     if (res.ok) {
@@ -806,11 +828,12 @@ export async function getPlexSectionTotalPhotos(
   sectionKey: string
 ): Promise<number | null> {
   const cleanUri = serverUri.replace(/\/$/, '');
+  const safeSectionKey = sanitizePlexKeySegment(sectionKey, 'sectionKey');
   const tokenParam = `X-Plex-Token=${encodeURIComponent(serverAccessToken)}`;
   try {
     // Request container size 1 so Plex computes totalSize for pagination without sending photos
     const res = await fetch(
-      `${cleanUri}/library/sections/${sectionKey}/all?type=13&X-Plex-Container-Start=0&X-Plex-Container-Size=1&${tokenParam}`,
+      `${cleanUri}/library/sections/${safeSectionKey}/all?type=13&X-Plex-Container-Start=0&X-Plex-Container-Size=1&${tokenParam}`,
       { headers: { Accept: 'application/json' } }
     );
     if (res.ok) {
@@ -823,7 +846,7 @@ export async function getPlexSectionTotalPhotos(
 
     // Fallback: check section /all without type filter
     const fallbackRes = await fetch(
-      `${cleanUri}/library/sections/${sectionKey}/all?X-Plex-Container-Start=0&X-Plex-Container-Size=1&${tokenParam}`,
+      `${cleanUri}/library/sections/${safeSectionKey}/all?X-Plex-Container-Start=0&X-Plex-Container-Size=1&${tokenParam}`,
       { headers: { Accept: 'application/json' } }
     );
     if (fallbackRes.ok) {
@@ -859,6 +882,7 @@ export async function getPlexPhotosFromSection(
   legacyOnProgress?: (count: number) => void
 ): Promise<PhotoItem[]> {
   const cleanUri = serverUri.replace(/\/$/, '');
+  const safeSectionKey = sanitizePlexKeySegment(sectionKey, 'sectionKey');
   const tokenParam = `X-Plex-Token=${encodeURIComponent(serverAccessToken)}`;
 
   const options: PlexScanOptions =
@@ -932,7 +956,7 @@ export async function getPlexPhotosFromSection(
     while (hasMorePages && (isUnlimited || photos.length < maxPhotos)) {
       if (signal?.aborted) break;
 
-      const pageUrl = `${cleanUri}/library/sections/${sectionKey}/all?type=13&includeDetails=1&includeAdvanced=1&checkFiles=1${filterParams}${sortParam}&X-Plex-Container-Start=${offset}&X-Plex-Container-Size=${PAGE_SIZE}&${tokenParam}`;
+      const pageUrl = `${cleanUri}/library/sections/${safeSectionKey}/all?type=13&includeDetails=1&includeAdvanced=1&checkFiles=1${filterParams}${sortParam}&X-Plex-Container-Start=${offset}&X-Plex-Container-Size=${PAGE_SIZE}&${tokenParam}`;
       try {
         const res = await fetch(pageUrl, {
           headers: { Accept: 'application/json' },
@@ -1012,7 +1036,7 @@ export async function getPlexPhotosFromSection(
     }
 
     // Fallback: If section /all?type=13 query returned 0 photos, traverse from the section folder root
-    directoryQueue.push({ key: `/library/sections/${sectionKey}/folder`, depth: 0 });
+    directoryQueue.push({ key: `/library/sections/${safeSectionKey}/folder`, depth: 0 });
   }
 
   // Breadth-first recursive directory traversal (up to depth 15, unlimited photos)
@@ -1029,7 +1053,7 @@ export async function getPlexPhotosFromSection(
       if (visitedDirectoryKeys.has(key)) return null;
       visitedDirectoryKeys.add(key);
 
-      const targetUrl = buildPlexItemUrl(cleanUri, key, tokenParam, sectionKey);
+      const targetUrl = buildPlexItemUrl(cleanUri, key, tokenParam, safeSectionKey);
       if (!targetUrl) return null;
       try {
         const res = await fetch(targetUrl, { headers: { Accept: 'application/json' }, signal });

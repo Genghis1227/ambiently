@@ -89,8 +89,9 @@ const rateLimitBuckets = new Map<string, { windowStartMs: number; count: number 
 function getClientIp(request: Request): string {
   const cfIp = (request.headers.get('CF-Connecting-IP') || '').trim();
   if (cfIp) return cfIp;
-  const xff = (request.headers.get('X-Forwarded-For') || '').split(',')[0].trim();
-  if (xff) return xff;
+  const xff = request.headers.get('X-Forwarded-For') || '';
+  const rightmost = xff.split(',').at(-1)?.trim();
+  if (rightmost) return rightmost;
   return 'local';
 }
 

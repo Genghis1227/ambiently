@@ -260,6 +260,7 @@ export const IdlePhotoScreensaver: React.FC<IdlePhotoScreensaverProps> = ({
             showCaptions={showCaptions}
             showDateTaken={showDateTaken}
             transparentBg={false}
+            ignoreCanvasOcclusion={true}
           />
         </div>
       )}

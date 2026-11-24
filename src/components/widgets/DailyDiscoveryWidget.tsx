@@ -57,8 +57,8 @@ export const DailyDiscoveryWidget: React.FC<DailyDiscoveryWidgetProps> = ({
   isLight = false,
   transparentBg = false,
 }) => {
-  const { isNightMode, isOledNightClock } = useDisplayActivity();
-  const nowDate = useSharedClock('10s', !isOledNightClock);
+  const { isCanvasOccluded, shouldPauseAnimations } = useDisplayActivity();
+  const nowDate = useSharedClock('10s', !isCanvasOccluded);
   const year = nowDate.getFullYear();
   const month = nowDate.getMonth() + 1;
   const day = nowDate.getDate();
@@ -145,9 +145,9 @@ export const DailyDiscoveryWidget: React.FC<DailyDiscoveryWidgetProps> = ({
     };
   }, [dayKey, month, day]);
 
-  // Rotate tabs cleanly when in 'rotate' mode unless paused by recent tap or Night Mode
+  // Rotate tabs cleanly when in 'rotate' mode unless paused by recent tap, idle occlusion, or Night Mode
   useEffect(() => {
-    if (configuredMode !== 'rotate' || autoRotateSec <= 0 || isNightMode) return;
+    if (configuredMode !== 'rotate' || autoRotateSec <= 0 || shouldPauseAnimations) return;
     let intervalId: number | undefined;
     const startRotation = () => {
       intervalId = window.setInterval(() => {
@@ -164,7 +164,7 @@ export const DailyDiscoveryWidget: React.FC<DailyDiscoveryWidgetProps> = ({
       window.clearTimeout(delayTimer);
       if (intervalId !== undefined) window.clearInterval(intervalId);
     };
-  }, [configuredMode, autoRotateSec, isNightMode, pauseSeq]);
+  }, [configuredMode, autoRotateSec, shouldPauseAnimations, pauseSeq]);
 
   const dailyTrivia = useMemo(
     () => getDailyTriviaForDate(nowDate, triviaCategory, triviaOffset),

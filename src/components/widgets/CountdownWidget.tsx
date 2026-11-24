@@ -17,8 +17,8 @@ export const CountdownWidget: React.FC<CountdownWidgetProps> = ({
   isLight = false,
   transparentBg = false,
 }) => {
-  const { isOledNightClock } = useDisplayActivity();
-  const nowDate = useSharedClock('second', !isOledNightClock);
+  const { isCanvasOccluded } = useDisplayActivity();
+  const nowDate = useSharedClock('second', !isCanvasOccluded);
   const nowMs = nowDate.getTime();
 
   const targetMs = resolveCountdownTarget(targetDate, nowDate).getTime();

@@ -1,6 +1,8 @@
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { pipeline } from 'node:stream';
+import { promisify } from 'node:util';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
@@ -91,7 +93,8 @@ function readPackageVersion(): string {
 }
 
 const APP_VERSION = readPackageVersion();
-const immutableGzipCache = new Map<string, Buffer>();
+const gzipAsync = promisify(zlib.gzip);
+const staticGzipCache = new Map<string, { etag: string; buf: Buffer }>();
 const MAX_GZIP_CACHE_ITEMS = 96;
 
 function buildRuntimeConfigScript(): string {
@@ -161,8 +164,50 @@ function loadHeaderRules(): HeaderRule[] {
   return headerRules;
 }
 
+function getTrustProxyMode(
+  trustProxyEnv = process.env.AMBIENTLY_TRUST_PROXY
+): 'false' | 'true' | 'cloudflare' {
+  const normalized = (trustProxyEnv || '').trim().toLowerCase();
+  if (normalized === 'cloudflare') return 'cloudflare';
+  if (normalized === 'true') return 'true';
+  return 'false';
+}
+
 function isTrustedProxyEnabled(): boolean {
-  return process.env.AMBIENTLY_TRUST_PROXY === 'true';
+  return getTrustProxyMode() !== 'false';
+}
+
+function firstHeaderValue(raw: string | string[] | undefined): string {
+  return (Array.isArray(raw) ? raw[0] : raw || '').trim();
+}
+
+/**
+ * Resolves the canonical client IP for rate limiting: ignores forwarded headers when untrusted,
+ * reads rightmost X-Forwarded-For / X-Real-IP under `AMBIENTLY_TRUST_PROXY=true`, and trusts
+ * `CF-Connecting-IP` only under `AMBIENTLY_TRUST_PROXY=cloudflare`.
+ */
+export function resolveClientIpFromRequest(
+  req: IncomingMessage,
+  trustProxyEnv = process.env.AMBIENTLY_TRUST_PROXY
+): string {
+  const mode = getTrustProxyMode(trustProxyEnv);
+  const peerIp = (req.socket?.remoteAddress || '').trim() || 'local';
+  if (mode === 'false') {
+    return peerIp;
+  }
+  if (mode === 'cloudflare') {
+    const cfIp = firstHeaderValue(req.headers['cf-connecting-ip']);
+    if (cfIp) return cfIp;
+  }
+  const rawXff = firstHeaderValue(req.headers['x-forwarded-for']);
+  const rightmostXff = rawXff
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .at(-1);
+  if (rightmostXff) return rightmostXff;
+  const realIp = firstHeaderValue(req.headers['x-real-ip']);
+  return realIp || peerIp;
 }
 
 function isHttpsRequest(req?: IncomingMessage): boolean {
@@ -221,15 +266,15 @@ function applyApiSecurityHeaders(res: ServerResponse): void {
   }
 }
 
-function serveStaticFile(
+async function serveStaticFile(
   req: IncomingMessage,
   res: ServerResponse,
   filePath: string,
   urlPathname: string
-): boolean {
+): Promise<boolean> {
   let stat: fs.Stats;
   try {
-    stat = fs.statSync(filePath);
+    stat = await fs.promises.stat(filePath);
   } catch {
     return false;
   }
@@ -267,18 +312,20 @@ function serveStaticFile(
       return true;
     }
 
-    const isImmutable = urlPathname.startsWith('/assets/');
-    let compressed = isImmutable ? immutableGzipCache.get(filePath) : undefined;
-    if (!compressed) {
-      const raw = fs.readFileSync(filePath);
-      compressed = zlib.gzipSync(raw, { level: 6 });
-      if (isImmutable) {
-        if (immutableGzipCache.size >= MAX_GZIP_CACHE_ITEMS) {
-          const oldest = immutableGzipCache.keys().next().value;
-          if (oldest) immutableGzipCache.delete(oldest);
-        }
-        immutableGzipCache.set(filePath, compressed);
+    const cached = staticGzipCache.get(filePath);
+    let compressed: Buffer;
+    if (cached && cached.etag === etag) {
+      staticGzipCache.delete(filePath);
+      staticGzipCache.set(filePath, cached);
+      compressed = cached.buf;
+    } else {
+      const raw = await fs.promises.readFile(filePath);
+      compressed = await gzipAsync(raw, { level: 6 });
+      if (staticGzipCache.size >= MAX_GZIP_CACHE_ITEMS) {
+        const oldest = staticGzipCache.keys().next().value;
+        if (oldest !== undefined) staticGzipCache.delete(oldest);
       }
+      staticGzipCache.set(filePath, { etag, buf: compressed });
     }
 
     res.setHeader('Content-Length', compressed.byteLength);
@@ -295,7 +342,7 @@ function serveStaticFile(
   }
 
   res.writeHead(200);
-  fs.createReadStream(filePath).pipe(res);
+  pipeline(fs.createReadStream(filePath), res, () => {});
   return true;
 }
 
@@ -362,11 +409,10 @@ async function handleApiRoute(
     for (const [key, value] of Object.entries(req.headers)) {
       const lower = key.toLowerCase();
       if (
-        !trustProxy &&
-        (lower === 'cf-connecting-ip' ||
-          lower === 'x-forwarded-for' ||
-          lower === 'x-real-ip' ||
-          lower === 'x-forwarded-proto')
+        lower === 'cf-connecting-ip' ||
+        lower === 'x-forwarded-for' ||
+        lower === 'x-real-ip' ||
+        (!trustProxy && lower === 'x-forwarded-proto')
       ) {
         continue;
       }
@@ -376,12 +422,7 @@ async function handleApiRoute(
         headers.set(key, value.join(', '));
       }
     }
-    if (!trustProxy) {
-      const peerIp = (req.socket?.remoteAddress || '').trim();
-      if (peerIp) {
-        headers.set('cf-connecting-ip', peerIp);
-      }
-    }
+    headers.set('cf-connecting-ip', resolveClientIpFromRequest(req));
 
     const requestBody =
       method === 'POST' ? await readBoundedRequestBody(req, MAX_API_POST_BODY_BYTES) : undefined;
@@ -494,14 +535,14 @@ export function createAmbientlyServer(): http.Server {
       return;
     }
 
-    if (serveStaticFile(req, res, resolvedPath, pathname === '/' ? '/index.html' : pathname)) {
+    if (await serveStaticFile(req, res, resolvedPath, pathname === '/' ? '/index.html' : pathname)) {
       return;
     }
 
     // 5. SPA Fallback to dist/index.html for client-side routes (skip missing explicit asset extensions)
     if (!path.extname(pathname)) {
       const indexHtmlPath = path.join(distRoot, 'index.html');
-      if (serveStaticFile(req, res, indexHtmlPath, '/index.html')) {
+      if (await serveStaticFile(req, res, indexHtmlPath, '/index.html')) {
         return;
       }
     }

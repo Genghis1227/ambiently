@@ -127,6 +127,8 @@ function hydrateDirtySettingsKeysFromStorage(): void {
   }
 }
 
+const DANGEROUS_SETTING_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 /**
  * Records which `AppSettings` keys were modified locally since the last successful Cloud Sync
  * pull or push so concurrent cross-device pushes can merge modified fields rather than clobbering.
@@ -135,7 +137,7 @@ export function markDirtySettingsKeys(keys: Iterable<string>): void {
   hydrateDirtySettingsKeysFromStorage();
   let added = false;
   for (const key of keys) {
-    if (typeof key === 'string' && key.trim()) {
+    if (typeof key === 'string' && key.trim() && !DANGEROUS_SETTING_KEYS.has(key)) {
       dirtySettingsKeys.add(key);
       added = true;
     }
@@ -295,7 +297,7 @@ export function mergeConcurrentCloudSettings(params: MergeConcurrentCloudSetting
   if (dirtySet) {
     const localRecord = localSettings as unknown as Record<string, unknown>;
     for (const key of dirtySet) {
-      if (key in localRecord) {
+      if (!DANGEROUS_SETTING_KEYS.has(key) && Object.hasOwn(localRecord, key)) {
         merged[key] = localRecord[key];
       }
     }

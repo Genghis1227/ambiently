@@ -30,12 +30,12 @@ export const QuotesWidget: React.FC<QuotesWidgetProps> = ({
   }, [customQuotes, quoteMode]);
 
   const intervalSec = rotationIntervalSec ?? 3600;
-  const { isOledNightClock } = useDisplayActivity();
-  const isOledRef = useRef(isOledNightClock);
+  const { isCanvasOccluded, shouldPauseAnimations } = useDisplayActivity();
+  const pausedRef = useRef(shouldPauseAnimations);
   useEffect(() => {
-    isOledRef.current = isOledNightClock;
-  }, [isOledNightClock]);
-  const sharedDate = useSharedClock('minute', !isOledNightClock && intervalSec > 0);
+    pausedRef.current = shouldPauseAnimations;
+  }, [shouldPauseAnimations]);
+  const sharedDate = useSharedClock('minute', !isCanvasOccluded && intervalSec > 0);
   const minuteMs = sharedDate.getTime();
 
   // Compute time block index so synchronized displays show the same quote
@@ -55,10 +55,10 @@ export const QuotesWidget: React.FC<QuotesWidgetProps> = ({
 
   // Automatic rotation timer
   useEffect(() => {
-    if (intervalSec <= 0 || pool.length <= 1) return;
+    if (intervalSec <= 0 || pool.length <= 1 || shouldPauseAnimations) return;
 
     const timer = setInterval(() => {
-      if ((typeof document !== 'undefined' && document.visibilityState === 'hidden') || isOledRef.current) return;
+      if ((typeof document !== 'undefined' && document.visibilityState === 'hidden') || pausedRef.current) return;
       setIsFading(true);
       setTimeout(() => {
         setCurrentBlock((prev) => prev + 1);
@@ -67,7 +67,7 @@ export const QuotesWidget: React.FC<QuotesWidgetProps> = ({
     }, intervalSec * 1000);
 
     return () => clearInterval(timer);
-  }, [intervalSec, pool.length]);
+  }, [intervalSec, pool.length, shouldPauseAnimations]);
 
   const cycleNext = () => {
     if (pool.length <= 1) return;

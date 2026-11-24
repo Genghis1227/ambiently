@@ -1,3 +1,4 @@
+import { parseHTML } from 'linkedom';
 import {
   externalFetchErrorResponse,
   fetchExternal,
@@ -248,30 +249,78 @@ function hasSchemaType(nodeType: unknown, targetType: string): boolean {
   return matchesSingle(nodeType);
 }
 
-function extractMetaContent(html: string, keys: string[]): string | undefined {
-  for (const key of keys) {
-    const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const pattern1 = new RegExp(
-      `<meta[^>]+(?:property|name|itemprop)=(?:"${escaped}"|'${escaped}')[^>]+content=(?:"([^"]+)"|'([^']+)')[^>]*>`,
-      'i'
-    );
-    const m1 = html.match(pattern1);
-    const val1 = m1?.[1] ?? m1?.[2];
-    if (val1?.trim()) {
-      return decodeHtmlEntities(val1);
-    }
+interface ParsedHtmlDocument {
+  metaMap: Map<string, string>;
+  ldJsonBlocks: string[];
+  rawTitle?: string;
+}
 
-    const pattern2 = new RegExp(
-      `<meta[^>]+content=(?:"([^"]+)"|'([^']+)')[^>]+(?:property|name|itemprop)=(?:"${escaped}"|'${escaped}')[^>]*>`,
-      'i'
-    );
-    const m2 = html.match(pattern2);
-    const val2 = m2?.[1] ?? m2?.[2];
-    if (val2?.trim()) {
-      return decodeHtmlEntities(val2);
+function buildMetaMapFromDocument(document: Document): Map<string, string> {
+  const metaMap = new Map<string, string>();
+  const metas = document.querySelectorAll('meta');
+  for (const meta of metas) {
+    const rawContent = meta.getAttribute('content');
+    if (!rawContent || !rawContent.trim()) continue;
+    const decoded = decodeHtmlEntities(rawContent);
+    if (!decoded) continue;
+    for (const attr of ['property', 'name', 'itemprop']) {
+      const key = meta.getAttribute(attr)?.trim().toLowerCase();
+      if (key && !metaMap.has(key)) {
+        metaMap.set(key, decoded);
+      }
     }
   }
+  return metaMap;
+}
+
+function extractMetaContent(metaMap: Map<string, string>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const val = metaMap.get(key.toLowerCase());
+    if (val) return val;
+  }
   return undefined;
+}
+
+function extractRawTitleFromHtml(html: string): string | undefined {
+  const lower = html.toLowerCase();
+  let searchFrom = 0;
+  while (searchFrom < lower.length) {
+    const start = lower.indexOf('<title', searchFrom);
+    if (start === -1) return undefined;
+    const nextChar = lower[start + 6];
+    if (nextChar && nextChar !== '>' && !/\s/.test(nextChar)) {
+      searchFrom = start + 6;
+      continue;
+    }
+    const openEnd = lower.indexOf('>', start + 6);
+    if (openEnd === -1) return undefined;
+    const close = lower.indexOf('</title', openEnd + 1);
+    if (close === -1) return undefined;
+    return decodeHtmlEntities(html.slice(openEnd + 1, close).replace(/\s+/g, ' '));
+  }
+  return undefined;
+}
+
+function parseHtmlDocumentOnce(html: string): ParsedHtmlDocument {
+  const { document } = parseHTML(html);
+  const metaMap = buildMetaMapFromDocument(document as unknown as Document);
+  const ldJsonBlocks: string[] = [];
+  const scripts = document.querySelectorAll('script');
+  for (const script of scripts) {
+    if (ldJsonBlocks.length >= 24) break;
+    const type = (script.getAttribute('type') || '').trim().toLowerCase();
+    if (type !== 'application/ld+json') continue;
+    const raw = (script.textContent || '').trim();
+    if (raw) ldJsonBlocks.push(raw);
+  }
+  return {
+    metaMap,
+    ldJsonBlocks,
+    rawTitle:
+      extractRawTitleFromHtml(html) ||
+      decodeHtmlEntities((document.querySelector('title')?.textContent || '').replace(/\s+/g, ' ')) ||
+      undefined,
+  };
 }
 
 function parsePriceAmount(raw?: string): number | undefined {
@@ -284,7 +333,7 @@ function parsePriceAmount(raw?: string): number | undefined {
 }
 
 function extractJsonLdEntities(
-  html: string,
+  ldJsonBlocks: string[],
   baseUrl: string
 ): {
   product: { title?: string; imageUrl?: string; price?: number };
@@ -292,10 +341,6 @@ function extractJsonLdEntities(
 } {
   const product: { title?: string; imageUrl?: string; price?: number } = {};
   let recipe: ExtractedRecipeMetadata | undefined;
-
-  const scriptRegex =
-    /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
-  let match: RegExpExecArray | null;
 
   const inspectNode = (node: unknown, depth = 0) => {
     if (!node || typeof node !== 'object' || depth > 16) return;
@@ -372,8 +417,8 @@ function extractJsonLdEntities(
     }
   };
 
-  while ((match = scriptRegex.exec(html)) !== null) {
-    const rawBlock = match[1]
+  for (const block of ldJsonBlocks) {
+    const rawBlock = block
       .trim()
       .replace(/^<!--/, '')
       .replace(/-->$/, '')
@@ -402,18 +447,15 @@ function extractJsonLdEntities(
  * Exported for deterministic unit testing as well as Edge invocation.
  */
 export function extractMetadataFromHtml(html: string, finalUrl: string): ExtractedUrlMetadata {
-  const { product, recipe } = extractJsonLdEntities(html, finalUrl);
+  const { metaMap, ldJsonBlocks, rawTitle } = parseHtmlDocumentOnce(html);
+  const { product, recipe } = extractJsonLdEntities(ldJsonBlocks, finalUrl);
 
   // 1. Extract Title (og:title -> twitter:title -> Recipe title -> Product name -> <title>)
-  const ogTitle = extractMetaContent(html, ['og:title', 'twitter:title']);
-  const titleTagMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  const fallbackTitle = titleTagMatch?.[1]
-    ? decodeHtmlEntities(titleTagMatch[1].replace(/\s+/g, ' '))
-    : undefined;
-  const title = ogTitle || recipe?.title || product.title || fallbackTitle || '';
+  const ogTitle = extractMetaContent(metaMap, ['og:title', 'twitter:title']);
+  const title = ogTitle || recipe?.title || product.title || rawTitle || '';
 
   // 2. Extract Image (og:image -> twitter:image -> Recipe image -> Product image)
-  const rawMetaImage = extractMetaContent(html, [
+  const rawMetaImage = extractMetaContent(metaMap, [
     'og:image',
     'og:image:secure_url',
     'og:image:url',
@@ -433,7 +475,7 @@ export function extractMetadataFromHtml(html: string, finalUrl: string): Extract
     : undefined;
 
   // 3. Extract Price (product:price:amount -> og:price:amount -> price -> JSON-LD offers.price)
-  const metaPriceStr = extractMetaContent(html, [
+  const metaPriceStr = extractMetaContent(metaMap, [
     'product:price:amount',
     'og:price:amount',
     'product:price',
@@ -449,7 +491,7 @@ export function extractMetadataFromHtml(html: string, finalUrl: string): Extract
   } catch {
     defaultHostname = '';
   }
-  const siteName = extractMetaContent(html, ['og:site_name']) || defaultHostname;
+  const siteName = extractMetaContent(metaMap, ['og:site_name']) || defaultHostname;
 
   return {
     title,

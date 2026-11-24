@@ -175,14 +175,14 @@ const CookingModeContent: React.FC<CookingModeContentProps> = ({
     );
   }, [tabTimerWidgets]);
 
-  const { isNightMode } = useDisplayActivity();
-  const dashboardSettings = useDashboardStore((s) => s.settings);
-  const nightActive = isNightMode || isAmbientlyInNightMode(dashboardSettings);
+  const { isNightMode, isCanvasOccluded } = useDisplayActivity();
+  const nightModeSetting = useDashboardStore((s) => Boolean(s.settings?.nightModeEnabled));
+  const nightActive = isNightMode || nightModeSetting || isAmbientlyInNightMode();
 
   const hasActiveOrDoneTabTimer = allTabTimers.some(
     ({ timer }) => timer.status === 'running' || timer.status === 'completed'
   );
-  const nowDate = useSharedClock(hasActiveOrDoneTabTimer ? 'second' : '10s');
+  const nowDate = useSharedClock(hasActiveOrDoneTabTimer ? 'second' : '10s', !isCanvasOccluded);
   const nowMs = nowDate.getTime() > 0 ? nowDate.getTime() : Date.now();
 
   // Persist expired running timers on active tab even when TimerWidget is off-screen
@@ -210,6 +210,46 @@ const CookingModeContent: React.FC<CookingModeContentProps> = ({
       }
     }
   }, [tabTimerWidgets, nowMs, updateWidgetConfig]);
+
+  // Wake once at the earliest timer deadline when hidden/occluded so expiry persists without 1s ticks
+  useEffect(() => {
+    if (!isCanvasOccluded) return;
+    let earliestEndMs = Infinity;
+    for (const { timer } of allTabTimers) {
+      if (timer.status === 'running' && timer.endsAt) {
+        const endMs = Date.parse(timer.endsAt);
+        if (Number.isFinite(endMs) && endMs < earliestEndMs) {
+          earliestEndMs = endMs;
+        }
+      }
+    }
+    if (!Number.isFinite(earliestEndMs)) return;
+    const delayMs = Math.max(0, earliestEndMs - Date.now() + 25);
+    const timeoutId = window.setTimeout(() => {
+      const fireMs = Date.now();
+      for (const widget of tabTimerWidgets) {
+        const resolved = resolveWidgetTimers(
+          (widget.config as TimerWidgetConfig | undefined)?.timers
+        );
+        let changed = false;
+        const nextTimers = resolved.map((t) => {
+          if (t.status !== 'running' || !getTimerLiveState(t, fireMs).isExpired) return t;
+          changed = true;
+          return {
+            ...t,
+            status: 'completed' as const,
+            remainingSec: 0,
+            endsAt: null,
+            completedAt: new Date(fireMs).toISOString(),
+          };
+        });
+        if (changed) {
+          void updateWidgetConfig(widget.id, { timers: nextTimers });
+        }
+      }
+    }, delayMs);
+    return () => window.clearTimeout(timeoutId);
+  }, [isCanvasOccluded, allTabTimers, tabTimerWidgets, updateWidgetConfig]);
 
   const hasRingingModalAlarm =
     !nightActive &&

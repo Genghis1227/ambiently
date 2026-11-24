@@ -66,7 +66,7 @@ import { type CalendarSource, normalizeCalendarUrl, testCalendarFeed } from '../
 import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 import type { QuoteItem } from '../../services/quotes';
 import { EMBED_PRESETS, type EmbedPresetId } from './MediaEmbedWidget';
-import { DEFAULT_WORLD_CITIES, type WorldClockCity, getZoneOffsetMinutes } from './WorldClockWidget';
+import { DEFAULT_WORLD_CITIES, type WorldClockCity, getZoneOffsetMinutes } from '../../utils/timezoneFormat';
 import type { TextBoxConfig } from './TextBoxWidget';
 import { CURATED_RSS_FEEDS, RSS_FEED_CATEGORIES, type RssFeedCategory } from '../../data/curatedFeeds';
 import type { MediaSelectionMeta } from './MediaSearchModal';

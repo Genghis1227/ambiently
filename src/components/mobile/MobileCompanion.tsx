@@ -170,6 +170,7 @@ interface MobileCompanionProps {
   onAddWidget?: (widget: Partial<DashboardWidget>) => void;
   onToggleDesktopView: () => void;
   onOpenSettings: () => void;
+  onAuthorizeSettings?: (onAuthorized: () => void, prompt?: { title?: string; subtitle?: string }) => void;
   onSwipePointerDown?: React.PointerEventHandler<HTMLDivElement>;
   transitionClass?: string;
 }
@@ -190,6 +191,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
   onAddWidget,
   onToggleDesktopView,
   onOpenSettings,
+  onAuthorizeSettings,
   onSwipePointerDown,
   transitionClass,
 }) => {
@@ -240,6 +242,24 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
   const [isTrashOpen, setIsTrashOpen] = useState(false);
   const handleCloseAddWidget = React.useCallback(() => setIsAddWidgetOpen(false), []);
 
+  const requestOpenWidgetSettings = React.useCallback(
+    (target: DashboardWidget) => {
+      const openTarget = () => {
+        const latestWidget =
+          useDashboardStore.getState().widgets.find((w) => w.id === target.id) || target;
+        setEditingWidget(latestWidget);
+      };
+      if (onAuthorizeSettings) {
+        onAuthorizeSettings(openTarget, {
+          subtitle: 'Enter parent PIN to edit tile settings & sources',
+        });
+        return;
+      }
+      openTarget();
+    },
+    [onAuthorizeSettings]
+  );
+
   // Authenticated status
   const [userEmail, setUserEmail] = useState<string | null>(null);
   // Set while the cloud refuses this board's changes because the board is full
@@ -284,11 +304,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
     const reordered = [...sortedWidgets];
     const [moved] = reordered.splice(currentIndex, 1);
     reordered.splice(targetIndex, 0, moved);
-    reordered.forEach((w, idx) => {
-      if (w.mobileOrder !== idx) {
-        onUpdateWidget(w.id, { mobileOrder: idx });
-      }
-    });
+    void useDashboardStore.getState().reorderMobileWidgets(reordered.map((w) => w.id));
   };
 
   const handleQuickAdd = () => {
@@ -883,7 +899,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
               config={widget.config}
               isLight={isLight}
               transparentBg={false}
-              onOpenSettings={() => setEditingWidget(widget)}
+              onOpenSettings={() => requestOpenWidgetSettings(widget)}
             />
           </div>
         );
@@ -1214,7 +1230,7 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
                             {/* Configure Settings ⚙️ */}
                             <button
                               type="button"
-                              onClick={() => setEditingWidget(widget)}
+                              onClick={() => requestOpenWidgetSettings(widget)}
                               title="Configure widget settings"
                               className="p-1.5 rounded-lg text-blue-400 hover:text-white hover:bg-blue-600/30 transition-all cursor-pointer"
                             >
@@ -1462,7 +1478,12 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         {editingWidget && (
           <WidgetSettingsModal
             isOpen={Boolean(editingWidget)}
-            onClose={() => setEditingWidget(null)}
+            onClose={() => {
+              setEditingWidget(null);
+              if (!photoSourcesTarget) {
+                useDashboardStore.getState().lockKiosk();
+              }
+            }}
             widget={editingWidget}
             onOpenPhotoSources={(asCommonSource) => {
               if (editingWidget) {
@@ -1483,6 +1504,9 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
                 onUpdateWidget(widgetId, updates);
               }
               setEditingWidget(null);
+              if (!photoSourcesTarget) {
+                useDashboardStore.getState().lockKiosk();
+              }
             }}
           />
         )}
@@ -1496,7 +1520,12 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
           return (
             <PhotoSourcesModal
               isOpen={Boolean(photoSourcesTarget)}
-              onClose={() => setPhotoSourcesTarget(null)}
+              onClose={() => {
+                setPhotoSourcesTarget(null);
+                if (!editingWidget) {
+                  useDashboardStore.getState().lockKiosk();
+                }
+              }}
               targetWidgetId={activePhotoWidget.id}
               isCommonSource={isUsingCommon}
               initialWebUrls={

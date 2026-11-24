@@ -67,6 +67,14 @@ and grantee = 'authenticated'
 and privilege_type = 'UPDATE'
 
 union all
+select 'Owners can insert arbitrary columns into dashboard_members', table_name || ': table-wide INSERT'
+from information_schema.role_table_grants
+where table_schema = 'public'
+and table_name = 'dashboard_members'
+and grantee = 'authenticated'
+and privilege_type = 'INSERT'
+
+union all
 select 'Function runs as its owner without a fixed search_path', n.nspname || '.' || p.proname
 from pg_proc p
 join pg_namespace n on n.oid = p.pronamespace
@@ -173,6 +181,20 @@ union all
 select 'Secret-looking value stored in settings or widget config', 'widget ' || dashboard_id || '/' || id
 from public.widgets
 where config::text ilike '%x-plex-token=%'
-   or (jsonb_typeof(config) = 'object' and config ?| array['password', 'haAccessToken', 'accessToken', 'apiToken', 'bearerToken'])
+   or (jsonb_typeof(config) = 'object' and (
+     config ?| array['password', 'haAccessToken', 'accessToken', 'apiToken', 'bearerToken']
+     or (
+       jsonb_typeof(config->'homeAssistant') = 'object'
+       and (config->'homeAssistant') ?| array['accessToken', 'haAccessToken', 'token', 'bearerToken', 'apiToken']
+     )
+     or exists (
+       select 1
+       from jsonb_array_elements(
+         case when jsonb_typeof(config->'services') = 'array' then config->'services' else '[]'::jsonb end
+       ) elem
+       where jsonb_typeof(elem) = 'object'
+         and elem ?| array['token', 'headers', 'accessToken', 'bearerToken', 'apiToken']
+     )
+   ))
 
 order by 1, 2;

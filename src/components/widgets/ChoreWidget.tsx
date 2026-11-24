@@ -42,6 +42,7 @@ import {
 } from '../../utils/choreEngine';
 import { localDateKey } from '../../utils/timePrefs';
 import { isAmbientlyInNightMode } from '../../utils/confetti';
+import { useDisplayActivity } from '../../utils/displayActivity';
 import { ProfileAvatar } from '../common/ProfileAvatar';
 import { fireConfettiCelebration } from '../common/ConfettiCelebration';
 
@@ -104,32 +105,29 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
   const householdProfiles = useProfileStore((s) => s.profiles);
   const isProfileStoreInitialized = useProfileStore((s) => s.isInitialized);
 
-  const dashboardSettings = useDashboardStore((s) => s.settings);
+  const nightModeSetting = useDashboardStore((s) => Boolean(s.settings?.nightModeEnabled));
+  const settingsWeekStartsOn = useDashboardStore((s) => s.settings?.weekStartsOn);
+  const { isNightMode: activityNightMode, isCanvasOccluded } = useDisplayActivity();
   const [now, setNow] = useState<Date>(() => new Date());
 
   useEffect(() => {
+    if (isCanvasOccluded) return;
+    const wakeTimeoutId = window.setTimeout(() => {
+      setNow(new Date());
+    }, 0);
     const intervalId = window.setInterval(() => {
       setNow(new Date());
     }, 30_000);
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        setNow(new Date());
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
     return () => {
+      window.clearTimeout(wakeTimeoutId);
       window.clearInterval(intervalId);
-      document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, []);
+  }, [isCanvasOccluded]);
 
   const isNightMode = useMemo(() => {
     void now;
-    return (
-      Boolean(dashboardSettings?.nightModeEnabled) ||
-      isAmbientlyInNightMode(dashboardSettings)
-    );
-  }, [dashboardSettings, now]);
+    return activityNightMode || nightModeSetting || isAmbientlyInNightMode();
+  }, [activityNightMode, nightModeSetting, now]);
 
   const [isProposeModalOpen, setIsProposeModalOpen] = useState(false);
   const [editingProposal, setEditingProposal] = useState<WishlistReward | null>(null);
@@ -305,7 +303,7 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
     let cCount = 0;
 
     const weekStartsOn: 'sunday' | 'monday' =
-      dashboardSettings?.weekStartsOn === 'monday' ||
+      settingsWeekStartsOn === 'monday' ||
       snapshot.householdSettings?.weekStartsOn === 'monday'
         ? 'monday'
         : 'sunday';
@@ -483,7 +481,7 @@ export const ChoreWidget: React.FC<ChoreWidgetProps> = ({
     snapshot.instances,
     snapshot.ledger,
     snapshot.householdSettings?.weekStartsOn,
-    dashboardSettings?.weekStartsOn,
+    settingsWeekStartsOn,
     templateMap,
     visibleProfiles,
     todayKey,

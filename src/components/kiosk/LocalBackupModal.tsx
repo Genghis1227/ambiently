@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import {
   X,
   HardDrive,
@@ -34,7 +35,16 @@ export const LocalBackupModal: React.FC<LocalBackupModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { settings, tabs, widgets, notes, initStore, saveLocalBackupImmediate } = useDashboardStore();
+  const { settings, tabs, widgets, notes, initStore, saveLocalBackupImmediate } = useDashboardStore(
+    useShallow((state) => ({
+      settings: state.settings,
+      tabs: state.tabs,
+      widgets: state.widgets,
+      notes: state.notes,
+      initStore: state.initStore,
+      saveLocalBackupImmediate: state.saveLocalBackupImmediate,
+    }))
+  );
   const fileSync = useFileSync();
   const fileInputRef = useRef<HTMLInputElement>(null);
 

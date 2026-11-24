@@ -24,7 +24,7 @@ import {
   RefreshCw,
   MapPin,
 } from 'lucide-react';
-import { getFormattedTimeForZone } from './WorldClockWidget';
+import { getFormattedTimeForZone } from '../../utils/timezoneFormat';
 
 interface ClockWeatherWidgetProps {
   locationName?: string;
@@ -70,13 +70,14 @@ export const ClockWeatherWidget: React.FC<ClockWeatherWidgetProps> = ({
   transparentBg = false,
 }) => {
   const { hour12 } = useTimePrefs();
-  const { isOledNightClock } = useDisplayActivity();
-  const isOledRef = useRef(isOledNightClock);
+  const { isCanvasOccluded, shouldPauseAnimations } = useDisplayActivity();
+  const shouldPauseRef = useRef(shouldPauseAnimations);
   useEffect(() => {
-    isOledRef.current = isOledNightClock;
-  }, [isOledNightClock]);
-  const wasOledRef = useRef(false);
-  const time = useSharedClock(showSeconds ? 'second' : '10s', !isOledNightClock);
+    shouldPauseRef.current = shouldPauseAnimations;
+  }, [shouldPauseAnimations]);
+  const wasPausedRef = useRef(false);
+  const lastWeatherFetchAtRef = useRef(0);
+  const time = useSharedClock(showSeconds ? 'second' : '10s', !isCanvasOccluded);
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [nwsAlerts, setNwsAlerts] = useState<WeatherAlert[]>([]);
   const alertReqIdRef = useRef(0);
@@ -89,6 +90,7 @@ export const ClockWeatherWidget: React.FC<ClockWeatherWidgetProps> = ({
 
   // Fetch Weather
   const loadWeather = useCallback(async () => {
+    lastWeatherFetchAtRef.current = Date.now();
     setLoading(true);
     const reqId = ++alertReqIdRef.current;
     void fetchWeatherAlerts(latitude, longitude)
@@ -111,18 +113,22 @@ export const ClockWeatherWidget: React.FC<ClockWeatherWidgetProps> = ({
   useEffect(() => {
     void loadWeather();
     const interval = setInterval(() => {
-      if ((typeof document !== 'undefined' && document.visibilityState === 'hidden') || isOledRef.current) return;
+      if ((typeof document !== 'undefined' && document.visibilityState === 'hidden') || shouldPauseRef.current) return;
       void loadWeather();
     }, 15 * 60 * 1000);
     return () => clearInterval(interval);
   }, [loadWeather]);
 
   useEffect(() => {
-    if (wasOledRef.current && !isOledNightClock) {
+    if (
+      wasPausedRef.current &&
+      !shouldPauseAnimations &&
+      Date.now() - lastWeatherFetchAtRef.current >= 15 * 60 * 1000
+    ) {
       void loadWeather();
     }
-    wasOledRef.current = isOledNightClock;
-  }, [isOledNightClock, loadWeather]);
+    wasPausedRef.current = shouldPauseAnimations;
+  }, [shouldPauseAnimations, loadWeather]);
 
   const zt = getFormattedTimeForZone(time, timezone, hour12);
   const stickerShadow = transparentBg && !isLight ? 'drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]' : '';

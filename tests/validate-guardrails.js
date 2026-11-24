@@ -20,7 +20,6 @@ export const ALLOWED_RUNTIME_DEPENDENCIES = new Set([
   'dexie',
   'dompurify',
   'fast-xml-parser',
-  'framer-motion',
   'ical.js',
   'libheif-js',
   'linkedom',

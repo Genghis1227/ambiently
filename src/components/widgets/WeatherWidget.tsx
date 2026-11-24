@@ -73,15 +73,17 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({
   const [forecastMode, setForecastMode] = useState<'daily' | 'hourly'>('daily');
   const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { isOledNightClock } = useDisplayActivity();
-  const isOledRef = useRef(isOledNightClock);
+  const { shouldPauseAnimations } = useDisplayActivity();
+  const shouldPauseRef = useRef(shouldPauseAnimations);
   useEffect(() => {
-    isOledRef.current = isOledNightClock;
-  }, [isOledNightClock]);
-  const wasOledRef = useRef(false);
+    shouldPauseRef.current = shouldPauseAnimations;
+  }, [shouldPauseAnimations]);
+  const wasPausedRef = useRef(false);
+  const lastFetchAtRef = useRef(0);
 
   const loadWeather = useCallback(
     async (forceRefresh = false) => {
+      lastFetchAtRef.current = Date.now();
       setLoading(true);
       const reqId = ++alertReqIdRef.current;
       void fetchWeatherAlerts(latitude, longitude, forceRefresh)
@@ -106,18 +108,22 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({
   useEffect(() => {
     void loadWeather();
     const interval = setInterval(() => {
-      if ((typeof document !== 'undefined' && document.visibilityState === 'hidden') || isOledRef.current) return;
+      if ((typeof document !== 'undefined' && document.visibilityState === 'hidden') || shouldPauseRef.current) return;
       void loadWeather();
     }, 15 * 60 * 1000);
     return () => clearInterval(interval);
   }, [loadWeather]);
 
   useEffect(() => {
-    if (wasOledRef.current && !isOledNightClock) {
+    if (
+      wasPausedRef.current &&
+      !shouldPauseAnimations &&
+      Date.now() - lastFetchAtRef.current >= 15 * 60 * 1000
+    ) {
       void loadWeather();
     }
-    wasOledRef.current = isOledNightClock;
-  }, [isOledNightClock, loadWeather]);
+    wasPausedRef.current = shouldPauseAnimations;
+  }, [shouldPauseAnimations, loadWeather]);
 
   const stickerShadow = transparentBg && !isLight ? 'drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]' : '';
 

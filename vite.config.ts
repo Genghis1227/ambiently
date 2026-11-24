@@ -129,6 +129,25 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//, /^\/functions\//, /^\/config\.js$/],
         runtimeCaching: [
           {
+            // Keep runtime Supabase config fresh when online while falling back quickly after 2s offline
+            urlPattern: ({ url }) =>
+              url.origin === (globalThis as unknown as { location: { origin: string } }).location.origin &&
+              url.pathname === '/config.js',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'runtime-config',
+              networkTimeoutSeconds: 2,
+              expiration: {
+                maxEntries: 2,
+                maxAgeSeconds: 24 * 60 * 60,
+                purgeOnQuotaError: true,
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
+          {
             // Cache lazy-excluded immutable hashed chunks on first demand rather than eager precache
             urlPattern: ({ url }) =>
               url.origin === (globalThis as unknown as { location: { origin: string } }).location.origin &&

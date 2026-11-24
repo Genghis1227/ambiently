@@ -224,3 +224,157 @@ describe('v0.8.0 UX & systems performance optimizations', () => {
     }
   });
 });
+
+describe('Milestone 4 Performance & Kiosk Runtime Suite', () => {
+  it('batches z-order updates synchronously and preserves untouched sibling references', async () => {
+    const prevWidgets = useDashboardStore.getState().widgets;
+    const prevNotes = useDashboardStore.getState().notes;
+
+    const w1 = {
+      id: 'w-z-1',
+      tabId: 'tab-1',
+      type: 'clock' as const,
+      title: 'Clock',
+      config: {},
+      gridPos: { x: 0, y: 0, w: 4, h: 4 },
+      freeformPos: { xRatio: 0.1, yRatio: 0.1, wRatio: 0.3, hRatio: 0.3, zIndex: 1, rotation: 0 },
+      updated_at: '2026-11-24T00:00:00.000Z',
+    };
+    const w2 = {
+      id: 'w-z-2',
+      tabId: 'tab-1',
+      type: 'weather' as const,
+      title: 'Weather',
+      config: {},
+      gridPos: { x: 4, y: 0, w: 4, h: 4 },
+      freeformPos: { xRatio: 0.5, yRatio: 0.1, wRatio: 0.3, hRatio: 0.3, zIndex: 2, rotation: 0 },
+      updated_at: '2026-11-24T00:00:00.000Z',
+    };
+    const n1 = {
+      id: 'n-z-1',
+      tabId: 'tab-1',
+      content: 'Note',
+      color: '#fef08a',
+      freeformPos: { xRatio: 0.2, yRatio: 0.2, wRatio: 0.2, hRatio: 0.2, zIndex: 3, rotation: 0 },
+      updated_at: '2026-11-24T00:00:00.000Z',
+    };
+
+    useDashboardStore.setState({
+      widgets: [w1 as never, w2 as never],
+      notes: [n1 as never],
+    });
+
+    let notifications = 0;
+    const unsub = useDashboardStore.subscribe(() => {
+      notifications += 1;
+    });
+
+    try {
+      await useDashboardStore.getState().applyCanvasZOrderUpdates([
+        { id: 'w-z-1', type: 'widget', zIndex: 10, isBackground: true },
+        { id: 'n-z-1', type: 'note', zIndex: 11, isBackground: false },
+      ]);
+
+      const stateAfterZ = useDashboardStore.getState();
+      assert.equal(notifications, 1);
+      assert.equal(stateAfterZ.widgets[0].freeformPos?.zIndex, 10);
+      assert.equal(stateAfterZ.widgets[0].freeformPos?.isBackground, true);
+      assert.equal(stateAfterZ.widgets[1], w2);
+      assert.equal(stateAfterZ.notes[0].freeformPos?.zIndex, 11);
+
+      await useDashboardStore.getState().reorderMobileWidgets(['w-z-2', 'w-z-1']);
+      const stateAfterOrder = useDashboardStore.getState();
+      assert.equal(stateAfterOrder.widgets[0].mobileOrder, 1);
+      assert.equal(stateAfterOrder.widgets[1].mobileOrder, 0);
+    } finally {
+      unsub();
+      useDashboardStore.setState({ widgets: prevWidgets, notes: prevNotes });
+    }
+  });
+
+  it('caps local folder scans at 1500 and filters dead session blob URLs', async () => {
+    const { MAX_LOCAL_FOLDER_PHOTOS, filterDeadSessionBlobPhotos } = await import(
+      '../src/services/photos'
+    );
+    assert.equal(MAX_LOCAL_FOLDER_PHOTOS, 1500);
+
+    const filtered = filterDeadSessionBlobPhotos([
+      { id: '1', url: 'blob:https://example.org/dead-session-uuid-1' },
+      { id: '2', url: 'https://example.org/photo.jpg' },
+      { id: '3', url: 'data:image/png;base64,iVBORw0KGgo=' },
+    ]);
+    assert.deepEqual(
+      filtered.map((p) => p.id),
+      ['2', '3']
+    );
+  });
+
+  it('toggles canvas occlusion state cleanly for photo screensaver hibernation', async () => {
+    const { getPhotoScreensaverOccludingCanvas, setPhotoScreensaverOccludingCanvas } =
+      await import('../src/utils/displayActivity');
+
+    try {
+      assert.equal(getPhotoScreensaverOccludingCanvas(), false);
+      setPhotoScreensaverOccludingCanvas(true);
+      assert.equal(getPhotoScreensaverOccludingCanvas(), true);
+      setPhotoScreensaverOccludingCanvas(false);
+      assert.equal(getPhotoScreensaverOccludingCanvas(), false);
+    } finally {
+      setPhotoScreensaverOccludingCanvas(false);
+    }
+  });
+
+  it('formats timezone offsets independently of WorldClockWidget UI', async () => {
+    const { getFormattedTimeForZone, getZoneOffsetMinutes } = await import(
+      '../src/utils/timezoneFormat'
+    );
+    const sampleDate = new Date('2026-11-24T12:00:00.000Z');
+    assert.equal(getZoneOffsetMinutes(sampleDate, 'UTC'), 0);
+
+    const formatted12 = getFormattedTimeForZone(sampleDate, 'UTC', true);
+    assert.equal(formatted12.hoursMinutes, '12:00');
+    assert.equal(formatted12.ampm, 'PM');
+
+    const formatted24 = getFormattedTimeForZone(sampleDate, 'UTC', false);
+    assert.equal(formatted24.hoursMinutes, '12:00');
+    assert.equal(formatted24.ampm, '');
+  });
+
+  it('deduplicates concurrent in-flight RSS feed requests for the same URL', async () => {
+    const { clearFeedMemoryCaches, fetchRssFeed } = await import('../src/services/feeds');
+    clearFeedMemoryCaches();
+
+    const prevFetch = globalThis.fetch;
+    let fetchCalls = 0;
+    globalThis.fetch = (async () => {
+      fetchCalls += 1;
+      await new Promise((r) => setTimeout(r, 15));
+      return new Response(
+        JSON.stringify({
+          title: 'Test Feed',
+          items: [
+            {
+              title: 'Headline One',
+              link: 'https://example.org/post-1',
+              pubDate: '2026-11-24T12:00:00.000Z',
+              snippet: 'Summary',
+            },
+          ],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }) as typeof fetch;
+
+    try {
+      const feedUrl = 'https://example.org/dedup-rss-test.xml';
+      const [resA, resB] = await Promise.all([fetchRssFeed(feedUrl), fetchRssFeed(feedUrl)]);
+      assert.equal(fetchCalls, 1);
+      assert.equal(resA.items.length, 1);
+      assert.equal(resB.items.length, 1);
+      assert.equal(resA.items[0].title, 'Headline One');
+    } finally {
+      globalThis.fetch = prevFetch;
+      clearFeedMemoryCaches();
+    }
+  });
+});

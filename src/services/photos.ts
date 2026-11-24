@@ -69,6 +69,7 @@ const CACHE_NAME = PHOTO_CACHE_NAME;
 const MAX_CACHE_ENTRIES = 50;
 const IMAGE_EXT_REGEX = /\.(jpe?g|png|webp|avif|gif|bmp|heic|heif)$/i;
 const photosBeingCached = new Set<string>();
+export const MAX_LOCAL_FOLDER_PHOTOS = 1500;
 
 export async function cachePhotosLocally(photos: PhotoItem[]): Promise<void> {
   if (typeof globalThis.caches === 'undefined') return;
@@ -112,15 +113,30 @@ export async function cachePhotosLocally(photos: PhotoItem[]): Promise<void> {
 }
 
 const activeLocalBlobUrls: string[] = [];
+const sessionBlobUrlSet = new Set<string>();
 
 function createTrackedBlobUrl(file: File): string {
   const url = URL.createObjectURL(file);
   activeLocalBlobUrls.push(url);
+  sessionBlobUrlSet.add(url);
   return url;
 }
 
+export function isLiveSessionBlobUrl(url: string): boolean {
+  return typeof url === 'string' && url.startsWith('blob:') && sessionBlobUrlSet.has(url);
+}
+
+export function filterDeadSessionBlobPhotos<T extends { url?: string }>(
+  photos: T[] | undefined
+): T[] {
+  if (!Array.isArray(photos) || photos.length === 0) return [];
+  return photos.filter(
+    (p) => typeof p?.url === 'string' && (!p.url.startsWith('blob:') || sessionBlobUrlSet.has(p.url))
+  );
+}
+
 export function revokePreviousLocalBlobUrls(): void {
-  if (activeLocalBlobUrls.length === 0) return;
+  if (activeLocalBlobUrls.length === 0 && sessionBlobUrlSet.size === 0) return;
   for (let i = 0; i < activeLocalBlobUrls.length; i++) {
     try {
       URL.revokeObjectURL(activeLocalBlobUrls[i]);
@@ -129,21 +145,25 @@ export function revokePreviousLocalBlobUrls(): void {
     }
   }
   activeLocalBlobUrls.length = 0;
+  sessionBlobUrlSet.clear();
 }
 
 export async function scanDirectoryHandle(
   dirHandle: any,
   photos: PhotoItem[],
-  maxPhotos = Infinity,
+  maxPhotos = MAX_LOCAL_FOLDER_PHOTOS,
   currentDepth = 0,
   maxDepth = 12,
   onProgress?: (count: number, currentDirName: string) => void
 ): Promise<void> {
-  const isUnlimited = !maxPhotos || maxPhotos <= 0 || !isFinite(maxPhotos);
-  if (currentDepth > maxDepth || (!isUnlimited && photos.length >= maxPhotos)) return;
+  const effectiveMax =
+    maxPhotos > 0 && isFinite(maxPhotos)
+      ? Math.min(maxPhotos, MAX_LOCAL_FOLDER_PHOTOS)
+      : MAX_LOCAL_FOLDER_PHOTOS;
+  if (currentDepth > maxDepth || photos.length >= effectiveMax) return;
 
   for await (const entry of dirHandle.values()) {
-    if (!isUnlimited && photos.length >= maxPhotos) break;
+    if (photos.length >= effectiveMax) break;
 
     if (entry.kind === 'file') {
       const isImgExt = IMAGE_EXT_REGEX.test(entry.name);
@@ -345,14 +365,17 @@ export async function scanSelectedSubfolders(
       ? { maxPhotos: maxPhotosOrOptions, onProgress: legacyOnProgress }
       : maxPhotosOrOptions || {};
 
-  const maxPhotos = options.maxPhotos ?? Infinity;
+  const requestedMax = options.maxPhotos;
+  const maxPhotos =
+    requestedMax && isFinite(requestedMax) && requestedMax > 0
+      ? Math.min(requestedMax, MAX_LOCAL_FOLDER_PHOTOS)
+      : MAX_LOCAL_FOLDER_PHOTOS;
   const onProgress = options.onProgress;
   const onBatch = options.onBatch;
   const signal = options.signal;
 
   const folderEntries: { id: string; name: string; photos: PhotoItem[] }[] = [];
   const totalPhotos: PhotoItem[] = [];
-  const isUnlimited = !maxPhotos || maxPhotos <= 0 || !isFinite(maxPhotos);
 
   let hasEmittedInitial = false;
   const checkEmitInitial = () => {
@@ -370,7 +393,7 @@ export async function scanSelectedSubfolders(
       const rootPhotos: PhotoItem[] = [];
       for await (const entry of inspection.dirHandle.values()) {
         if (signal?.aborted) break;
-        if (!isUnlimited && totalPhotos.length >= maxPhotos) break;
+        if (totalPhotos.length >= maxPhotos) break;
         if (entry.kind === 'file' && IMAGE_EXT_REGEX.test(entry.name)) {
           try {
             const file = await entry.getFile();
@@ -402,10 +425,10 @@ export async function scanSelectedSubfolders(
     for (const sub of inspection.subfolders) {
       if (signal?.aborted) break;
       if (!selectedSubfolderNames.has(sub.name)) continue;
-      if (!isUnlimited && totalPhotos.length >= maxPhotos) break;
+      if (totalPhotos.length >= maxPhotos) break;
 
       const subPhotos: PhotoItem[] = [];
-      const remainingLimit = isUnlimited ? Infinity : maxPhotos - totalPhotos.length;
+      const remainingLimit = maxPhotos - totalPhotos.length;
       await scanDirectoryHandle(sub.handle, subPhotos, remainingLimit, 0, 12, onProgress);
       if (subPhotos.length > 0) {
         totalPhotos.push(...subPhotos);
@@ -425,7 +448,7 @@ export async function scanSelectedSubfolders(
       const rootFiles = inspection.files.filter(
         (file) => ((file as any).webkitRelativePath || file.name).split('/').length <= 2
       );
-      const { photos } = parseFileListToPhotos(rootFiles, isUnlimited ? Infinity : maxPhotos);
+      const { photos } = parseFileListToPhotos(rootFiles, maxPhotos);
       if (photos.length > 0) {
         totalPhotos.push(...photos);
         folderEntries.push({
@@ -440,10 +463,10 @@ export async function scanSelectedSubfolders(
     for (const sub of inspection.subfolders) {
       if (signal?.aborted) break;
       if (!selectedSubfolderNames.has(sub.name)) continue;
-      if (!isUnlimited && totalPhotos.length >= maxPhotos) break;
+      if (totalPhotos.length >= maxPhotos) break;
 
       const subFiles = sub.files || [];
-      const remainingLimit = isUnlimited ? Infinity : maxPhotos - totalPhotos.length;
+      const remainingLimit = maxPhotos - totalPhotos.length;
       const { photos } = parseFileListToPhotos(subFiles, remainingLimit);
       if (photos.length > 0) {
         totalPhotos.push(...photos);
@@ -469,7 +492,7 @@ export async function scanSelectedSubfolders(
 
 // Local Directory Picker (showDirectoryPicker) for local PC / mapped NAS photos
 export async function pickLocalPhotoDirectory(
-  maxPhotos = Infinity,
+  maxPhotos = MAX_LOCAL_FOLDER_PHOTOS,
   onProgress?: (count: number, currentDirName: string) => void
 ): Promise<{
   success: boolean;
@@ -478,6 +501,10 @@ export async function pickLocalPhotoDirectory(
   error?: string;
 }> {
   try {
+    const boundedMax =
+      maxPhotos > 0 && isFinite(maxPhotos)
+        ? Math.min(maxPhotos, MAX_LOCAL_FOLDER_PHOTOS)
+        : MAX_LOCAL_FOLDER_PHOTOS;
     const promptRes = await promptLocalDirectoryHandle();
     if (!promptRes.success) {
       if (promptRes.cancelled) {
@@ -490,7 +517,7 @@ export async function pickLocalPhotoDirectory(
     const folderName = dirHandle.name || 'Selected Folder';
     revokePreviousLocalBlobUrls();
     const localPhotos: PhotoItem[] = [];
-    await scanDirectoryHandle(dirHandle, localPhotos, maxPhotos, 0, 12, onProgress);
+    await scanDirectoryHandle(dirHandle, localPhotos, boundedMax, 0, 12, onProgress);
 
     if (localPhotos.length === 0) {
       return {
@@ -513,12 +540,16 @@ export async function pickLocalPhotoDirectory(
 // Fallback directory parser for standard HTML5 file inputs (<input type="file" webkitdirectory />)
 export function parseFileListToPhotos(
   files: FileList | File[],
-  maxPhotos = 5000
+  maxPhotos = MAX_LOCAL_FOLDER_PHOTOS
 ): { folderName: string; photos: PhotoItem[] } {
   const photos: PhotoItem[] = [];
   let detectedFolder = 'Selected Folder';
+  const boundedMax =
+    maxPhotos > 0 && isFinite(maxPhotos)
+      ? Math.min(maxPhotos, MAX_LOCAL_FOLDER_PHOTOS)
+      : MAX_LOCAL_FOLDER_PHOTOS;
 
-  for (let i = 0; i < files.length && photos.length < maxPhotos; i++) {
+  for (let i = 0; i < files.length && photos.length < boundedMax; i++) {
     const file = files[i];
     const path = (file as any).webkitRelativePath || file.name;
     const parts = path.split('/');

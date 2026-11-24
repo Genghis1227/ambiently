@@ -243,13 +243,24 @@ export async function downloadBackupFile(
   URL.revokeObjectURL(url);
 }
 
+export const MAX_BACKUP_FILE_BYTES = 50 * 1024 * 1024;
+const DANGEROUS_JSON_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 // 2. Universal File Upload & Validation for Restore (.json)
 export async function parseAndValidateBackup(
   file: File
 ): Promise<{ success: boolean; data?: LocalExportPayload; error?: string }> {
   try {
+    if (typeof file.size === 'number' && file.size > MAX_BACKUP_FILE_BYTES) {
+      return {
+        success: false,
+        error: `Backup file exceeds maximum supported size (${Math.round(MAX_BACKUP_FILE_BYTES / (1024 * 1024))} MB).`,
+      };
+    }
     const text = await file.text();
-    const data = JSON.parse(text);
+    const data = JSON.parse(text, (key, value) =>
+      DANGEROUS_JSON_KEYS.has(key) ? undefined : value
+    );
 
     if (!data || typeof data !== 'object') {
       return { success: false, error: 'Invalid JSON file.' };

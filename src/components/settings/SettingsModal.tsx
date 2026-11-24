@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import {
   X,
   Lock,
@@ -163,7 +164,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setHomeTab,
     deleteTab,
     reorderTabs,
-  } = useDashboardStore();
+  } = useDashboardStore(
+    useShallow((state) => ({
+      settings: state.settings,
+      photoSyncState: state.photoSyncState,
+      photoSyncMeta: state.photoSyncMeta,
+      tabs: state.tabs,
+      widgets: state.widgets,
+      notes: state.notes,
+      setDockPosition: state.setDockPosition,
+      setDockHidden: state.setDockHidden,
+      setSnapToGrid: state.setSnapToGrid,
+      setCarouselEnabled: state.setCarouselEnabled,
+      setCarouselDuration: state.setCarouselDuration,
+      applyCommonPhotosToAllWidgets: state.applyCommonPhotosToAllWidgets,
+      updateSettings: state.updateSettings,
+      setPinLock: state.setPinLock,
+      saveLocalBackupImmediate: state.saveLocalBackupImmediate,
+      addTab: state.addTab,
+      updateTab: state.updateTab,
+      setHomeTab: state.setHomeTab,
+      deleteTab: state.deleteTab,
+      reorderTabs: state.reorderTabs,
+    }))
+  );
 
   const [activeTab, setActiveTab] = useState<SettingsTabId>(initialTab);
   const fileSync = useFileSync();

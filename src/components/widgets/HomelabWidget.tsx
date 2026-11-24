@@ -40,7 +40,6 @@ import {
   writeCachedHomelabStatus,
 } from '../../services/homelab';
 import { useDisplayActivity } from '../../utils/displayActivity';
-import { useIsCursorHidden } from '../../hooks/useIdleCursor';
 
 interface HomelabWidgetProps {
   widgetId: string;
@@ -118,7 +117,6 @@ export const HomelabWidget: React.FC<HomelabWidgetProps> = ({
   transparentBg = false,
   onOpenSettings,
 }) => {
-  const isCursorHidden = useIsCursorHidden();
   const { shouldPauseAnimations } = useDisplayActivity();
 
   const services = useMemo(
@@ -384,7 +382,7 @@ export const HomelabWidget: React.FC<HomelabWidgetProps> = ({
                 setIsRefreshing(true);
                 runProbe();
               }}
-              title={isCursorHidden ? undefined : 'Refresh service & Home Assistant status'}
+              title="Refresh service & Home Assistant status"
               className={`p-1 rounded-lg transition-colors cursor-pointer ${
                 isLight ? 'hover:bg-slate-200 text-slate-600' : 'hover:bg-gray-800 text-gray-300'
               }`}
@@ -559,11 +557,7 @@ export const HomelabWidget: React.FC<HomelabWidgetProps> = ({
                     return (
                       <div
                         key={ent.id}
-                        title={
-                          isCursorHidden
-                            ? undefined
-                            : ent.error || `${ent.entityId}: ${ent.formattedValue}`
-                        }
+                        title={ent.error || `${ent.entityId}: ${ent.formattedValue}`}
                         className={`px-2.5 py-2 rounded-xl flex flex-col justify-between gap-1 ${cardSurfaceClass}`}
                       >
                         <div className="flex items-center justify-between gap-1">

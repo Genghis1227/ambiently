@@ -287,7 +287,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
   if (!feedUrl) {
     return new Response(JSON.stringify({ error: 'Missing "url" query parameter' }), {
       status: 400,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' },
     });
   }
 
@@ -313,7 +313,10 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     if (!fetchRes.ok) {
       return new Response(
         JSON.stringify({ error: `Failed to fetch RSS feed: ${fetchRes.statusText}` }),
-        { status: fetchRes.status, headers: { 'Content-Type': 'application/json' } }
+        {
+          status: fetchRes.status,
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' },
+        }
       );
     }
 
@@ -388,7 +391,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     return new Response(JSON.stringify({ title: feedTitle, items }), {
       headers: {
         'Content-Type': 'application/json',
-        'Cache-Control': bypassCache ? 'no-store' : 'public, max-age=600',
+        'Cache-Control': bypassCache ? 'private, no-store' : 'private, max-age=600',
       },
     });
   } catch (err: any) {
@@ -396,7 +399,10 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     if (fetchError) return fetchError;
     return new Response(
       JSON.stringify({ error: `RSS parsing error: ${err.message}` }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' },
+      }
     );
   }
 }

@@ -8,8 +8,6 @@ interface PlexReauthBannerProps {
 }
 
 export const PlexReauthBanner: React.FC<PlexReauthBannerProps> = ({ onOpenPlexAuth }) => {
-  const settings = useDashboardStore((s) => s.settings);
-  const widgets = useDashboardStore((s) => s.widgets);
   const [hasToken, setHasToken] = useState<boolean | null>(null);
   const [isDismissed, setIsDismissed] = useState<boolean>(() => {
     try {
@@ -19,12 +17,13 @@ export const PlexReauthBanner: React.FC<PlexReauthBannerProps> = ({ onOpenPlexAu
     }
   });
 
-  // Check if Plex is configured anywhere on this dashboard
-  const isPlexConfigured = React.useMemo(() => {
+  // Check if Plex is configured anywhere on this dashboard (primitive boolean selector prevents unrelated store renders)
+  const isPlexConfigured = useDashboardStore((s) => {
+    const settings = s.settings;
     if (settings.commonPhotoSourceType === 'plex') return true;
     if (settings.commonPhotoSourceLabel?.toLowerCase().includes('plex')) return true;
     if (settings.commonPhotos?.some((p) => p.source === 'plex')) return true;
-    return widgets.some(
+    return s.widgets.some(
       (w) =>
         !w.deleted_at &&
         w.type === 'photo_frame' &&
@@ -33,7 +32,7 @@ export const PlexReauthBanner: React.FC<PlexReauthBannerProps> = ({ onOpenPlexAu
           w.config?.sourceLabel?.toLowerCase().includes('plex') ||
           w.config?.customPhotos?.some((p: any) => p.source === 'plex'))
     );
-  }, [settings, widgets]);
+  });
 
   useEffect(() => {
     let isMounted = true;
