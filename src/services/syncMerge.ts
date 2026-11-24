@@ -93,6 +93,95 @@ export function keepLocalNoteFields(incoming: StickyNoteItem, local?: StickyNote
 /** The canvas look fields of a tab, which sync inside the board settings (canvasThemes). */
 export const CANVAS_LOOK_FIELDS = ['backgroundTheme', 'customWallpaperUrl', 'backgroundDimLevel', 'hideNotes', 'isHome'] as const;
 
+const DIRTY_SETTINGS_KEYS_STORAGE_KEY = 'ambiently_dirty_settings_keys';
+const dirtySettingsKeys = new Set<string>();
+
+function persistDirtySettingsKeysToStorage(): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    if (dirtySettingsKeys.size === 0) {
+      localStorage.removeItem(DIRTY_SETTINGS_KEYS_STORAGE_KEY);
+    } else {
+      localStorage.setItem(DIRTY_SETTINGS_KEYS_STORAGE_KEY, JSON.stringify([...dirtySettingsKeys]));
+    }
+  } catch {
+    // Ignore storage quota or sandbox restrictions
+  }
+}
+
+function hydrateDirtySettingsKeysFromStorage(): void {
+  if (dirtySettingsKeys.size > 0 || typeof localStorage === 'undefined') return;
+  try {
+    const raw = localStorage.getItem(DIRTY_SETTINGS_KEYS_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      for (const item of parsed) {
+        if (typeof item === 'string' && item.trim()) {
+          dirtySettingsKeys.add(item);
+        }
+      }
+    }
+  } catch {
+    // Ignore malformed storage entries
+  }
+}
+
+/**
+ * Records which `AppSettings` keys were modified locally since the last successful Cloud Sync
+ * pull or push so concurrent cross-device pushes can merge modified fields rather than clobbering.
+ */
+export function markDirtySettingsKeys(keys: Iterable<string>): void {
+  hydrateDirtySettingsKeysFromStorage();
+  let added = false;
+  for (const key of keys) {
+    if (typeof key === 'string' && key.trim()) {
+      dirtySettingsKeys.add(key);
+      added = true;
+    }
+  }
+  if (added) {
+    persistDirtySettingsKeysToStorage();
+  }
+}
+
+/**
+ * Returns the set of locally modified `AppSettings` keys awaiting Cloud Sync reconciliation.
+ */
+export function getDirtySettingsKeys(): ReadonlySet<string> {
+  hydrateDirtySettingsKeysFromStorage();
+  return new Set(dirtySettingsKeys);
+}
+
+/**
+ * Clears tracked local dirty `AppSettings` keys after Cloud Sync finishes pushing or pulling.
+ */
+export function clearDirtySettingsKeys(): void {
+  dirtySettingsKeys.clear();
+  persistDirtySettingsKeysToStorage();
+}
+
+let beforeUpdateReloadHandler: (() => Promise<void>) | null = null;
+
+/**
+ * Registers an async hook (such as flushing pending cloud pushes) invoked before `applyUpdate`
+ * swaps the Service Worker or reloads the window.
+ */
+export function registerBeforeUpdateReload(fn: () => Promise<void>): void {
+  beforeUpdateReloadHandler = fn;
+}
+
+/**
+ * Runs the registered pre-reload hook (if any) with a bounded timeout before an app update reload.
+ */
+export async function invokeBeforeUpdateReload(timeoutMs = 1200): Promise<void> {
+  if (!beforeUpdateReloadHandler) return;
+  await Promise.race([
+    beforeUpdateReloadHandler(),
+    new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
+  ]).catch(() => {});
+}
+
 export interface CloudSettingsDecisionParams {
   switchingBoards: boolean;
   joiningExistingCloudBoard: boolean;
@@ -103,6 +192,8 @@ export interface CloudSettingsDecisionParams {
   localTime: number;
   cloudTime: number;
   boardTime: number;
+  hasExplicitCloudSettingsTime?: boolean;
+  knownCloudSettingsTime?: number | null;
 }
 
 /**
@@ -118,9 +209,12 @@ export function shouldAcceptCloudSettings(params: CloudSettingsDecisionParams): 
     return true;
   }
   if (params.isMember) {
+    if (params.knownCloudSettingsTime !== undefined && params.knownCloudSettingsTime !== null) {
+      return params.cloudTime !== params.knownCloudSettingsTime;
+    }
     return params.cloudTime !== params.localTime;
   }
-  if (params.firstSyncThisWay) {
+  if (params.firstSyncThisWay && !params.hasExplicitCloudSettingsTime) {
     return params.boardTime >= params.localTime;
   }
   return params.cloudTime > params.localTime;
@@ -136,8 +230,8 @@ export interface MergeCloudSettingsParams {
 }
 
 /**
- * Merges cloud settings with local defaults while preserving device-local PIN/kiosk locks
- * and reusing the resolved shared photo catalog when appropriate.
+ * Merges cloud settings with local defaults while preserving device-local PIN/kiosk locks,
+ * runtime nightModeEnabled state, displayDensity, and the resolved shared photo catalog.
  */
 export function mergeCloudSettingsForLocal(params: MergeCloudSettingsParams): AppSettings {
   const {
@@ -155,6 +249,12 @@ export function mergeCloudSettingsForLocal(params: MergeCloudSettingsParams): Ap
     ...defaultSettings,
     ...cloudSettings,
     commonPhotos: resolvedCommonPhotos,
+    nightModeEnabled: preserveDeviceLocks ? Boolean(currentSettings?.nightModeEnabled) : false,
+    displayDensity: preserveDeviceLocks
+      ? (currentSettings?.displayDensity ??
+          cloudSettings.displayDensity ??
+          defaultSettings.displayDensity)
+      : (cloudSettings.displayDensity ?? defaultSettings.displayDensity),
     pinHash: keepLocalLocks ? (currentSettings?.pinHash ?? null) : null,
     pinLockEnabled: keepLocalLocks,
     lockCanvasEditing: keepLocalLocks && currentSettings ? Boolean(currentSettings.lockCanvasEditing) : false,
@@ -167,6 +267,72 @@ export function mergeCloudSettingsForLocal(params: MergeCloudSettingsParams): Ap
       : defaultSettings.externalBrowserLinksPolicy || 'auto',
     id: 'global',
     updated_at: cloudSettingsAt,
+  };
+}
+
+export interface MergeConcurrentCloudSettingsParams {
+  defaultSettings: AppSettings;
+  baseCloudSettings: Partial<AppSettings>;
+  localSettings: AppSettings;
+  dirtyKeys?: Iterable<string>;
+}
+
+/**
+ * Reconciles concurrent cross-device `AppSettings` edits when a device pushes local changes
+ * while newer cloud settings already exist from another device, overlaying only `dirtyKeys`
+ * plus device-local runtime/kiosk fields so unrelated fields (such as screensaver mode) survive.
+ */
+export function mergeConcurrentCloudSettings(params: MergeConcurrentCloudSettingsParams): AppSettings {
+  const { defaultSettings, baseCloudSettings, localSettings, dirtyKeys } = params;
+  const dirtyList = dirtyKeys ? Array.from(dirtyKeys) : [];
+  const dirtySet = dirtyList.length > 0 ? new Set(dirtyList) : null;
+
+  const merged: Record<string, unknown> = {
+    ...defaultSettings,
+    ...baseCloudSettings,
+  };
+
+  if (dirtySet) {
+    const localRecord = localSettings as unknown as Record<string, unknown>;
+    for (const key of dirtySet) {
+      if (key in localRecord) {
+        merged[key] = localRecord[key];
+      }
+    }
+    if (!dirtySet.has('commonPhotos')) {
+      const hasCloudCommonPhotos =
+        Array.isArray(baseCloudSettings.commonPhotos) && baseCloudSettings.commonPhotos.length > 0;
+      const sameSource =
+        !dirtySet.has('commonPhotoSourceType') &&
+        baseCloudSettings.commonPhotoSourceType === localSettings.commonPhotoSourceType &&
+        baseCloudSettings.commonPhotoSourceLabel === localSettings.commonPhotoSourceLabel &&
+        baseCloudSettings.commonPhotoSourceUrl === localSettings.commonPhotoSourceUrl;
+      if (
+        !hasCloudCommonPhotos &&
+        sameSource &&
+        Array.isArray(localSettings.commonPhotos) &&
+        localSettings.commonPhotos.length > 0
+      ) {
+        merged.commonPhotos = localSettings.commonPhotos;
+      }
+    }
+  } else {
+    Object.assign(merged, localSettings);
+  }
+
+  return {
+    ...(merged as unknown as AppSettings),
+    pinLockEnabled: localSettings.pinLockEnabled,
+    pinHash: localSettings.pinHash,
+    lockCanvasEditing: localSettings.lockCanvasEditing,
+    lockFullscreenKiosk: localSettings.lockFullscreenKiosk,
+    lockSettingsAccess: localSettings.lockSettingsAccess,
+    settingsPinOptOut: localSettings.settingsPinOptOut,
+    externalBrowserLinksPolicy: localSettings.externalBrowserLinksPolicy,
+    displayDensity: localSettings.displayDensity,
+    nightModeEnabled: localSettings.nightModeEnabled,
+    id: 'global',
+    updated_at: localSettings.updated_at,
   };
 }
 

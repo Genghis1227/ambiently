@@ -1,6 +1,11 @@
 // Local JSON Backup, File System Access API & Universal Export/Restore helper
 import { useState, useEffect } from 'react';
-import { db, DEFAULT_ROUTINES_SNAPSHOT, DEFAULT_CALENDAR_EVENTS_SNAPSHOT } from './db';
+import {
+  db,
+  DEFAULT_CALENDAR_EVENTS_SNAPSHOT,
+  DEFAULT_ROUTINES_SNAPSHOT,
+  DEFAULT_SETTINGS,
+} from './db';
 import type { AppSettings, DashboardTab, DashboardWidget, StickyNoteItem } from '../types/dashboard';
 import type { ChoreEngineSnapshot } from '../types/chores';
 import type { HouseholdProfile } from '../types/profiles';
@@ -21,6 +26,7 @@ import { sanitizeRestoredPhotoWidget } from '../utils/photoSourceIsolation';
 import { normalizePinLockSettings } from '../utils/pinValidation';
 import { collectVaultMediaMap, restoreVaultMediaMap } from '../utils/localMediaVault';
 import { stripPlexTokens } from './plexLinks';
+import { markDirtySettingsKeys, nextMonotonicIso } from './syncMerge';
 import {
   stripHomelabCredentialsFromConfig,
   stripWifiCredentialsFromConfig,
@@ -48,6 +54,7 @@ function isRecordWithId<T extends { id?: unknown }>(item: unknown): item is T & 
 export function sanitizePayloadForBackupExport(payload: LocalExportPayload): LocalExportPayload {
   const safeSettings: AppSettings = {
     ...stripPlexTokens(payload.settings),
+    nightModeEnabled: false,
     pinLockEnabled: false,
     pinHash: null,
     lockCanvasEditing: false,
@@ -270,8 +277,13 @@ export async function restoreBackupToDatabase(
     // 1. Restore Settings
     if (payload.settings) {
       const existingSettings = await db.settings.get('global');
-      let settingsToSave: AppSettings = stripPlexTokens({ ...payload.settings });
-      // Keep this device's external browser link policy intact across cross-device restores
+      let settingsToSave: AppSettings = stripPlexTokens({
+        ...DEFAULT_SETTINGS,
+        ...payload.settings,
+        id: 'global',
+      });
+      // Keep this device's runtime night-mode state and external browser link policy intact
+      settingsToSave.nightModeEnabled = Boolean(existingSettings?.nightModeEnabled);
       settingsToSave.externalBrowserLinksPolicy =
         existingSettings?.externalBrowserLinksPolicy ||
         settingsToSave.externalBrowserLinksPolicy ||
@@ -291,6 +303,12 @@ export async function restoreBackupToDatabase(
         settingsToSave.commonPhotoCuratedCategory =
           inferCuratedCategoryId(undefined, settingsToSave.commonPhotoSourceLabel) || 'all';
       }
+      const restoredSettingsTime = Date.parse(settingsToSave.updated_at || '') || 0;
+      settingsToSave.updated_at = nextMonotonicIso(
+        existingSettings?.updated_at,
+        Math.max(Date.now(), restoredSettingsTime)
+      );
+      markDirtySettingsKeys(Object.keys(payload.settings));
       await db.settings.put(settingsToSave);
     }
 

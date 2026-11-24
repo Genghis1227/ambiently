@@ -5,12 +5,15 @@ import { stripPlexTokens } from './plexLinks';
 import { isBoardFullError, setSyncRefusal } from './syncRefusal';
 import {
   buildNoteCloudFreeformPos,
+  clearDirtySettingsKeys,
+  getDirtySettingsKeys,
   hydrateNoteFromCloudRow,
   isPermanentlyPurgedWidget,
   keepLocalNoteFields,
   keepLocalTabFields,
   keepLocalWidgetFields,
   mergeCloudSettingsForLocal,
+  mergeConcurrentCloudSettings,
   resolveEffectiveSyncScopes,
   shouldAcceptCloudRow,
   shouldAcceptCloudSettings,
@@ -193,8 +196,8 @@ function setKnownCloudSettingsAt(boardId: string, at: string): void {
   }
 }
 
-// Settings that belong to this screen, not to a board: the PIN, the kiosk locks and the display size.
-// They stay when the device moves to another board.
+// Settings that belong to this screen, not to a board: the PIN, kiosk locks, display size, and
+// runtime night-mode state. They stay when the device moves to another board.
 function deviceOwnSettings(settings?: AppSettings): Partial<AppSettings> {
   if (!settings) return {};
   return {
@@ -206,12 +209,14 @@ function deviceOwnSettings(settings?: AppSettings): Partial<AppSettings> {
     settingsPinOptOut: settings.settingsPinOptOut,
     displayDensity: settings.displayDensity,
     externalBrowserLinksPolicy: settings.externalBrowserLinksPolicy,
+    nightModeEnabled: settings.nightModeEnabled,
   };
 }
 
 // Removes the previous board's tabs, widgets, notes, settings, chores, profiles, meals, kanban,
 // photo catalog, board-scoped device vault credentials, and private feed caches from this device
 async function clearLocalBoard(): Promise<void> {
+  clearDirtySettingsKeys();
   const current = await db.settings.get('global');
   await db.transaction(
     'rw',
@@ -1046,7 +1051,7 @@ export async function pushToCloud(
 
     const propSettingsTime = Date.parse(settings?.updated_at || '') || 0;
     const dbSettingsTime = Date.parse(dbSettings?.updated_at || '') || 0;
-    const activeSettings =
+    let activeSettings =
       dbSettings && dbSettingsTime >= propSettingsTime ? dbSettings : settings;
 
     const tabsToPush = scopes.tabs ? (dbTabs.length > 0 ? dbTabs : tabs) : [];
@@ -1087,9 +1092,11 @@ export async function pushToCloud(
     // device has saved newer ones since. Only then is the cloud's settings time read, which reads the
     // settings themselves, so most syncs don't.
     const localSettingsTime = Date.parse(activeSettings.updated_at || '') || 0;
+    const knownCloudSettingsTime = getKnownCloudSettingsAt(dashboardId);
+    let remoteCloudSettings: Partial<AppSettings> | null = null;
+    let remoteCloudSettingsTime = 0;
     let shouldUpsertDash = false;
     if (!isMember && (scopes.settings || options?.force || !remoteDashRes.data)) {
-      const knownCloudSettingsTime = getKnownCloudSettingsAt(dashboardId);
       if (options?.force || !remoteDashRes.data) {
         shouldUpsertDash = true;
       } else if (knownCloudSettingsTime === null || localSettingsTime > knownCloudSettingsTime) {
@@ -1098,10 +1105,10 @@ export async function pushToCloud(
           .select('settings')
           .eq('id', dashboardId)
           .maybeSingle();
-        const cloudSettingsAt =
-          ((cloudDashRow?.settings ?? null) as Partial<AppSettings> | null)?.updated_at || null;
-        const cloudSettingsTime = Date.parse(cloudSettingsAt || '') || 0;
-        shouldUpsertDash = localSettingsTime > cloudSettingsTime;
+        remoteCloudSettings = (cloudDashRow?.settings ?? null) as Partial<AppSettings> | null;
+        const cloudSettingsAt = remoteCloudSettings?.updated_at || null;
+        remoteCloudSettingsTime = Date.parse(cloudSettingsAt || '') || 0;
+        shouldUpsertDash = localSettingsTime > remoteCloudSettingsTime;
         if (!shouldUpsertDash && cloudSettingsAt) setKnownCloudSettingsAt(dashboardId, cloudSettingsAt);
       }
     }
@@ -1439,7 +1446,26 @@ export async function pushToCloud(
     const isNotDeletion = (row: { deleted_at: string | null }) => !row.deleted_at;
 
     if (shouldUpsertDash) {
-      const tabThemeMeta = tabs.reduce((acc, t) => {
+      const dirtyKeys = getDirtySettingsKeys();
+      if (
+        !options?.force &&
+        remoteCloudSettings &&
+        remoteCloudSettingsTime > (knownCloudSettingsTime ?? 0) &&
+        dirtyKeys.size > 0
+      ) {
+        activeSettings = mergeConcurrentCloudSettings({
+          defaultSettings: DEFAULT_SETTINGS,
+          baseCloudSettings: remoteCloudSettings,
+          localSettings: activeSettings,
+          dirtyKeys,
+        });
+        await db.settings.put(activeSettings).catch(() => {});
+      }
+
+      const tabsForThemes = (
+        tabs.length > 0 ? tabs : dbTabs.length > 0 ? dbTabs : await db.tabs.toArray()
+      ).filter((t) => !t.deleted_at);
+      const tabThemeMeta = tabsForThemes.reduce((acc, t) => {
         acc[t.id] = {
           backgroundTheme: t.backgroundTheme,
           customWallpaperUrl: t.customWallpaperUrl,
@@ -1459,6 +1485,7 @@ export async function pushToCloud(
 
       const cloudSafeSettings = stripPlexTokens({
         ...settingsToPush,
+        nightModeEnabled: false,
         pinLockEnabled: false,
         pinHash: null,
         lockCanvasEditing: false,
@@ -1478,7 +1505,10 @@ export async function pushToCloud(
         updated_at: nowIso,
       });
       if (dashErr) skipIfBoardFull(dashErr);
-      else setKnownCloudSettingsAt(dashboardId, activeSettings.updated_at);
+      else {
+        setKnownCloudSettingsAt(dashboardId, activeSettings.updated_at);
+        clearDirtySettingsKeys();
+      }
     }
     // Saving a tab, widget or note moves the board's updated_at in the database (the touch trigger in
     // supabase/schema.sql), for members too, so the app doesn't send a separate update for it
@@ -1671,8 +1701,9 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
       const cloudTime = Date.parse(cloudSettingsAt || '') || 0;
       // The first time a device syncs this way, it still compares with the board's time, as before, so
       // it takes the cloud's settings once rather than sending its own copy back. A member can't save
-      // the board's settings, so a member's device always follows the owner's.
-      const firstSyncThisWay = getKnownCloudSettingsAt(dashboardId) === null;
+      // the board's settings, so a member's device follows the owner's when the cloud copy changes.
+      const knownCloudSettingsTime = getKnownCloudSettingsAt(dashboardId);
+      const firstSyncThisWay = knownCloudSettingsTime === null;
       const boardTime = Date.parse(dashRes.data.updated_at || '') || 0;
       const acceptCloudSettings = shouldAcceptCloudSettings({
         switchingBoards,
@@ -1684,9 +1715,12 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
         localTime,
         cloudTime,
         boardTime,
+        hasExplicitCloudSettingsTime: Boolean(cloudSettings.updated_at),
+        knownCloudSettingsTime,
       });
       setKnownCloudSettingsAt(dashboardId, cloudSettingsAt);
       if (acceptCloudSettings) {
+        clearDirtySettingsKeys();
         const cloudPhotoType = dashRes.data.settings?.commonPhotoSourceType;
         const resolvedCommonPhotos =
           cloudPhotoType === 'curated' || dashRes.data.settings?.commonPhotoCuratedCategory
@@ -1710,6 +1744,8 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
             preserveDeviceLocks: true,
           })
         );
+      } else if (!switchingBoards && !overwriteLocal && !target?.isMember && localTime > cloudTime) {
+        hasUnsyncedLocalChanges = true;
       }
     }
 

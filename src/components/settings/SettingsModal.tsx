@@ -195,7 +195,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   );
   const screensaverSelectedTabId = screensaverTabExists
     ? settings.idleScreensaverTabId || null
-    : pickDefaultScreensaverCanvasTabId(screensaverNonDeletedTabs, widgets);
+    : null;
   const photoCanvasTabIds = new Set(
     widgets.filter((w) => !w.deleted_at && w.type === 'photo_frame').map((w) => w.tabId)
   );
@@ -2066,6 +2066,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
                           Designated Screensaver Canvas
                         </span>
+                        {!screensaverTabExists && (
+                          <div className="mb-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-200">
+                            No saved screensaver canvas is selected yet — screensaver falls back to Photo Slideshow until you choose a canvas below.
+                          </div>
+                        )}
                         <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                           {screensaverNonDeletedTabs.map((t) => {
                             const matchedIcon =
@@ -2080,7 +2085,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 key={t.id}
                                 type="button"
                                 aria-pressed={isSelected}
-                                onClick={() => updateSettings({ idleScreensaverTabId: t.id })}
+                                onClick={() =>
+                                  updateSettings({
+                                    idleScreensaverMode: 'canvas',
+                                    idleScreensaverTabId: t.id,
+                                  })
+                                }
                                 className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl border text-left transition-colors cursor-pointer ${
                                   isSelected
                                     ? 'bg-teal-600/20 border-teal-500 text-teal-100'
