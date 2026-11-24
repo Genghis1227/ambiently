@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.8.10",
+    date: "November 23, 2026",
+    title: "Idle Photo & Canvas Screensaver Settings Persistence Across Restores & Sync",
+    highlights: [
+      "Isolated Runtime Night Mode State: Scheduled Night Mode transitions, tap-to-wake, and manual Night Mode toggles no longer stamp settings timestamps or overwrite saved Canvas Screensaver and Photo Slideshow configurations during boot or cloud sync restores.",
+      "Concurrent Multi-Device Settings Sync & Pre-Reload Flush: Added field-level dirty setting merging across Cloud Sync pushes/pulls (plus member display and backup restore hardening), monotonic synchronous store updates, and automatic cloud flushes when closing Settings, previewing Screensaver, or updating.",
+      "Accurate Screensaver Canvas Selection UI: Removed misleading fallback highlighting in Display Settings when no saved canvas is selected yet and persisted mode and canvas ID together on click.",
+    ],
+  },
+  {
     version: "v0.8.9",
     date: "November 23, 2026",
     title: "Phase 2: True Portrait (9:16) Wall Display Layout Support",
