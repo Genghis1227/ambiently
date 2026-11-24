@@ -80,7 +80,10 @@ const COMPRESSIBLE_EXTENSIONS = new Set([
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
-const distRoot = path.resolve(process.env.AMBIENTLY_DIST_DIR || path.join(projectRoot, 'dist'));
+
+function getDistRoot(): string {
+  return path.resolve(process.env.AMBIENTLY_DIST_DIR || path.join(projectRoot, 'dist'));
+}
 
 function readPackageVersion(): string {
   try {
@@ -151,7 +154,7 @@ function parseHeadersFile(text: string): HeaderRule[] {
 
 function loadHeaderRules(): HeaderRule[] {
   if (headerRules) return headerRules;
-  for (const file of [path.join(distRoot, '_headers'), path.join(projectRoot, 'public', '_headers')]) {
+  for (const file of [path.join(getDistRoot(), '_headers'), path.join(projectRoot, 'public', '_headers')]) {
     try {
       headerRules = parseHeadersFile(fs.readFileSync(file, 'utf8'));
       return headerRules;
@@ -463,6 +466,7 @@ async function handleApiRoute(
 
 export function createAmbientlyServer(): http.Server {
   installAddressGuard();
+  const activeDistRoot = getDistRoot();
   const server = http.createServer(async (req, res) => {
     const rawUrl = req.url || '/';
     let pathname = '/';
@@ -528,8 +532,8 @@ export function createAmbientlyServer(): http.Server {
 
     // 4. Static PWA Assets from dist/ with strict path-traversal guard
     const relativeTarget = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
-    const resolvedPath = path.resolve(distRoot, relativeTarget);
-    if (resolvedPath !== distRoot && !resolvedPath.startsWith(distRoot + path.sep)) {
+    const resolvedPath = path.resolve(activeDistRoot, relativeTarget);
+    if (resolvedPath !== activeDistRoot && !resolvedPath.startsWith(activeDistRoot + path.sep)) {
       res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('Forbidden');
       return;
@@ -541,7 +545,7 @@ export function createAmbientlyServer(): http.Server {
 
     // 5. SPA Fallback to dist/index.html for client-side routes (skip missing explicit asset extensions)
     if (!path.extname(pathname)) {
-      const indexHtmlPath = path.join(distRoot, 'index.html');
+      const indexHtmlPath = path.join(activeDistRoot, 'index.html');
       if (await serveStaticFile(req, res, indexHtmlPath, '/index.html')) {
         return;
       }

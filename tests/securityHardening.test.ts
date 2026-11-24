@@ -18,7 +18,6 @@ import {
 import { installAddressGuard, isBlockedAddress } from '../server/addressGuard';
 import { onRequestGet as webProxy } from '../functions/api/web-proxy';
 import { onRequestGet as rssHandler } from '../functions/api/rss';
-import { resolveClientIpFromRequest } from '../server/index';
 import { buildPlexItemUrl, sanitizePlexKeySegment } from '../src/services/plex';
 import { matchPlexServerFromList } from '../src/services/photoSyncService';
 import { stripPlexTokens } from '../src/services/plexLinks';
@@ -613,7 +612,8 @@ describe('Database security audit & board usage coverage (supabase/)', () => {
 });
 
 describe('Milestone 4 Security Regression Suite', () => {
-  it('resolveClientIpFromRequest gates proxy headers behind AMBIENTLY_TRUST_PROXY', () => {
+  it('resolveClientIpFromRequest gates proxy headers behind AMBIENTLY_TRUST_PROXY', async () => {
+    const { resolveClientIpFromRequest } = await import('../server/index');
     const mockReq = {
       socket: { remoteAddress: '10.0.0.50' },
       headers: {
