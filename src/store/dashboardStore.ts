@@ -48,9 +48,11 @@ import {
   keepLocalNoteFields,
   keepLocalTabFields,
   keepLocalWidgetFields,
+  markDirtySettingsKeys,
   mergeDirtySyncScopes,
   nextMonotonicIso,
   normalizeLoadedNote,
+  registerBeforeUpdateReload,
   shouldApplyRealtimeRow,
   type DirtySyncScopes,
 } from '../services/syncMerge';
@@ -227,9 +229,14 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 // (canvasThemes in pushToCloud), and settings are only sent when they've changed. So a change to a look
 // marks the settings as changed too, or it would never reach other devices.
 async function markCanvasLooksChanged(get: () => DashboardState, set: (partial: Partial<DashboardState>) => void) {
-  const settings: AppSettings = { ...get().settings, updated_at: new Date().toISOString() };
-  await db.settings.put(settings).catch(() => {});
+  const prev = get().settings;
+  const settings: AppSettings = {
+    ...prev,
+    updated_at: nextMonotonicIso(prev.updated_at),
+  };
+  markDirtySettingsKeys(['canvasThemes']);
   set({ settings });
+  await db.settings.put(settings).catch(() => {});
 }
 
 export const MAX_LAYOUT_UNDO_STACK = 20;
@@ -405,6 +412,7 @@ interface DashboardState {
   setCarouselDuration: (seconds: number) => Promise<void>;
   pauseCarouselTemporarily: (durationMs?: number) => void;
   toggleNightModeManual: () => void;
+  setNightModeActive: (enabled: boolean) => Promise<void>;
   updateSettings: (updates: Partial<AppSettings>) => Promise<void>;
   setPinLock: (pin: string | null) => Promise<void>;
   unlockKiosk: (enteredPin: string) => Promise<boolean>;
@@ -937,16 +945,28 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   setDockPosition: async (dockPosition) => {
-    const updated = { ...get().settings, dockPosition, updated_at: new Date().toISOString() };
-    await db.settings.put(updated);
+    const prev = get().settings;
+    const updated: AppSettings = {
+      ...prev,
+      dockPosition,
+      updated_at: nextMonotonicIso(prev.updated_at),
+    };
+    markDirtySettingsKeys(['dockPosition']);
     set({ settings: updated });
+    await db.settings.put(updated).catch(() => {});
     get().saveLocalBackup({ settings: true });
   },
 
   setSnapToGrid: async (snapToGrid) => {
-    const updated = { ...get().settings, snapToGrid, updated_at: new Date().toISOString() };
-    await db.settings.put(updated);
+    const prev = get().settings;
+    const updated: AppSettings = {
+      ...prev,
+      snapToGrid,
+      updated_at: nextMonotonicIso(prev.updated_at),
+    };
+    markDirtySettingsKeys(['snapToGrid']);
     set({ settings: updated });
+    await db.settings.put(updated).catch(() => {});
     get().saveLocalBackup({ settings: true });
   },
 
@@ -956,9 +976,15 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   setDockHidden: async (isDockHidden) => {
-    const updated = { ...get().settings, isDockHidden, updated_at: new Date().toISOString() };
-    await db.settings.put(updated);
+    const prev = get().settings;
+    const updated: AppSettings = {
+      ...prev,
+      isDockHidden,
+      updated_at: nextMonotonicIso(prev.updated_at),
+    };
+    markDirtySettingsKeys(['isDockHidden']);
     set({ settings: updated });
+    await db.settings.put(updated).catch(() => {});
     get().saveLocalBackup({ settings: true });
   },
 
@@ -969,7 +995,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
 
   setCommonPhotos: async (photos, sourceLabel, sourceUrl, sourceType, plexSyncConfig, curatedCategoryId) => {
     const prevSettings = get().settings;
-    const updated = {
+    const updated: AppSettings = {
       ...prevSettings,
       commonPhotos: photos,
       commonPhotoSourceLabel: sourceLabel,
@@ -987,10 +1013,18 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           : sourceType
           ? undefined
           : prevSettings.commonPhotoPlexConfig,
-      updated_at: new Date().toISOString(),
+      updated_at: nextMonotonicIso(prevSettings.updated_at),
     };
-    await db.settings.put(updated);
+    markDirtySettingsKeys([
+      'commonPhotos',
+      'commonPhotoSourceLabel',
+      'commonPhotoSourceUrl',
+      'commonPhotoSourceType',
+      'commonPhotoCuratedCategory',
+      'commonPhotoPlexConfig',
+    ]);
     set({ settings: updated });
+    await db.settings.put(updated).catch(() => {});
     get().saveLocalBackup({ settings: true });
   },
 
@@ -1036,7 +1070,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
 
       const resolvedSourceType = sourceType || prevSettings.commonPhotoSourceType;
       const combined = [...current, ...fresh];
-      const updated = {
+      const updated: AppSettings = {
         ...prevSettings,
         commonPhotos: combined,
         commonPhotoSourceLabel: sourceLabel || prevSettings.commonPhotoSourceLabel,
@@ -1054,10 +1088,18 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
             : sourceType
             ? undefined
             : prevSettings.commonPhotoPlexConfig,
-        updated_at: new Date().toISOString(),
+        updated_at: nextMonotonicIso(prevSettings.updated_at),
       };
-      await db.settings.put(updated);
+      markDirtySettingsKeys([
+        'commonPhotos',
+        'commonPhotoSourceLabel',
+        'commonPhotoSourceUrl',
+        'commonPhotoSourceType',
+        'commonPhotoCuratedCategory',
+        'commonPhotoPlexConfig',
+      ]);
       set({ settings: updated });
+      await db.settings.put(updated).catch(() => {});
     } else {
       // Specific Widget
       const widget = get().widgets.find((w) => w.id === targetWidgetId);
@@ -1168,9 +1210,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   setDisplayDensity: async (displayDensity) => {
-    const updated = { ...get().settings, displayDensity, updated_at: new Date().toISOString() };
-    await db.settings.put(updated);
+    const updated: AppSettings = { ...get().settings, displayDensity };
     set({ settings: updated });
+    await db.settings.put(updated).catch(() => {});
   },
 
   setCarouselEnabled: async (carouselEnabled) => {
@@ -1178,16 +1220,28 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       clearTimeout(carouselPauseTimerId);
       carouselPauseTimerId = null;
     }
-    const updated = { ...get().settings, carouselEnabled, updated_at: new Date().toISOString() };
-    await db.settings.put(updated);
+    const prev = get().settings;
+    const updated: AppSettings = {
+      ...prev,
+      carouselEnabled,
+      updated_at: nextMonotonicIso(prev.updated_at),
+    };
+    markDirtySettingsKeys(['carouselEnabled']);
     set({ settings: updated, ...(!carouselEnabled && get().isCarouselPaused ? { isCarouselPaused: false } : {}) });
+    await db.settings.put(updated).catch(() => {});
     get().saveLocalBackup({ settings: true });
   },
 
   setCarouselDuration: async (defaultRotateDurationSec) => {
-    const updated = { ...get().settings, defaultRotateDurationSec, updated_at: new Date().toISOString() };
-    await db.settings.put(updated);
+    const prev = get().settings;
+    const updated: AppSettings = {
+      ...prev,
+      defaultRotateDurationSec,
+      updated_at: nextMonotonicIso(prev.updated_at),
+    };
+    markDirtySettingsKeys(['defaultRotateDurationSec']);
     set({ settings: updated });
+    await db.settings.put(updated).catch(() => {});
     get().saveLocalBackup({ settings: true });
   },
 
@@ -1226,14 +1280,52 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     });
   },
 
-  updateSettings: async (updates) => {
+  setNightModeActive: async (enabled) => {
+    const prev = get().settings;
+    if (Boolean(prev.nightModeEnabled) === Boolean(enabled)) return;
+    // Night mode active state is display-local runtime state and must not bump updated_at or push to Cloud.
     const updated: AppSettings = {
-      ...get().settings,
-      ...updates,
-      updated_at: new Date().toISOString(),
+      ...prev,
+      nightModeEnabled: Boolean(enabled),
     };
-    await db.settings.put(updated);
     set({ settings: updated });
+    await db.settings.put(updated).catch(() => {});
+  },
+
+  updateSettings: async (updates) => {
+    const keys = Object.keys(updates);
+    if (keys.length === 0) return;
+
+    if (keys.length === 1 && 'nightModeEnabled' in updates) {
+      await get().setNightModeActive(Boolean(updates.nightModeEnabled));
+      return;
+    }
+
+    const deviceLocalKeys = new Set([
+      'nightModeEnabled',
+      'externalBrowserLinksPolicy',
+      'displayDensity',
+    ]);
+
+    if (keys.every((k) => deviceLocalKeys.has(k))) {
+      const updated: AppSettings = {
+        ...get().settings,
+        ...updates,
+      };
+      set({ settings: updated });
+      await db.settings.put(updated).catch(() => {});
+      return;
+    }
+
+    const prev = get().settings;
+    markDirtySettingsKeys(keys.filter((k) => !deviceLocalKeys.has(k)));
+    const updated: AppSettings = {
+      ...prev,
+      ...updates,
+      updated_at: nextMonotonicIso(prev.updated_at),
+    };
+    set({ settings: updated });
+    await db.settings.put(updated).catch(() => {});
     if (updates.weekStartsOn === 'monday' || updates.weekStartsOn === 'sunday') {
       void useChoreStore.getState().updateHouseholdSettings({
         weekStartsOn: updates.weekStartsOn,
@@ -1261,10 +1353,10 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const updated = {
       ...current,
       ...applyPinLockTransition(current, pinHash),
-      updated_at: hasBoundCloudBoard ? new Date().toISOString() : current.updated_at,
+      updated_at: hasBoundCloudBoard ? nextMonotonicIso(current.updated_at) : current.updated_at,
     };
-    await db.settings.put(updated);
     set({ settings: updated, isUnlocked: !pinLockEnabled });
+    await db.settings.put(updated).catch(() => {});
     get().saveLocalBackup({ settings: true });
   },
 
@@ -2556,3 +2648,5 @@ registerKanbanRowSyncListener((event) => {
     void syncKanbanRowEventToCloud(event);
   }
 });
+
+registerBeforeUpdateReload(() => flushPendingCloudPush());

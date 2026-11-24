@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.10] - 2026-11-23
+
+### Fixed
+- **Idle Photo & Canvas Screensaver Settings Persistence (`dashboardStore.ts`, `syncMerge.ts`, `supabase.ts`, `fileSync.ts`, `updateChecker.ts`, `App.tsx`, `SettingsModal.tsx`):**
+  - Isolated runtime `nightModeEnabled` state into `setNightModeActive` (preserved device-locally via `deviceOwnSettings`, stripped in `cloudSafeSettings`, and kept across `mergeCloudSettingsForLocal`) so Night Mode schedule checks, tap-to-wake, and manual toggles no longer bump `settings.updated_at` or overwrite saved cloud screensaver settings with defaults on boot/restore.
+  - Added field-level `dirtySettingsKeys` tracking (`markDirtySettingsKeys`, `getDirtySettingsKeys`, `clearDirtySettingsKeys`) and `mergeConcurrentCloudSettings` so pushing unrelated changes (`dockPosition`, `commonPhotos`, `canvasThemes`, etc.) merges with newer cloud settings instead of clobbering `idleScreensaver*` fields.
+  - Fixed `shouldAcceptCloudSettings` and `pullFromCloudOnce` so initial syncs with explicit `cloudSettings.updated_at` compare against `cloudTime` rather than board `updated_at`, member displays compare against `knownCloudSettingsTime`, and newer local settings trigger `hasUnsyncedLocalChanges` pushback on boot.
+  - Updated settings mutators in `dashboardStore.ts` to apply monotonic timestamps (`nextMonotonicIso`) and synchronous Zustand updates ahead of Dexie writes, flushed pending cloud pushes when closing Settings, previewing Screensaver, or applying PWA updates (`registerBeforeUpdateReload` / `invokeBeforeUpdateReload`), hardened JSON backup export/restore (`restoreBackupToDatabase`), and fixed `SettingsModal` to reflect the real saved `idleScreensaverTabId` with a clear fallback hint banner.
+
 ## [0.8.9] - 2026-11-23
 
 ### Added

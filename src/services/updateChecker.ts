@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 import { APP_VERSION } from '../data/version';
+import { invokeBeforeUpdateReload, registerBeforeUpdateReload } from './syncMerge';
+
+export { registerBeforeUpdateReload };
 
 export interface VersionInfo {
   version: string;
@@ -15,7 +18,7 @@ interface UpdateState {
   isDismissed: boolean;
   checkForUpdates: () => Promise<boolean>;
   dismissUpdate: () => void;
-  applyUpdate: () => void;
+  applyUpdate: () => Promise<void>;
 }
 
 export const useUpdateChecker = create<UpdateState>((set, get) => ({
@@ -85,7 +88,9 @@ export const useUpdateChecker = create<UpdateState>((set, get) => ({
     set({ isDismissed: true });
   },
 
-  applyUpdate: () => {
+  applyUpdate: async () => {
+    await invokeBeforeUpdateReload(1200);
+
     // If there is a waiting Service Worker, tell it to take over
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistration().then((reg) => {

@@ -19,8 +19,15 @@ import {
   normalizeExternalBrowserLinksPolicy,
   resolveExternalBrowserLinkAccess,
 } from '../src/utils/externalLinksPolicy.ts';
-import { mergeCloudSettingsForLocal } from '../src/services/syncMerge.ts';
+import {
+  clearDirtySettingsKeys,
+  getDirtySettingsKeys,
+  mergeCloudSettingsForLocal,
+  mergeConcurrentCloudSettings,
+  shouldAcceptCloudSettings,
+} from '../src/services/syncMerge.ts';
 import { sanitizePayloadForBackupExport } from '../src/services/fileSync.ts';
+import { useDashboardStore } from '../src/store/dashboardStore.ts';
 import {
   filterCalendarEvents,
   localFamilyEventsToCalendarEvents,
@@ -263,6 +270,198 @@ describe('Phase 1 — Idle Photo Screensaver helpers', () => {
       normalizeIdleScreensaverPhotoStyle(DEFAULT_SETTINGS.idleScreensaverPhotoStyle),
       'ken_burns'
     );
+  });
+
+  it('preserves canvas and photo screensaver settings across Cloud Sync merge, concurrent edits, and member pulls', () => {
+    // 1. Cloud pull merge retains saved canvas screensaver target & photo options while keeping device-local runtime flags
+    const mergedFromCloud = mergeCloudSettingsForLocal({
+      defaultSettings: DEFAULT_SETTINGS,
+      cloudSettings: {
+        idleScreensaverTimeoutMin: 10,
+        idleScreensaverMode: 'canvas',
+        idleScreensaverTabId: 'tab-family-photos',
+        idleScreensaverPhotoStyle: 'polaroid',
+        idleScreensaverPolaroidCount: 24,
+        idleScreensaverPolaroidSizeMode: 'large',
+        idleScreensaverRotationIntervalSec: 30,
+        idleScreensaverPhotoOrder: 'sequential',
+        idleScreensaverShowCaptions: false,
+        idleScreensaverShowDateTaken: true,
+        idleScreensaverCanvasShowOverlay: true,
+        nightModeEnabled: false,
+      },
+      currentSettings: {
+        ...DEFAULT_SETTINGS,
+        nightModeEnabled: true,
+        displayDensity: 1.25,
+        externalBrowserLinksPolicy: 'kiosk_qr_only',
+      },
+      resolvedCommonPhotos: [],
+      cloudSettingsAt: '2026-11-23T12:00:00.000Z',
+      preserveDeviceLocks: true,
+    });
+    assert.equal(mergedFromCloud.idleScreensaverTimeoutMin, 10);
+    assert.equal(mergedFromCloud.idleScreensaverMode, 'canvas');
+    assert.equal(mergedFromCloud.idleScreensaverTabId, 'tab-family-photos');
+    assert.equal(mergedFromCloud.idleScreensaverPhotoStyle, 'polaroid');
+    assert.equal(mergedFromCloud.idleScreensaverPolaroidCount, 24);
+    assert.equal(mergedFromCloud.idleScreensaverPolaroidSizeMode, 'large');
+    assert.equal(mergedFromCloud.idleScreensaverRotationIntervalSec, 30);
+    assert.equal(mergedFromCloud.idleScreensaverPhotoOrder, 'sequential');
+    assert.equal(mergedFromCloud.idleScreensaverShowCaptions, false);
+    assert.equal(mergedFromCloud.idleScreensaverShowDateTaken, true);
+    assert.equal(mergedFromCloud.idleScreensaverCanvasShowOverlay, true);
+    assert.equal(mergedFromCloud.nightModeEnabled, true);
+    assert.equal(mergedFromCloud.displayDensity, 1.25);
+    assert.equal(mergedFromCloud.externalBrowserLinksPolicy, 'kiosk_qr_only');
+
+    // 2. Concurrent Device B edit (dockPosition) does not overwrite Device A's saved canvas screensaver in cloud
+    const concurrentMerged = mergeConcurrentCloudSettings({
+      defaultSettings: DEFAULT_SETTINGS,
+      baseCloudSettings: {
+        idleScreensaverTimeoutMin: 15,
+        idleScreensaverMode: 'canvas',
+        idleScreensaverTabId: 'tab-photos-canvas',
+        idleScreensaverPhotoStyle: 'mosaic',
+        idleScreensaverMosaicKenBurns: true,
+        dockPosition: 'left',
+        updated_at: '2026-11-23T12:05:00.000Z',
+      },
+      localSettings: {
+        ...DEFAULT_SETTINGS,
+        idleScreensaverTimeoutMin: 0,
+        idleScreensaverMode: 'photos',
+        idleScreensaverTabId: null,
+        dockPosition: 'bottom',
+        nightModeEnabled: true,
+        updated_at: '2026-11-23T12:05:05.000Z',
+      },
+      dirtyKeys: ['dockPosition'],
+    });
+    assert.equal(concurrentMerged.dockPosition, 'bottom');
+    assert.equal(concurrentMerged.idleScreensaverTimeoutMin, 15);
+    assert.equal(concurrentMerged.idleScreensaverMode, 'canvas');
+    assert.equal(concurrentMerged.idleScreensaverTabId, 'tab-photos-canvas');
+    assert.equal(concurrentMerged.idleScreensaverPhotoStyle, 'mosaic');
+    assert.equal(concurrentMerged.idleScreensaverMosaicKenBurns, true);
+    assert.equal(concurrentMerged.nightModeEnabled, true);
+
+    // 3. First sync with explicit cloudSettings.updated_at respects newer local settings even if boardTime moved on a note edit
+    assert.equal(
+      shouldAcceptCloudSettings({
+        switchingBoards: false,
+        joiningExistingCloudBoard: false,
+        overwriteLocal: false,
+        hasLocalSettings: true,
+        isMember: false,
+        firstSyncThisWay: true,
+        localTime: Date.parse('2026-11-23T12:10:00.000Z'),
+        cloudTime: Date.parse('2026-11-23T12:00:00.000Z'),
+        boardTime: Date.parse('2026-11-23T12:20:00.000Z'),
+        hasExplicitCloudSettingsTime: true,
+        knownCloudSettingsTime: null,
+      }),
+      false
+    );
+
+    // 4. Member display accepts cloud settings only when owner's cloud settings timestamp changed since knownCloudSettingsTime
+    assert.equal(
+      shouldAcceptCloudSettings({
+        switchingBoards: false,
+        joiningExistingCloudBoard: false,
+        overwriteLocal: false,
+        hasLocalSettings: true,
+        isMember: true,
+        firstSyncThisWay: false,
+        localTime: Date.parse('2026-11-23T12:10:00.000Z'),
+        cloudTime: Date.parse('2026-11-23T12:00:00.000Z'),
+        boardTime: Date.parse('2026-11-23T12:20:00.000Z'),
+        hasExplicitCloudSettingsTime: true,
+        knownCloudSettingsTime: Date.parse('2026-11-23T12:00:00.000Z'),
+      }),
+      false
+    );
+    assert.equal(
+      shouldAcceptCloudSettings({
+        switchingBoards: false,
+        joiningExistingCloudBoard: false,
+        overwriteLocal: false,
+        hasLocalSettings: true,
+        isMember: true,
+        firstSyncThisWay: false,
+        localTime: Date.parse('2026-11-23T12:10:00.000Z'),
+        cloudTime: Date.parse('2026-11-23T12:25:00.000Z'),
+        boardTime: Date.parse('2026-11-23T12:25:00.000Z'),
+        hasExplicitCloudSettingsTime: true,
+        knownCloudSettingsTime: Date.parse('2026-11-23T12:00:00.000Z'),
+      }),
+      true
+    );
+  });
+
+  it('preserves idle screensaver fields in backup export and prevents Night Mode transitions from clobbering updated_at', async () => {
+    clearDirtySettingsKeys();
+    const initialUpdatedAt = '2026-11-23T10:00:00.000Z';
+    useDashboardStore.setState({
+      isInitialized: true,
+      settings: {
+        ...DEFAULT_SETTINGS,
+        nightModeEnabled: false,
+        updated_at: initialUpdatedAt,
+      },
+    });
+
+    const store = useDashboardStore.getState();
+    await store.updateSettings({
+      idleScreensaverTimeoutMin: 5,
+      idleScreensaverMode: 'canvas',
+      idleScreensaverTabId: 'tab-photos-screen',
+      idleScreensaverPhotoStyle: 'filmstrip',
+      idleScreensaverCanvasShowOverlay: true,
+    });
+
+    const afterSave = useDashboardStore.getState().settings;
+    assert.equal(afterSave.idleScreensaverTimeoutMin, 5);
+    assert.equal(afterSave.idleScreensaverMode, 'canvas');
+    assert.equal(afterSave.idleScreensaverTabId, 'tab-photos-screen');
+    assert.equal(afterSave.idleScreensaverPhotoStyle, 'filmstrip');
+    assert.equal(afterSave.idleScreensaverCanvasShowOverlay, true);
+    assert.ok(Date.parse(afterSave.updated_at) > Date.parse(initialUpdatedAt));
+    assert.ok(getDirtySettingsKeys().has('idleScreensaverMode'));
+    assert.ok(getDirtySettingsKeys().has('idleScreensaverTabId'));
+
+    const savedTimestamp = afterSave.updated_at;
+
+    // Night Mode schedule activation and tap-to-wake must not alter screensaver config or updated_at
+    await store.setNightModeActive(true);
+    await store.updateSettings({ nightModeEnabled: false });
+
+    const afterNightCycle = useDashboardStore.getState().settings;
+    assert.equal(afterNightCycle.nightModeEnabled, false);
+    assert.equal(afterNightCycle.updated_at, savedTimestamp);
+    assert.equal(afterNightCycle.idleScreensaverMode, 'canvas');
+    assert.equal(afterNightCycle.idleScreensaverTabId, 'tab-photos-screen');
+
+    const exported = sanitizePayloadForBackupExport({
+      version: 1,
+      exportedAt: '2026-11-23T12:30:00.000Z',
+      settings: {
+        ...afterNightCycle,
+        nightModeEnabled: true,
+        externalBrowserLinksPolicy: 'kiosk_qr_only',
+      },
+      tabs: [],
+      widgets: [],
+      notes: [],
+    });
+    assert.equal(exported.settings.idleScreensaverMode, 'canvas');
+    assert.equal(exported.settings.idleScreensaverTabId, 'tab-photos-screen');
+    assert.equal(exported.settings.idleScreensaverPhotoStyle, 'filmstrip');
+    assert.equal(exported.settings.idleScreensaverCanvasShowOverlay, true);
+    assert.equal(exported.settings.nightModeEnabled, false);
+    assert.equal(exported.settings.externalBrowserLinksPolicy, 'auto');
+
+    clearDirtySettingsKeys();
   });
 });
 

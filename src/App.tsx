@@ -121,7 +121,7 @@ export function App() {
   const lockKiosk = useDashboardStore((s) => s.lockKiosk);
   const isCarouselPaused = useDashboardStore((s) => s.isCarouselPaused);
   const pauseCarouselTemporarily = useDashboardStore((s) => s.pauseCarouselTemporarily);
-  const updateSettings = useDashboardStore((s) => s.updateSettings);
+  const setNightModeActive = useDashboardStore((s) => s.setNightModeActive);
   const updateNotePosition = useDashboardStore((s) => s.updateNotePosition);
   const updateWidgetPosition = useDashboardStore((s) => s.updateWidgetPosition);
   const addWidget = useDashboardStore((s) => s.addWidget);
@@ -658,8 +658,8 @@ export function App() {
         sessionStorage.setItem('ambiently_night_snooze', String(snoozeUntil));
       } catch {}
     }
-    updateSettings({ nightModeEnabled: false });
-  }, [wakeTimeoutMin, updateSettings]);
+    void setNightModeActive(false);
+  }, [wakeTimeoutMin, setNightModeActive]);
 
   const handleToggleNightMode = useCallback(() => {
     setIsIdleScreensaverActive(false);
@@ -669,16 +669,16 @@ export function App() {
       try {
         sessionStorage.removeItem('ambiently_night_snooze');
       } catch {}
-      updateSettings({ nightModeEnabled: false });
+      void setNightModeActive(false);
     } else {
       setDismissedUntilMorning(false);
       setNightWakeSnoozeUntil(null);
       try {
         sessionStorage.removeItem('ambiently_night_snooze');
       } catch {}
-      updateSettings({ nightModeEnabled: true });
+      void setNightModeActive(true);
     }
-  }, [settings.nightModeEnabled, updateSettings]);
+  }, [settings.nightModeEnabled, setNightModeActive]);
 
   const handleCloseAddWidget = useCallback(() => setIsAddWidgetOpen(false), []);
   const handleCloseCreateCanvas = useCallback(() => setIsCreateCanvasOpen(false), []);
@@ -721,8 +721,7 @@ export function App() {
       } catch {}
     }
 
-    // Wait for saved settings: updateSettings saves the store's current settings, which are still
-    // the defaults at this point, over the user's real ones.
+    // Wait for saved settings before evaluating the Night Mode schedule.
     if (!isInitialized || settings.nightScheduleEnabled === false) return;
     if (!settings.nightModeStart || !settings.nightModeEnd) return;
 
@@ -753,7 +752,7 @@ export function App() {
               sessionStorage.removeItem('ambiently_night_snooze');
             } catch {}
           }
-          updateSettings({ nightModeEnabled: true });
+          void setNightModeActive(true);
         }
       } else {
         // Daytime: reset snooze and dismissed state, turn off night mode if it was on
@@ -769,7 +768,7 @@ export function App() {
         // End night mode only as the window closes (or on load), so it can still be switched on
         // by hand during the day
         if (wasInWindow !== false && settings.nightModeEnabled) {
-          updateSettings({ nightModeEnabled: false });
+          void setNightModeActive(false);
         }
       }
     };
@@ -785,7 +784,7 @@ export function App() {
     settings.nightModeEnabled,
     nightWakeSnoozeUntil,
     dismissedUntilMorning,
-    updateSettings,
+    setNightModeActive,
   ]);
 
   // Scheduled background photo library rescan (24h default, pauses in Night Mode & hidden tabs)
@@ -997,6 +996,7 @@ export function App() {
   const handlePreviewScreensaver = useCallback(() => {
     setIsSettingsOpen(false);
     lockKiosk();
+    void flushPendingCloudPush();
     setIsIdleScreensaverActive(true);
   }, [lockKiosk]);
 
@@ -1348,6 +1348,7 @@ export function App() {
               onClose={() => {
                 setIsSettingsOpen(false);
                 lockKiosk();
+                void flushPendingCloudPush();
               }}
               onOpenQuickStart={() => setIsQuickStartOpen(true)}
             />
@@ -1697,6 +1698,7 @@ export function App() {
             onClose={() => {
               setIsSettingsOpen(false);
               lockKiosk();
+              void flushPendingCloudPush();
             }}
             onOpenQuickStart={() => setIsQuickStartOpen(true)}
             onPreviewScreensaver={handlePreviewScreensaver}
