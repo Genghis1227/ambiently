@@ -101,6 +101,77 @@ html.reduce-visual-effects .backdrop-blur-xl {
   will-change: transform;
 }
 
+.ambiently-ticker-paused {
+  animation-play-state: paused !important;
+}
+
+@keyframes ambiently-photo-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ambiently-ken-burns {
+  from {
+    opacity: 0;
+    transform: scale3d(1, 1, 1);
+  }
+  to {
+    opacity: 1;
+    transform: scale3d(1.14, 1.14, 1);
+  }
+}
+
+@keyframes ambiently-polaroid-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -18px, 0) scale3d(0.84, 0.84, 1) rotate(calc(var(--polaroid-rotate, 0deg) + 5deg));
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale3d(1, 1, 1) rotate(var(--polaroid-rotate, 0deg));
+  }
+}
+
+.ambiently-photo-fade {
+  animation: ambiently-photo-fade 750ms ease-out both;
+  will-change: opacity;
+}
+
+.ambiently-ken-burns-enter {
+  animation: ambiently-ken-burns var(--ken-burns-duration, 18s) linear both;
+  will-change: transform, opacity;
+}
+
+.ambiently-polaroid-card {
+  transform: translate3d(0, 0, 0) scale3d(1, 1, 1) rotate(var(--polaroid-rotate, 0deg));
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: ambiently-polaroid-enter 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform, opacity;
+}
+
+.ambiently-polaroid-card:hover {
+  transform: translate3d(0, 0, 0) scale3d(1.14, 1.14, 1) rotate(0deg);
+  z-index: 70 !important;
+}
+
+.ambiently-polaroid-card:active {
+  transform: translate3d(0, 0, 0) scale3d(0.96, 0.96, 1) rotate(var(--polaroid-rotate, 0deg));
+}
+
+html.reduce-visual-effects .ambiently-ken-burns-enter,
+html.reduce-visual-effects .ambiently-polaroid-card {
+  animation: ambiently-photo-fade 450ms ease-out both !important;
+  will-change: auto;
+}
+
+html.reduce-visual-effects .ambiently-polaroid-card {
+  transform: rotate(var(--polaroid-rotate, 0deg)) !important;
+}
+
 @keyframes ambiently-toast-down {
   from {
     opacity: 0;
@@ -163,8 +234,13 @@ html.reduce-visual-effects .backdrop-blur-xl {
 
 @media (prefers-reduced-motion: reduce) {
   .ambiently-canvas-enter-next,
-  .ambiently-canvas-enter-prev {
+  .ambiently-canvas-enter-prev,
+  .ambiently-photo-fade,
+  .ambiently-ken-burns-enter,
+  .ambiently-polaroid-card {
     animation: none !important;
+    transition: none !important;
+    will-change: auto;
   }
 }
 

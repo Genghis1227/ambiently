@@ -25,7 +25,6 @@ import {
   undoLastChalkStroke,
   type BoardPoint,
 } from '../../utils/chalkboardEngine';
-import { useIsCursorHidden } from '../../hooks/useIdleCursor';
 
 interface ChalkboardWidgetProps {
   title?: string;
@@ -59,7 +58,6 @@ export const ChalkboardWidget: React.FC<ChalkboardWidgetProps> = ({
   isCanvasLocked = false,
   onUpdateConfig,
 }) => {
-  const isCursorHidden = useIsCursorHidden();
   const surface: ChalkboardSurface =
     config?.surface === 'cork' || config?.surface === 'whiteboard' ? config.surface : 'slate';
   const showToolbarPref = config?.showToolbar !== false;
@@ -362,23 +360,16 @@ export const ChalkboardWidget: React.FC<ChalkboardWidgetProps> = ({
           data-no-drag="true"
           data-no-canvas-swipe="true"
           onPointerDown={(e) => e.stopPropagation()}
+          data-kiosk-edit-chrome={!isTrayOpen ? 'true' : undefined}
           onClick={(e) => {
             e.stopPropagation();
             setIsTrayOpen((prev) => !prev);
           }}
-          title={
-            isCursorHidden
-              ? undefined
-              : isTrayOpen
-                ? 'Hide chalk tray'
-                : 'Show chalk & doodle tools'
-          }
+          title={isTrayOpen ? 'Hide chalk tray' : 'Show chalk & doodle tools'}
           className={`pointer-events-auto p-1.5 rounded-xl transition-all cursor-pointer ${pillChromeClass} ${
             isTrayOpen
               ? 'opacity-90 hover:opacity-100'
-              : isCursorHidden
-                ? 'opacity-0 pointer-events-none'
-                : 'opacity-55 hover:opacity-100'
+              : 'opacity-55 hover:opacity-100'
           }`}
         >
           <Pencil className="w-3.5 h-3.5" />
@@ -450,7 +441,7 @@ export const ChalkboardWidget: React.FC<ChalkboardWidgetProps> = ({
                       setActiveTool(defaultTool);
                     }
                   }}
-                  title={isCursorHidden ? undefined : swatch.label}
+                  title={swatch.label}
                   aria-label={swatch.label}
                   style={{ backgroundColor: swatch.hex }}
                   className={`w-4 h-4 rounded-full transition-transform cursor-pointer border ${
@@ -473,7 +464,7 @@ export const ChalkboardWidget: React.FC<ChalkboardWidgetProps> = ({
                 e.stopPropagation();
                 setActiveTool('chalk');
               }}
-              title={isCursorHidden ? undefined : 'Soft chalk'}
+              title="Soft chalk"
               className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                 activeTool === 'chalk'
                   ? 'bg-cyan-500/25 text-cyan-400'
@@ -489,7 +480,7 @@ export const ChalkboardWidget: React.FC<ChalkboardWidgetProps> = ({
                 e.stopPropagation();
                 setActiveTool('marker');
               }}
-              title={isCursorHidden ? undefined : 'Smooth ink marker'}
+              title="Smooth ink marker"
               className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                 activeTool === 'marker'
                   ? 'bg-cyan-500/25 text-cyan-400'
@@ -505,7 +496,7 @@ export const ChalkboardWidget: React.FC<ChalkboardWidgetProps> = ({
                 e.stopPropagation();
                 setActiveTool('eraser');
               }}
-              title={isCursorHidden ? undefined : 'Eraser'}
+              title="Eraser"
               className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                 activeTool === 'eraser'
                   ? 'bg-rose-500/25 text-rose-400'
@@ -525,7 +516,7 @@ export const ChalkboardWidget: React.FC<ChalkboardWidgetProps> = ({
                   e.stopPropagation();
                   setActiveSize(sz.id);
                 }}
-                title={isCursorHidden ? undefined : `${sz.label} brush`}
+                title={`${sz.label} brush`}
                 className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
                   activeSize === sz.id
                     ? 'bg-cyan-500/25 text-cyan-400'
@@ -542,7 +533,7 @@ export const ChalkboardWidget: React.FC<ChalkboardWidgetProps> = ({
               type="button"
               onClick={handleUndo}
               disabled={strokes.length === 0}
-              title={isCursorHidden ? undefined : 'Undo last stroke'}
+              title="Undo last stroke"
               className="p-1.5 rounded-lg opacity-80 hover:opacity-100 disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
             >
               <RotateCcw className="w-3.5 h-3.5" />
@@ -552,7 +543,7 @@ export const ChalkboardWidget: React.FC<ChalkboardWidgetProps> = ({
               type="button"
               onClick={handleClear}
               disabled={strokes.length === 0}
-              title={isCursorHidden ? undefined : 'Clear board'}
+              title="Clear board"
               className={`px-1.5 py-1 rounded-lg flex items-center gap-1 text-[10px] font-semibold transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
                 confirmClearArmed
                   ? 'bg-rose-500 text-white'

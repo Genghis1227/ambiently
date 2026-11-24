@@ -18,14 +18,22 @@ import {
 import { installAddressGuard, isBlockedAddress } from '../server/addressGuard';
 import { onRequestGet as webProxy } from '../functions/api/web-proxy';
 import { onRequestGet as rssHandler } from '../functions/api/rss';
-import { buildPlexItemUrl } from '../src/services/plex';
+import { buildPlexItemUrl, sanitizePlexKeySegment } from '../src/services/plex';
+import { matchPlexServerFromList } from '../src/services/photoSyncService';
+import { stripPlexTokens } from '../src/services/plexLinks';
+import { markDirtySettingsKeys, mergeConcurrentCloudSettings } from '../src/services/syncMerge';
+import { stripHtmlToText } from '../src/utils/htmlEntities';
 import {
   isSafeExternalEmbedUrl,
   safeCssBackgroundUrl,
   sanitizeExternalHttpUrl,
 } from '../src/utils/urlSecurity';
 import { isSafeVaultMediaDataUrl } from '../src/utils/localMediaVault';
-import { sanitizePayloadForBackupExport } from '../src/services/fileSync';
+import {
+  MAX_BACKUP_FILE_BYTES,
+  parseAndValidateBackup,
+  sanitizePayloadForBackupExport,
+} from '../src/services/fileSync';
 
 describe('Self-hosted address guard (server/addressGuard.ts)', () => {
   it('blocks loopback, metadata and reserved addresses in every form, and home networks unless allowed', () => {
@@ -578,5 +586,168 @@ describe('Database security audit & board usage coverage (supabase/)', () => {
     const composeText = fs.readFileSync(path.join(repoRoot, 'compose.yaml'), 'utf8');
     assert.match(composeText, /read_only:\s*true/);
     assert.match(composeText, /cap_drop:\s*\r?\n\s*-\s*ALL/);
+  });
+
+  it('hardens dashboard_members invites and strips nested Home Assistant / Homelab secrets in SQL', () => {
+    const supabaseDir = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      '..',
+      'supabase'
+    );
+    const schemaText = fs.readFileSync(path.join(supabaseDir, 'schema.sql'), 'utf8');
+    const migrationText = fs.readFileSync(
+      path.join(supabaseDir, 'migrations', '20261124_harden_members_and_nested_secrets.sql'),
+      'utf8'
+    );
+
+    for (const sqlText of [schemaText, migrationText]) {
+      assert.match(sqlText, /grant insert \(dashboard_id, email, role\) on public\.dashboard_members to authenticated/i);
+      assert.match(sqlText, /user_id is null/i);
+      assert.match(sqlText, /email <> private\.current_email\(\)/i);
+      assert.match(sqlText, /not private\.owns_dashboard\(dashboard_id\)/i);
+      assert.match(sqlText, /new\.config->'homeAssistant'/i);
+      assert.match(sqlText, /new\.config->'services'/i);
+    }
+  });
+});
+
+describe('Milestone 4 Security Regression Suite', () => {
+  it('resolveClientIpFromRequest gates proxy headers behind AMBIENTLY_TRUST_PROXY', async () => {
+    const { resolveClientIpFromRequest } = await import('../server/index');
+    const mockReq = {
+      socket: { remoteAddress: '10.0.0.50' },
+      headers: {
+        'x-forwarded-for': '198.51.100.1, 203.0.113.9',
+        'cf-connecting-ip': '198.51.100.7',
+      },
+    } as unknown as http.IncomingMessage;
+
+    assert.equal(resolveClientIpFromRequest(mockReq, 'false'), '10.0.0.50');
+    assert.equal(resolveClientIpFromRequest(mockReq, ''), '10.0.0.50');
+    assert.equal(resolveClientIpFromRequest(mockReq, 'true'), '203.0.113.9');
+    assert.equal(resolveClientIpFromRequest(mockReq, 'cloudflare'), '198.51.100.7');
+  });
+
+  it('sanitizePlexKeySegment and buildPlexItemUrl reject traversal and cross-origin payloads', () => {
+    assert.equal(sanitizePlexKeySegment('sec_12-ab', 'sectionKey'), 'sec_12-ab');
+    assert.throws(() => sanitizePlexKeySegment('../../admin', 'ratingKey'), /Invalid Plex ratingKey/);
+    assert.throws(() => sanitizePlexKeySegment('1/../../users', 'sectionKey'), /Invalid Plex sectionKey/);
+
+    assert.equal(
+      buildPlexItemUrl('https://plex.example.com:32400', '../users', 'X-Plex-Token=abc'),
+      null
+    );
+    assert.equal(
+      buildPlexItemUrl('https://plex.example.com:32400', '//evil.example.org/pwn', 'X-Plex-Token=abc'),
+      null
+    );
+    assert.equal(
+      buildPlexItemUrl('https://plex.example.com:32400', 'https://evil.example.org/library/1', 'X-Plex-Token=abc'),
+      null
+    );
+    assert.equal(
+      buildPlexItemUrl('https://plex.example.com:32400', '/library/metadata/42', 'X-Plex-Token=abc'),
+      'https://plex.example.com:32400/library/metadata/42?includeDetails=1&includeAdvanced=1&checkFiles=1&X-Plex-Token=abc'
+    );
+  });
+
+  it('matchPlexServerFromList enforces strict clientIdentifier matching when specified', () => {
+    const servers = [
+      {
+        name: 'Home Plex',
+        clientIdentifier: 'server-id-1',
+        connections: [],
+      },
+      {
+        name: 'Home Plex',
+        clientIdentifier: 'server-id-2',
+        connections: [],
+      },
+    ] as Parameters<typeof matchPlexServerFromList>[0];
+
+    const missingMatch = matchPlexServerFromList(servers, {
+      serverClientIdentifier: 'missing-server-id',
+      serverName: 'Home Plex',
+      sectionKey: '1',
+      sectionTitle: 'Photos',
+    });
+    assert.equal(missingMatch, undefined);
+
+    const exactMatch = matchPlexServerFromList(servers, {
+      serverClientIdentifier: 'server-id-2',
+      serverName: 'Home Plex',
+      sectionKey: '1',
+      sectionTitle: 'Photos',
+    });
+    assert.equal(exactMatch?.clientIdentifier, 'server-id-2');
+  });
+
+  it('stripHtmlToText handles malformed 50KB HTML inputs in linear time without ReDoS', () => {
+    const hostileInput = `<p class="test">${'a'.repeat(50_000)}<script>${'x'.repeat(5_000)}`;
+    const start = performance.now();
+    const text = stripHtmlToText(hostileInput);
+    const elapsedMs = performance.now() - start;
+
+    assert.ok(elapsedMs < 200, `Expected linear-time stripHtmlToText, took ${elapsedMs}ms`);
+    assert.ok(text.startsWith('aaaa'));
+  });
+
+  it('enforces backup size cap and strips __proto__/constructor/prototype keys across parsers and mergers', async () => {
+    assert.equal(MAX_BACKUP_FILE_BYTES, 50 * 1024 * 1024);
+
+    const oversized = await parseAndValidateBackup({
+      size: MAX_BACKUP_FILE_BYTES + 1,
+      text: async () => '{}',
+    } as unknown as File);
+    assert.equal(oversized.success, false);
+    assert.match(oversized.error || '', /maximum supported size/i);
+
+    // Raw string with explicit JSON __proto__ key:
+    const rawJsonWithProto =
+      '{"__proto__":{"polluted":"yes"},"constructor":{"bad":true},"prototype":{"bad":true},"tabs":[],"widgets":[],"notes":[],"settings":{"themeMode":"dark"}}';
+    const parsed = await parseAndValidateBackup({
+      size: rawJsonWithProto.length,
+      text: async () => rawJsonWithProto,
+    } as unknown as File);
+    assert.equal(parsed.success, true);
+    assert.equal(Object.hasOwn(parsed.data as object, '__proto__'), false);
+    assert.equal(Object.hasOwn(parsed.data as object, 'constructor'), false);
+    assert.equal(Object.hasOwn(parsed.data as object, 'prototype'), false);
+    assert.equal((parsed.data?.settings as { themeMode?: string } | undefined)?.themeMode, 'dark');
+    assert.equal(({} as { polluted?: unknown }).polluted, undefined);
+
+    const rawObj = JSON.parse(
+      '{"__proto__":{"polluted":true},"constructor":{"bad":1},"url":"https://plex.example.com/a?X-Plex-Token=secret&w=10"}'
+    );
+    const stripped = stripPlexTokens(rawObj) as Record<string, unknown>;
+    assert.equal(Object.hasOwn(stripped, '__proto__'), false);
+    assert.equal(Object.hasOwn(stripped, 'constructor'), false);
+    assert.equal(stripped.url, 'https://plex.example.com/a?w=10');
+
+    markDirtySettingsKeys(['__proto__', 'constructor', 'prototype', 'themeMode']);
+    const fakeLocal = Object.create(null) as Record<string, unknown>;
+    Object.defineProperty(fakeLocal, '__proto__', { value: { pwned: true }, enumerable: true });
+    fakeLocal.pinLockEnabled = false;
+    fakeLocal.pinHash = null;
+    fakeLocal.lockCanvasEditing = false;
+    fakeLocal.lockFullscreenKiosk = false;
+    fakeLocal.lockSettingsAccess = false;
+    fakeLocal.settingsPinOptOut = false;
+    fakeLocal.externalBrowserLinksPolicy = 'auto';
+    fakeLocal.displayDensity = 'comfortable';
+    fakeLocal.nightModeEnabled = false;
+    fakeLocal.themeMode = 'light';
+    fakeLocal.updated_at = '2026-11-24T00:00:00.000Z';
+
+    const merged = mergeConcurrentCloudSettings({
+      defaultSettings: { id: 'global', themeMode: 'dark' } as unknown as Parameters<typeof mergeConcurrentCloudSettings>[0]['defaultSettings'],
+      baseCloudSettings: { themeMode: 'dark' },
+      localSettings: fakeLocal as unknown as Parameters<typeof mergeConcurrentCloudSettings>[0]['localSettings'],
+      dirtyKeys: ['__proto__', 'constructor', 'themeMode'],
+    });
+    assert.equal(Object.hasOwn(merged as object, '__proto__'), false);
+    assert.equal(Object.hasOwn(merged as object, 'constructor'), false);
+    assert.equal((merged as unknown as { pwned?: unknown }).pwned, undefined);
+    assert.equal(merged.themeMode, 'light');
   });
 });

@@ -35,7 +35,6 @@ import {
   aggregateIngredients,
   normalizeItemNameSingular,
 } from '../../utils/ingredientAggregator';
-import { isAmbientlyInNightMode } from '../../utils/confetti';
 import { localDateKey } from '../../utils/dateKey';
 import { resolveAdaptiveMealWeekColumns } from '../../utils/displayOrientation';
 import {
@@ -45,6 +44,7 @@ import {
   pickDefaultScheduleSlot,
 } from '../../utils/mealCalendarEvents';
 import { ProfileAvatar } from '../common/ProfileAvatar';
+import { useDisplayActivity } from '../../utils/displayActivity';
 
 const MealEntryModal = lazy(() =>
   import('../meals/MealEntryModal').then((m) => ({ default: m.MealEntryModal }))
@@ -154,18 +154,24 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
     (s) => s.exportShoppingListForGoogleKeep
   );
 
-  const settings = useDashboardStore((s) => s.settings);
-  const boardNotes = useDashboardStore((s) => s.notes);
-  const activeTabId = useDashboardStore((s) => s.activeTabId);
+  const nightModeEnabled = useDashboardStore((s) => Boolean(s.settings?.nightModeEnabled));
+  const { isCanvasOccluded } = useDisplayActivity();
 
-  // Refresh clock tick every 60s so midnight date rollover and Night Mode schedules stay accurate
+  // Refresh clock tick every 60s so midnight date rollover stays accurate (paused while occluded)
   const [clockTick, setClockTick] = useState<number>(() => Date.now());
   useEffect(() => {
+    if (isCanvasOccluded) return;
+    const wakeTimeoutId = window.setTimeout(() => {
+      setClockTick(Date.now());
+    }, 0);
     const id = window.setInterval(() => {
       setClockTick(Date.now());
     }, 60_000);
-    return () => window.clearInterval(id);
-  }, []);
+    return () => {
+      window.clearTimeout(wakeTimeoutId);
+      window.clearInterval(id);
+    };
+  }, [isCanvasOccluded]);
 
   // Auto-measure tile width for adaptive portrait Full-Week columns
   const containerRef = useRef<HTMLDivElement>(null);
@@ -205,13 +211,7 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
     }
   }, [isMealStoreInitialized, isProfileStoreInitialized]);
 
-  const isNightMode = useMemo(
-    () =>
-      Boolean(settings?.nightModeEnabled) || isAmbientlyInNightMode(settings),
-    // clockTick keeps scheduled night window evaluation live
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [settings, clockTick]
-  );
+  const isNightMode = nightModeEnabled;
 
   // Scope & Week navigation state
   const [fallbackScope, setFallbackScope] =
@@ -573,8 +573,10 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
     }, 1200);
   };
 
-  // Dedicated Shopping List Sticky Note on the canvas (`isShoppingList: true`)
-  const targetListNote = useMemo((): StickyNoteItem | undefined => {
+  // Dedicated Shopping List Sticky Note on the canvas (`isShoppingList: true`) — return exact note reference so unrelated note edits do not re-render
+  const targetListNote = useDashboardStore((s): StickyNoteItem | undefined => {
+    const boardNotes = s.notes;
+    const currentTabId = s.activeTabId;
     const isUsableChecklist = (n: StickyNoteItem | undefined): n is StickyNoteItem =>
       Boolean(n && (n.isChecklist || n.isShoppingList || n.freeformPos?.isShoppingList) && !n.deleted_at && !n.archivedAt);
     const isDedicatedShoppingNote = (n: StickyNoteItem): boolean =>
@@ -591,18 +593,18 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
         (n) =>
           isUsableChecklist(n) &&
           isDedicatedShoppingNote(n) &&
-          (n.tabId === activeTabId || n.tabId === 'all')
+          (n.tabId === currentTabId || n.tabId === 'all')
       ) ||
       boardNotes.find((n) => isUsableChecklist(n) && isDedicatedShoppingNote(n)) ||
       boardNotes.find(
         (n) =>
           isUsableChecklist(n) &&
-          (n.tabId === activeTabId || n.tabId === 'all') &&
+          (n.tabId === currentTabId || n.tabId === 'all') &&
           pattern.test(n.title || '')
       ) ||
       boardNotes.find((n) => isUsableChecklist(n) && pattern.test(n.title || ''))
     );
-  }, [boardNotes, config?.listNoteId, activeTabId]);
+  });
 
   // Combined items ready to sync into the canvas Sticky Note (unchecked shopping items + upcoming scheduled recipes)
   const syncableStickyNoteItems = useMemo(() => {
@@ -735,7 +737,7 @@ export const MealPlannerWidget: React.FC<MealPlannerWidgetProps> = ({
       const { items } = mergeChecklistItems([]);
       await dashStore.addNote({
         id: newNoteId,
-        tabId: activeTabId,
+        tabId: dashStore.activeTabId,
         title: '🛒 Shopping List',
         content: '',
         isChecklist: true,

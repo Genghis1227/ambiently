@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.8.11",
+    date: "November 24, 2026",
+    title: "Security Hardening, Bundle Reduction & 24/7 Kiosk Performance Optimizations",
+    highlights: [
+      "Household Sync, Proxy & Parent PIN Security Hardening: Tightened Supabase household invite permissions and nested Homelab/Home Assistant secret stripping, added proxy-header trust gating and private RSS caching, enforced strict Plex server/path checks and 50 MB prototype-safe backup parsing, and extended Parent PIN locking to Widget Settings, Photo Sources, Carousel, Snap to Grid, and Dock visibility.",
+      "Smaller Bundle & Faster Cold Boot: Removed framer-motion from runtime dependencies in favor of GPU CSS keyframes, lazy-loaded Corkboard, added async gzip ETag static streaming plus Workbox NetworkFirst /config.js caching, and parallelized local store initialization.",
+      "Smoother Dragging & 24/7 Kiosk Hibernation: Batched z-order and mobile widget order updates synchronously, eliminated idle-cursor React render cascades, capped local folder scans at 1,500 photos while pruning dead session blob URLs, deduplicated concurrent RSS fetches, and paused background widget clocks and pollers whenever Photo Screensaver covers the board.",
+    ],
+  },
+  {
     version: "v0.8.10",
     date: "November 23, 2026",
     title: "Idle Photo & Canvas Screensaver Settings Persistence Across Restores & Sync",

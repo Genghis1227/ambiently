@@ -250,18 +250,23 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
   </script>`;
 
     // Strip existing upstream <base> tags before injecting our base URL so relative resolution cannot be hijacked
-    html = html.replace(/<base\b[^>]*>/gi, '');
+    html = html.replace(/<base\b[^>]{0,2048}>/gi, '');
 
     // Inject right after <head> or at top
-    if (/<head[^>]*>/i.test(html)) {
-      html = html.replace(/<head[^>]*>/i, (head) => head + injectedCode);
+    if (/<head(?:\s[^<>]{0,1024})?>/i.test(html)) {
+      html = html.replace(/<head(?:\s[^<>]{0,1024})?>/i, (head) => head + injectedCode);
     } else {
       html = injectedCode + html;
     }
 
-    // Strip meta tags that enforce frame-ancestors or X-Frame-Options
-    html = html.replace(/<meta[^>]*http-equiv=["']X-Frame-Options["'][^>]*>/gi, '');
-    html = html.replace(/<meta[^>]*http-equiv=["']Content-Security-Policy["'][^>]*>/gi, '');
+    // Strip meta tags that enforce frame-ancestors or X-Frame-Options in one bounded linear pass
+    html = html.replace(/<meta\b[^>]{0,4096}>/gi, (tag) =>
+      /\bhttp-equiv\s*=\s*(?:["']\s*(?:x-frame-options|content-security-policy)\s*["']|(?:x-frame-options|content-security-policy)(?=[\s/>]))/i.test(
+        tag
+      )
+        ? ''
+        : tag
+    );
 
     return htmlResponse(html, 200, { 'Cache-Control': 'private, max-age=180' });
   } catch (err) {

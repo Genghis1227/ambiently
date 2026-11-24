@@ -611,6 +611,7 @@ const memoryRssCache = new Map<
   string,
   { v: number; timestamp: number; title: string; items: RssArticle[] }
 >();
+const inFlightRssRequests = new Map<string, Promise<{ title: string; items: RssArticle[] }>>();
 
 function getRssCacheKey(url: string): string {
   let hash = 0;
@@ -625,6 +626,7 @@ export function clearFeedMemoryCaches(): void {
   memoryUrlEventCache.clear();
   memoryCalendarCache.clear();
   memoryRssCache.clear();
+  inFlightRssRequests.clear();
   feedStatuses.clear();
   urlBackoffState.clear();
 }
@@ -661,56 +663,69 @@ export async function fetchRssFeed(
     return { title: cached.title, items: cached.items };
   }
 
-  try {
-    const qs = `url=${encodeURIComponent(normalized)}&v=${RSS_CACHE_VERSION}${forceRefresh ? '&refresh=1' : ''}`;
-    const fetchInit: RequestInit | undefined = forceRefresh ? { cache: 'no-store' } : undefined;
-    let res = await fetch(`/api/rss?${qs}`, fetchInit);
-    if (res.status === 404) {
-      res = await fetch(`/functions/api/rss?${qs}`, fetchInit);
-    }
-    if (!res.ok) return cached ? { title: cached.title, items: cached.items } : { title: '', items: [] };
-    const ct = res.headers.get('content-type') || '';
-    if (!ct.includes('application/json')) {
-      return cached ? { title: cached.title, items: cached.items } : { title: '', items: [] };
-    }
-    const data = await res.json();
-    const result = {
-      title: data.title || '',
-      items: Array.isArray(data.items) ? data.items : [],
-    };
+  const inFlightKey = `${forceRefresh ? 'bypass:' : 'cache:'}${normalized}`;
+  const existingRequest = inFlightRssRequests.get(inFlightKey);
+  if (existingRequest) {
+    return existingRequest;
+  }
 
-    if (result.items.length > 0) {
-      const entry = { v: RSS_CACHE_VERSION, timestamp: Date.now(), ...result };
-      if (memoryRssCache.has(key)) {
-        memoryRssCache.delete(key);
-      } else if (memoryRssCache.size >= MAX_RSS_CACHE_KEYS) {
-        const oldestKey = memoryRssCache.keys().next().value;
-        if (oldestKey !== undefined) memoryRssCache.delete(oldestKey);
+  const requestPromise = (async (): Promise<{ title: string; items: RssArticle[] }> => {
+    try {
+      const qs = `url=${encodeURIComponent(normalized)}&v=${RSS_CACHE_VERSION}${forceRefresh ? '&refresh=1' : ''}`;
+      const fetchInit: RequestInit | undefined = forceRefresh ? { cache: 'no-store' } : undefined;
+      let res = await fetch(`/api/rss?${qs}`, fetchInit);
+      if (res.status === 404) {
+        res = await fetch(`/functions/api/rss?${qs}`, fetchInit);
       }
-      memoryRssCache.set(key, entry);
+      if (!res.ok) return cached ? { title: cached.title, items: cached.items } : { title: '', items: [] };
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) {
+        return cached ? { title: cached.title, items: cached.items } : { title: '', items: [] };
+      }
+      const data = await res.json();
+      const result = {
+        title: data.title || '',
+        items: Array.isArray(data.items) ? data.items : [],
+      };
 
-      if (typeof window !== 'undefined' && window.localStorage) {
-        try {
-          localStorage.setItem(`ambiently_rss_cache_${key}`, JSON.stringify(entry));
-          pruneLocalStorageCachePrefix(
-            'ambiently_rss_cache_',
-            MAX_RSS_CACHE_KEYS,
-            memoryRssCache,
-            key,
-            (parsed) =>
-              parsed && parsed.v === RSS_CACHE_VERSION && typeof parsed.timestamp === 'number'
-                ? parsed.timestamp
-                : null
-          );
-        } catch {
-          // ignore storage errors
+      if (result.items.length > 0) {
+        const entry = { v: RSS_CACHE_VERSION, timestamp: Date.now(), ...result };
+        if (memoryRssCache.has(key)) {
+          memoryRssCache.delete(key);
+        } else if (memoryRssCache.size >= MAX_RSS_CACHE_KEYS) {
+          const oldestKey = memoryRssCache.keys().next().value;
+          if (oldestKey !== undefined) memoryRssCache.delete(oldestKey);
+        }
+        memoryRssCache.set(key, entry);
+
+        if (typeof window !== 'undefined' && window.localStorage) {
+          try {
+            localStorage.setItem(`ambiently_rss_cache_${key}`, JSON.stringify(entry));
+            pruneLocalStorageCachePrefix(
+              'ambiently_rss_cache_',
+              MAX_RSS_CACHE_KEYS,
+              memoryRssCache,
+              key,
+              (parsed) =>
+                parsed && parsed.v === RSS_CACHE_VERSION && typeof parsed.timestamp === 'number'
+                  ? parsed.timestamp
+                  : null
+            );
+          } catch {
+            // ignore storage errors
+          }
         }
       }
-    }
 
-    return result;
-  } catch (err) {
-    console.warn('Failed to fetch RSS feed:', err);
-    return cached ? { title: cached.title, items: cached.items } : { title: '', items: [] };
-  }
+      return result;
+    } catch (err) {
+      console.warn('Failed to fetch RSS feed:', err);
+      return cached ? { title: cached.title, items: cached.items } : { title: '', items: [] };
+    }
+  })().finally(() => {
+    inFlightRssRequests.delete(inFlightKey);
+  });
+
+  inFlightRssRequests.set(inFlightKey, requestPromise);
+  return requestPromise;
 }

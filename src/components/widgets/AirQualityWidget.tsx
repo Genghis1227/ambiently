@@ -10,7 +10,6 @@ import {
 } from '../../services/airQuality';
 import { useDisplayActivity } from '../../utils/displayActivity';
 import { useDashboardStore } from '../../store/dashboardStore';
-import { isAmbientlyInNightMode } from '../../utils/confetti';
 
 interface AirQualityWidgetProps {
   locationName?: string;
@@ -80,9 +79,8 @@ export const AirQualityWidget: React.FC<AirQualityWidgetProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { isTabHidden, isNightMode } = useDisplayActivity();
-  const dashboardSettings = useDashboardStore((s) => s.settings);
-  const nightActive = isNightMode || isAmbientlyInNightMode(dashboardSettings);
+  const { shouldPauseAnimations } = useDisplayActivity();
+  const nightActive = useDashboardStore((s) => Boolean(s.settings?.nightModeEnabled));
 
   const loadAirQuality = useCallback(
     async (forceRefresh: boolean = false) => {
@@ -105,11 +103,11 @@ export const AirQualityWidget: React.FC<AirQualityWidgetProps> = ({
     void loadAirQuality(false);
     const intervalMs = Math.max(15, refreshIntervalMin) * 60 * 1000;
     const id = window.setInterval(() => {
-      if (isTabHidden || nightActive) return;
+      if (shouldPauseAnimations || nightActive) return;
       void loadAirQuality(false);
     }, intervalMs);
     return () => window.clearInterval(id);
-  }, [loadAirQuality, refreshIntervalMin, isTabHidden, nightActive]);
+  }, [loadAirQuality, refreshIntervalMin, shouldPauseAnimations, nightActive]);
 
   const stickerShadow = transparentBg && !isLight ? 'drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]' : '';
   const pillBoxClass = transparentBg

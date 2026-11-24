@@ -101,26 +101,196 @@ export function decodeHtmlEntities(str: string): string {
   });
 }
 
+const BLOCK_LEVEL_HTML_TAGS = new Set([
+  'br', 'p', 'div', 'li', 'ul', 'ol', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  'blockquote', 'pre', 'tr', 'td', 'th', 'section', 'article', 'header',
+  'footer', 'aside', 'figure', 'figcaption', 'hr',
+]);
+
+function stripCaseInsensitiveTagBlocks(input: string, tagName: string): string {
+  const openToken = `<${tagName}`;
+  const closeToken = `</${tagName}`;
+  const lower = input.toLowerCase();
+  let out = '';
+  let pos = 0;
+
+  while (pos < input.length) {
+    const start = lower.indexOf(openToken, pos);
+    if (start === -1) {
+      out += input.slice(pos);
+      break;
+    }
+    const boundary = lower[start + openToken.length];
+    if (boundary && !/[\s/>]/.test(boundary)) {
+      out += input.slice(pos, start + openToken.length);
+      pos = start + openToken.length;
+      continue;
+    }
+    out += input.slice(pos, start);
+    const openEnd = input.indexOf('>', start + openToken.length);
+    if (openEnd === -1) break;
+    const closeStart = lower.indexOf(closeToken, openEnd + 1);
+    if (closeStart === -1) break;
+    const closeEnd = input.indexOf('>', closeStart + closeToken.length);
+    if (closeEnd === -1) break;
+    out += ' ';
+    pos = closeEnd + 1;
+  }
+  return out;
+}
+
+function stripHtmlCommentsLinear(input: string): string {
+  let out = '';
+  let pos = 0;
+  while (pos < input.length) {
+    const start = input.indexOf('<!--', pos);
+    if (start === -1) {
+      out += input.slice(pos);
+      break;
+    }
+    out += input.slice(pos, start);
+    const end = input.indexOf('-->', start + 4);
+    if (end === -1) break;
+    out += ' ';
+    pos = end + 3;
+  }
+  return out;
+}
+
+function isAsciiLetter(code: number): boolean {
+  return (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+}
+
+function isTagNameChar(code: number): boolean {
+  return (
+    isAsciiLetter(code) ||
+    (code >= 48 && code <= 57) ||
+    code === 58 || // :
+    code === 45 // -
+  );
+}
+
+function stripHtmlTagsLinear(input: string): string {
+  let out = '';
+  let pos = 0;
+  const len = input.length;
+
+  while (pos < len) {
+    const lt = input.indexOf('<', pos);
+    if (lt === -1) {
+      out += input.slice(pos);
+      break;
+    }
+    out += input.slice(pos, lt);
+    if (lt + 1 >= len) {
+      out += '<';
+      break;
+    }
+
+    const nextCode = input.charCodeAt(lt + 1);
+    if (nextCode === 33 /* ! */) {
+      const gt = input.indexOf('>', lt + 2);
+      const nextLt = input.indexOf('<', lt + 2);
+      if (gt !== -1 && (nextLt === -1 || gt < nextLt)) {
+        pos = gt + 1;
+        continue;
+      }
+      out += '<';
+      pos = lt + 1;
+      continue;
+    }
+
+    if (nextCode === 63 /* ? */) {
+      const closePi = input.indexOf('?>', lt + 2);
+      const nextLt = input.indexOf('<', lt + 2);
+      if (closePi !== -1 && (nextLt === -1 || closePi < nextLt)) {
+        pos = closePi + 2;
+        continue;
+      }
+      out += '<';
+      pos = lt + 1;
+      continue;
+    }
+
+    let nameStart = lt + 1;
+    let isClosing = false;
+    if (nextCode === 47 /* / */) {
+      isClosing = true;
+      nameStart += 1;
+    }
+    if (nameStart >= len || !isAsciiLetter(input.charCodeAt(nameStart))) {
+      out += '<';
+      pos = lt + 1;
+      continue;
+    }
+
+    let nameEnd = nameStart + 1;
+    while (nameEnd < len && isTagNameChar(input.charCodeAt(nameEnd))) {
+      nameEnd += 1;
+    }
+    const tagName = input.slice(nameStart, nameEnd).toLowerCase();
+
+    if (nameEnd >= len) {
+      // Truncate unclosed trailing closing/open tag without attributes at EOF
+      break;
+    }
+
+    const sep = input[nameEnd];
+    if (sep !== '>' && sep !== '/' && !/\s/.test(sep)) {
+      out += '<';
+      pos = lt + 1;
+      continue;
+    }
+
+    let scan = nameEnd;
+    let foundClose = -1;
+    let hitNestedLt = false;
+    while (scan < len) {
+      const ch = input[scan];
+      if (ch === '>') {
+        foundClose = scan;
+        break;
+      }
+      if (ch === '<') {
+        hitNestedLt = true;
+        break;
+      }
+      scan += 1;
+    }
+
+    if (hitNestedLt) {
+      out += '<';
+      pos = lt + 1;
+      continue;
+    }
+
+    if (foundClose === -1) {
+      // Unclosed tag running to EOF (drops trailing open HTML fragment linearly)
+      if (!isClosing && /\s/.test(sep)) break;
+      out += '<';
+      pos = lt + 1;
+      continue;
+    }
+
+    if (BLOCK_LEVEL_HTML_TAGS.has(tagName)) {
+      out += ' ';
+    }
+    pos = foundClose + 1;
+  }
+
+  return out;
+}
+
 /**
- * Strips HTML markup to normalized plain text while preserving spacing between blocks and
- * decoding HTML entities after tag removal so escaped tags like `&lt;p&gt;` in prose survive.
+ * Strips HTML markup to normalized plain text in guaranteed linear time while preserving spacing
+ * between blocks and decoding HTML entities after tag removal so escaped tags like `&lt;p&gt;` survive.
  */
 export function stripHtmlToText(html: string): string {
   if (!html) return '';
-  const withoutDangerous = html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<!--[\s\S]*?-->/g, ' ');
-
-  const withoutTags = withoutDangerous
-    .replace(
-      /<br\s*\/?>|<\/?(?:p|div|li|ul|ol|h[1-6]|blockquote|pre|tr|td|th|section|article|header|footer|aside|figure|figcaption|hr)\b[^>]*>/gi,
-      ' '
-    )
-    .replace(/<\/?[a-zA-Z][a-zA-Z0-9:-]*(?:\s[^<>]*?)?\/?>/g, '')
-    .replace(/<![^>]*>/g, '')
-    .replace(/<\?[^>]*\?>/g, '')
-    .replace(/<(?:\/[a-zA-Z][a-zA-Z0-9:-]*|[a-zA-Z][a-zA-Z0-9:-]*\s+[^<>]*)$/g, '');
+  const withoutScripts = stripCaseInsensitiveTagBlocks(html, 'script');
+  const withoutStyles = stripCaseInsensitiveTagBlocks(withoutScripts, 'style');
+  const withoutComments = stripHtmlCommentsLinear(withoutStyles);
+  const withoutTags = stripHtmlTagsLinear(withoutComments);
 
   return decodeHtmlEntities(withoutTags).replace(/\s+/g, ' ').trim();
 }

@@ -31,7 +31,6 @@ import {
   shouldAutoFadeOutForNightMode,
 } from '../../utils/soundscapeEngine';
 import { useDisplayActivity } from '../../utils/displayActivity';
-import { useIsCursorHidden } from '../../hooks/useIdleCursor';
 
 interface SoundscapeWidgetProps {
   title?: string;
@@ -56,7 +55,6 @@ export const SoundscapeWidget: React.FC<SoundscapeWidgetProps> = ({
   transparentBg = false,
   onUpdateConfig,
 }) => {
-  const isCursorHidden = useIsCursorHidden();
   const { isNightMode } = useDisplayActivity();
 
   const [prevConfigChannels, setPrevConfigChannels] = useState(config?.channels);
@@ -308,7 +306,7 @@ export const SoundscapeWidget: React.FC<SoundscapeWidgetProps> = ({
           <button
             type="button"
             onClick={handleCycleSleepTimer}
-            title={isCursorHidden ? undefined : 'Cycle auto-fade sleep timer'}
+            title="Cycle auto-fade sleep timer"
             className={`px-2 py-1.5 rounded-xl text-[10px] font-semibold flex items-center gap-1 transition-colors cursor-pointer ${
               sleepMin > 0
                 ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/35'
@@ -330,7 +328,7 @@ export const SoundscapeWidget: React.FC<SoundscapeWidgetProps> = ({
           <button
             type="button"
             onClick={handleTogglePlay}
-            title={isCursorHidden ? undefined : isPlaying ? 'Pause soundscape' : 'Play soundscape'}
+            title={isPlaying ? 'Pause soundscape' : 'Play soundscape'}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm ${
               isPlaying
                 ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
@@ -396,7 +394,7 @@ export const SoundscapeWidget: React.FC<SoundscapeWidgetProps> = ({
                   e.stopPropagation();
                   handleChannelChange(ch.id, channelActive ? 0 : 50);
                 }}
-                title={isCursorHidden ? undefined : channelActive ? `Mute ${ch.label}` : `Enable ${ch.label}`}
+                title={channelActive ? `Mute ${ch.label}` : `Enable ${ch.label}`}
                 className={`p-1 rounded-lg transition-colors cursor-pointer shrink-0 ${
                   channelActive
                     ? 'bg-cyan-500/20 text-cyan-400'
@@ -455,7 +453,7 @@ export const SoundscapeWidget: React.FC<SoundscapeWidgetProps> = ({
             if (isPlaying) ensureController().updateMix(channels, nextMaster);
             schedulePersistMix(channels, nextMaster);
           }}
-          title={isCursorHidden ? undefined : masterVolume > 0 ? 'Mute master output' : 'Unmute master output'}
+          title={masterVolume > 0 ? 'Mute master output' : 'Unmute master output'}
           className="p-1 rounded-lg text-cyan-400 hover:bg-cyan-500/15 cursor-pointer shrink-0"
         >
           {masterVolume > 0 && isAudible ? (

@@ -69,6 +69,7 @@ interface NavigationDockProps {
   onOpenSettings: () => void;
   /** Opens household sharing, asking for the PIN first when settings need it */
   onOpenShare: () => void;
+  onAuthorizeSettings?: (onAuthorized: () => void, challengePrompt?: { title?: string; subtitle?: string }) => void;
   onToggleNightMode: () => void;
   onToggleFullscreen: () => void;
   isFullscreen: boolean;
@@ -134,6 +135,7 @@ export const NavigationDock: React.FC<NavigationDockProps> = React.memo(({
   onToggleNightMode,
   onToggleFullscreen,
   isFullscreen,
+  onAuthorizeSettings,
   onOpenAddWidget,
   onOpenAddCanvas,
   onOpenCreateNote,
@@ -157,8 +159,8 @@ export const NavigationDock: React.FC<NavigationDockProps> = React.memo(({
   const [isPeekOpen, setIsPeekOpen] = useState(false);
   const navRef = useRef<HTMLElement>(null);
   const { isUpdateAvailable, latestVersion, applyUpdate } = useUpdateChecker();
-  const dashboardSettings = useDashboardStore((s) => s.settings);
-  const effectiveNightMode = Boolean(isNightMode ?? dashboardSettings?.nightModeEnabled);
+  const nightModeSetting = useDashboardStore((s) => Boolean(s.settings?.nightModeEnabled));
+  const effectiveNightMode = Boolean(isNightMode ?? nightModeSetting);
 
   useEffect(() => {
     if (!showOrganizeMenu) return;
@@ -373,23 +375,26 @@ export const NavigationDock: React.FC<NavigationDockProps> = React.memo(({
             />
           </button>
 
-          {/* Ambient Quick Command Popover */}
-          <AmbientQuickMenu
-            dockPosition={dockPosition}
-            isOpen={isQuickMenuOpen}
-            onClose={() => setIsQuickMenuOpen(false)}
-            onSelectTab={(tabId) => {
-              setIsQuickMenuOpen(false);
-              setActivePopout(null);
-              onSelectTab(tabId);
-            }}
-            onOpenSettings={onOpenSettings}
-            onOpenShare={onOpenShare}
-            onToggleFullscreen={onToggleFullscreen}
-            isFullscreen={isFullscreen}
-            onToggleMobileCompanion={onToggleMobileCompanion}
-            onOpenQuickStart={onOpenQuickStart}
-          />
+          {/* Ambient Quick Command Popover (mounted only when open) */}
+          {isQuickMenuOpen && (
+            <AmbientQuickMenu
+              dockPosition={dockPosition}
+              isOpen={isQuickMenuOpen}
+              onClose={() => setIsQuickMenuOpen(false)}
+              onSelectTab={(tabId) => {
+                setIsQuickMenuOpen(false);
+                setActivePopout(null);
+                onSelectTab(tabId);
+              }}
+              onOpenSettings={onOpenSettings}
+              onOpenShare={onOpenShare}
+              onAuthorizeSettings={onAuthorizeSettings}
+              onToggleFullscreen={onToggleFullscreen}
+              isFullscreen={isFullscreen}
+              onToggleMobileCompanion={onToggleMobileCompanion}
+              onOpenQuickStart={onOpenQuickStart}
+            />
+          )}
         </div>
 
         <div

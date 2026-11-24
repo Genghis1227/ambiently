@@ -421,7 +421,12 @@ export const useChoreStore = create<ChoreStoreState>((set, get) => {
         };
 
         if (!rolloverIntervalId) {
-          rolloverIntervalId = setInterval(triggerRolloverCheck, 15_000);
+          rolloverIntervalId = setInterval(() => {
+            if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+              return;
+            }
+            triggerRolloverCheck();
+          }, 300_000);
         }
 
         scheduleNextMidnightTimeout(triggerRolloverCheck);

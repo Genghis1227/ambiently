@@ -84,15 +84,14 @@ function inferLegacyPlexDateFilter(sourceLabel?: string): PlexPhotoSyncConfig['d
   return 'all';
 }
 
-function matchPlexServerFromList(
+export function matchPlexServerFromList(
   servers: PlexServerResource[],
   config?: PlexPhotoSyncConfig,
   sourceLabel?: string
 ): PlexServerResource | undefined {
   if (servers.length === 0) return undefined;
   if (config?.serverClientIdentifier) {
-    const byId = servers.find((s) => s.clientIdentifier === config.serverClientIdentifier);
-    if (byId) return byId;
+    return servers.find((s) => s.clientIdentifier === config.serverClientIdentifier);
   }
   if (config?.serverName) {
     const byName = servers.find((s) => s.name === config.serverName);
@@ -775,22 +774,22 @@ class PhotoSyncService {
             const matchedServer = matchPlexServerFromList(servers, resolvedPlexConfig, sourceLabel);
             if (matchedServer) {
               const bestUri = getBestPlexConnectionUri(matchedServer);
+              if (!bestUri) {
+                throw new Error('No reachable connection URI for Plex server.');
+              }
               serverToken = matchedServer.accessToken || accountToken;
               if (resolvedPlexConfig) {
                 resolvedPlexConfig = {
                   ...resolvedPlexConfig,
                   serverClientIdentifier: matchedServer.clientIdentifier || resolvedPlexConfig.serverClientIdentifier,
                   serverName: matchedServer.name || resolvedPlexConfig.serverName,
-                  serverUri: stripPlexToken(bestUri || resolvedPlexConfig.serverUri),
+                  serverUri: stripPlexToken(bestUri),
                 };
               } else {
                 if (sourceLabel && /\[\d+\s+Folders\]|\s-\s[^-]+\s-\s/.test(sourceLabel) && /Folders\]/i.test(sourceLabel)) {
                   throw new Error(
                     'Open Configure Photos once to save your Plex folder selection for 1-click rescans.'
                   );
-                }
-                if (!bestUri) {
-                  throw new Error('No reachable connection URI for Plex server.');
                 }
                 const sections = await getPlexPhotoLibraries(bestUri, serverToken, true);
                 const sectionMatch = sections.find(

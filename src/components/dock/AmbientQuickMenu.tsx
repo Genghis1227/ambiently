@@ -20,9 +20,14 @@ import {
 } from 'lucide-react';
 import type { DockPosition } from '../../types/dashboard';
 import { useDashboardStore } from '../../store/dashboardStore';
-import { getCurrentUser, onAuthStateChange } from '../../services/supabase';
+import {
+  getCachedSessionUser,
+  hasSupabaseCredentials,
+  onAuthStateChange,
+} from '../../services/supabase';
 import { APP_VERSION } from '../../data/version';
 import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
+import { isSettingsPinRequired } from '../../utils/pinValidation';
 
 const ChangelogModal = React.lazy(() =>
   import('../changelog/ChangelogModal').then((m) => ({ default: m.ChangelogModal }))
@@ -36,6 +41,7 @@ interface AmbientQuickMenuProps {
   onOpenSettings: () => void;
   /** Opens household sharing through App, which asks for the PIN when settings need it */
   onOpenShare?: () => void;
+  onAuthorizeSettings?: (onAuthorized: () => void, challengePrompt?: { title?: string; subtitle?: string }) => void;
   onToggleFullscreen: () => void;
   isFullscreen: boolean;
   onToggleMobileCompanion?: () => void;
@@ -48,6 +54,7 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
   onClose,
   onSelectTab,
   onOpenSettings,
+  onAuthorizeSettings,
   onToggleFullscreen,
   isFullscreen,
   onToggleMobileCompanion,
@@ -64,10 +71,11 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
   const toggleDockHidden = useDashboardStore((s) => s.toggleDockHidden);
   const tabs = useDashboardStore((s) => s.tabs);
 
-  // Sync cloud authentication state
+  // Sync cloud authentication state only when menu is open and cloud is configured
   useEffect(() => {
+    if (!isOpen || !hasSupabaseCredentials()) return;
     let active = true;
-    void getCurrentUser().then((user) => {
+    void getCachedSessionUser().then((user) => {
       if (active) setCloudEmail(user?.email ?? null);
     });
     const unsubscribe = onAuthStateChange((user) => {
@@ -78,6 +86,21 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
       unsubscribe();
     };
   }, [isOpen]);
+
+  const runProtectedSettingAction = (action: () => void, subtitle: string) => {
+    if (isSettingsPinRequired(useDashboardStore.getState().settings) && onAuthorizeSettings) {
+      onClose();
+      onAuthorizeSettings(
+        () => {
+          action();
+          useDashboardStore.getState().lockKiosk();
+        },
+        { subtitle }
+      );
+      return;
+    }
+    action();
+  };
 
   // Live clock display in header (only active while quick menu is open)
   useEffect(() => {
@@ -249,7 +272,10 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
           <button
             type="button"
             onClick={() => {
-              setCarouselEnabled(!settings.carouselEnabled);
+              const nextEnabled = !useDashboardStore.getState().settings.carouselEnabled;
+              runProtectedSettingAction(() => {
+                void setCarouselEnabled(nextEnabled);
+              }, 'Enter parent PIN to change auto-rotate settings');
             }}
             className={`p-2.5 rounded-xl border flex flex-col items-start gap-1 transition-all cursor-pointer text-left ${
               settings.carouselEnabled
@@ -312,7 +338,9 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
           <button
             type="button"
             onClick={() => {
-              toggleSnapToGrid();
+              runProtectedSettingAction(() => {
+                void toggleSnapToGrid();
+              }, 'Enter parent PIN to change grid snapping');
             }}
             className={`w-full flex items-center justify-between px-3 py-2 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
               settings.snapToGrid
@@ -338,7 +366,9 @@ export const AmbientQuickMenu: React.FC<AmbientQuickMenuProps> = ({
             type="button"
             onClick={() => {
               onClose();
-              toggleDockHidden();
+              runProtectedSettingAction(() => {
+                void toggleDockHidden();
+              }, 'Enter parent PIN to show or hide the navigation toolbar');
             }}
             className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-gray-900/80 hover:bg-gray-800/90 border border-gray-800 text-xs font-medium text-gray-200 transition-all cursor-pointer"
           >

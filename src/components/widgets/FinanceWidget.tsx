@@ -33,6 +33,7 @@ import {
 import { useDashboardStore } from '../../store/dashboardStore';
 import { isAmbientlyInNightMode } from '../../utils/confetti';
 import { resolveFinanceAutoMode } from '../../utils/displayOrientation';
+import { useDisplayActivity } from '../../utils/displayActivity';
 
 interface FinanceWidgetProps {
   title?: string;
@@ -173,9 +174,15 @@ export const FinanceWidget: React.FC<FinanceWidgetProps> = ({
   transparentBg = false,
   onUpdateConfig,
 }) => {
-  const dashboardSettings = useDashboardStore((state) => state.settings);
-  const isNightMode =
-    Boolean(dashboardSettings?.nightModeEnabled) || isAmbientlyInNightMode(dashboardSettings);
+  const nightModeSetting = useDashboardStore((state) => Boolean(state.settings?.nightModeEnabled));
+  const { isNightMode: activityNightMode, shouldPauseAnimations } = useDisplayActivity();
+  const isNightMode = activityNightMode || nightModeSetting || isAmbientlyInNightMode();
+  const shouldPauseRef = useRef(shouldPauseAnimations);
+  useEffect(() => {
+    shouldPauseRef.current = shouldPauseAnimations;
+  }, [shouldPauseAnimations]);
+  const wasPausedRef = useRef(false);
+  const lastFetchAtRef = useRef(0);
 
   const svgBaseId = useId().replace(/:/g, '');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -270,6 +277,7 @@ export const FinanceWidget: React.FC<FinanceWidgetProps> = ({
     let activeController: AbortController | null = null;
 
     const runFetch = async () => {
+      lastFetchAtRef.current = Date.now();
       if (activeController) {
         activeController.abort();
       }
@@ -304,12 +312,16 @@ export const FinanceWidget: React.FC<FinanceWidgetProps> = ({
     const intervalMs = refreshIntervalMin * 60_000;
     const interval = window.setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-      if (isNightMode) return;
+      if (shouldPauseRef.current) return;
       void runFetch();
     }, intervalMs);
 
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible' && !isNightMode) {
+      if (
+        document.visibilityState === 'visible' &&
+        !shouldPauseRef.current &&
+        Date.now() - lastFetchAtRef.current >= intervalMs
+      ) {
         void runFetch();
       }
     };
@@ -321,7 +333,19 @@ export const FinanceWidget: React.FC<FinanceWidgetProps> = ({
       window.clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [symbolsKey, range, requestKey, refreshTick, refreshIntervalMin, isNightMode]);
+  }, [symbolsKey, range, requestKey, refreshTick, refreshIntervalMin]);
+
+  useEffect(() => {
+    const intervalMs = refreshIntervalMin * 60_000;
+    if (
+      wasPausedRef.current &&
+      !shouldPauseAnimations &&
+      Date.now() - lastFetchAtRef.current >= intervalMs
+    ) {
+      setRefreshTick((t) => t + 1);
+    }
+    wasPausedRef.current = shouldPauseAnimations;
+  }, [shouldPauseAnimations, refreshIntervalMin]);
 
   // Debounced ticker autocomplete when quick-add search is open
   useEffect(() => {
@@ -765,14 +789,14 @@ export const FinanceWidget: React.FC<FinanceWidgetProps> = ({
           <div
             className={
               tickerShouldScroll
-                ? 'ambiently-ticker-track hover:[animation-play-state:paused]'
+                ? `ambiently-ticker-track hover:[animation-play-state:paused]${shouldPauseAnimations ? ' ambiently-ticker-paused' : ''}`
                 : 'flex items-center gap-2.5 overflow-x-auto no-scrollbar w-full'
             }
             style={
               tickerShouldScroll
                 ? ({
                     '--ticker-duration': `${Math.max(18, activeQuotes.length * 6)}s`,
-                    animationPlayState: isNightMode ? 'paused' : undefined,
+                    animationPlayState: shouldPauseAnimations ? 'paused' : undefined,
                   } as React.CSSProperties)
                 : undefined
             }

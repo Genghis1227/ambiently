@@ -2,7 +2,7 @@
   "name": "ambiently",
   "description": "Modern, ambient smart-display and command center PWA (dashboard.trinhism.com)",
   "private": true,
-  "version": "0.8.10",
+  "version": "0.8.11",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -21,7 +21,6 @@
     "dexie": "^4.4.7",
     "dompurify": "^3.4.18",
     "fast-xml-parser": "^5.11.2",
-    "framer-motion": "^14.9.0",
     "ical.js": "^2.2.1",
     "libheif-js": "^1.23.5",
     "linkedom": "^0.18.15",

@@ -103,7 +103,7 @@ describe('/api/rss XML parsing, HTML stripping & security (functions/api/rss.ts)
         ),
       });
       assert.equal(res.status, 200);
-      assert.equal(res.headers.get('Cache-Control'), 'public, max-age=600');
+      assert.equal(res.headers.get('Cache-Control'), 'private, max-age=600');
 
       const data = (await res.json()) as {
         title: string;
@@ -193,7 +193,7 @@ describe('/api/rss XML parsing, HTML stripping & security (functions/api/rss.ts)
         ),
       });
       assert.equal(res.status, 200);
-      assert.equal(res.headers.get('Cache-Control'), 'no-store');
+      assert.equal(res.headers.get('Cache-Control'), 'private, no-store');
 
       const data = (await res.json()) as {
         title: string;

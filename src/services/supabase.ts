@@ -888,13 +888,17 @@ export async function resolveActiveDashboardId(): Promise<{ dashboardId: string;
     if (user.email) {
       const { data: membership } = await sb
         .from('dashboard_members')
-        .select('dashboard_id')
+        .select('dashboard_id, user_id')
         .eq('email', user.email.toLowerCase())
         .not('accepted_at', 'is', null)
         .limit(1)
         .maybeSingle();
 
-      if (membership?.dashboard_id && membership.dashboard_id !== user.id) {
+      if (
+        membership?.dashboard_id &&
+        membership.dashboard_id !== user.id &&
+        (!membership.user_id || membership.user_id === user.id)
+      ) {
         const { data: sharedDash } = await sb
           .from('dashboards')
           .select('id, user_id')

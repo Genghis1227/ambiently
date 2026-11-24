@@ -52,12 +52,13 @@ export const RssWidget: React.FC<RssWidgetProps> = ({
   const [feedTitle, setFeedTitle] = useState("Tony's Tipbits");
   const [articles, setArticles] = useState<RssArticle[]>([]);
   const [loading, setLoading] = useState(false);
-  const { isOledNightClock } = useDisplayActivity();
-  const isOledRef = useRef(isOledNightClock);
+  const { shouldPauseAnimations } = useDisplayActivity();
+  const shouldPauseRef = useRef(shouldPauseAnimations);
   useEffect(() => {
-    isOledRef.current = isOledNightClock;
-  }, [isOledNightClock]);
-  const wasOledRef = useRef(false);
+    shouldPauseRef.current = shouldPauseAnimations;
+  }, [shouldPauseAnimations]);
+  const wasPausedRef = useRef(false);
+  const lastFetchAtRef = useRef(0);
 
   // Measure container dimensions adaptively as tile resizes or enters fullscreen
   useEffect(() => {
@@ -85,6 +86,7 @@ export const RssWidget: React.FC<RssWidgetProps> = ({
   }, []);
 
   const loadFeed = useCallback(async (forceRefresh = false) => {
+    lastFetchAtRef.current = Date.now();
     setLoading(true);
     try {
       const data = await fetchRssFeed(feedUrl, forceRefresh);
@@ -100,18 +102,22 @@ export const RssWidget: React.FC<RssWidgetProps> = ({
   useEffect(() => {
     void loadFeed();
     const interval = setInterval(() => {
-      if ((typeof document !== 'undefined' && document.visibilityState === 'hidden') || isOledRef.current) return;
+      if ((typeof document !== 'undefined' && document.visibilityState === 'hidden') || shouldPauseRef.current) return;
       void loadFeed();
     }, 15 * 60 * 1000);
     return () => clearInterval(interval);
   }, [loadFeed]);
 
   useEffect(() => {
-    if (wasOledRef.current && !isOledNightClock) {
+    if (
+      wasPausedRef.current &&
+      !shouldPauseAnimations &&
+      Date.now() - lastFetchAtRef.current >= 15 * 60 * 1000
+    ) {
       void loadFeed();
     }
-    wasOledRef.current = isOledNightClock;
-  }, [isOledNightClock, loadFeed]);
+    wasPausedRef.current = shouldPauseAnimations;
+  }, [shouldPauseAnimations, loadFeed]);
 
   const handleSelectSuggestedFeed = (url: string) => {
     if (onUpdateConfig) {

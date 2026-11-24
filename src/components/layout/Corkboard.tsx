@@ -127,10 +127,9 @@ const SoundscapeWidget = React.lazy(() =>
 const HomelabWidget = React.lazy(() =>
   import('../widgets/HomelabWidget').then((m) => ({ default: m.HomelabWidget }))
 );
-import { useDashboardStore } from '../../store/dashboardStore';
+import { useDashboardStore, type CanvasZOrderUpdate } from '../../store/dashboardStore';
 import { CANVAS_THEMES, isCanvasThemeLight } from '../../data/canvasThemes';
 import { findOpenCanvasSpot } from '../../utils/autoLayout';
-import { useIsCursorHidden } from '../../hooks/useIdleCursor';
 import {
   resolveWidgetToolbarPlacement,
   shouldShowWidgetToolbarFullscreenButton,
@@ -192,6 +191,7 @@ interface CorkboardProps {
   onOpenAddWidget?: () => void;
   onUpdateWidget?: (widgetId: string, updates: Partial<DashboardWidget>) => void;
   onUpdateTab?: (tabId: string, updates: Partial<DashboardTab>) => void;
+  onAuthorizeSettings?: (onAuthorized: () => void, prompt?: { title?: string; subtitle?: string }) => void;
   snapToGrid?: boolean;
   isCanvasLocked?: boolean;
 }
@@ -645,7 +645,6 @@ interface MemoizedCanvasWidgetCardProps {
   widget: DashboardWidget;
   isWidgetLight: boolean;
   isCanvasLocked: boolean;
-  isCursorHidden: boolean;
   isSwipeNavigationActive: boolean;
   defaultWidgetStyle: DefaultWidgetFrameStyle;
   reduceVisualEffects: boolean;
@@ -685,7 +684,6 @@ const MemoizedCanvasWidgetCard: React.FC<MemoizedCanvasWidgetCardProps> = React.
   widget,
   isWidgetLight,
   isCanvasLocked,
-  isCursorHidden,
   isSwipeNavigationActive,
   defaultWidgetStyle,
   reduceVisualEffects,
@@ -877,19 +875,11 @@ const MemoizedCanvasWidgetCard: React.FC<MemoizedCanvasWidgetCardProps> = React.
             e.stopPropagation();
             handlersRef.current?.onUpdateWidgetPos?.(widget.id, widget.gridPos, { ...pos, rotation: 0 });
           }}
-          title={
-            isCursorHidden
-              ? undefined
-              : 'Grab and drag in a circle to rotate tile (double-click to reset to 0°)'
-          }
+          title="Grab and drag in a circle to rotate tile (double-click to reset to 0°)"
           className={`absolute ${
             isNarrowCardForToolbar ? 'left-3' : 'left-1/2 -translate-x-1/2'
           } z-50 flex flex-col items-center transition-opacity pointer-events-auto cursor-grab active:cursor-grabbing px-3 ${
-            isRotating
-              ? 'opacity-100'
-              : isCursorHidden
-                ? 'opacity-0 pointer-events-none'
-                : 'opacity-0 group-hover:opacity-100'
+            isRotating ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
           } ${
             toolbarPlacement === 'outside-bottom'
               ? '-bottom-8 pt-2 flex-col-reverse'
@@ -927,9 +917,7 @@ const MemoizedCanvasWidgetCard: React.FC<MemoizedCanvasWidgetCardProps> = React.
               onSetExpandedCompactToolbarId((prev) => (prev === widget.id ? null : prev));
             }
           }}
-          className={`absolute z-50 transition-opacity ${
-            isCursorHidden ? 'opacity-0 pointer-events-none' : 'opacity-0 group-hover:opacity-100'
-          } ${
+          className={`absolute z-50 transition-opacity opacity-0 group-hover:opacity-100 ${
             toolbarPlacement === 'outside-top'
               ? 'bottom-full right-2 pb-1.5'
               : toolbarPlacement === 'outside-bottom'
@@ -948,7 +936,7 @@ const MemoizedCanvasWidgetCard: React.FC<MemoizedCanvasWidgetCardProps> = React.
                 e.stopPropagation();
                 onSetExpandedCompactToolbarId(widget.id);
               }}
-              title={isCursorHidden ? undefined : 'Tile actions'}
+              title="Tile actions"
               className={`flex items-center justify-center px-2 py-0.5 rounded-full backdrop-blur-md shadow-lg transition-colors cursor-pointer ${
                 isWidgetLight
                   ? 'bg-white/95 border border-slate-300/90 text-slate-600 hover:text-slate-900'
@@ -981,11 +969,9 @@ const MemoizedCanvasWidgetCard: React.FC<MemoizedCanvasWidgetCardProps> = React.
                     }
                   }}
                   title={
-                    isCursorHidden
-                      ? undefined
-                      : pos.rotation !== 0
-                        ? `Rotated ${pos.rotation}° — drag to rotate or click to reset to 0°`
-                        : 'Drag in a circle to rotate tile'
+                    pos.rotation !== 0
+                      ? `Rotated ${pos.rotation}° — drag to rotate or click to reset to 0°`
+                      : 'Drag in a circle to rotate tile'
                   }
                   className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold flex items-center gap-0.5 transition-all cursor-grab active:cursor-grabbing ${
                     pos.rotation !== 0
@@ -1008,7 +994,7 @@ const MemoizedCanvasWidgetCard: React.FC<MemoizedCanvasWidgetCardProps> = React.
                     onOpenWidgetSettings(widget);
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
-                  title={isCursorHidden ? undefined : 'Configure tile title and settings'}
+                  title="Configure tile title and settings"
                   className={`p-1 rounded-lg transition-all cursor-pointer ${
                     isWidgetLight
                       ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
@@ -1037,7 +1023,7 @@ const MemoizedCanvasWidgetCard: React.FC<MemoizedCanvasWidgetCardProps> = React.
                     });
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
-                  title={isCursorHidden ? undefined : 'Layer order & appearance'}
+                  title="Layer order & appearance"
                   className={`p-1 rounded-lg transition-all cursor-pointer ${
                     isWidgetLight
                       ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
@@ -1056,13 +1042,7 @@ const MemoizedCanvasWidgetCard: React.FC<MemoizedCanvasWidgetCardProps> = React.
                     onToggleWidgetFullScreen(widget, !isFullScreen);
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
-                  title={
-                    isCursorHidden
-                      ? undefined
-                      : isFullScreen
-                        ? 'Restore card size'
-                        : 'Fill full screen / canvas'
-                  }
+                  title={isFullScreen ? 'Restore card size' : 'Fill full screen / canvas'}
                   className={`p-1 rounded-lg transition-all cursor-pointer ${
                     isWidgetLight
                       ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
@@ -1086,7 +1066,7 @@ const MemoizedCanvasWidgetCard: React.FC<MemoizedCanvasWidgetCardProps> = React.
                     handlersRef.current?.onRemoveWidget?.(widget.id);
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
-                  title={isCursorHidden ? undefined : 'Remove widget'}
+                  title="Remove widget"
                   className="p-1 rounded-lg hover:bg-red-500/80 text-gray-400 hover:text-white transition-all cursor-pointer"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -1104,13 +1084,9 @@ const MemoizedCanvasWidgetCard: React.FC<MemoizedCanvasWidgetCardProps> = React.
           data-no-canvas-swipe="true"
           data-kiosk-edit-chrome="true"
           onPointerDown={(e) => handlersRef.current?.onResizePointerDown(e, widget.id, 'widget', pos)}
-          title={isCursorHidden ? undefined : 'Drag to resize tile'}
+          title="Drag to resize tile"
           className={`absolute bottom-1 right-1 p-1.5 cursor-nwse-resize z-40 touch-none transition-opacity ${
-            isResizing
-              ? 'opacity-100'
-              : isCursorHidden
-                ? 'opacity-0 pointer-events-none'
-                : 'opacity-40 group-hover:opacity-100 hover:opacity-100'
+            isResizing ? 'opacity-100' : 'opacity-40 group-hover:opacity-100 hover:opacity-100'
           } ${
             isWidgetLight ? 'text-slate-400 hover:text-slate-800' : 'text-gray-400 hover:text-white'
           }`}
@@ -1168,7 +1144,6 @@ interface MemoizedCanvasStickyNoteCardProps {
   note: StickyNoteItem;
   nowMs: number;
   isCanvasLocked: boolean;
-  isCursorHidden: boolean;
   isSwipeNavigationActive: boolean;
   isHighlighted: boolean;
   hasStickyNotesTile: boolean;
@@ -1189,7 +1164,6 @@ const MemoizedCanvasStickyNoteCard: React.FC<MemoizedCanvasStickyNoteCardProps> 
   note,
   nowMs,
   isCanvasLocked,
-  isCursorHidden,
   isSwipeNavigationActive,
   isHighlighted,
   hasStickyNotesTile,
@@ -1330,7 +1304,7 @@ const MemoizedCanvasStickyNoteCard: React.FC<MemoizedCanvasStickyNoteCardProps> 
             e.stopPropagation();
             handlersRef.current?.onUpdateNotePos(note.id, { ...pos, rotation: 0 });
           }}
-          title={isCursorHidden ? undefined : 'Grab and drag in a circle to rotate note (double-click to reset to 0°)'}
+          title="Grab and drag in a circle to rotate note (double-click to reset to 0°)"
           className={`absolute -top-7.5 left-1/2 -translate-x-1/2 flex flex-col items-center z-50 transition-opacity pointer-events-auto cursor-grab active:cursor-grabbing px-3 pb-2 ${
             isRotating ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
           }`}
@@ -1381,7 +1355,7 @@ const MemoizedCanvasStickyNoteCard: React.FC<MemoizedCanvasStickyNoteCardProps> 
           <div className="flex items-center gap-1 shrink-0 select-none touch-none">
             {note.expiresAt && (
               <span
-                title={isCursorHidden ? undefined : `Expires: ${new Date(note.expiresAt).toLocaleString()}`}
+                title={`Expires: ${new Date(note.expiresAt).toLocaleString()}`}
                 className={`text-[9px] px-1.5 py-0.5 rounded-full flex items-center gap-0.5 select-none touch-none ${
                   isExpiringSoon ? 'bg-amber-500/30 text-amber-950 font-bold' : 'bg-black/10 text-gray-700'
                 }`}
@@ -1401,7 +1375,7 @@ const MemoizedCanvasStickyNoteCard: React.FC<MemoizedCanvasStickyNoteCardProps> 
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
                   className="p-1 rounded-md text-gray-700 hover:text-blue-900 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
-                  title={isCursorHidden ? undefined : 'Edit note'}
+                  title="Edit note"
                 >
                   <Edit2 className="w-3 h-3" />
                 </button>
@@ -1424,7 +1398,7 @@ const MemoizedCanvasStickyNoteCard: React.FC<MemoizedCanvasStickyNoteCardProps> 
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
                   className="p-1 rounded-md text-gray-700 hover:text-blue-900 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
-                  title={isCursorHidden ? undefined : 'Layer order (Bring to Front / Send to Back)'}
+                  title="Layer order (Bring to Front / Send to Back)"
                 >
                   <Layers className="w-3 h-3" />
                 </button>
@@ -1442,11 +1416,9 @@ const MemoizedCanvasStickyNoteCard: React.FC<MemoizedCanvasStickyNoteCardProps> 
                   onPointerDown={(e) => e.stopPropagation()}
                   className="p-1 rounded-md text-gray-700 hover:text-red-900 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
                   title={
-                    isCursorHidden
-                      ? undefined
-                      : hasStickyNotesTile
-                        ? 'Close from canvas (remains saved in Notes Tile)'
-                        : 'Delete note (move to Archive)'
+                    hasStickyNotesTile
+                      ? 'Close from canvas (remains saved in Notes Tile)'
+                      : 'Delete note (move to Archive)'
                   }
                 >
                   <X className="w-3 h-3" />
@@ -1486,7 +1458,7 @@ const MemoizedCanvasStickyNoteCard: React.FC<MemoizedCanvasStickyNoteCardProps> 
                   onPointerDown={(e) => {
                     e.stopPropagation();
                   }}
-                  title={isCursorHidden ? undefined : item.done ? 'Mark as incomplete' : 'Mark as complete'}
+                  title={item.done ? 'Mark as incomplete' : 'Mark as complete'}
                   className="p-0.5 -m-0.5 hover:opacity-80 transition-opacity shrink-0 cursor-pointer text-gray-700 hover:text-gray-900"
                 >
                   {item.done ? (
@@ -1542,7 +1514,7 @@ const MemoizedCanvasStickyNoteCard: React.FC<MemoizedCanvasStickyNoteCardProps> 
               }}
               onPointerDown={(e) => e.stopPropagation()}
               style={{ backgroundColor: color }}
-              title={isCursorHidden ? undefined : 'Change note color'}
+              title="Change note color"
               className={`w-3.5 h-3.5 rounded-full border transition-transform cursor-pointer ${
                 (note.bgColor || '#fef08a') === color
                   ? 'border-gray-900 scale-125 ring-1 ring-gray-900/50'
@@ -1565,7 +1537,7 @@ const MemoizedCanvasStickyNoteCard: React.FC<MemoizedCanvasStickyNoteCardProps> 
             }}
             onPointerDown={(e) => e.stopPropagation()}
             className="px-1 py-0.5 rounded text-[9px] font-mono text-gray-700 hover:bg-black/10 transition-all cursor-pointer"
-            title={isCursorHidden ? undefined : 'Straighten note (0°)'}
+            title="Straighten note (0°)"
           >
             0°
           </button>
@@ -1579,7 +1551,7 @@ const MemoizedCanvasStickyNoteCard: React.FC<MemoizedCanvasStickyNoteCardProps> 
               }}
               onPointerDown={(e) => e.stopPropagation()}
               className="p-1.5 rounded-lg text-gray-700 hover:text-red-700 hover:bg-black/10 active:bg-black/20 transition-all cursor-pointer"
-              title={isCursorHidden ? undefined : 'Archive note to Trash'}
+              title="Archive note to Trash"
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
@@ -1594,7 +1566,7 @@ const MemoizedCanvasStickyNoteCard: React.FC<MemoizedCanvasStickyNoteCardProps> 
           data-no-canvas-swipe="true"
           data-kiosk-edit-chrome="true"
           onPointerDown={(e) => handlersRef.current?.onResizePointerDown(e, note.id, 'note', pos)}
-          title={isCursorHidden ? undefined : 'Drag to resize note (from mini post-it to full poster)'}
+          title="Drag to resize note (from mini post-it to full poster)"
           className="absolute bottom-1 right-1 p-1.5 cursor-nwse-resize z-20 opacity-50 group-hover:opacity-100 hover:opacity-100 touch-none text-gray-700 hover:text-black transition-opacity"
         >
           <svg width="12" height="12" viewBox="0 0 12 12" className="fill-current">
@@ -1629,7 +1601,7 @@ function shouldYieldToEdgeSwipeCardEvent(
   });
 }
 
-export const Corkboard: React.FC<CorkboardProps> = ({
+export const Corkboard: React.FC<CorkboardProps> = React.memo(({
   notes,
   widgets = [],
   tabs = [],
@@ -1656,6 +1628,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   onOpenAddWidget,
   onUpdateWidget,
   onUpdateTab,
+  onAuthorizeSettings,
   snapToGrid = false,
   isCanvasLocked = false,
 }) => {
@@ -1663,7 +1636,6 @@ export const Corkboard: React.FC<CorkboardProps> = ({
   const defaultWidgetStyle = useDashboardStore((s) => s.settings.defaultWidgetStyle || 'auto');
   const canvasSwipeEnabled = useDashboardStore((s) => s.settings.canvasSwipeEnabled !== false);
   const reduceVisualEffects = useDashboardStore((s) => Boolean(s.settings.reduceVisualEffects));
-  const isCursorHidden = useIsCursorHidden();
   const [expandedCompactToolbarId, setExpandedCompactToolbarId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [draggingType, setDraggingType] = useState<'note' | 'widget'>('note');
@@ -1872,77 +1844,47 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     // Sort ascending by current zIndex
     foreground.sort((a, b) => a.zIndex - b.zIndex);
 
-    // Re-index remaining foreground items sequentially to guarantee no ties or gaps
+    const updates: CanvasZOrderUpdate[] = [];
+    // Re-index remaining foreground items sequentially in one store batch
     foreground.forEach((item, index) => {
       const normalizedZ = index + 1;
-      if (item.zIndex !== normalizedZ) {
-        if (item.type === 'widget' && onUpdateWidgetPos) {
-          onUpdateWidgetPos(item.id, item.gridPos, {
-            ...item.pos,
-            zIndex: normalizedZ,
-            isBackground: false,
-          });
-        } else if (item.type === 'note' && onUpdateNotePos) {
-          onUpdateNotePos(item.id, {
-            ...item.pos,
-            zIndex: normalizedZ,
-            isBackground: false,
-          });
-        }
+      if (item.zIndex !== normalizedZ || item.isBackground) {
+        updates.push({
+          id: item.id,
+          type: item.type,
+          zIndex: normalizedZ,
+          isBackground: false,
+        });
       }
     });
 
     // Place target item strictly at the top layer
     const topZ = foreground.length + 1;
-    if (targetItem.type === 'widget' && onUpdateWidgetPos) {
-      onUpdateWidgetPos(id, targetItem.gridPos, {
-        ...targetItem.pos,
+    if (targetItem.zIndex !== topZ || targetItem.isBackground) {
+      updates.push({
+        id: targetItem.id,
+        type: targetItem.type,
         zIndex: topZ,
         isBackground: false,
       });
-    } else if (targetItem.type === 'note' && onUpdateNotePos) {
-      onUpdateNotePos(id, {
-        ...targetItem.pos,
-        zIndex: topZ,
-        isBackground: false,
-      });
+    }
+
+    if (updates.length > 0) {
+      void useDashboardStore.getState().applyCanvasZOrderUpdates(updates);
     }
 
     setContextMenu(null);
   };
 
   const handleSendToBack = (id: string, type: 'widget' | 'note') => {
-    if (type === 'widget' && onUpdateWidgetPos) {
-      const w = widgets.find((x) => x.id === id);
-      const pos = w?.freeformPos || {
-        xRatio: 0.1,
-        yRatio: 0.1,
-        wRatio: 0.35,
-        hRatio: 0.45,
-        zIndex: 0,
-        rotation: 0,
-      };
-      onUpdateWidgetPos(id, w?.gridPos, {
-        ...pos,
+    void useDashboardStore.getState().applyCanvasZOrderUpdates([
+      {
+        id,
+        type,
         zIndex: 0,
         isBackground: true,
-      });
-    } else if (type === 'note' && onUpdateNotePos) {
-      const n = notes.find((x) => x.id === id);
-      const pos = n?.freeformPos || {
-        xRatio: 0.15,
-        yRatio: 0.15,
-        wRatio: 0.26,
-        hRatio: 0.3,
-        zIndex: 0,
-        rotation: 0,
-      };
-      onUpdateNotePos(id, {
-        ...pos,
-        zIndex: 0,
-        isBackground: true,
-      });
-    }
+      },
+    ]);
     setContextMenu(null);
   };
 
@@ -1969,16 +1911,22 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       foreground[idx + 1] = temp;
     }
 
+    const updates: CanvasZOrderUpdate[] = [];
     foreground.forEach((item, index) => {
       const newZ = index + 1;
-      if (item.zIndex !== newZ) {
-        if (item.type === 'widget' && onUpdateWidgetPos) {
-          onUpdateWidgetPos(item.id, item.gridPos, { ...item.pos, zIndex: newZ, isBackground: false });
-        } else if (item.type === 'note' && onUpdateNotePos) {
-          onUpdateNotePos(item.id, { ...item.pos, zIndex: newZ, isBackground: false });
-        }
+      if (item.zIndex !== newZ || item.isBackground) {
+        updates.push({
+          id: item.id,
+          type: item.type,
+          zIndex: newZ,
+          isBackground: false,
+        });
       }
     });
+
+    if (updates.length > 0) {
+      void useDashboardStore.getState().applyCanvasZOrderUpdates(updates);
+    }
 
     setContextMenu(null);
   };
@@ -2009,16 +1957,22 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     foreground[idx] = foreground[idx - 1];
     foreground[idx - 1] = temp;
 
+    const updates: CanvasZOrderUpdate[] = [];
     foreground.forEach((item, index) => {
       const newZ = index + 1;
-      if (item.zIndex !== newZ) {
-        if (item.type === 'widget' && onUpdateWidgetPos) {
-          onUpdateWidgetPos(item.id, item.gridPos, { ...item.pos, zIndex: newZ, isBackground: false });
-        } else if (item.type === 'note' && onUpdateNotePos) {
-          onUpdateNotePos(item.id, { ...item.pos, zIndex: newZ, isBackground: false });
-        }
+      if (item.zIndex !== newZ || item.isBackground) {
+        updates.push({
+          id: item.id,
+          type: item.type,
+          zIndex: newZ,
+          isBackground: false,
+        });
       }
     });
+
+    if (updates.length > 0) {
+      void useDashboardStore.getState().applyCanvasZOrderUpdates(updates);
+    }
 
     setContextMenu(null);
   };
@@ -2128,9 +2082,30 @@ export const Corkboard: React.FC<CorkboardProps> = ({
     []
   );
 
-  const handleOpenWidgetSettings = useCallback((target: DashboardWidget) => {
-    setEditingWidget(target);
-  }, []);
+  const requestOpenWidgetSettings = useCallback(
+    (target: DashboardWidget) => {
+      const openTarget = () => {
+        const latestTarget =
+          useDashboardStore.getState().widgets.find((w) => w.id === target.id) || target;
+        setEditingWidget(latestTarget);
+      };
+      if (onAuthorizeSettings) {
+        onAuthorizeSettings(openTarget, {
+          subtitle: 'Enter parent PIN to edit tile settings & sources',
+        });
+        return;
+      }
+      openTarget();
+    },
+    [onAuthorizeSettings]
+  );
+
+  const handleOpenWidgetSettings = useCallback(
+    (target: DashboardWidget) => {
+      requestOpenWidgetSettings(target);
+    },
+    [requestOpenWidgetSettings]
+  );
 
   const handleToggleWidgetFullScreen = useCallback(
     (target: DashboardWidget, makeFullScreen: boolean) => {
@@ -3060,7 +3035,6 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             widget={widget}
             isWidgetLight={isWidgetLight}
             isCanvasLocked={isCanvasLocked}
-            isCursorHidden={isCursorHidden}
             isSwipeNavigationActive={isSwipeNavigationActive}
             defaultWidgetStyle={defaultWidgetStyle}
             reduceVisualEffects={reduceVisualEffects}
@@ -3101,7 +3075,6 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             note={note}
             nowMs={nowMs}
             isCanvasLocked={isCanvasLocked}
-            isCursorHidden={isCursorHidden}
             isSwipeNavigationActive={isSwipeNavigationActive}
             isHighlighted={highlightedNoteId === note.id}
             hasStickyNotesTile={hasStickyNotesTile}
@@ -3171,7 +3144,12 @@ export const Corkboard: React.FC<CorkboardProps> = ({
         <React.Suspense fallback={null}>
           <WidgetSettingsModal
             isOpen={editingWidget !== null}
-            onClose={() => setEditingWidget(null)}
+            onClose={() => {
+              setEditingWidget(null);
+              if (!photoSourcesTarget) {
+                useDashboardStore.getState().lockKiosk();
+              }
+            }}
             widget={editingWidget}
             onSave={(widgetId, updates) => {
               if (onUpdateWidget) {
@@ -3207,7 +3185,12 @@ export const Corkboard: React.FC<CorkboardProps> = ({
           <React.Suspense fallback={null}>
             <PhotoSourcesModal
               isOpen={true}
-              onClose={() => setPhotoSourcesTarget(null)}
+              onClose={() => {
+                setPhotoSourcesTarget(null);
+                if (!editingWidget) {
+                  useDashboardStore.getState().lockKiosk();
+                }
+              }}
               targetWidgetId={activePhotoWidget.id}
               isCommonSource={isUsingCommon}
               initialWebUrls={
@@ -3317,7 +3300,7 @@ export const Corkboard: React.FC<CorkboardProps> = ({
             onUpdateNotePos={onUpdateNotePos}
             onRemoveWidget={onRemoveWidget}
             onDeleteNote={onDeleteNote}
-            onEditWidget={(w) => setEditingWidget(w)}
+            onEditWidget={requestOpenWidgetSettings}
             onEditNote={openNoteEditorForExisting}
             onDuplicateNote={handleDuplicateNote}
             onBringToFront={handleBringToFront}
@@ -3333,4 +3316,4 @@ export const Corkboard: React.FC<CorkboardProps> = ({
       )}
     </div>
   );
-};
+});

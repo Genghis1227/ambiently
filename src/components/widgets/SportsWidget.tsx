@@ -29,6 +29,7 @@ import {
 } from '../../services/sports';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { isAmbientlyInNightMode } from '../../utils/confetti';
+import { useDisplayActivity } from '../../utils/displayActivity';
 
 interface SportsWidgetProps {
   title?: string;
@@ -140,9 +141,15 @@ export const SportsWidget: React.FC<SportsWidgetProps> = ({
   isLight = false,
   transparentBg = false,
 }) => {
-  const dashboardSettings = useDashboardStore((state) => state.settings);
-  const isNightMode =
-    Boolean(dashboardSettings?.nightModeEnabled) || isAmbientlyInNightMode(dashboardSettings);
+  const nightModeSetting = useDashboardStore((state) => Boolean(state.settings?.nightModeEnabled));
+  const { isNightMode: activityNightMode, shouldPauseAnimations } = useDisplayActivity();
+  const isNightMode = activityNightMode || nightModeSetting || isAmbientlyInNightMode();
+  const shouldPauseRef = useRef(shouldPauseAnimations);
+  useEffect(() => {
+    shouldPauseRef.current = shouldPauseAnimations;
+  }, [shouldPauseAnimations]);
+  const wasPausedRef = useRef(false);
+  const lastFetchAtRef = useRef(0);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const tickerMeasureRef = useRef<HTMLDivElement>(null);
@@ -246,6 +253,7 @@ export const SportsWidget: React.FC<SportsWidgetProps> = ({
     let activeController: AbortController | null = null;
 
     const runFetch = async () => {
+      lastFetchAtRef.current = Date.now();
       if (activeController) activeController.abort();
       const controller = new AbortController();
       activeController = controller;
@@ -276,12 +284,16 @@ export const SportsWidget: React.FC<SportsWidgetProps> = ({
     const intervalMs = refreshIntervalMin * 60_000;
     const interval = window.setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-      if (isNightMode) return;
+      if (shouldPauseRef.current) return;
       void runFetch();
     }, intervalMs);
 
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible' && !isNightMode) {
+      if (
+        document.visibilityState === 'visible' &&
+        !shouldPauseRef.current &&
+        Date.now() - lastFetchAtRef.current >= intervalMs
+      ) {
         void runFetch();
       }
     };
@@ -293,7 +305,19 @@ export const SportsWidget: React.FC<SportsWidgetProps> = ({
       window.clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [leaguesKey, refreshTick, refreshIntervalMin, isNightMode]);
+  }, [leaguesKey, refreshTick, refreshIntervalMin]);
+
+  useEffect(() => {
+    const intervalMs = refreshIntervalMin * 60_000;
+    if (
+      wasPausedRef.current &&
+      !shouldPauseAnimations &&
+      Date.now() - lastFetchAtRef.current >= intervalMs
+    ) {
+      setRefreshTick((t) => t + 1);
+    }
+    wasPausedRef.current = shouldPauseAnimations;
+  }, [shouldPauseAnimations, refreshIntervalMin]);
 
   const rawGames = useMemo(() => {
     if (fetchResult.key === leaguesKey && fetchResult.games.length > 0) {
@@ -532,14 +556,14 @@ export const SportsWidget: React.FC<SportsWidgetProps> = ({
           <div
             className={
               tickerShouldScroll
-                ? 'ambiently-ticker-track hover:[animation-play-state:paused]'
+                ? `ambiently-ticker-track hover:[animation-play-state:paused]${shouldPauseAnimations ? ' ambiently-ticker-paused' : ''}`
                 : 'flex items-center gap-2.5 overflow-x-auto no-scrollbar w-full'
             }
             style={
               tickerShouldScroll
                 ? ({
                     '--ticker-duration': `${Math.max(18, visibleGames.length * 6)}s`,
-                    animationPlayState: isNightMode ? 'paused' : undefined,
+                    animationPlayState: shouldPauseAnimations ? 'paused' : undefined,
                   } as React.CSSProperties)
                 : undefined
             }

@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState, useCallback, useMemo, lazy, Suspense } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo, lazy, Suspense, memo } from 'react';
 import { useDashboardStore, flushPendingCloudPush } from './store/dashboardStore';
 import type { AutoOrganizeMode } from './types/dashboard';
 import { useChoreStore } from './store/choreStore';
 import { useKanbanStore } from './stores/useKanbanStore';
 import { NavigationDock } from './components/dock/NavigationDock';
-import { Corkboard } from './components/layout/Corkboard';
 import { PinOverlay } from './components/kiosk/PinOverlay';
 import { NightMode } from './components/kiosk/NightMode';
+const Corkboard = lazy(() =>
+  import('./components/layout/Corkboard').then((m) => ({ default: m.Corkboard }))
+);
 const IdlePhotoScreensaver = lazy(() =>
   import('./components/kiosk/IdlePhotoScreensaver').then((m) => ({
     default: m.IdlePhotoScreensaver,
@@ -63,6 +65,7 @@ import {
   resolveVisibleChoreOverlay,
   resolveVisibleKanbanOverlay,
 } from './utils/fullscreenWidgetOverlay';
+import { setPhotoScreensaverOccludingCanvas } from './utils/displayActivity';
 
 const SettingsModal = lazy(() =>
   import('./components/settings/SettingsModal').then((m) => ({ default: m.SettingsModal }))
@@ -106,6 +109,106 @@ const WidgetDeleteConfirmModal = lazy(() =>
   }))
 );
 
+interface CarouselRotationControllerProps {
+  visibleTabIds: string;
+  activeTabIdResolved: string;
+  isAnyOverlayOpen: boolean;
+  showIdleScreensaver: boolean;
+  onCloseUnscopedOverlays: () => void;
+}
+
+/**
+ * Isolated tab auto-carousel controller so temporary user-activity pauses only re-render this null-rendering leaf.
+ */
+const CarouselRotationController = memo(function CarouselRotationController({
+  visibleTabIds,
+  activeTabIdResolved,
+  isAnyOverlayOpen,
+  showIdleScreensaver,
+  onCloseUnscopedOverlays,
+}: CarouselRotationControllerProps) {
+  const carouselEnabled = useDashboardStore((s) => Boolean(s.settings.carouselEnabled));
+  const rotateDurationSec = useDashboardStore((s) => s.settings.defaultRotateDurationSec || 30);
+  const isCarouselPaused = useDashboardStore((s) => s.isCarouselPaused);
+  const pauseCarouselTemporarily = useDashboardStore((s) => s.pauseCarouselTemporarily);
+  const rotateToTab = useDashboardStore((s) => s.rotateToTab);
+
+  // Pause carousel on any pointer, touch, or wheel activity (including inside portals)
+  useEffect(() => {
+    if (!carouselEnabled) return;
+
+    let lastActivityPauseAt = 0;
+    const handleUserActivity = () => {
+      const nowMs = Date.now();
+      if (nowMs - lastActivityPauseAt < 4000) return;
+      lastActivityPauseAt = nowMs;
+      pauseCarouselTemporarily(20000);
+    };
+
+    const events = ['pointerdown', 'touchstart', 'wheel'] as const;
+    events.forEach((evt) =>
+      window.addEventListener(evt, handleUserActivity, { capture: true, passive: true })
+    );
+    return () => {
+      events.forEach((evt) =>
+        window.removeEventListener(evt, handleUserActivity, { capture: true })
+      );
+    };
+  }, [carouselEnabled, pauseCarouselTemporarily]);
+
+  // Tab auto-carousel rotation (pauses automatically when user interacts or any modal/hub/input is active)
+  useEffect(() => {
+    const tabIds = visibleTabIds.split('\n').filter(Boolean);
+    if (
+      !carouselEnabled ||
+      isCarouselPaused ||
+      isAnyOverlayOpen ||
+      showIdleScreensaver ||
+      tabIds.length <= 1
+    ) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      // Never rotate if any widget modal, dialog, or inline editor is open, or if an input is focused
+      if (typeof document !== 'undefined') {
+        if (document.querySelector('[role="dialog"], [aria-modal="true"], [data-carousel-lock="true"]')) {
+          return;
+        }
+        const activeEl = document.activeElement as HTMLElement | null;
+        if (
+          activeEl &&
+          (activeEl.tagName === 'INPUT' ||
+            activeEl.tagName === 'TEXTAREA' ||
+            activeEl.tagName === 'SELECT' ||
+            activeEl.isContentEditable)
+        ) {
+          return;
+        }
+      }
+
+      const currentIndex = tabIds.indexOf(activeTabIdResolved);
+      const nextIndex = (currentIndex === -1 ? 1 : currentIndex + 1) % tabIds.length;
+      onCloseUnscopedOverlays();
+      rotateToTab(tabIds[nextIndex]);
+    }, rotateDurationSec * 1000);
+
+    return () => clearInterval(interval);
+  }, [
+    carouselEnabled,
+    isCarouselPaused,
+    isAnyOverlayOpen,
+    showIdleScreensaver,
+    rotateDurationSec,
+    visibleTabIds,
+    activeTabIdResolved,
+    onCloseUnscopedOverlays,
+    rotateToTab,
+  ]);
+
+  return null;
+});
+
 export function App() {
   const isInitialized = useDashboardStore((s) => s.isInitialized);
   const initStore = useDashboardStore((s) => s.initStore);
@@ -116,11 +219,8 @@ export function App() {
   const deletedWidgetCount = useDashboardStore((s) => s.deletedWidgets.length);
   const notes = useDashboardStore((s) => s.notes);
   const setActiveTabId = useDashboardStore((s) => s.setActiveTabId);
-  const rotateToTab = useDashboardStore((s) => s.rotateToTab);
   const unlockKiosk = useDashboardStore((s) => s.unlockKiosk);
   const lockKiosk = useDashboardStore((s) => s.lockKiosk);
-  const isCarouselPaused = useDashboardStore((s) => s.isCarouselPaused);
-  const pauseCarouselTemporarily = useDashboardStore((s) => s.pauseCarouselTemporarily);
   const setNightModeActive = useDashboardStore((s) => s.setNightModeActive);
   const updateNotePosition = useDashboardStore((s) => s.updateNotePosition);
   const updateWidgetPosition = useDashboardStore((s) => s.updateWidgetPosition);
@@ -135,13 +235,13 @@ export function App() {
   const addTab = useDashboardStore((s) => s.addTab);
   const updateTab = useDashboardStore((s) => s.updateTab);
   const autoOrganizeCanvas = useDashboardStore((s) => s.autoOrganizeCanvas);
-  const layoutUndoStack = useDashboardStore((s) => s.layoutUndoStack);
   const toggleDockHidden = useDashboardStore((s) => s.toggleDockHidden);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const pendingPinCallbackRef = useRef<(() => void) | null>(null);
   const [pinChallenge, setPinChallenge] = useState<{
-    action: 'open_settings' | 'open_share' | 'open_plex_pairing';
+    action: 'open_settings' | 'open_share' | 'open_plex_pairing' | 'authorize_callback';
     title?: string;
     subtitle?: string;
   } | null>(null);
@@ -368,14 +468,6 @@ export function App() {
     [closeUnscopedOverlays, setActiveTabId]
   );
 
-  const handleRotateToTab = useCallback(
-    (tabId: string) => {
-      closeUnscopedOverlays();
-      rotateToTab(tabId);
-    },
-    [closeUnscopedOverlays, rotateToTab]
-  );
-
   // Keyboard shortcuts:
   // '\' (backslash) to toggle toolbar visibility
   // '1'-'9' and '0' (for 10) to switch between canvases
@@ -571,16 +663,39 @@ export function App() {
     setIsPlexPairingModalOpen(true);
   }, [isSettingsLocked]);
 
+  const handleAuthorizeSettingsAction = useCallback(
+    (onAuthorized: () => void, challengePrompt?: { title?: string; subtitle?: string }) => {
+      if (isSettingsPinRequired(useDashboardStore.getState().settings)) {
+        pendingPinCallbackRef.current = onAuthorized;
+        setPinChallenge({
+          action: 'authorize_callback',
+          title: challengePrompt?.title || 'Kiosk Settings Locked',
+          subtitle:
+            challengePrompt?.subtitle ||
+            'Enter parent PIN to access settings & controls',
+        });
+        return;
+      }
+      onAuthorized();
+    },
+    []
+  );
+
   // Does what the PIN pad was opened for, once the PIN is entered or removed
   const finishPinChallenge = () => {
-    if (pinChallenge?.action === 'open_settings') {
-      setIsSettingsOpen(true);
-    } else if (pinChallenge?.action === 'open_share') {
-      setIsShareOpen(true);
-    } else if (pinChallenge?.action === 'open_plex_pairing') {
-      setIsPlexPairingModalOpen(true);
-    }
+    const action = pinChallenge?.action;
+    const pendingCallback = pendingPinCallbackRef.current;
+    pendingPinCallbackRef.current = null;
     setPinChallenge(null);
+    if (action === 'open_settings') {
+      setIsSettingsOpen(true);
+    } else if (action === 'open_share') {
+      setIsShareOpen(true);
+    } else if (action === 'open_plex_pairing') {
+      setIsPlexPairingModalOpen(true);
+    } else if (action === 'authorize_callback') {
+      pendingCallback?.();
+    }
   };
 
   const handlePinUnlock = async (enteredPin: string) => {
@@ -895,8 +1010,8 @@ export function App() {
   const handleUndoActiveTabLayout = useCallback(() => {
     void useDashboardStore.getState().undoLayoutChange();
   }, []);
-  const canUndoActiveTabLayout = layoutUndoStack.some(
-    (entry) => entry.tabId === activeTabIdResolved
+  const canUndoActiveTabLayout = useDashboardStore((s) =>
+    s.layoutUndoStack.some((entry) => entry.tabId === activeTabIdResolved)
   );
   const handleRequestRemoveWidget = useCallback(
     (widgetId: string) => {
@@ -968,6 +1083,13 @@ export function App() {
     showIdleScreensaver && effectiveScreensaver.mode === 'canvas';
   const isPhotoScreensaverActive =
     showIdleScreensaver && effectiveScreensaver.mode === 'photos';
+
+  useEffect(() => {
+    setPhotoScreensaverOccludingCanvas(Boolean(showIdleScreensaver && !isCanvasScreensaverActive));
+    return () => {
+      setPhotoScreensaverOccludingCanvas(false);
+    };
+  }, [showIdleScreensaver, isCanvasScreensaverActive]);
   const screensaverCanvasTab = isCanvasScreensaverActive ? effectiveScreensaver.tab : null;
   const screensaverCanvasWidgets = useMemo(
     () =>
@@ -988,10 +1110,11 @@ export function App() {
 
   const handleWakeIdleScreensaver = useCallback(() => {
     setIsIdleScreensaverActive(false);
-    if (settings.carouselEnabled) {
-      pauseCarouselTemporarily(20000);
+    const st = useDashboardStore.getState();
+    if (st.settings.carouselEnabled) {
+      st.pauseCarouselTemporarily(20000);
     }
-  }, [settings.carouselEnabled, pauseCarouselTemporarily]);
+  }, []);
 
   const handlePreviewScreensaver = useCallback(() => {
     setIsSettingsOpen(false);
@@ -1171,80 +1294,8 @@ export function App() {
   );
 
   // `visibleTabs` is a new array on every render, and a background cloud refresh renders every 60
-  // seconds. Depending on the ids instead keeps that from restarting the countdown.
+  // seconds. Passing the stable ID list string keeps CarouselRotationController from restarting.
   const visibleTabIds = visibleTabs.map((t) => t.id).join('\n');
-  const rotateDurationSec = settings.defaultRotateDurationSec || 30;
-
-  // Pause carousel on any pointer, touch, or wheel activity (including inside portals)
-  useEffect(() => {
-    if (!settings.carouselEnabled) return;
-
-    let lastActivityPauseAt = 0;
-    const handleUserActivity = () => {
-      const nowMs = Date.now();
-      if (nowMs - lastActivityPauseAt < 4000) return;
-      lastActivityPauseAt = nowMs;
-      pauseCarouselTemporarily(20000);
-    };
-
-    const events = ['pointerdown', 'touchstart', 'wheel'] as const;
-    events.forEach((evt) =>
-      window.addEventListener(evt, handleUserActivity, { capture: true, passive: true })
-    );
-    return () => {
-      events.forEach((evt) =>
-        window.removeEventListener(evt, handleUserActivity, { capture: true })
-      );
-    };
-  }, [settings.carouselEnabled, pauseCarouselTemporarily]);
-
-  // Tab auto-carousel rotation (pauses automatically when user interacts or any modal/hub/input is active)
-  useEffect(() => {
-    const tabIds = visibleTabIds.split('\n').filter(Boolean);
-    if (
-      !settings.carouselEnabled ||
-      isCarouselPaused ||
-      isAnyOverlayOpen ||
-      showIdleScreensaver ||
-      tabIds.length <= 1
-    ) {
-      return;
-    }
-
-    const interval = setInterval(() => {
-      // Never rotate if any widget modal, dialog, or inline editor is open, or if an input is focused
-      if (typeof document !== 'undefined') {
-        if (document.querySelector('[role="dialog"], [aria-modal="true"], [data-carousel-lock="true"]')) {
-          return;
-        }
-        const activeEl = document.activeElement as HTMLElement | null;
-        if (
-          activeEl &&
-          (activeEl.tagName === 'INPUT' ||
-            activeEl.tagName === 'TEXTAREA' ||
-            activeEl.tagName === 'SELECT' ||
-            activeEl.isContentEditable)
-        ) {
-          return;
-        }
-      }
-
-      const currentIndex = tabIds.indexOf(activeTabIdResolved);
-      const nextIndex = (currentIndex === -1 ? 1 : currentIndex + 1) % tabIds.length;
-      handleRotateToTab(tabIds[nextIndex]);
-    }, rotateDurationSec * 1000);
-
-    return () => clearInterval(interval);
-  }, [
-    settings.carouselEnabled,
-    isCarouselPaused,
-    isAnyOverlayOpen,
-    showIdleScreensaver,
-    rotateDurationSec,
-    visibleTabIds,
-    activeTabIdResolved,
-    handleRotateToTab,
-  ]);
 
   // Strict per-canvas sticky notes (plus notes explicitly pinned to 'all' canvases)
   const activeCanvasNotes = useMemo(
@@ -1296,6 +1347,7 @@ export function App() {
             onAddWidget={addWidget}
             onToggleDesktopView={handleEnterDesktopMode}
             onOpenSettings={handleOpenSettings}
+            onAuthorizeSettings={handleAuthorizeSettingsAction}
             onSwipePointerDown={handleCanvasSwipePointerDown}
             transitionClass={swipeTransitionClass}
           />
@@ -1383,7 +1435,10 @@ export function App() {
             subtitle={pinChallenge.subtitle}
             onUnlock={handlePinUnlock}
             onPinRemoved={finishPinChallenge}
-            onCancel={() => setPinChallenge(null)}
+            onCancel={() => {
+              pendingPinCallbackRef.current = null;
+              setPinChallenge(null);
+            }}
           />
         )}
       </>
@@ -1437,36 +1492,39 @@ export function App() {
             : `w-full h-full${swipeTransitionClass ? ` ${swipeTransitionClass}` : ''}`
         }
       >
-        <Corkboard
-          notes={displayedNotes}
-          widgets={displayedWidgets}
-          tabs={visibleTabs}
-          activeTabId={displayedTabId}
-          dockPaddingClass={displayedDockPadding}
-          backgroundTheme={displayedTab?.backgroundTheme || 'midnight_dots'}
-          customWallpaperUrl={displayedTab?.customWallpaperUrl}
-          backgroundDimLevel={displayedTab?.backgroundDimLevel ?? 45}
-          hideNotes={Boolean(displayedTab?.hideNotes)}
-          isCreatorOpen={isNoteCreatorOpen}
-          onOpenCreator={handleOpenCreator}
-          onCloseCreator={handleCloseCreator}
-          isTrashOpen={isTrashOpen}
-          onCloseTrash={handleCloseTrash}
-          onUpdateNotePos={updateNotePosition}
-          onUpdateWidgetPos={updateWidgetPosition}
-          onAddNote={addNote}
-          onUpdateNote={updateNote}
-          onDeleteNote={deleteNote}
-          onPermanentlyDeleteNote={permanentlyDeleteNote}
-          onPermanentlyDeleteNotes={permanentlyDeleteNotes}
-          onAddWidget={addWidget}
-          onRemoveWidget={handleRequestRemoveWidget}
-          onOpenAddWidget={handleOpenAddWidget}
-          onUpdateWidget={updateWidget}
-          onUpdateTab={updateTab}
-          snapToGrid={settings.snapToGrid}
-          isCanvasLocked={displayedIsCanvasLocked}
-        />
+        <Suspense fallback={null}>
+          <Corkboard
+            notes={displayedNotes}
+            widgets={displayedWidgets}
+            tabs={visibleTabs}
+            activeTabId={displayedTabId}
+            dockPaddingClass={displayedDockPadding}
+            backgroundTheme={displayedTab?.backgroundTheme || 'midnight_dots'}
+            customWallpaperUrl={displayedTab?.customWallpaperUrl}
+            backgroundDimLevel={displayedTab?.backgroundDimLevel ?? 45}
+            hideNotes={Boolean(displayedTab?.hideNotes)}
+            isCreatorOpen={isNoteCreatorOpen}
+            onOpenCreator={handleOpenCreator}
+            onCloseCreator={handleCloseCreator}
+            isTrashOpen={isTrashOpen}
+            onCloseTrash={handleCloseTrash}
+            onUpdateNotePos={updateNotePosition}
+            onUpdateWidgetPos={updateWidgetPosition}
+            onAddNote={addNote}
+            onUpdateNote={updateNote}
+            onDeleteNote={deleteNote}
+            onPermanentlyDeleteNote={permanentlyDeleteNote}
+            onPermanentlyDeleteNotes={permanentlyDeleteNotes}
+            onAddWidget={addWidget}
+            onRemoveWidget={handleRequestRemoveWidget}
+            onOpenAddWidget={handleOpenAddWidget}
+            onUpdateWidget={updateWidget}
+            onUpdateTab={updateTab}
+            onAuthorizeSettings={handleAuthorizeSettingsAction}
+            snapToGrid={settings.snapToGrid}
+            isCanvasLocked={displayedIsCanvasLocked}
+          />
+        </Suspense>
       </div>
 
       {/* Navigation Dock - Pinned at Viewport Level (hidden during edge-to-edge Canvas Screensaver) */}
@@ -1480,6 +1538,7 @@ export function App() {
           onSelectTab={handleSelectTab}
           onOpenSettings={handleOpenSettings}
           onOpenShare={handleOpenShare}
+          onAuthorizeSettings={handleAuthorizeSettingsAction}
           onToggleNightMode={handleToggleNightMode}
           onToggleFullscreen={handleToggleFullscreen}
           isFullscreen={isFullscreen}
@@ -1628,6 +1687,7 @@ export function App() {
                   });
                 }
                 setIsPlexPairingModalOpen(false);
+                lockKiosk();
                 if (typeof window !== 'undefined') {
                   window.dispatchEvent(new CustomEvent('plex_auth_changed', { detail: { hasToken: true } }));
                 }
@@ -1644,9 +1704,20 @@ export function App() {
           subtitle={pinChallenge.subtitle}
           onUnlock={handlePinUnlock}
           onPinRemoved={finishPinChallenge}
-          onCancel={() => setPinChallenge(null)}
+          onCancel={() => {
+            pendingPinCallbackRef.current = null;
+            setPinChallenge(null);
+          }}
         />
       )}
+
+      <CarouselRotationController
+        visibleTabIds={visibleTabIds}
+        activeTabIdResolved={activeTabIdResolved}
+        isAnyOverlayOpen={isAnyOverlayOpen}
+        showIdleScreensaver={showIdleScreensaver}
+        onCloseUnscopedOverlays={closeUnscopedOverlays}
+      />
 
       <Suspense fallback={null}>
         {/* Household sharing, opened from the dock's quick menu */}

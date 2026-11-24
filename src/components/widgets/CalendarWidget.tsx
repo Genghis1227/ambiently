@@ -37,6 +37,7 @@ import { ProfileAvatar } from '../common/ProfileAvatar';
 import type { LocalEventFormInput } from '../calendar/LocalEventModal';
 import { localDateKey } from '../../utils/dateKey';
 import { resolveAdaptiveCalendarColumns } from '../../utils/displayOrientation';
+import { useDisplayActivity } from '../../utils/displayActivity';
 import {
   MEAL_PLANNER_CALENDAR_ID,
   MEAL_SLOT_CALENDAR_META,
@@ -573,7 +574,16 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
     onUpdateConfig?.({ multiDayLayout: newLayout });
   };
 
+  const { shouldPauseAnimations } = useDisplayActivity();
+  const shouldPauseRef = useRef(shouldPauseAnimations);
+  useEffect(() => {
+    shouldPauseRef.current = shouldPauseAnimations;
+  }, [shouldPauseAnimations]);
+  const wasPausedRef = useRef(false);
+  const lastFetchAtRef = useRef(0);
+
   const loadEvents = async (force: boolean = false, background: boolean = false) => {
+    lastFetchAtRef.current = Date.now();
     if (!background && events.length === 0) {
       setLoading(true);
     }
@@ -591,6 +601,8 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
       setIsSyncing(false);
     }
   };
+  const loadEventsRef = useRef(loadEvents);
+  loadEventsRef.current = loadEvents;
 
   useEffect(() => {
     const cached = getCachedCalendarEvents(sources);
@@ -598,6 +610,7 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
       setEvents(cached.events);
       setFeedProblems(getVisibleCalendarFeedProblems(sources));
       setLastUpdated(cached.lastFetched);
+      lastFetchAtRef.current = cached.lastFetched;
       if (cached.isStale) {
         // Silently revalidate in background if older than 15 minutes
         loadEvents(true, true);
@@ -606,14 +619,25 @@ export const CalendarWidget: React.FC<CalendarWidgetProps> = ({
       loadEvents(false, false);
     }
 
-    // Recommended refresh frequency: 15-minute background polling (pauses when tab is hidden)
+    // Recommended refresh frequency: 15-minute background polling (pauses when tab hidden, night mode, or occluded)
     const interval = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      if ((typeof document !== 'undefined' && document.visibilityState === 'hidden') || shouldPauseRef.current) return;
       loadEvents(true, true);
     }, 15 * 60 * 1000);
 
     return () => clearInterval(interval);
   }, [sources]);
+
+  useEffect(() => {
+    if (
+      wasPausedRef.current &&
+      !shouldPauseAnimations &&
+      Date.now() - lastFetchAtRef.current >= 15 * 60 * 1000
+    ) {
+      void loadEventsRef.current(true, true);
+    }
+    wasPausedRef.current = shouldPauseAnimations;
+  }, [shouldPauseAnimations]);
 
   const handleSwitchView = (newView: CalendarViewMode) => {
     setView(newView);

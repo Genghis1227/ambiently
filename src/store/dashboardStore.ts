@@ -33,7 +33,7 @@ import {
 } from '../utils/displayOrientation';
 import { getDefaultWidgetStickerMode, isStickerCapableWidget } from '../utils/widgetStickerMode';
 import type { PhotoTargetSyncMeta, PlexPhotoSyncConfig } from '../utils/photoSyncPolicy';
-import type { PhotoItem } from '../services/photos';
+import { filterDeadSessionBlobPhotos, type PhotoItem } from '../services/photos';
 import {
   hasSupabaseCredentials,
   getCachedSessionUser,
@@ -111,6 +111,19 @@ let hasPendingCloudPush = false;
 let pendingDirtyScopes: DirtySyncScopes = {};
 let activeCloudPushPromise: Promise<void> | null = null;
 let latestDashboardGet: (() => DashboardState) | null = null;
+let tombstoneCleanupScheduled = false;
+
+function stripEphemeralBlobPhotos<T extends { url?: string }>(
+  photos: T[] | undefined
+): T[] | undefined {
+  if (!Array.isArray(photos) || photos.length === 0) return photos;
+  if (!photos.some((p) => typeof p?.url === 'string' && p.url.startsWith('blob:'))) {
+    return photos;
+  }
+  return photos.filter(
+    (p) => !(typeof p?.url === 'string' && p.url.startsWith('blob:'))
+  );
+}
 
 /**
  * Cancels any pending debounced cloud auto-push before an explicit backup or restore.
@@ -325,6 +338,13 @@ interface LayoutSnapshot {
   notePositions: Record<string, FreeformPosition>;
 }
 
+export interface CanvasZOrderUpdate {
+  id: string;
+  type: 'widget' | 'note';
+  zIndex: number;
+  isBackground: boolean;
+}
+
 interface DashboardState {
   isInitialized: boolean;
   settings: AppSettings;
@@ -466,6 +486,8 @@ interface DashboardState {
     noteId: string,
     freeformPos: StickyNoteItem['freeformPos']
   ) => Promise<void>;
+  applyCanvasZOrderUpdates: (updates: CanvasZOrderUpdate[]) => Promise<void>;
+  reorderMobileWidgets: (orderedWidgetIds: string[]) => Promise<void>;
 }
 
 function getExistingBoxesForTab(
@@ -588,22 +610,33 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   photoSyncMeta: {},
 
   initStore: async () => {
-    // Non-blocking cleanup of soft-deleted records older than 30 days
-    purgeOldTombstones().catch(() => {});
-
-    // Load from Dexie or seed fresh database
-    const settingsCount = await db.settings.count();
+    // Load from Dexie (or seed fresh database) in parallel
+    const settingsCount = await db.settings.count().catch(() => 0);
     if (settingsCount === 0) {
-      await db.settings.add(DEFAULT_SETTINGS);
-      await db.tabs.bulkAdd(DEFAULT_TABS);
-      await db.widgets.bulkAdd(DEFAULT_WIDGETS);
-      await db.notes.bulkAdd(DEFAULT_NOTES);
+      await Promise.all([
+        db.settings.add(DEFAULT_SETTINGS),
+        db.tabs.bulkAdd(DEFAULT_TABS),
+        db.widgets.bulkAdd(DEFAULT_WIDGETS),
+        db.notes.bulkAdd(DEFAULT_NOTES),
+      ]);
     }
 
-    const rawSettings = await db.settings.get('global');
+    const [rawSettings, allTabs, allWidgetsRaw, allNotes] = await Promise.all([
+      db.settings.get('global'),
+      db.tabs.toArray(),
+      db.widgets.toArray(),
+      db.notes.toArray(),
+    ]);
+
+    const rawCommonPhotos = rawSettings?.commonPhotos;
+    const filteredCommonPhotos = filterDeadSessionBlobPhotos(rawCommonPhotos);
+    const removedDeadCommonBlobs =
+      Array.isArray(rawCommonPhotos) && filteredCommonPhotos.length !== rawCommonPhotos.length;
+
     const mergedSettings = {
       ...DEFAULT_SETTINGS,
       ...(rawSettings || {}),
+      ...(removedDeadCommonBlobs ? { commonPhotos: filteredCommonPhotos } : {}),
       carouselEnabled: rawSettings?.carouselEnabled ?? true,
       // Night mode is what this screen is doing right now. The background cloud refresh re-runs
       // initStore every 60 seconds and must not switch it on or off.
@@ -613,10 +646,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     };
     const { settings: loadedSettings, repaired: pinSettingsRepaired } =
       normalizePinLockSettings(mergedSettings);
-    if (pinSettingsRepaired) {
-      await db.settings.put(loadedSettings).catch(() => {});
-    }
-    const allTabs = await db.tabs.toArray();
+
     const deletedTabTimestamps: Record<string, string> = {};
     for (const t of allTabs) {
       if (t.deleted_at) {
@@ -637,10 +667,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         return t;
       })
       .sort((a: DashboardTab, b: DashboardTab) => (a.order ?? 0) - (b.order ?? 0));
-    if (tabsToRepair.length > 0) {
-      await db.tabs.bulkPut(tabsToRepair).catch(() => {});
-    }
-    const allWidgetsRaw = await db.widgets.toArray();
+
     const deletedWidgetTimestamps: Record<string, string> = {};
     const deletedWidgetsList: DashboardWidget[] = [];
     for (const w of allWidgetsRaw) {
@@ -659,13 +686,35 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const widgetsToRepair: DashboardWidget[] = [];
     const loadedWidgets = rawLoadedWidgets.map((w) => {
       const { widget: sanitized, repaired } = sanitizeRestoredPhotoWidget(w);
-      if (repaired) widgetsToRepair.push(sanitized);
-      return sanitized;
+      const rawCustomPhotos = sanitized.config?.customPhotos;
+      const filteredCustomPhotos = filterDeadSessionBlobPhotos(rawCustomPhotos);
+      const removedDeadCustomBlobs =
+        Array.isArray(rawCustomPhotos) && filteredCustomPhotos.length !== rawCustomPhotos.length;
+      const cleanedWidget = removedDeadCustomBlobs
+        ? {
+            ...sanitized,
+            config: {
+              ...sanitized.config,
+              customPhotos: filteredCustomPhotos,
+            },
+          }
+        : sanitized;
+      if (repaired || removedDeadCustomBlobs) {
+        widgetsToRepair.push({
+          ...cleanedWidget,
+          ...(cleanedWidget.config?.customPhotos
+            ? {
+                config: {
+                  ...cleanedWidget.config,
+                  customPhotos: stripEphemeralBlobPhotos(cleanedWidget.config.customPhotos),
+                },
+              }
+            : {}),
+        });
+      }
+      return cleanedWidget;
     });
-    if (widgetsToRepair.length > 0) {
-      await db.widgets.bulkPut(widgetsToRepair).catch(() => {});
-    }
-    const allNotes = await db.notes.toArray();
+
     const deletedNoteTimestamps: Record<string, string> = {};
     for (const n of allNotes) {
       if (n.deleted_at) {
@@ -676,13 +725,27 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       .filter((n) => !n.deleted_at)
       .map((n) => normalizeLoadedNote(n));
 
-    // Initialize Global Household Profile Store, Chore Engine Store, Meal Planner Store, Kanban Store, Routines Store & Calendar Events Store
+    // Hydrate profile store first (shared dependency of Chore & Meal stores), then fan out secondary stores in parallel
     await useProfileStore.getState().initProfileStore();
-    await useChoreStore.getState().initChoreStore();
-    await useMealStore.getState().initMealStore();
-    await useKanbanStore.getState().initKanbanStore();
-    await useRoutinesStore.getState().initRoutinesStore();
-    await useCalendarEventsStore.getState().initCalendarEventsStore();
+    await Promise.all([
+      ...(pinSettingsRepaired || removedDeadCommonBlobs
+        ? [
+            db.settings
+              .put({
+                ...loadedSettings,
+                commonPhotos: stripEphemeralBlobPhotos(loadedSettings.commonPhotos),
+              })
+              .catch(() => {}),
+          ]
+        : []),
+      ...(tabsToRepair.length > 0 ? [db.tabs.bulkPut(tabsToRepair).catch(() => {})] : []),
+      ...(widgetsToRepair.length > 0 ? [db.widgets.bulkPut(widgetsToRepair).catch(() => {})] : []),
+      useChoreStore.getState().initChoreStore(),
+      useMealStore.getState().initMealStore(),
+      useKanbanStore.getState().initKanbanStore(),
+      useRoutinesStore.getState().initRoutinesStore(),
+      useCalendarEventsStore.getState().initCalendarEventsStore(),
+    ]);
 
     const tabsToUse = loadedTabs.length > 0 ? loadedTabs : DEFAULT_TABS;
     const explicitHome = tabsToUse.find((t) => t.isHome && (t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false));
@@ -711,6 +774,25 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       deletedTabTimestamps,
       isUnlocked: !loadedSettings.pinLockEnabled,
     });
+
+    if (!tombstoneCleanupScheduled) {
+      tombstoneCleanupScheduled = true;
+      const runCleanup = () => {
+        purgeOldTombstones().catch(() => {});
+      };
+      if (typeof window !== 'undefined') {
+        const idleWin = window as unknown as {
+          requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+        };
+        if (typeof idleWin.requestIdleCallback === 'function') {
+          idleWin.requestIdleCallback(runCleanup, { timeout: 5000 });
+        } else {
+          window.setTimeout(runCleanup, 3000);
+        }
+      } else {
+        setTimeout(runCleanup, 3000);
+      }
+    }
   },
 
   setActiveTabId: (tabId) => {
@@ -1024,7 +1106,11 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       'commonPhotoPlexConfig',
     ]);
     set({ settings: updated });
-    await db.settings.put(updated).catch(() => {});
+    const persistedSettings: AppSettings = {
+      ...updated,
+      commonPhotos: stripEphemeralBlobPhotos(updated.commonPhotos),
+    };
+    await db.settings.put(persistedSettings).catch(() => {});
     get().saveLocalBackup({ settings: true });
   },
 
@@ -1043,8 +1129,19 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       optInWidgetId
     );
     if (changedWidgets.length > 0) {
-      await db.widgets.bulkPut(changedWidgets);
       set({ widgets: updatedWidgets });
+      const persistedChanged = changedWidgets.map((w) =>
+        w.config?.customPhotos
+          ? {
+              ...w,
+              config: {
+                ...w.config,
+                customPhotos: stripEphemeralBlobPhotos(w.config.customPhotos),
+              },
+            }
+          : w
+      );
+      await db.widgets.bulkPut(persistedChanged).catch(() => {});
     }
     get().saveLocalBackup({ settings: true, widgets: true });
   },
@@ -1099,7 +1196,12 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         'commonPhotoPlexConfig',
       ]);
       set({ settings: updated });
-      await db.settings.put(updated).catch(() => {});
+      await db.settings
+        .put({
+          ...updated,
+          commonPhotos: stripEphemeralBlobPhotos(updated.commonPhotos),
+        })
+        .catch(() => {});
     } else {
       // Specific Widget
       const widget = get().widgets.find((w) => w.id === targetWidgetId);
@@ -1136,10 +1238,18 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         },
         updated_at: new Date().toISOString(),
       };
-      await db.widgets.put(updatedWidget);
       set({
         widgets: get().widgets.map((w) => (w.id === targetWidgetId ? updatedWidget : w)),
       });
+      await db.widgets
+        .put({
+          ...updatedWidget,
+          config: {
+            ...updatedWidget.config,
+            customPhotos: stripEphemeralBlobPhotos(combined),
+          },
+        })
+        .catch(() => {});
     }
     get().saveLocalBackup({ ...(targetWidgetId ? { widgets: true } : { settings: true }) });
   },
@@ -1176,10 +1286,18 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           },
           updated_at: new Date().toISOString(),
         };
-        await db.widgets.put(updatedWidget);
         set({
           widgets: get().widgets.map((w) => (w.id === targetWidgetId ? updatedWidget : w)),
         });
+        await db.widgets
+          .put({
+            ...updatedWidget,
+            config: {
+              ...updatedWidget.config,
+              customPhotos: stripEphemeralBlobPhotos(allPhotos),
+            },
+          })
+          .catch(() => {});
         get().saveLocalBackup({ widgets: true });
       }
     }
@@ -2508,7 +2626,6 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       ...(freeformPos ? { freeformPos } : {}),
       updated_at: nextMonotonicIso(widget.updated_at, nowMs),
     };
-    await db.widgets.put(updated).catch(() => {});
 
     const latest = get();
     const nextStack = undoEntry
@@ -2530,6 +2647,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           }
         : {}),
     });
+    await db.widgets.put(updated).catch(() => {});
     get().saveLocalBackup({ widgets: true });
   },
 
@@ -2573,7 +2691,6 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         : freeformPos,
       updated_at: nextMonotonicIso(note.updated_at, nowMs),
     };
-    await db.notes.put(updated).catch(() => {});
 
     const latest = get();
     const nextStack = undoEntry
@@ -2595,7 +2712,147 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           }
         : {}),
     });
+    await db.notes.put(updated).catch(() => {});
     get().saveLocalBackup({ notes: true });
+  },
+
+  applyCanvasZOrderUpdates: async (updates) => {
+    if (!Array.isArray(updates) || updates.length === 0) return;
+
+    const widgetUpdates = new Map<string, CanvasZOrderUpdate>();
+    const noteUpdates = new Map<string, CanvasZOrderUpdate>();
+    for (const u of updates) {
+      if (u.type === 'widget') {
+        widgetUpdates.set(u.id, u);
+      } else {
+        noteUpdates.set(u.id, u);
+      }
+    }
+
+    const state = get();
+    const nowMs = Date.now();
+    const changedWidgets: DashboardWidget[] = [];
+    const nextWidgets =
+      widgetUpdates.size > 0
+        ? state.widgets.map((w) => {
+            const patch = widgetUpdates.get(w.id);
+            if (!patch) return w;
+            const prevPos: FreeformPosition = w.freeformPos
+              ? { ...w.freeformPos }
+              : {
+                  xRatio: 0.1,
+                  yRatio: 0.1,
+                  wRatio: 0.35,
+                  hRatio: 0.45,
+                  zIndex: 5,
+                  rotation: 0,
+                };
+            if (
+              prevPos.zIndex === patch.zIndex &&
+              Boolean(prevPos.isBackground) === patch.isBackground
+            ) {
+              return w;
+            }
+            const updated: DashboardWidget = {
+              ...w,
+              freeformPos: {
+                ...prevPos,
+                zIndex: patch.zIndex,
+                isBackground: patch.isBackground,
+              },
+              updated_at: nextMonotonicIso(w.updated_at, nowMs),
+            };
+            changedWidgets.push(updated);
+            return updated;
+          })
+        : state.widgets;
+
+    const changedNotes: StickyNoteItem[] = [];
+    const nextNotes =
+      noteUpdates.size > 0
+        ? state.notes.map((n) => {
+            const patch = noteUpdates.get(n.id);
+            if (!patch) return n;
+            const isShoppingList = Boolean(n.isShoppingList || n.freeformPos?.isShoppingList);
+            const prevPos: FreeformPosition = n.freeformPos
+              ? { ...n.freeformPos }
+              : {
+                  xRatio: 0.15,
+                  yRatio: 0.15,
+                  wRatio: 0.26,
+                  hRatio: 0.3,
+                  zIndex: 1,
+                  rotation: 0,
+                };
+            if (
+              prevPos.zIndex === patch.zIndex &&
+              Boolean(prevPos.isBackground) === patch.isBackground
+            ) {
+              return n;
+            }
+            const nextPos = buildNoteFreeformPos(
+              { ...n, isShoppingList },
+              {
+                ...prevPos,
+                zIndex: patch.zIndex,
+                isBackground: patch.isBackground,
+              }
+            );
+            const updated: StickyNoteItem = {
+              ...n,
+              isShoppingList,
+              freeformPos: nextPos,
+              updated_at: nextMonotonicIso(n.updated_at, nowMs),
+            };
+            changedNotes.push(updated);
+            return updated;
+          })
+        : state.notes;
+
+    if (changedWidgets.length === 0 && changedNotes.length === 0) return;
+
+    set({
+      ...(changedWidgets.length > 0 ? { widgets: nextWidgets } : {}),
+      ...(changedNotes.length > 0 ? { notes: nextNotes } : {}),
+    });
+
+    if (changedWidgets.length > 0) {
+      await db.widgets.bulkPut(changedWidgets).catch(() => {});
+    }
+    if (changedNotes.length > 0) {
+      await db.notes.bulkPut(changedNotes).catch(() => {});
+    }
+    get().saveLocalBackup({
+      ...(changedWidgets.length > 0 ? { widgets: true } : {}),
+      ...(changedNotes.length > 0 ? { notes: true } : {}),
+    });
+  },
+
+  reorderMobileWidgets: async (orderedWidgetIds) => {
+    if (!Array.isArray(orderedWidgetIds) || orderedWidgetIds.length === 0) return;
+    const orderById = new Map<string, number>();
+    orderedWidgetIds.forEach((id, idx) => orderById.set(id, idx));
+
+    const state = get();
+    const nowMs = Date.now();
+    const changedWidgets: DashboardWidget[] = [];
+    const nextWidgets = state.widgets.map((w) => {
+      const targetOrder = orderById.get(w.id);
+      if (targetOrder === undefined || w.mobileOrder === targetOrder) return w;
+      const updated: DashboardWidget = {
+        ...w,
+        mobileOrder: targetOrder,
+        updated_at: nextMonotonicIso(w.updated_at, nowMs),
+      };
+      changedWidgets.push(updated);
+      return updated;
+    });
+
+    if (changedWidgets.length === 0) return;
+
+    set({ widgets: nextWidgets });
+    await db.widgets.bulkPut(changedWidgets).catch(() => {});
+    get().saveLocalBackup({ widgets: true });
   },
 }));
 
