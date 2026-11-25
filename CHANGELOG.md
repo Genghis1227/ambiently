@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.12] - 2026-11-24
+
+### Added
+- **Phase 3 — Time-of-Day Canvas Scheduling, Interactive Home Assistant Controls & Cameras, Now Playing Widget, and Per-Room Display Filtering (`Closes #178`):**
+  - **Time-of-Day Canvas Scheduling (`canvasSchedule.ts`, `App.tsx`, `SettingsModal.tsx`, `dashboard.ts`, `db.ts`):** Added configurable local `HH:MM` schedule rules with weekday filters and overnight ranges (`start > end`) that switch active canvases automatically, pin auto-carousel rotation during active rules (`isSchedulePinned`), and snooze temporarily (`canvasScheduleSnoozeMin`) on manual tap/swipe/hotkey switches.
+  - **Interactive Home Assistant Controls & LAN Camera Snapshots (`functions/api/homelab.ts`, `functions/_shared/fetchExternal.ts`, `homelabEngine.ts`, `homelab.ts`, `HomelabWidget.tsx`, `Phase5WidgetSettingsPanel.tsx`):** Added opt-in allowlisted Home Assistant service execution (`mode: 'ha_service'`) with default Parent PIN protection on sensitive domains (`lock.*`, `cover.*`, `alarm_control_panel.*`), and `AMBIENTLY_ALLOW_PRIVATE_FEEDS=true`-gated LAN camera snapshots supporting raster image verification and a portal lightbox modal.
+  - **Now Playing Media Widget (`NowPlayingWidget.tsx`, `NowPlayingSettingsPanel.tsx`, `services/nowPlaying.ts`, `types/nowPlaying.ts`, `homelabVault.ts`, `widgetCatalog.ts`):** Added the `now_playing` widget backed by Home Assistant `media_player.*` entities (with origin-matched shared vault token fallback and transport controls) or live Plex `/status/sessions` playback.
+  - **Per-Display / Per-Room Canvas Filtering (`displayRoomFilter.ts`, `App.tsx`, `SettingsModal.tsx`):** Added board-scoped device-local room preferences (`localHomeTabId`, `hiddenTabIds`, `followCanvasSchedule`, and room label) so wall displays filter canvases per room while keeping always-at-least-one-visible-tab safeguards.
+
 ## [0.8.11] - 2026-11-24
 
 ### Security
