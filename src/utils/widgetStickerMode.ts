@@ -22,6 +22,7 @@ export const STICKER_CAPABLE_WIDGET_TYPES = new Set<DashboardWidget['type']>([
   'chalkboard',
   'soundscape',
   'homelab',
+  'now_playing',
 ]);
 
 export function isStickerCapableWidget(type?: DashboardWidget['type']): boolean {

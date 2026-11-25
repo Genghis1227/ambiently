@@ -127,6 +127,9 @@ const SoundscapeWidget = React.lazy(() =>
 const HomelabWidget = React.lazy(() =>
   import('../widgets/HomelabWidget').then((m) => ({ default: m.HomelabWidget }))
 );
+const NowPlayingWidget = React.lazy(() =>
+  import('../widgets/NowPlayingWidget').then((m) => ({ default: m.NowPlayingWidget }))
+);
 import { useDashboardStore, type CanvasZOrderUpdate } from '../../store/dashboardStore';
 import { CANVAS_THEMES, isCanvasThemeLight } from '../../data/canvasThemes';
 import { findOpenCanvasSpot } from '../../utils/autoLayout';
@@ -242,6 +245,7 @@ interface CanvasWidgetBodyProps {
   onUpdateWidgetConfig: (widgetId: string, config: Record<string, any>) => void;
   onOpenWidgetSettings: (widget: DashboardWidget) => void;
   onToggleWidgetFullScreen: (widget: DashboardWidget, makeFullScreen: boolean) => void;
+  onAuthorizeAction?: (onAuthorized: () => void, prompt?: { title?: string; subtitle?: string }) => void;
   stickyNotes?: StickyNoteItem[];
   stickyActions?: StickyCanvasActions;
 }
@@ -257,6 +261,7 @@ const MemoizedCanvasWidgetBody: React.FC<CanvasWidgetBodyProps> = React.memo(({
   onUpdateWidgetConfig,
   onOpenWidgetSettings,
   onToggleWidgetFullScreen,
+  onAuthorizeAction,
   stickyNotes,
   stickyActions,
 }) => {
@@ -597,6 +602,17 @@ const MemoizedCanvasWidgetBody: React.FC<CanvasWidgetBodyProps> = React.memo(({
           isLight={isWidgetLight}
           transparentBg={isFramelessWidget}
           onOpenSettings={handleOpenSettings}
+          onAuthorizeAction={onAuthorizeAction}
+        />
+      ) : widget.type === 'now_playing' ? (
+        <NowPlayingWidget
+          widgetId={widget.id}
+          title={widget.title}
+          config={widget.config}
+          isLight={isWidgetLight}
+          transparentBg={isFramelessWidget}
+          onOpenSettings={handleOpenSettings}
+          onAuthorizeAction={onAuthorizeAction}
         />
       ) : null}
       </React.Suspense>
@@ -666,6 +682,7 @@ interface MemoizedCanvasWidgetCardProps {
   onUpdateWidgetConfig: (widgetId: string, config: Record<string, any>) => void;
   onOpenWidgetSettings: (widget: DashboardWidget) => void;
   onToggleWidgetFullScreen: (widget: DashboardWidget, makeFullScreen: boolean) => void;
+  onAuthorizeAction?: (onAuthorized: () => void, prompt?: { title?: string; subtitle?: string }) => void;
   onSetExpandedCompactToolbarId: React.Dispatch<React.SetStateAction<string | null>>;
   onSetContextMenu: React.Dispatch<React.SetStateAction<CorkboardContextMenuState | null>>;
   handlersRef: React.RefObject<CanvasCardEventHandlers | null>;
@@ -705,6 +722,7 @@ const MemoizedCanvasWidgetCard: React.FC<MemoizedCanvasWidgetCardProps> = React.
   onUpdateWidgetConfig,
   onOpenWidgetSettings,
   onToggleWidgetFullScreen,
+  onAuthorizeAction,
   onSetExpandedCompactToolbarId,
   onSetContextMenu,
   handlersRef,
@@ -1123,6 +1141,7 @@ const MemoizedCanvasWidgetCard: React.FC<MemoizedCanvasWidgetCardProps> = React.
           onUpdateWidgetConfig={onUpdateWidgetConfig}
           onOpenWidgetSettings={onOpenWidgetSettings}
           onToggleWidgetFullScreen={onToggleWidgetFullScreen}
+          onAuthorizeAction={onAuthorizeAction}
           stickyNotes={widget.type === 'sticky_notes' ? stickyNotes : undefined}
           stickyActions={widget.type === 'sticky_notes' ? stickyActions : undefined}
         />
@@ -3056,6 +3075,7 @@ export const Corkboard: React.FC<CorkboardProps> = React.memo(({
             onUpdateWidgetConfig={handleUpdateWidgetConfig}
             onOpenWidgetSettings={handleOpenWidgetSettings}
             onToggleWidgetFullScreen={handleToggleWidgetFullScreen}
+            onAuthorizeAction={onAuthorizeSettings}
             onSetExpandedCompactToolbarId={setExpandedCompactToolbarId}
             onSetContextMenu={setContextMenu}
             handlersRef={cardHandlersRef}

@@ -192,20 +192,26 @@ import {
 const HomelabSettingsPanel = React.lazy(() =>
   import('./Phase5WidgetSettingsPanel').then((m) => ({ default: m.HomelabSettingsPanel }))
 );
+const NowPlayingSettingsPanel = React.lazy(() =>
+  import('./NowPlayingSettingsPanel').then((m) => ({ default: m.NowPlayingSettingsPanel }))
+);
 import type {
   HomeAssistantEntityTarget,
+  HomelabCameraTarget,
   HomelabDisplayMode,
   HomelabServiceTarget,
 } from '../../types/phase5Widgets';
+import type { NowPlayingDisplayMode, NowPlayingSource } from '../../types/nowPlaying';
 import {
   normalizeHomelabBaseUrl,
   resolveHomeAssistantEntities,
+  resolveHomelabCameras,
   resolveHomelabServices,
 } from '../../utils/homelabEngine';
 import {
   deleteHomelabCredentialsFromVault,
   extractHomelabOrigin,
-  loadHomelabCredentialsFromVault,
+  loadHomelabCredentialsWithSharedFallback,
   saveHomelabCredentialsToVault,
 } from '../../utils/homelabVault';
 import { stripHomelabCredentialsFromConfig } from '../../utils/mediaOptimization';
@@ -495,9 +501,24 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
   const [homelabHaBaseUrl, setHomelabHaBaseUrl] = useState<string>('');
   const [homelabHaToken, setHomelabHaToken] = useState<string>('');
   const [homelabHaEntities, setHomelabHaEntities] = useState<HomeAssistantEntityTarget[]>([]);
+  const [homelabCameras, setHomelabCameras] = useState<HomelabCameraTarget[]>([]);
   const [homelabDisplayMode, setHomelabDisplayMode] = useState<HomelabDisplayMode>('auto');
   const [homelabShowLatency, setHomelabShowLatency] = useState<boolean>(true);
   const [homelabRefreshSec, setHomelabRefreshSec] = useState<30 | 60 | 120 | 300>(60);
+
+  // Phase 3: Now Playing Media
+  const [npSource, setNpSource] = useState<NowPlayingSource>('home_assistant');
+  const [npHaBaseUrl, setNpHaBaseUrl] = useState<string>('');
+  const [npHaToken, setNpHaToken] = useState<string>('');
+  const [npHaEntityId, setNpHaEntityId] = useState<string>('');
+  const [npAllowControls, setNpAllowControls] = useState<boolean>(true);
+  const [npRequirePin, setNpRequirePin] = useState<boolean>(false);
+  const [npPlexServerClientId, setNpPlexServerClientId] = useState<string>('');
+  const [npPlexServerName, setNpPlexServerName] = useState<string>('');
+  const [npPlexPlayerFilter, setNpPlexPlayerFilter] = useState<string>('');
+  const [npDisplayMode, setNpDisplayMode] = useState<NowPlayingDisplayMode>('auto');
+  const [npShowProgress, setNpShowProgress] = useState<boolean>(true);
+  const [npRefreshSec, setNpRefreshSec] = useState<10 | 15 | 30 | 60>(15);
 
   const [rssCategoryFilter, setRssCategoryFilter] = useState<'All' | RssFeedCategory>('All');
   const [rssSearchQuery, setRssSearchQuery] = useState('');
@@ -857,9 +878,11 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setSoundscapeFadeOutOnNightMode(widget.config?.fadeOutOnNightMode !== false);
     } else if (widget.type === 'homelab') {
       setHomelabServices(resolveHomelabServices(widget.config?.services));
-      setHomelabHaBaseUrl(widget.config?.haBaseUrl || '');
+      const initialHaUrl = widget.config?.haBaseUrl || '';
+      setHomelabHaBaseUrl(initialHaUrl);
       setHomelabHaToken('');
       setHomelabHaEntities(resolveHomeAssistantEntities(widget.config?.haEntities));
+      setHomelabCameras(resolveHomelabCameras(widget.config?.cameras));
       const mode = widget.config?.displayMode;
       setHomelabDisplayMode(mode === 'split' || mode === 'compact' ? mode : 'auto');
       setHomelabShowLatency(widget.config?.showLatency !== false);
@@ -867,13 +890,46 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       setHomelabRefreshSec(sec === 30 || sec === 120 || sec === 300 ? sec : 60);
 
       const targetId = widget.id;
-      const savedHaOrigin = extractHomelabOrigin(widget.config?.haBaseUrl);
-      void loadHomelabCredentialsFromVault(targetId).then((creds) => {
+      void loadHomelabCredentialsWithSharedFallback(targetId, initialHaUrl).then((creds) => {
         if (lastOpenedWidgetIdRef.current === targetId && creds) {
+          const savedHaOrigin = extractHomelabOrigin(initialHaUrl);
           if (!creds.boundOrigin || creds.boundOrigin === savedHaOrigin) {
             setHomelabHaToken(creds.haAccessToken);
           } else {
             setHomelabHaToken('');
+          }
+        }
+      });
+    } else if (widget.type === 'now_playing') {
+      const inheritedHaUrl =
+        extractHouseholdInheritedDefaults(useDashboardStore.getState().widgets).haBaseUrl || '';
+      const initialHaUrl =
+        typeof widget.config?.haBaseUrl === 'string' && widget.config.haBaseUrl.trim()
+          ? widget.config.haBaseUrl.trim()
+          : inheritedHaUrl;
+      setNpSource(widget.config?.source === 'plex' ? 'plex' : 'home_assistant');
+      setNpHaBaseUrl(initialHaUrl);
+      setNpHaToken('');
+      setNpHaEntityId(widget.config?.haEntityId || '');
+      setNpAllowControls(widget.config?.allowControls !== false);
+      setNpRequirePin(Boolean(widget.config?.requirePinForControls));
+      setNpPlexServerClientId(widget.config?.plexServerClientId || '');
+      setNpPlexServerName(widget.config?.plexServerName || '');
+      setNpPlexPlayerFilter(widget.config?.plexPlayerFilter || '');
+      const npMode = widget.config?.displayMode;
+      setNpDisplayMode(npMode === 'card' || npMode === 'compact' ? npMode : 'auto');
+      setNpShowProgress(widget.config?.showProgress !== false);
+      const sec = widget.config?.refreshIntervalSec;
+      setNpRefreshSec(sec === 10 || sec === 30 || sec === 60 ? sec : 15);
+
+      const targetId = widget.id;
+      void loadHomelabCredentialsWithSharedFallback(targetId, initialHaUrl).then((creds) => {
+        if (lastOpenedWidgetIdRef.current === targetId && creds) {
+          const savedHaOrigin = extractHomelabOrigin(initialHaUrl);
+          if (!creds.boundOrigin || creds.boundOrigin === savedHaOrigin) {
+            setNpHaToken(creds.haAccessToken);
+          } else {
+            setNpHaToken('');
           }
         }
       });
@@ -1417,11 +1473,36 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
       configUpdates.services = resolveHomelabServices(homelabServices);
       configUpdates.haBaseUrl = normalizeHomelabBaseUrl(homelabHaBaseUrl);
       configUpdates.haEntities = resolveHomeAssistantEntities(homelabHaEntities);
+      configUpdates.cameras = resolveHomelabCameras(homelabCameras);
       configUpdates.displayMode = homelabDisplayMode;
       configUpdates.showLatency = homelabShowLatency;
       configUpdates.refreshIntervalSec = homelabRefreshSec;
 
       const cleanToken = homelabHaToken.trim();
+      const boundOrigin = extractHomelabOrigin(configUpdates.haBaseUrl) ?? undefined;
+      if (cleanToken) {
+        void saveHomelabCredentialsToVault(widget.id, {
+          haAccessToken: cleanToken,
+          ...(boundOrigin ? { boundOrigin } : {}),
+        });
+      } else {
+        void deleteHomelabCredentialsFromVault(widget.id);
+      }
+    } else if (effectiveType === 'now_playing') {
+      configUpdates = stripHomelabCredentialsFromConfig(configUpdates);
+      configUpdates.source = npSource;
+      configUpdates.haBaseUrl = normalizeHomelabBaseUrl(npHaBaseUrl);
+      configUpdates.haEntityId = npHaEntityId.trim().toLowerCase();
+      configUpdates.allowControls = npAllowControls;
+      configUpdates.requirePinForControls = npRequirePin;
+      configUpdates.plexServerClientId = npPlexServerClientId.trim() || undefined;
+      configUpdates.plexServerName = npPlexServerName.trim() || undefined;
+      configUpdates.plexPlayerFilter = npPlexPlayerFilter.trim() || undefined;
+      configUpdates.displayMode = npDisplayMode;
+      configUpdates.showProgress = npShowProgress;
+      configUpdates.refreshIntervalSec = npRefreshSec;
+
+      const cleanToken = npHaToken.trim();
       const boundOrigin = extractHomelabOrigin(configUpdates.haBaseUrl) ?? undefined;
       if (cleanToken) {
         void saveHomelabCredentialsToVault(widget.id, {
@@ -1683,6 +1764,7 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
               'chalkboard',
               'soundscape',
               'homelab',
+              'now_playing',
             ].includes(effectiveType) && (
               <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-800/60">
                 <div>
@@ -5238,12 +5320,44 @@ export const WidgetSettingsModal: React.FC<WidgetSettingsModalProps> = ({
                 setHaAccessToken={setHomelabHaToken}
                 haEntities={homelabHaEntities}
                 setHaEntities={setHomelabHaEntities}
+                cameras={homelabCameras}
+                setCameras={setHomelabCameras}
                 displayMode={homelabDisplayMode}
                 setDisplayMode={setHomelabDisplayMode}
                 showLatency={homelabShowLatency}
                 setShowLatency={setHomelabShowLatency}
                 refreshIntervalSec={homelabRefreshSec}
                 setRefreshIntervalSec={setHomelabRefreshSec}
+              />
+            )}
+
+            {/* NOW PLAYING MEDIA SETTINGS */}
+            {effectiveType === 'now_playing' && (
+              <NowPlayingSettingsPanel
+                source={npSource}
+                setSource={setNpSource}
+                haBaseUrl={npHaBaseUrl}
+                setHaBaseUrl={setNpHaBaseUrl}
+                haAccessToken={npHaToken}
+                setHaAccessToken={setNpHaToken}
+                haEntityId={npHaEntityId}
+                setHaEntityId={setNpHaEntityId}
+                allowControls={npAllowControls}
+                setAllowControls={setNpAllowControls}
+                requirePinForControls={npRequirePin}
+                setRequirePinForControls={setNpRequirePin}
+                plexServerClientId={npPlexServerClientId}
+                setPlexServerClientId={setNpPlexServerClientId}
+                plexServerName={npPlexServerName}
+                setPlexServerName={setNpPlexServerName}
+                plexPlayerFilter={npPlexPlayerFilter}
+                setPlexPlayerFilter={setNpPlexPlayerFilter}
+                displayMode={npDisplayMode}
+                setDisplayMode={setNpDisplayMode}
+                showProgress={npShowProgress}
+                setShowProgress={setNpShowProgress}
+                refreshIntervalSec={npRefreshSec}
+                setRefreshIntervalSec={setNpRefreshSec}
               />
             )}
             </React.Suspense>

@@ -1,9 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { Eye, EyeOff, KeyRound, Plus, Server, ShieldAlert, Trash2 } from 'lucide-react';
+import {
+  Camera,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Lock,
+  Plus,
+  Server,
+  ShieldAlert,
+  Trash2,
+} from 'lucide-react';
 import {
   MAX_HA_ENTITIES,
+  MAX_HOMELAB_CAMERAS,
   MAX_HOMELAB_SERVICES,
   type HomeAssistantEntityTarget,
+  type HomelabCameraTarget,
   type HomelabDisplayMode,
   type HomelabServiceTarget,
 } from '../../types/phase5Widgets';
@@ -11,7 +23,10 @@ import {
   HOMELAB_HA_ENTITY_TEMPLATES,
   HOMELAB_SERVICE_PRESETS,
   createHomelabItemId,
+  getControllableHaActions,
   inferIconHintFromEntityId,
+  isSensitiveHomeAssistantEntity,
+  isValidHomeAssistantCameraEntityId,
   isValidHomeAssistantEntityId,
 } from '../../utils/homelabEngine';
 import { fetchHomelabCapabilities } from '../../services/homelab';
@@ -25,6 +40,8 @@ interface HomelabSettingsPanelProps {
   setHaAccessToken: (val: string) => void;
   haEntities: HomeAssistantEntityTarget[];
   setHaEntities: (next: HomeAssistantEntityTarget[]) => void;
+  cameras: HomelabCameraTarget[];
+  setCameras: (next: HomelabCameraTarget[]) => void;
   displayMode: HomelabDisplayMode;
   setDisplayMode: (mode: HomelabDisplayMode) => void;
   showLatency: boolean;
@@ -42,6 +59,8 @@ export const HomelabSettingsPanel: React.FC<HomelabSettingsPanelProps> = ({
   setHaAccessToken,
   haEntities,
   setHaEntities,
+  cameras,
+  setCameras,
   displayMode,
   setDisplayMode,
   showLatency,
@@ -55,6 +74,9 @@ export const HomelabSettingsPanel: React.FC<HomelabSettingsPanelProps> = ({
   const [newSvcUrl, setNewSvcUrl] = useState('');
   const [newEntityId, setNewEntityId] = useState('');
   const [newEntityLabel, setNewEntityLabel] = useState('');
+  const [newCamSourceType, setNewCamSourceType] = useState<'ha_entity' | 'snapshot_url'>('ha_entity');
+  const [newCamName, setNewCamName] = useState('');
+  const [newCamTarget, setNewCamTarget] = useState('');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -108,6 +130,8 @@ export const HomelabSettingsPanel: React.FC<HomelabSettingsPanelProps> = ({
         label: tpl.label,
         iconHint: tpl.iconHint,
         enabled: true,
+        allowControl: Boolean(tpl.allowControl),
+        requirePin: tpl.requirePin ?? isSensitiveHomeAssistantEntity(tpl.entityId),
       },
     ]);
   };
@@ -125,10 +149,46 @@ export const HomelabSettingsPanel: React.FC<HomelabSettingsPanelProps> = ({
         label: newEntityLabel.trim() || undefined,
         iconHint: inferIconHintFromEntityId(cleanId),
         enabled: true,
+        allowControl: false,
+        requirePin: isSensitiveHomeAssistantEntity(cleanId),
       },
     ]);
     setNewEntityId('');
     setNewEntityLabel('');
+  };
+
+  const handleAddCamera = () => {
+    if (cameras.length >= MAX_HOMELAB_CAMERAS) return;
+    const rawTarget = newCamTarget.trim();
+    if (!rawTarget) return;
+    if (newCamSourceType === 'ha_entity') {
+      const entityId = rawTarget.toLowerCase();
+      if (!isValidHomeAssistantCameraEntityId(entityId)) return;
+      setCameras([
+        ...cameras,
+        {
+          id: createHomelabItemId('cam'),
+          name: newCamName.trim() || entityId,
+          sourceType: 'ha_entity',
+          entityId,
+          enabled: true,
+        },
+      ]);
+    } else {
+      if (!/^https?:\/\//i.test(rawTarget)) return;
+      setCameras([
+        ...cameras,
+        {
+          id: createHomelabItemId('cam'),
+          name: newCamName.trim() || 'Camera Snapshot',
+          sourceType: 'snapshot_url',
+          snapshotUrl: rawTarget,
+          enabled: true,
+        },
+      ]);
+    }
+    setNewCamName('');
+    setNewCamTarget('');
   };
 
   return (
@@ -158,9 +218,9 @@ export const HomelabSettingsPanel: React.FC<HomelabSettingsPanelProps> = ({
           <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
           <span>
             Private LAN (<code className="font-mono">192.168.x.x</code> /{' '}
-            <code className="font-mono">.local</code>) endpoints are disabled on this server. Set{' '}
-            <code className="font-mono">AMBIENTLY_ALLOW_PRIVATE_FEEDS=true</code> in Docker / Pi
-            or point to public HTTPS reverse-proxy URLs.
+            <code className="font-mono">.local</code>) endpoints & camera snapshots are disabled on
+            this server. Set <code className="font-mono">AMBIENTLY_ALLOW_PRIVATE_FEEDS=true</code> in
+            Docker / Pi or point to public HTTPS reverse-proxy URLs.
           </span>
         </div>
       )}
@@ -263,11 +323,11 @@ export const HomelabSettingsPanel: React.FC<HomelabSettingsPanelProps> = ({
         </div>
       </div>
 
-      {/* Home Assistant Read-Only Entities */}
+      {/* Home Assistant Entities & Opt-In Controls */}
       <div className="space-y-2.5 pt-3 border-t border-gray-800/70">
         <div className="flex items-center justify-between">
           <label className="text-[11px] font-semibold text-gray-300">
-            Home Assistant Read-Only Entities ({haEntities.length}/{MAX_HA_ENTITIES})
+            Home Assistant Entities & Controls ({haEntities.length}/{MAX_HA_ENTITIES})
           </label>
           <span className="text-[10px] text-emerald-300 flex items-center gap-1">
             <KeyRound className="w-3 h-3" />
@@ -328,45 +388,85 @@ export const HomelabSettingsPanel: React.FC<HomelabSettingsPanelProps> = ({
         </div>
 
         {haEntities.length > 0 && (
-          <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
-            {haEntities.map((ent, idx) => (
-              <div
-                key={ent.id}
-                className="flex items-center gap-2 p-1.5 rounded-xl bg-gray-950/70 border border-gray-800"
-              >
-                <input
-                  type="checkbox"
-                  checked={ent.enabled}
-                  onChange={(e) => {
-                    const next = [...haEntities];
-                    next[idx] = { ...ent, enabled: e.target.checked };
-                    setHaEntities(next);
-                  }}
-                  className="accent-cyan-500 cursor-pointer"
-                />
-                <span className="text-[11px] font-mono text-cyan-300 truncate flex-1">
-                  {ent.entityId}
-                </span>
-                <input
-                  type="text"
-                  value={ent.label || ''}
-                  onChange={(e) => {
-                    const next = [...haEntities];
-                    next[idx] = { ...ent, label: e.target.value };
-                    setHaEntities(next);
-                  }}
-                  placeholder="Label"
-                  className="w-28 rounded-lg bg-gray-900 border border-gray-800 px-2 py-1 text-[11px] text-white focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => setHaEntities(haEntities.filter((e) => e.id !== ent.id))}
-                  className="p-1 text-gray-400 hover:text-rose-400 cursor-pointer"
+          <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+            {haEntities.map((ent, idx) => {
+              const supportsControl = getControllableHaActions(ent.entityId).length > 0;
+              return (
+                <div
+                  key={ent.id}
+                  className="p-2 rounded-xl bg-gray-950/70 border border-gray-800 space-y-1.5"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ))}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={ent.enabled}
+                      onChange={(e) => {
+                        const next = [...haEntities];
+                        next[idx] = { ...ent, enabled: e.target.checked };
+                        setHaEntities(next);
+                      }}
+                      className="accent-cyan-500 cursor-pointer"
+                    />
+                    <span className="text-[11px] font-mono text-cyan-300 truncate flex-1">
+                      {ent.entityId}
+                    </span>
+                    <input
+                      type="text"
+                      value={ent.label || ''}
+                      onChange={(e) => {
+                        const next = [...haEntities];
+                        next[idx] = { ...ent, label: e.target.value };
+                        setHaEntities(next);
+                      }}
+                      placeholder="Label"
+                      className="w-28 rounded-lg bg-gray-900 border border-gray-800 px-2 py-1 text-[11px] text-white focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setHaEntities(haEntities.filter((e) => e.id !== ent.id))}
+                      className="p-1 text-gray-400 hover:text-rose-400 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {supportsControl && (
+                    <div className="flex flex-wrap items-center gap-4 pl-5 text-[10px] text-gray-300">
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(ent.allowControl)}
+                          onChange={(e) => {
+                            const next = [...haEntities];
+                            next[idx] = { ...ent, allowControl: e.target.checked };
+                            setHaEntities(next);
+                          }}
+                          className="accent-cyan-500 cursor-pointer"
+                        />
+                        <span>Enable tap control</span>
+                      </label>
+
+                      {ent.allowControl && (
+                        <label className="flex items-center gap-1.5 cursor-pointer text-amber-200">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(ent.requirePin)}
+                            onChange={(e) => {
+                              const next = [...haEntities];
+                              next[idx] = { ...ent, requirePin: e.target.checked };
+                              setHaEntities(next);
+                            }}
+                            className="accent-amber-500 cursor-pointer"
+                          />
+                          <Lock className="w-3 h-3" />
+                          <span>Require Parent PIN</span>
+                        </label>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -375,7 +475,7 @@ export const HomelabSettingsPanel: React.FC<HomelabSettingsPanelProps> = ({
             type="text"
             value={newEntityId}
             onChange={(e) => setNewEntityId(e.target.value)}
-            placeholder="sensor.living_room_temp"
+            placeholder="light.kitchen or sensor.temp"
             className="sm:col-span-2 rounded-xl bg-gray-950 border border-gray-800 px-2.5 py-2 text-xs font-mono text-white focus:outline-none focus:border-cyan-500"
           />
           <input
@@ -392,6 +492,92 @@ export const HomelabSettingsPanel: React.FC<HomelabSettingsPanelProps> = ({
               !isValidHomeAssistantEntityId(newEntityId) || haEntities.length >= MAX_HA_ENTITIES
             }
             className="px-3 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-xs font-bold text-white flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Add</span>
+          </button>
+        </div>
+      </div>
+
+      {/* LAN Camera Snapshots (Gated Behind AMBIENTLY_ALLOW_PRIVATE_FEEDS=true) */}
+      <div className="space-y-2.5 pt-3 border-t border-gray-800/70">
+        <div className="flex items-center justify-between">
+          <label className="text-[11px] font-semibold text-gray-300 flex items-center gap-1.5">
+            <Camera className="w-3.5 h-3.5 text-cyan-400" />
+            <span>LAN Camera Snapshots ({cameras.length}/{MAX_HOMELAB_CAMERAS})</span>
+          </label>
+          <span className="text-[10px] text-gray-400">Requires LAN mode</span>
+        </div>
+
+        {cameras.length > 0 && (
+          <div className="space-y-1.5">
+            {cameras.map((cam, idx) => (
+              <div
+                key={cam.id}
+                className="flex items-center gap-2 p-2 rounded-xl bg-gray-950/70 border border-gray-800"
+              >
+                <input
+                  type="checkbox"
+                  checked={cam.enabled}
+                  onChange={(e) => {
+                    const next = [...cameras];
+                    next[idx] = { ...cam, enabled: e.target.checked };
+                    setCameras(next);
+                  }}
+                  className="accent-cyan-500 cursor-pointer"
+                />
+                <span className="text-xs font-semibold text-white truncate max-w-[110px]">
+                  {cam.name}
+                </span>
+                <span className="text-[11px] font-mono text-cyan-300 truncate flex-1">
+                  {cam.sourceType === 'ha_entity' ? cam.entityId : cam.snapshotUrl}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCameras(cameras.filter((c) => c.id !== cam.id))}
+                  className="p-1 text-gray-400 hover:text-rose-400 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-6 gap-1.5">
+          <select
+            value={newCamSourceType}
+            onChange={(e) =>
+              setNewCamSourceType(e.target.value as 'ha_entity' | 'snapshot_url')
+            }
+            className="sm:col-span-2 rounded-xl bg-gray-950 border border-gray-800 px-2 py-2 text-xs text-white"
+          >
+            <option value="ha_entity">HA Camera Entity</option>
+            <option value="snapshot_url">Snapshot URL</option>
+          </select>
+          <input
+            type="text"
+            value={newCamName}
+            onChange={(e) => setNewCamName(e.target.value)}
+            placeholder="Camera label"
+            className="sm:col-span-1 rounded-xl bg-gray-950 border border-gray-800 px-2.5 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"
+          />
+          <input
+            type="text"
+            value={newCamTarget}
+            onChange={(e) => setNewCamTarget(e.target.value)}
+            placeholder={
+              newCamSourceType === 'ha_entity'
+                ? 'camera.front_porch'
+                : 'http://192.168.1.60/snap.jpg'
+            }
+            className="sm:col-span-2 rounded-xl bg-gray-950 border border-gray-800 px-2.5 py-2 text-xs font-mono text-white focus:outline-none focus:border-cyan-500"
+          />
+          <button
+            type="button"
+            onClick={handleAddCamera}
+            disabled={cameras.length >= MAX_HOMELAB_CAMERAS || !newCamTarget.trim()}
+            className="sm:col-span-1 px-3 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-xs font-bold text-white flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add</span>

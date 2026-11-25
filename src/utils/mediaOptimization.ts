@@ -199,7 +199,7 @@ export function sanitizeWidgetConfigForCloud(
       ? stripWifiCredentialsFromConfig(config)
       : { ...(config || {}) };
 
-  if (widgetType === 'homelab' || hasHomelabSecretKeys) {
+  if (widgetType === 'homelab' || widgetType === 'now_playing' || hasHomelabSecretKeys) {
     next = stripHomelabCredentialsFromConfig(next);
   }
 

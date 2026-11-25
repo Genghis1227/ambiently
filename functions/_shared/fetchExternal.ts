@@ -260,6 +260,7 @@ export interface ExternalFetchOptions {
   method?: 'GET' | 'POST';
   headers?: Record<string, string>;
   body?: string;
+  responseType?: 'text' | 'bytes';
 }
 
 export interface ExternalFetchResult {
@@ -267,7 +268,8 @@ export interface ExternalFetchResult {
   status: number;
   statusText: string;
   url: string; // the address the answer finally came from
-  text: string; // empty unless ok
+  text: string; // empty unless ok and responseType !== 'bytes'
+  bytes?: Uint8Array; // populated when ok and responseType === 'bytes'
   contentType?: string;
   canEmbedDirectly?: boolean; // true if no X-Frame-Options or CSP frame-ancestors header blocks iframes
   etag?: string;
@@ -293,7 +295,11 @@ function parseRetryAfterSeconds(headerVal: string | null): number | undefined {
   return undefined;
 }
 
-async function readCapped(res: Response, maxBytes: number, signal: AbortSignal): Promise<string> {
+async function readCappedBytes(
+  res: Response,
+  maxBytes: number,
+  signal: AbortSignal
+): Promise<Uint8Array> {
   const tooBig = () =>
     new ExternalFetchError(`The answer is larger than ${Math.round(maxBytes / 1024 / 1024)} MB.`, 502);
   const declared = Number(res.headers.get('Content-Length'));
@@ -301,7 +307,7 @@ async function readCapped(res: Response, maxBytes: number, signal: AbortSignal):
     await res.body?.cancel();
     throw tooBig();
   }
-  if (!res.body) return '';
+  if (!res.body) return new Uint8Array(0);
 
   const reader = res.body.getReader();
   // Stop reading when time runs out, even if this runtime doesn't end the body on abort
@@ -332,7 +338,17 @@ async function readCapped(res: Response, maxBytes: number, signal: AbortSignal):
     all.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return new TextDecoder().decode(all);
+  return all;
+}
+
+export function encodeBytesToBase64(bytes: Uint8Array): string {
+  const chunkSize = 0x8000;
+  const parts: string[] = [];
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const slice = bytes.subarray(i, i + chunkSize);
+    parts.push(String.fromCharCode(...slice));
+  }
+  return btoa(parts.join(''));
 }
 
 // checkPublicHttpsUrl only sees the name in the address. On Cloudflare that's enough, because a
@@ -418,13 +434,15 @@ export async function fetchExternal(rawUrl: string, options: ExternalFetchOption
       const csp = (res.headers.get('content-security-policy') || '').trim();
       const contentType = (res.headers.get('content-type') || '').trim() || undefined;
       const hasFrameBlock = Boolean(xfo) || /frame-ancestors/i.test(csp);
-      const text = await readCapped(res, maxBytes, controller.signal);
+      const rawBytes = await readCappedBytes(res, maxBytes, controller.signal);
+      const isBinary = options.responseType === 'bytes';
       return {
         ok: true,
         status: res.status,
         statusText: res.statusText,
         url: url.toString(),
-        text,
+        text: isBinary ? '' : new TextDecoder().decode(rawBytes),
+        ...(isBinary ? { bytes: rawBytes } : {}),
         contentType,
         canEmbedDirectly: !hasFrameBlock,
         etag,
