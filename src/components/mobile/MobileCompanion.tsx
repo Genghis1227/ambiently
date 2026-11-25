@@ -42,6 +42,7 @@ import {
   Pencil,
   Volume2,
   Server,
+  Disc3,
 } from 'lucide-react';
 import type { DashboardTab, DashboardWidget, StickyNoteItem, WidgetThemeMode } from '../../types/dashboard';
 import { categorizeIngredient, parseIngredient } from '../../utils/ingredientAggregator';
@@ -154,6 +155,9 @@ const SoundscapeWidget = React.lazy(() =>
 );
 const HomelabWidget = React.lazy(() =>
   import('../widgets/HomelabWidget').then((m) => ({ default: m.HomelabWidget }))
+);
+const NowPlayingWidget = React.lazy(() =>
+  import('../widgets/NowPlayingWidget').then((m) => ({ default: m.NowPlayingWidget }))
 );
 
 interface MobileCompanionProps {
@@ -452,6 +456,8 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return Volume2;
       case 'homelab':
         return Server;
+      case 'now_playing':
+        return Disc3;
       default:
         return LayoutGrid;
     }
@@ -513,6 +519,8 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
         return 'Ambient Soundscape Mixer';
       case 'homelab':
         return 'Home Lab & Home Assistant';
+      case 'now_playing':
+        return 'Now Playing Media';
       default:
         return 'Widget';
     }
@@ -900,6 +908,21 @@ export const MobileCompanion: React.FC<MobileCompanionProps> = ({
               isLight={isLight}
               transparentBg={false}
               onOpenSettings={() => requestOpenWidgetSettings(widget)}
+              onAuthorizeAction={onAuthorizeSettings}
+            />
+          </div>
+        );
+      case 'now_playing':
+        return (
+          <div className="max-h-[24rem] overflow-y-auto">
+            <NowPlayingWidget
+              widgetId={widget.id}
+              title={widget.title}
+              config={widget.config}
+              isLight={isLight}
+              transparentBg={false}
+              onOpenSettings={() => requestOpenWidgetSettings(widget)}
+              onAuthorizeAction={onAuthorizeSettings}
             />
           </div>
         );

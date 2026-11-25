@@ -52,6 +52,7 @@ const ALL_WIDGET_TYPES: WidgetType[] = [
   'chalkboard',
   'soundscape',
   'homelab',
+  'now_playing',
 ];
 
 function makeWidget(
@@ -80,8 +81,8 @@ function boxesOverlap(a: FreeformPosition, b: FreeformPosition): boolean {
 }
 
 describe('widgetCatalog', () => {
-  it('covers all 28 WidgetTypes cleanly across 25 entries and 4 categories', () => {
-    assert.equal(WIDGET_CATALOG_ENTRIES.length, 25);
+  it('covers all 29 WidgetTypes cleanly across 26 entries and 4 categories', () => {
+    assert.equal(WIDGET_CATALOG_ENTRIES.length, 26);
     assert.deepEqual(
       WIDGET_CATEGORIES.map((c) => c.id),
       ['all', 'household', 'time_weather', 'media_ambient', 'text_feeds']
@@ -237,6 +238,18 @@ describe('widgetCatalog', () => {
     assert.equal(homelabPayload.type, 'homelab');
     assert.equal(homelabPayload.title, 'Home Lab & Home Assistant');
     assert.equal(homelabPayload.config?.showLatency, true);
+
+    const npSearch = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'media_ambient', 'sonos');
+    assert.equal(npSearch[0]?.entry.id, 'now_playing');
+    const existingHaWidget = makeWidget('hl-existing', 'homelab', {
+      config: { haBaseUrl: 'http://homeassistant.local:8123' },
+    });
+    const npPayload = buildWidgetPayloadFromVariant(npSearch[0].entry.variants[0], 'tab-home', [
+      existingHaWidget,
+    ]);
+    assert.equal(npPayload.type, 'now_playing');
+    assert.equal(npPayload.title, 'Now Playing');
+    assert.equal(npPayload.config?.haBaseUrl, 'http://homeassistant.local:8123');
 
     assert.equal(getDefaultTitleForWidgetType('kanban'), 'Project Board (Kanban)');
     const projectBoardSearch = filterWidgetCatalog(WIDGET_CATALOG_ENTRIES, 'all', 'project board');

@@ -131,7 +131,8 @@ export type WidgetType =
   | 'daily_discovery'
   | 'chalkboard'
   | 'soundscape'
-  | 'homelab';
+  | 'homelab'
+  | 'now_playing';
 
 export interface RssWidgetConfig {
   feedUrl?: string;
@@ -250,6 +251,16 @@ export type IdleScreensaverMode = 'photos' | 'canvas';
 export type IdleScreensaverPhotoStyle = 'ken_burns' | 'mosaic' | 'polaroid' | 'filmstrip';
 export type IdleScreensaverPolaroidSizeMode = 'mixed' | 'uniform' | 'small' | 'large';
 
+export interface CanvasScheduleRule {
+  id: string;
+  tabId: string;
+  label?: string;
+  startTime: string; // "HH:MM" 24-hour local time
+  endTime: string;   // "HH:MM" 24-hour local time (supports overnight windows)
+  daysOfWeek?: number[]; // 0 (Sun) .. 6 (Sat); undefined or all 7 = every day
+  enabled: boolean;
+}
+
 export interface AppSettings {
   id: string; // 'global'
   dashboardTitle: string;
@@ -269,6 +280,11 @@ export interface AppSettings {
   nightDimOpacity: number; // 0.0 - 0.95
   nightModeWakeTimeoutMin?: number; // Inactivity timeout in minutes before returning to night mode (0 = keep awake until morning)
   nightScheduleEnabled?: boolean; // false = night mode only starts by hand (unset counts as on)
+
+  // Carousel & Time-of-Day Canvas Scheduling
+  canvasScheduleEnabled?: boolean;
+  canvasSchedules?: CanvasScheduleRule[];
+  canvasScheduleSnoozeMin?: 0 | 5 | 15 | 30 | 60;
 
   // Idle Photo Screensaver
   idleScreensaverTimeoutMin?: 0 | 5 | 10 | 15 | 30;

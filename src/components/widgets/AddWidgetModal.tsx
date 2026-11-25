@@ -29,6 +29,7 @@ import {
   Pencil,
   Volume2,
   Server,
+  Disc3,
 } from 'lucide-react';
 import type { DashboardWidget } from '../../types/dashboard';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -77,6 +78,7 @@ const CATALOG_ICONS: Record<WidgetCatalogIconKey, React.ComponentType<{ classNam
   chalkboard: Pencil,
   soundscape: Volume2,
   homelab: Server,
+  now_playing: Disc3,
 };
 
 export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({

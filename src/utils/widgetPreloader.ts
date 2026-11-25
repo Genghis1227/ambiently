@@ -28,6 +28,7 @@ const WIDGET_CHUNK_LOADERS: Partial<Record<WidgetType, () => Promise<unknown>>> 
   chalkboard: () => import('../components/widgets/ChalkboardWidget'),
   soundscape: () => import('../components/widgets/SoundscapeWidget'),
   homelab: () => import('../components/widgets/HomelabWidget'),
+  now_playing: () => import('../components/widgets/NowPlayingWidget'),
 };
 
 /**

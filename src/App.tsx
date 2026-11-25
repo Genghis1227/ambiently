@@ -66,6 +66,18 @@ import {
   resolveVisibleKanbanOverlay,
 } from './utils/fullscreenWidgetOverlay';
 import { setPhotoScreensaverOccludingCanvas } from './utils/displayActivity';
+import {
+  resolveDisplayHomeTab,
+  resolveDisplayVisibleTabs,
+  useDisplayRoomPreferences,
+} from './utils/displayRoomFilter';
+import {
+  clearCanvasScheduleSnooze,
+  computeScheduleSnoozeUntil,
+  readCanvasScheduleSnooze,
+  resolveActiveCanvasSchedule,
+  writeCanvasScheduleSnooze,
+} from './utils/canvasSchedule';
 
 const SettingsModal = lazy(() =>
   import('./components/settings/SettingsModal').then((m) => ({ default: m.SettingsModal }))
@@ -114,6 +126,7 @@ interface CarouselRotationControllerProps {
   activeTabIdResolved: string;
   isAnyOverlayOpen: boolean;
   showIdleScreensaver: boolean;
+  isSchedulePinned: boolean;
   onCloseUnscopedOverlays: () => void;
 }
 
@@ -125,6 +138,7 @@ const CarouselRotationController = memo(function CarouselRotationController({
   activeTabIdResolved,
   isAnyOverlayOpen,
   showIdleScreensaver,
+  isSchedulePinned,
   onCloseUnscopedOverlays,
 }: CarouselRotationControllerProps) {
   const carouselEnabled = useDashboardStore((s) => Boolean(s.settings.carouselEnabled));
@@ -164,6 +178,7 @@ const CarouselRotationController = memo(function CarouselRotationController({
       isCarouselPaused ||
       isAnyOverlayOpen ||
       showIdleScreensaver ||
+      isSchedulePinned ||
       tabIds.length <= 1
     ) {
       return;
@@ -199,6 +214,7 @@ const CarouselRotationController = memo(function CarouselRotationController({
     isCarouselPaused,
     isAnyOverlayOpen,
     showIdleScreensaver,
+    isSchedulePinned,
     rotateDurationSec,
     visibleTabIds,
     activeTabIdResolved,
@@ -428,18 +444,63 @@ export function App() {
   // Granular protection controls (Settings/Share/Plex verify PIN on each open; Canvas locks stay enforced whenever active)
   const isSettingsLocked = isSettingsPinRequired(settings);
   const isCanvasLocked = isCanvasPinLocked(settings);
+  const roomPrefs = useDisplayRoomPreferences(realtimeBoardId || undefined);
 
   const visibleTabs = useMemo(
-    () =>
-      tabs.filter((t) =>
-        t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false
-      ),
-    [tabs]
+    () => resolveDisplayVisibleTabs(tabs, roomPrefs),
+    [tabs, roomPrefs]
   );
 
-  const homeTab = visibleTabs.find((t) => t.isHome) || visibleTabs[0] || tabs[0];
+  const homeTab = resolveDisplayHomeTab(visibleTabs, tabs, roomPrefs);
   const activeTab = visibleTabs.find((t) => t.id === activeTabId) || homeTab;
   const activeTabIdResolved = activeTab?.id || 'tab-corkboard';
+
+  const minuteClock = useSharedClock('minute', true);
+  const [scheduleSnooze, setScheduleSnooze] = useState<{ ruleId: string; untilMs: number } | null>(
+    readCanvasScheduleSnooze
+  );
+  const visibleTabIdSet = useMemo(() => new Set(visibleTabs.map((t) => t.id)), [visibleTabs]);
+  const activeScheduleRule = useMemo(
+    () =>
+      resolveActiveCanvasSchedule({
+        now: minuteClock,
+        enabled: settings.canvasScheduleEnabled,
+        followOnThisDisplay: roomPrefs.followCanvasSchedule,
+        rules: settings.canvasSchedules,
+        visibleTabIds: visibleTabIdSet,
+      }),
+    [
+      minuteClock,
+      settings.canvasScheduleEnabled,
+      roomPrefs.followCanvasSchedule,
+      settings.canvasSchedules,
+      visibleTabIdSet,
+    ]
+  );
+  const activeScheduleRuleRef = useRef(activeScheduleRule);
+  useEffect(() => {
+    activeScheduleRuleRef.current = activeScheduleRule;
+  }, [activeScheduleRule]);
+
+  const isScheduleSnoozed = Boolean(
+    activeScheduleRule &&
+      scheduleSnooze &&
+      scheduleSnooze.ruleId === activeScheduleRule.id &&
+      minuteClock.getTime() < scheduleSnooze.untilMs
+  );
+
+  const hasAppliedInitialRoomHomeRef = useRef(false);
+  useEffect(() => {
+    if (!isInitialized || hasAppliedInitialRoomHomeRef.current) return;
+    hasAppliedInitialRoomHomeRef.current = true;
+    if (
+      roomPrefs.localHomeTabId &&
+      visibleTabs.some((t) => t.id === roomPrefs.localHomeTabId) &&
+      activeTabId !== roomPrefs.localHomeTabId
+    ) {
+      useDashboardStore.getState().rotateToTab(roomPrefs.localHomeTabId);
+    }
+  }, [isInitialized, roomPrefs.localHomeTabId, visibleTabs, activeTabId]);
 
   const tabWidgets = useMemo(
     () => widgets.filter((w) => w.tabId === activeTabIdResolved),
@@ -463,6 +524,21 @@ export function App() {
   const handleSelectTab = useCallback(
     (tabId: string) => {
       closeUnscopedOverlays();
+      const currentRule = activeScheduleRuleRef.current;
+      if (currentRule) {
+        if (tabId !== currentRule.tabId) {
+          const untilMs = computeScheduleSnoozeUntil(
+            Date.now(),
+            useDashboardStore.getState().settings.canvasScheduleSnoozeMin,
+            currentRule
+          );
+          writeCanvasScheduleSnooze(currentRule.id, untilMs);
+          setScheduleSnooze({ ruleId: currentRule.id, untilMs });
+        } else {
+          clearCanvasScheduleSnooze();
+          setScheduleSnooze(null);
+        }
+      }
       setActiveTabId(tabId);
     },
     [closeUnscopedOverlays, setActiveTabId]
@@ -1306,7 +1382,6 @@ export function App() {
     [notes, activeTabIdResolved]
   );
 
-  const minuteClock = useSharedClock('minute', !isMobileCompanionActive);
   const minuteNowMs = minuteClock.getTime();
   const noteTrashCount = useMemo(
     () =>
@@ -1315,6 +1390,33 @@ export function App() {
       ).length,
     [activeCanvasNotes, minuteNowMs]
   );
+
+  // Enforce active time-of-day canvas schedule when not snoozed or covered by Night Mode / Screensaver / Modal
+  useEffect(() => {
+    if (
+      !isInitialized ||
+      !activeScheduleRule ||
+      isScheduleSnoozed ||
+      settings.nightModeEnabled ||
+      showIdleScreensaver ||
+      isAnyOverlayOpen
+    ) {
+      return;
+    }
+    if (activeTabIdResolved !== activeScheduleRule.tabId) {
+      closeUnscopedOverlays();
+      useDashboardStore.getState().rotateToTab(activeScheduleRule.tabId);
+    }
+  }, [
+    isInitialized,
+    activeScheduleRule,
+    isScheduleSnoozed,
+    settings.nightModeEnabled,
+    showIdleScreensaver,
+    isAnyOverlayOpen,
+    activeTabIdResolved,
+    closeUnscopedOverlays,
+  ]);
   const trashCount = noteTrashCount + deletedWidgetCount;
 
   if (!isInitialized) {
@@ -1716,6 +1818,7 @@ export function App() {
         activeTabIdResolved={activeTabIdResolved}
         isAnyOverlayOpen={isAnyOverlayOpen}
         showIdleScreensaver={showIdleScreensaver}
+        isSchedulePinned={Boolean(activeScheduleRule && !isScheduleSnoozed)}
         onCloseUnscopedOverlays={closeUnscopedOverlays}
       />
 

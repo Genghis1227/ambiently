@@ -42,6 +42,7 @@ const WIDGET_PRIORITY: Record<string, number> = {
   chalkboard: 5,
   soundscape: 6,
   homelab: 6,
+  now_playing: 5,
   rss: 8,
   countdown: 9,
   quotes: 10,

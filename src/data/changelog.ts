@@ -11,6 +11,16 @@ export { APP_VERSION };
 
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: "v0.8.12",
+    date: "November 24, 2026",
+    title: "Phase 3: Smart-Home Controls, Now Playing, Canvas Scheduling & Per-Room Views",
+    highlights: [
+      "Time-of-Day Canvas Scheduling: Automatically switch boards on local HH:MM schedules with weekday filters, overnight windows, auto-carousel pinning, and temporary snooze on manual tab changes.",
+      "Interactive Home Assistant Controls & Camera Snapshots: Enable opt-in allowlisted light, switch, scene, lock, and cover toggles directly from Server & Home Assistant tiles (with default Parent PIN locks on sensitive domains) plus private-network-gated LAN camera snapshot tiles and lightbox zoom.",
+      "Now Playing Media Widget & Per-Room Display Views: Show live album art, progress, and transport controls via Home Assistant media players or Plex sessions, and customize local home canvases, hidden boards, and room labels per display.",
+    ],
+  },
+  {
     version: "v0.8.11",
     date: "November 24, 2026",
     title: "Security Hardening, Bundle Reduction & 24/7 Kiosk Performance Optimizations",

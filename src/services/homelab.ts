@@ -1,6 +1,10 @@
 import type {
+  HaMediaPlayerRequest,
+  HaMediaPlayerResponse,
   HomelabApiCheckRequest,
   HomelabApiCheckResponse,
+  HomelabServiceActionRequest,
+  HomelabServiceActionResponse,
 } from '../types/phase5Widgets';
 
 const HOMELAB_CACHE_PREFIX = 'ambiently_homelab_status_v1_';
@@ -31,7 +35,7 @@ export async function fetchHomelabStatus(
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ mode: 'check', ...payload }),
     cache: 'no-store',
     signal,
   });
@@ -39,6 +43,52 @@ export async function fetchHomelabStatus(
     throw new Error(`Home Lab check failed (${res.status})`);
   }
   return (await res.json()) as HomelabApiCheckResponse;
+}
+
+export async function callHomeAssistantService(
+  payload: Omit<HomelabServiceActionRequest, 'mode'>,
+  signal?: AbortSignal
+): Promise<HomelabServiceActionResponse> {
+  const res = await fetch('/api/homelab', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({ mode: 'ha_service', ...payload }),
+    cache: 'no-store',
+    signal,
+  });
+  const data = (await res.json()) as HomelabServiceActionResponse;
+  if (!res.ok) {
+    return {
+      ok: false,
+      blockedByLanGate: data?.blockedByLanGate,
+      error: data?.error || `Action failed (${res.status})`,
+    };
+  }
+  return data;
+}
+
+export async function fetchHomeAssistantMediaPlayer(
+  payload: Omit<HaMediaPlayerRequest, 'mode'>,
+  signal?: AbortSignal
+): Promise<HaMediaPlayerResponse> {
+  const res = await fetch('/api/homelab', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({ mode: 'ha_media_player', ...payload }),
+    cache: 'no-store',
+    signal,
+  });
+  const data = (await res.json()) as HaMediaPlayerResponse;
+  if (!res.ok && !data?.error) {
+    return { ok: false, state: 'error', error: `Media check failed (${res.status})` };
+  }
+  return data;
 }
 
 export function readCachedHomelabStatus(widgetId: string): HomelabApiCheckResponse | null {
@@ -62,7 +112,15 @@ export function writeCachedHomelabStatus(
 ): void {
   if (typeof localStorage === 'undefined' || !widgetId) return;
   try {
-    localStorage.setItem(`${HOMELAB_CACHE_PREFIX}${widgetId}`, JSON.stringify(response));
+    const sanitized: HomelabApiCheckResponse = {
+      ...response,
+      ...(response.cameras
+        ? {
+            cameras: response.cameras.map(({ imageDataUrl: _ignored, ...rest }) => rest),
+          }
+        : {}),
+    };
+    localStorage.setItem(`${HOMELAB_CACHE_PREFIX}${widgetId}`, JSON.stringify(sanitized));
   } catch {
     // Ignore storage quota errors on restricted devices
   }

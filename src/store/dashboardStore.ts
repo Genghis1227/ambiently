@@ -979,8 +979,16 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     await db.tabs.put(updated).catch(() => {});
 
     const vaultKeysToDeleteOnTabClose = get().widgets
-      .filter((w) => w.tabId === tabId && (w.type === 'wifi_qr' || w.type === 'homelab'))
-      .map((w) => (w.type === 'homelab' ? getHomelabVaultKey(w.id) : getWifiVaultKey(w.id)));
+      .filter(
+        (w) =>
+          w.tabId === tabId &&
+          (w.type === 'wifi_qr' || w.type === 'homelab' || w.type === 'now_playing')
+      )
+      .map((w) =>
+        w.type === 'homelab' || w.type === 'now_playing'
+          ? getHomelabVaultKey(w.id)
+          : getWifiVaultKey(w.id)
+      );
     if (vaultKeysToDeleteOnTabClose.length > 0) {
       await db.vault.bulkDelete(vaultKeysToDeleteOnTabClose).catch(() => {});
     }
@@ -2023,7 +2031,12 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       if (existing?.type === 'wifi_qr' || remoteWidget.type === 'wifi_qr') {
         db.vault.delete(getWifiVaultKey(remoteWidget.id)).catch(() => {});
       }
-      if (existing?.type === 'homelab' || remoteWidget.type === 'homelab') {
+      if (
+        existing?.type === 'homelab' ||
+        existing?.type === 'now_playing' ||
+        remoteWidget.type === 'homelab' ||
+        remoteWidget.type === 'now_playing'
+      ) {
         db.vault.delete(getHomelabVaultKey(remoteWidget.id)).catch(() => {});
       }
       const recordedTombstone = resolveTombstoneIso(remoteWidget.updated_at, remoteWidget.deleted_at);
@@ -2251,7 +2264,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     if (existing.type === 'wifi_qr') {
       await db.vault.delete(getWifiVaultKey(widgetId)).catch(() => {});
     }
-    if (existing.type === 'homelab') {
+    if (existing.type === 'homelab' || existing.type === 'now_playing') {
       await db.vault.delete(getHomelabVaultKey(widgetId)).catch(() => {});
     }
     const nowIso = nextMonotonicIso(existing.updated_at);
@@ -2395,7 +2408,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       if (w.type === 'wifi_qr') {
         vaultKeysToDelete.add(getWifiVaultKey(w.id));
       }
-      if (w.type === 'homelab') {
+      if (w.type === 'homelab' || w.type === 'now_playing') {
         vaultKeysToDelete.add(getHomelabVaultKey(w.id));
       }
       const mediaKey = parseVaultMediaKey(w.config?.url);

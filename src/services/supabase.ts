@@ -541,7 +541,7 @@ function attachRealtimeChannel(
           config:
             raw.type === 'wifi_qr'
               ? stripWifiCredentialsFromConfig(raw.config || {})
-              : raw.type === 'homelab'
+              : raw.type === 'homelab' || raw.type === 'now_playing'
                 ? stripHomelabCredentialsFromConfig(raw.config || {})
                 : (raw.config || {}),
           updated_at: raw.updated_at || new Date().toISOString(),
@@ -1952,7 +1952,12 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
           if (w.type === 'wifi_qr' || local?.type === 'wifi_qr') {
             wifiVaultKeysToDelete.add(getWifiVaultKey(w.id));
           }
-          if (w.type === 'homelab' || local?.type === 'homelab') {
+          if (
+            w.type === 'homelab' ||
+            w.type === 'now_playing' ||
+            local?.type === 'homelab' ||
+            local?.type === 'now_playing'
+          ) {
             wifiVaultKeysToDelete.add(getHomelabVaultKey(w.id));
           }
           continue;
@@ -1960,7 +1965,7 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
         const baseConfig =
           w.type === 'wifi_qr'
             ? stripWifiCredentialsFromConfig(w.config || {})
-            : w.type === 'homelab'
+            : w.type === 'homelab' || w.type === 'now_playing'
               ? stripHomelabCredentialsFromConfig(w.config || {})
               : (w.config || {});
         const isEmptyDeletedConfig = Boolean(w.deleted_at) && Object.keys(baseConfig).length === 0;
@@ -1969,7 +1974,11 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
           Array.isArray(w.config?.customPhotos) ||
           Boolean(local?.config?.customPhotos?.length);
         const config =
-          w.type === 'wifi_qr' || w.type === 'homelab' || isEmptyDeletedConfig || !hasAnyPhotos
+          w.type === 'wifi_qr' ||
+          w.type === 'homelab' ||
+          w.type === 'now_playing' ||
+          isEmptyDeletedConfig ||
+          !hasAnyPhotos
             ? baseConfig
             : {
                 ...baseConfig,
@@ -2010,7 +2019,13 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
           if (mapped.deleted_at && (mapped.type === 'wifi_qr' || local?.type === 'wifi_qr')) {
             wifiVaultKeysToDelete.add(getWifiVaultKey(mapped.id));
           }
-          if (mapped.deleted_at && (mapped.type === 'homelab' || local?.type === 'homelab')) {
+          if (
+            mapped.deleted_at &&
+            (mapped.type === 'homelab' ||
+              mapped.type === 'now_playing' ||
+              local?.type === 'homelab' ||
+              local?.type === 'now_playing')
+          ) {
             wifiVaultKeysToDelete.add(getHomelabVaultKey(mapped.id));
           }
           widgetsToPut.push(!local ? mapped : keepLocalWidgetFields(mapped, local));
@@ -2028,7 +2043,7 @@ async function pullFromCloudOnce(options?: { force?: boolean; overwriteLocal?: b
             if (lw.type === 'wifi_qr') {
               wifiVaultKeysToDelete.add(getWifiVaultKey(lw.id));
             }
-            if (lw.type === 'homelab') {
+            if (lw.type === 'homelab' || lw.type === 'now_playing') {
               wifiVaultKeysToDelete.add(getHomelabVaultKey(lw.id));
             }
           } else if (!switchingBoards && !joiningExistingCloudBoard) {

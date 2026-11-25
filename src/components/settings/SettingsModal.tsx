@@ -47,7 +47,21 @@ import {
   Server,
   Gauge,
   ExternalLink,
+  Monitor,
 } from 'lucide-react';
+import type { CanvasScheduleRule } from '../../types/dashboard';
+import {
+  resetDisplayRoomPreferences,
+  resolveDisplayVisibleTabs,
+  useDisplayRoomPreferences,
+  writeDisplayRoomPreferences,
+} from '../../utils/displayRoomFilter';
+import {
+  MAX_CANVAS_SCHEDULES,
+  clearCanvasScheduleSnooze,
+  createCanvasScheduleRuleId,
+  normalizeCanvasSchedules,
+} from '../../utils/canvasSchedule';
 import { useUpdateChecker } from '../../services/updateChecker';
 import { db } from '../../services/db';
 import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
@@ -191,6 +205,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const [activeTab, setActiveTab] = useState<SettingsTabId>(initialTab);
   const fileSync = useFileSync();
+  const roomPrefs = useDisplayRoomPreferences();
+  const householdEnabledTabs = tabs.filter(
+    (t) => !t.deleted_at && (t.id === 'tab-overview' ? Boolean(t.enabled) : t.enabled !== false)
+  );
+  const roomVisibleTabs = resolveDisplayVisibleTabs(tabs, roomPrefs);
+  const roomHiddenSet = new Set(roomPrefs.hiddenTabIds);
+  const canvasSchedules = normalizeCanvasSchedules(settings.canvasSchedules);
 
   const screensaverTimeoutMin = normalizeIdleScreensaverTimeoutMin(settings.idleScreensaverTimeoutMin);
   const screensaverMode = normalizeIdleScreensaverMode(settings.idleScreensaverMode);
@@ -660,6 +681,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="p-6 overflow-y-auto space-y-6 flex-1">
             {/* TAB 1: Canvases & Boards Manager */}
             {activeTab === 'boards' && (
+            <>
             <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800">
               <div className="flex items-center justify-between mb-3">
                 <div>
@@ -1093,6 +1115,133 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 })}
               </div>
             </div>
+
+            {/* Per-Display / Per-Room Filtering (Device-Local Only) */}
+            <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Monitor className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-white">
+                        This Display / Room View
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-cyan-500/15 text-cyan-300 border border-cyan-500/35">
+                        This Screen Only
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-gray-400">
+                      Customize which canvases appear on this wall display while sharing one household account.
+                    </span>
+                  </div>
+                </div>
+                {(roomPrefs.roomName ||
+                  roomPrefs.localHomeTabId ||
+                  roomPrefs.hiddenTabIds.length > 0) && (
+                  <button
+                    type="button"
+                    onClick={() => resetDisplayRoomPreferences()}
+                    className="px-2.5 py-1 rounded-lg bg-gray-900 hover:bg-gray-800 border border-gray-700 text-[11px] font-semibold text-gray-300 cursor-pointer shrink-0"
+                  >
+                    Reset Screen
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                    Room / Display Label
+                  </label>
+                  <input
+                    type="text"
+                    value={roomPrefs.roomName}
+                    onChange={(e) => writeDisplayRoomPreferences({ roomName: e.target.value })}
+                    placeholder="e.g. Kitchen Display, Hallway"
+                    className="w-full rounded-xl bg-gray-950 border border-gray-800 px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                    Home Canvas on This Screen
+                  </label>
+                  <select
+                    value={roomPrefs.localHomeTabId || ''}
+                    onChange={(e) => {
+                      const nextId = e.target.value || null;
+                      const nextHidden = nextId
+                        ? roomPrefs.hiddenTabIds.filter((id) => id !== nextId)
+                        : roomPrefs.hiddenTabIds;
+                      writeDisplayRoomPreferences({
+                        localHomeTabId: nextId,
+                        hiddenTabIds: nextHidden,
+                      });
+                    }}
+                    className="w-full rounded-xl bg-gray-950 border border-gray-800 px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"
+                  >
+                    <option value="">Use Household Default</option>
+                    {householdEnabledTabs.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                    Visible Canvases on This Display ({roomVisibleTabs.length}/{householdEnabledTabs.length})
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {householdEnabledTabs.map((t) => {
+                    const isHidden = roomHiddenSet.has(t.id);
+                    const isLastVisible = !isHidden && roomVisibleTabs.length <= 1;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        disabled={isLastVisible}
+                        onClick={() => {
+                          if (isHidden) {
+                            writeDisplayRoomPreferences({
+                              hiddenTabIds: roomPrefs.hiddenTabIds.filter((id) => id !== t.id),
+                            });
+                          } else if (!isLastVisible) {
+                            writeDisplayRoomPreferences({
+                              hiddenTabIds: [...roomPrefs.hiddenTabIds, t.id],
+                              ...(roomPrefs.localHomeTabId === t.id ? { localHomeTabId: null } : {}),
+                            });
+                          }
+                        }}
+                        title={
+                          isLastVisible
+                            ? 'At least one canvas must stay visible on each display'
+                            : isHidden
+                              ? 'Click to show on this display'
+                              : 'Click to hide on this display'
+                        }
+                        className={`px-2.5 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                          isHidden
+                            ? 'bg-gray-900/70 border-gray-800 text-gray-500 line-through'
+                            : 'bg-cyan-500/15 border-cyan-500/40 text-cyan-200 hover:bg-cyan-500/25'
+                        }`}
+                      >
+                        {isHidden ? (
+                          <EyeOff className="w-3 h-3 text-gray-500" />
+                        ) : (
+                          <Eye className="w-3 h-3 text-cyan-400" />
+                        )}
+                        <span>{t.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+            </>
             )}
 
             {/* TAB 2: Display & Kiosk Settings */}
@@ -1144,6 +1293,238 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </button>
                     ))}
                   </div>
+                </div>
+              )}
+            </div>
+
+            {/* Time-of-Day Canvas Scheduling */}
+            <div className="p-4 rounded-xl bg-gray-800/40 border border-gray-800 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-sky-400 shrink-0" />
+                  <div>
+                    <span className="text-sm font-semibold text-white block">
+                      Time-of-Day Canvas Schedule
+                    </span>
+                    <span className="text-[11px] text-gray-400">
+                      Automatically switch to designated canvases during morning, dinner, or evening windows.
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearCanvasScheduleSnooze();
+                    updateSettings({ canvasScheduleEnabled: !settings.canvasScheduleEnabled });
+                  }}
+                  className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer shrink-0 ${
+                    settings.canvasScheduleEnabled ? 'bg-sky-600' : 'bg-gray-700'
+                  }`}
+                >
+                  <div
+                    className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                      settings.canvasScheduleEnabled ? 'translate-x-6' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {settings.canvasScheduleEnabled && (
+                <div className="space-y-3 pt-2.5 border-t border-gray-800/60">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={roomPrefs.followCanvasSchedule}
+                        onChange={(e) =>
+                          writeDisplayRoomPreferences({ followCanvasSchedule: e.target.checked })
+                        }
+                        className="accent-sky-500 cursor-pointer"
+                      />
+                      <span>Follow schedule on this display</span>
+                    </label>
+
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] text-gray-400">Tap Override Snooze:</span>
+                      <select
+                        value={settings.canvasScheduleSnoozeMin ?? 15}
+                        onChange={(e) =>
+                          updateSettings({
+                            canvasScheduleSnoozeMin: Number(e.target.value) as
+                              | 0
+                              | 5
+                              | 15
+                              | 30
+                              | 60,
+                          })
+                        }
+                        className="rounded-lg bg-gray-900 border border-gray-700 px-2 py-1 text-xs text-white"
+                      >
+                        <option value={5}>5 min</option>
+                        <option value={15}>15 min</option>
+                        <option value={30}>30 min</option>
+                        <option value={60}>1 hour</option>
+                        <option value={0}>Until window ends</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {canvasSchedules.length > 0 && (
+                    <div className="space-y-2">
+                      {canvasSchedules.map((rule, idx) => {
+                        const updateRule = (patch: Partial<CanvasScheduleRule>) => {
+                          clearCanvasScheduleSnooze();
+                          const next = canvasSchedules.map((r, rIdx) =>
+                            rIdx === idx ? { ...r, ...patch } : r
+                          );
+                          updateSettings({ canvasSchedules: next });
+                        };
+                        const activeDays = new Set(
+                          Array.isArray(rule.daysOfWeek) && rule.daysOfWeek.length > 0
+                            ? rule.daysOfWeek
+                            : [0, 1, 2, 3, 4, 5, 6]
+                        );
+                        return (
+                          <div
+                            key={rule.id}
+                            className="p-2.5 rounded-xl bg-gray-950/75 border border-gray-800 space-y-2"
+                          >
+                            <div className="flex flex-wrap items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={rule.enabled}
+                                onChange={(e) => updateRule({ enabled: e.target.checked })}
+                                className="accent-sky-500 cursor-pointer"
+                              />
+                              <select
+                                value={rule.tabId}
+                                onChange={(e) => updateRule({ tabId: e.target.value })}
+                                className="flex-1 min-w-[140px] rounded-lg bg-gray-900 border border-gray-800 px-2 py-1 text-xs text-white"
+                              >
+                                {screensaverNonDeletedTabs.map((t) => (
+                                  <option key={t.id} value={t.id}>
+                                    {t.name}
+                                  </option>
+                                ))}
+                              </select>
+                              <input
+                                type="time"
+                                value={rule.startTime}
+                                onChange={(e) => updateRule({ startTime: e.target.value })}
+                                className="rounded-lg bg-gray-900 border border-gray-800 px-2 py-1 text-xs text-white"
+                              />
+                              <span className="text-[11px] text-gray-500">to</span>
+                              <input
+                                type="time"
+                                value={rule.endTime}
+                                onChange={(e) => updateRule({ endTime: e.target.value })}
+                                className="rounded-lg bg-gray-900 border border-gray-800 px-2 py-1 text-xs text-white"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  clearCanvasScheduleSnooze();
+                                  updateSettings({
+                                    canvasSchedules: canvasSchedules.filter((_, i) => i !== idx),
+                                  });
+                                }}
+                                className="p-1 text-gray-400 hover:text-rose-400 cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex items-center gap-1">
+                                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((dayChar, dayIdx) => {
+                                  const checked = activeDays.has(dayIdx);
+                                  return (
+                                    <button
+                                      key={`${rule.id}-d-${dayIdx}`}
+                                      type="button"
+                                      onClick={() => {
+                                        const nextDays = new Set(activeDays);
+                                        if (checked && nextDays.size > 1) {
+                                          nextDays.delete(dayIdx);
+                                        } else {
+                                          nextDays.add(dayIdx);
+                                        }
+                                        updateRule({
+                                          daysOfWeek:
+                                            nextDays.size === 7
+                                              ? undefined
+                                              : [...nextDays].sort((a, b) => a - b),
+                                        });
+                                      }}
+                                      className={`w-6 h-6 rounded-md text-[10px] font-bold cursor-pointer ${
+                                        checked
+                                          ? 'bg-sky-500/25 border border-sky-500/50 text-sky-200'
+                                          : 'bg-gray-900 border border-gray-800 text-gray-500'
+                                      }`}
+                                    >
+                                      {dayChar}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <div className="flex items-center gap-1 text-[10px]">
+                                <button
+                                  type="button"
+                                  onClick={() => updateRule({ daysOfWeek: undefined })}
+                                  className="px-2 py-0.5 rounded bg-gray-900 hover:bg-gray-800 text-gray-300 border border-gray-800 cursor-pointer"
+                                >
+                                  Every Day
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => updateRule({ daysOfWeek: [1, 2, 3, 4, 5] })}
+                                  className="px-2 py-0.5 rounded bg-gray-900 hover:bg-gray-800 text-gray-300 border border-gray-800 cursor-pointer"
+                                >
+                                  Weekdays
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => updateRule({ daysOfWeek: [0, 6] })}
+                                  className="px-2 py-0.5 rounded bg-gray-900 hover:bg-gray-800 text-gray-300 border border-gray-800 cursor-pointer"
+                                >
+                                  Weekends
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    disabled={
+                      canvasSchedules.length >= MAX_CANVAS_SCHEDULES ||
+                      screensaverNonDeletedTabs.length === 0
+                    }
+                    onClick={() => {
+                      const defaultTab =
+                        screensaverNonDeletedTabs[0]?.id || tabs[0]?.id || 'tab-corkboard';
+                      const next: CanvasScheduleRule[] = [
+                        ...canvasSchedules,
+                        {
+                          id: createCanvasScheduleRuleId(),
+                          tabId: defaultTab,
+                          startTime: '06:30',
+                          endTime: '09:00',
+                          enabled: true,
+                        },
+                      ];
+                      clearCanvasScheduleSnooze();
+                      updateSettings({ canvasSchedules: next });
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-sky-600/25 hover:bg-sky-600/40 border border-sky-500/40 text-sky-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-40"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>
+                      Add Schedule Window ({canvasSchedules.length}/{MAX_CANVAS_SCHEDULES})
+                    </span>
+                  </button>
                 </div>
               )}
             </div>

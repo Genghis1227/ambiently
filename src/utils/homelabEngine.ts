@@ -1,8 +1,10 @@
 import {
   MAX_HA_ENTITIES,
+  MAX_HOMELAB_CAMERAS,
   MAX_HOMELAB_SERVICES,
   type HomeAssistantEntityReading,
   type HomeAssistantEntityTarget,
+  type HomelabCameraTarget,
   type HomelabEntityIconHint,
   type HomelabServicePresetId,
   type HomelabServiceState,
@@ -72,15 +74,30 @@ export const HOMELAB_HA_ENTITY_TEMPLATES: Array<{
   label: string;
   iconHint: HomelabEntityIconHint;
   unitOverride?: string;
+  allowControl?: boolean;
+  requirePin?: boolean;
 }> = [
   { entityId: 'sensor.indoor_temperature', label: 'Indoor Temp', iconHint: 'thermometer' },
   { entityId: 'sensor.indoor_humidity', label: 'Humidity', iconHint: 'droplets' },
-  { entityId: 'cover.garage_door', label: 'Garage Door', iconHint: 'door' },
+  {
+    entityId: 'light.living_room',
+    label: 'Living Room Light',
+    iconHint: 'lightbulb',
+    allowControl: true,
+  },
+  {
+    entityId: 'cover.garage_door',
+    label: 'Garage Door',
+    iconHint: 'door',
+    allowControl: true,
+    requirePin: true,
+  },
   { entityId: 'binary_sensor.front_door', label: 'Front Door', iconHint: 'shield' },
   { entityId: 'sensor.solar_power', label: 'Solar Power', iconHint: 'zap' },
 ];
 
 const ENTITY_ID_RE = /^[a-z0-9_]+\.[a-z0-9_]+$/;
+const CAMERA_ENTITY_ID_RE = /^camera\.[a-z0-9_]+$/;
 const VALID_PRESETS = new Set<HomelabServicePresetId>([
   'plex',
   'nas',
@@ -103,9 +120,77 @@ const VALID_ICON_HINTS = new Set<HomelabEntityIconHint>([
   'gauge',
 ]);
 
+const SENSITIVE_HA_DOMAINS = new Set(['lock', 'cover', 'alarm_control_panel']);
+
+const ALLOWED_HA_DOMAIN_SERVICES: Record<string, readonly string[]> = {
+  light: ['toggle', 'turn_on', 'turn_off'],
+  switch: ['toggle', 'turn_on', 'turn_off'],
+  fan: ['toggle', 'turn_on', 'turn_off'],
+  input_boolean: ['toggle', 'turn_on', 'turn_off'],
+  scene: ['turn_on'],
+  script: ['turn_on'],
+  button: ['press'],
+  input_button: ['press'],
+  lock: ['lock', 'unlock'],
+  cover: ['open_cover', 'close_cover', 'stop_cover'],
+  alarm_control_panel: ['alarm_arm_home', 'alarm_arm_away', 'alarm_disarm'],
+  media_player: [
+    'media_play_pause',
+    'media_play',
+    'media_pause',
+    'media_next_track',
+    'media_previous_track',
+    'volume_mute',
+  ],
+};
+
 export function isValidHomeAssistantEntityId(entityId: string): boolean {
   const clean = (entityId || '').trim();
   return clean.length >= 3 && clean.length <= 120 && ENTITY_ID_RE.test(clean);
+}
+
+export function isValidHomeAssistantCameraEntityId(entityId: string): boolean {
+  const clean = (entityId || '').trim().toLowerCase();
+  return clean.length >= 8 && clean.length <= 120 && CAMERA_ENTITY_ID_RE.test(clean);
+}
+
+export function extractHaDomain(entityId: string): string {
+  const idx = (entityId || '').indexOf('.');
+  return idx > 0 ? entityId.slice(0, idx).toLowerCase() : '';
+}
+
+export function isSensitiveHomeAssistantEntity(entityId: string): boolean {
+  return SENSITIVE_HA_DOMAINS.has(extractHaDomain(entityId));
+}
+
+export function getControllableHaActions(entityId: string): string[] {
+  const domain = extractHaDomain(entityId);
+  const actions = ALLOWED_HA_DOMAIN_SERVICES[domain];
+  return actions ? [...actions] : [];
+}
+
+/**
+ * Validates and resolves an allowlisted Home Assistant domain/service call for an entity.
+ * Rejects dangerous/admin domains such as hassio, shell_command, homeassistant, or read-only sensors.
+ */
+export function resolveAllowedHaServiceCall(
+  entityId: string,
+  requestedAction?: string
+): { domain: string; service: string } | null {
+  const cleanEntity = (entityId || '').trim().toLowerCase();
+  if (!isValidHomeAssistantEntityId(cleanEntity)) return null;
+  const domain = extractHaDomain(cleanEntity);
+  const allowed = ALLOWED_HA_DOMAIN_SERVICES[domain];
+  if (!allowed || allowed.length === 0) return null;
+
+  const normalizedAction = (requestedAction || '').trim().toLowerCase();
+  if (!normalizedAction) {
+    return { domain, service: allowed[0] };
+  }
+  if (!allowed.includes(normalizedAction)) {
+    return null;
+  }
+  return { domain, service: normalizedAction };
 }
 
 export function normalizeHomelabBaseUrl(raw?: string): string {
@@ -114,7 +199,7 @@ export function normalizeHomelabBaseUrl(raw?: string): string {
 
 let homelabIdSeq = 0;
 
-export function createHomelabItemId(prefix: 'svc' | 'ent'): string {
+export function createHomelabItemId(prefix: 'svc' | 'ent' | 'cam'): string {
   homelabIdSeq += 1;
   return `${prefix}-${Date.now().toString(36)}-${homelabIdSeq}`;
 }
@@ -158,6 +243,9 @@ export function resolveHomeAssistantEntities(raw: unknown): HomeAssistantEntityT
     if (!isValidHomeAssistantEntityId(entityId) || seen.has(entityId)) continue;
     seen.add(entityId);
 
+    const supportsControl = getControllableHaActions(entityId).length > 0;
+    const sensitive = isSensitiveHomeAssistantEntity(entityId);
+
     out.push({
       id: typeof item.id === 'string' && item.id.trim() ? item.id.trim() : `ent-${i + 1}`,
       entityId,
@@ -169,6 +257,47 @@ export function resolveHomeAssistantEntities(raw: unknown): HomeAssistantEntityT
       iconHint: VALID_ICON_HINTS.has(item.iconHint as HomelabEntityIconHint)
         ? (item.iconHint as HomelabEntityIconHint)
         : inferIconHintFromEntityId(entityId),
+      enabled: item.enabled !== false,
+      allowControl: supportsControl && Boolean(item.allowControl),
+      requirePin:
+        typeof item.requirePin === 'boolean' ? item.requirePin : sensitive,
+    });
+  }
+
+  return out;
+}
+
+export function resolveHomelabCameras(raw: unknown): HomelabCameraTarget[] {
+  if (!Array.isArray(raw)) return [];
+  const out: HomelabCameraTarget[] = [];
+
+  for (let i = 0; i < raw.length; i++) {
+    if (out.length >= MAX_HOMELAB_CAMERAS) break;
+    const item = raw[i] as Partial<HomelabCameraTarget> | null | undefined;
+    if (!item || typeof item !== 'object') continue;
+
+    const sourceType = item.sourceType === 'snapshot_url' ? 'snapshot_url' : 'ha_entity';
+    const entityId =
+      typeof item.entityId === 'string' ? item.entityId.trim().toLowerCase() : undefined;
+    const snapshotUrl =
+      typeof item.snapshotUrl === 'string' ? item.snapshotUrl.trim() : undefined;
+
+    if (sourceType === 'ha_entity') {
+      if (!entityId || !isValidHomeAssistantCameraEntityId(entityId)) continue;
+    } else {
+      if (!snapshotUrl || !/^https?:\/\//i.test(snapshotUrl)) continue;
+    }
+
+    const name =
+      typeof item.name === 'string' && item.name.trim()
+        ? item.name.trim()
+        : entityId || 'Camera';
+
+    out.push({
+      id: typeof item.id === 'string' && item.id.trim() ? item.id.trim() : `cam-${i + 1}`,
+      name,
+      sourceType,
+      ...(sourceType === 'ha_entity' ? { entityId } : { snapshotUrl }),
       enabled: item.enabled !== false,
     });
   }
@@ -193,7 +322,13 @@ export function inferIconHintFromEntityId(entityId: string): HomelabEntityIconHi
   if (lower.includes('solar') || lower.includes('power') || lower.includes('watt') || lower.includes('energy')) {
     return 'zap';
   }
-  if (lower.startsWith('light.') || lower.startsWith('switch.')) {
+  if (
+    lower.startsWith('light.') ||
+    lower.startsWith('switch.') ||
+    lower.startsWith('fan.') ||
+    lower.startsWith('scene.') ||
+    lower.startsWith('input_boolean.')
+  ) {
     return 'lightbulb';
   }
   if (lower.startsWith('sun.')) {
@@ -292,12 +427,21 @@ export function formatHomeAssistantEntityReading(
   } else if (lower === 'off') {
     formattedValue = target.entityId.startsWith('binary_sensor.') && iconHint === 'door' ? 'Closed' : 'Off';
     tone = iconHint === 'door' || iconHint === 'shield' ? 'good' : 'neutral';
-  } else if (lower === 'home') {
-    formattedValue = 'Home';
+  } else if (lower === 'home' || lower === 'playing') {
+    formattedValue = lower === 'playing' ? 'Playing' : 'Home';
     tone = 'good';
-  } else if (lower === 'away' || lower === 'not_home') {
-    formattedValue = 'Away';
+  } else if (lower === 'away' || lower === 'not_home' || lower === 'paused' || lower === 'idle') {
+    formattedValue =
+      lower === 'away' || lower === 'not_home'
+        ? 'Away'
+        : lower.charAt(0).toUpperCase() + lower.slice(1);
     tone = 'neutral';
+  } else if (lower.startsWith('armed')) {
+    formattedValue = lower.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    tone = 'good';
+  } else if (lower === 'disarmed' || lower === 'triggered') {
+    formattedValue = lower.charAt(0).toUpperCase() + lower.slice(1);
+    tone = lower === 'triggered' ? 'alert' : 'warn';
   } else {
     const num = Number(rawState);
     if (Number.isFinite(num)) {
@@ -309,6 +453,14 @@ export function formatHomeAssistantEntityReading(
     }
   }
 
+  const domain = extractHaDomain(target.entityId);
+  const supportedActions = getControllableHaActions(target.entityId);
+  const controllable = Boolean(target.allowControl && supportedActions.length > 0);
+  const requiresPin =
+    typeof target.requirePin === 'boolean'
+      ? target.requirePin
+      : isSensitiveHomeAssistantEntity(target.entityId);
+
   return {
     id: target.id,
     entityId: target.entityId,
@@ -319,5 +471,9 @@ export function formatHomeAssistantEntityReading(
     tone,
     iconHint,
     updatedAt: typeof payload.last_updated === 'string' ? payload.last_updated : undefined,
+    domain,
+    controllable,
+    requiresPin,
+    ...(controllable ? { supportedActions } : {}),
   };
 }

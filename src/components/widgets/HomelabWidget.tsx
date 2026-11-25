@@ -1,11 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
+  Camera,
   DoorOpen,
   Droplets,
   Gauge,
   KeyRound,
   Lightbulb,
+  Loader2,
+  Lock,
+  Power,
   RefreshCw,
   Server,
   Settings,
@@ -13,12 +18,15 @@ import {
   Sun,
   Thermometer,
   WifiOff,
+  X,
   Zap,
 } from 'lucide-react';
 import type {
   HomeAssistantEntityReading,
   HomelabApiCheckResponse,
+  HomelabCameraSnapshot,
   HomelabEntityIconHint,
+  HomelabLocalVaultCredentials,
   HomelabServiceState,
   HomelabServiceStatus,
   HomelabWidgetConfig,
@@ -26,20 +34,24 @@ import type {
 import {
   normalizeHomelabBaseUrl,
   resolveHomeAssistantEntities,
+  resolveHomelabCameras,
   resolveHomelabServices,
 } from '../../utils/homelabEngine';
 import {
   HOMELAB_VAULT_UPDATED_EVENT,
-  loadHomelabCredentialsFromVault,
+  loadHomelabCredentialsWithSharedFallback,
   resolveBoundHomelabToken,
 } from '../../utils/homelabVault';
-import type { HomelabLocalVaultCredentials } from '../../types/phase5Widgets';
 import {
+  callHomeAssistantService,
   fetchHomelabStatus,
   readCachedHomelabStatus,
   writeCachedHomelabStatus,
 } from '../../services/homelab';
 import { useDisplayActivity } from '../../utils/displayActivity';
+import { useDashboardStore } from '../../store/dashboardStore';
+import { isSettingsPinRequired } from '../../utils/pinValidation';
+import { createBackdropDismissHandlers } from '../../utils/modalBackdropGuard';
 
 interface HomelabWidgetProps {
   widgetId: string;
@@ -48,6 +60,10 @@ interface HomelabWidgetProps {
   isLight?: boolean;
   transparentBg?: boolean;
   onOpenSettings?: () => void;
+  onAuthorizeAction?: (
+    onAuthorized: () => void,
+    prompt?: { title?: string; subtitle?: string }
+  ) => void;
 }
 
 const ENTITY_ICONS: Record<
@@ -109,6 +125,48 @@ function getEntityToneClass(tone: HomeAssistantEntityReading['tone'], isLight: b
   }
 }
 
+function resolvePrimaryEntityAction(ent: HomeAssistantEntityReading): {
+  service: string;
+  label: string;
+} | null {
+  if (!ent.controllable || !ent.supportedActions || ent.supportedActions.length === 0) {
+    return null;
+  }
+  const lowerState = ent.state.trim().toLowerCase();
+  const domain = ent.domain || '';
+  if (domain === 'lock') {
+    const isLocked = lowerState === 'locked';
+    return { service: isLocked ? 'unlock' : 'lock', label: isLocked ? 'Unlock' : 'Lock' };
+  }
+  if (domain === 'cover') {
+    const isOpen = lowerState === 'open' || lowerState === 'opening';
+    return {
+      service: isOpen ? 'close_cover' : 'open_cover',
+      label: isOpen ? 'Close' : 'Open',
+    };
+  }
+  if (domain === 'alarm_control_panel') {
+    const isDisarmed = lowerState === 'disarmed';
+    return {
+      service: isDisarmed ? 'alarm_arm_home' : 'alarm_disarm',
+      label: isDisarmed ? 'Arm Home' : 'Disarm',
+    };
+  }
+  if (domain === 'scene' || domain === 'script') {
+    return { service: 'turn_on', label: 'Run' };
+  }
+  if (domain === 'button' || domain === 'input_button') {
+    return { service: 'press', label: 'Press' };
+  }
+  if (domain === 'media_player') {
+    return { service: 'media_play_pause', label: lowerState === 'playing' ? 'Pause' : 'Play' };
+  }
+  return {
+    service: 'toggle',
+    label: lowerState === 'on' ? 'Turn Off' : 'Turn On',
+  };
+}
+
 export const HomelabWidget: React.FC<HomelabWidgetProps> = ({
   widgetId,
   title,
@@ -116,8 +174,11 @@ export const HomelabWidget: React.FC<HomelabWidgetProps> = ({
   isLight = false,
   transparentBg = false,
   onOpenSettings,
+  onAuthorizeAction,
 }) => {
-  const { shouldPauseAnimations } = useDisplayActivity();
+  const { shouldPauseAnimations, isCanvasOccluded } = useDisplayActivity();
+  const isPaused = shouldPauseAnimations || isCanvasOccluded;
+  const isPinLockActive = useDashboardStore((s) => isSettingsPinRequired(s.settings));
 
   const services = useMemo(
     () => resolveHomelabServices(config?.services).filter((s) => s.enabled && s.url),
@@ -127,6 +188,13 @@ export const HomelabWidget: React.FC<HomelabWidgetProps> = ({
   const haEntities = useMemo(
     () => (haBaseUrl ? resolveHomeAssistantEntities(config?.haEntities).filter((e) => e.enabled) : []),
     [haBaseUrl, config?.haEntities]
+  );
+  const cameras = useMemo(
+    () =>
+      resolveHomelabCameras(config?.cameras).filter(
+        (c) => c.enabled && (c.sourceType === 'snapshot_url' ? Boolean(c.snapshotUrl) : Boolean(haBaseUrl && c.entityId))
+      ),
+    [config?.cameras, haBaseUrl]
   );
 
   const showLatency = config?.showLatency !== false;
@@ -144,6 +212,9 @@ export const HomelabWidget: React.FC<HomelabWidgetProps> = ({
   );
   const [isUsingCache, setIsUsingCache] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pendingEntityIds, setPendingEntityIds] = useState<Record<string, boolean>>({});
+  const [actionError, setActionError] = useState<string>('');
+  const [expandedCamera, setExpandedCamera] = useState<HomelabCameraSnapshot | null>(null);
   const [containerWidth, setContainerWidth] = useState(420);
 
   const rootRef = useRef<HTMLDivElement>(null);
@@ -166,11 +237,11 @@ export const HomelabWidget: React.FC<HomelabWidgetProps> = ({
     [vaultCreds, haBaseUrl]
   );
 
-  // Load device-local Home Assistant token strictly from db.vault
+  // Load device-local Home Assistant token strictly from db.vault (with origin-matched shared fallback)
   useEffect(() => {
     let active = true;
     const loadToken = () => {
-      void loadHomelabCredentialsFromVault(widgetId)
+      void loadHomelabCredentialsWithSharedFallback(widgetId, haBaseUrl)
         .then((creds) => {
           if (!active) return;
           setVaultCreds(creds);
@@ -187,7 +258,7 @@ export const HomelabWidget: React.FC<HomelabWidgetProps> = ({
 
     const handleVaultUpdate = (ev: Event) => {
       const detail = (ev as CustomEvent<{ widgetId?: string }>).detail;
-      if (!detail || detail.widgetId === widgetId) {
+      if (!detail || detail.widgetId === widgetId || !detail.widgetId) {
         loadToken();
       }
     };
@@ -200,9 +271,10 @@ export const HomelabWidget: React.FC<HomelabWidgetProps> = ({
         window.removeEventListener(HOMELAB_VAULT_UPDATED_EVENT, handleVaultUpdate);
       }
     };
-  }, [widgetId]);
+  }, [widgetId, haBaseUrl]);
 
-  const hasTargets = services.length > 0 || (Boolean(haBaseUrl) && haEntities.length > 0);
+  const hasTargets =
+    services.length > 0 || cameras.length > 0 || (Boolean(haBaseUrl) && haEntities.length > 0);
 
   const runProbe = useCallback(
     (signal?: AbortSignal) => {
@@ -210,7 +282,8 @@ export const HomelabWidget: React.FC<HomelabWidgetProps> = ({
       void fetchHomelabStatus(
         {
           services,
-          ...(haBaseUrl && haEntities.length > 0
+          ...(cameras.length > 0 ? { cameras } : {}),
+          ...(haBaseUrl && (haEntities.length > 0 || cameras.some((c) => c.sourceType === 'ha_entity'))
             ? {
                 homeAssistant: {
                   baseUrl: haBaseUrl,
@@ -226,6 +299,7 @@ export const HomelabWidget: React.FC<HomelabWidgetProps> = ({
           setStatusData(res);
           setIsUsingCache(false);
           setIsRefreshing(false);
+          setActionError('');
           writeCachedHomelabStatus(widgetId, res);
         })
         .catch(() => {
@@ -238,11 +312,11 @@ export const HomelabWidget: React.FC<HomelabWidgetProps> = ({
           setIsRefreshing(false);
         });
     },
-    [hasTargets, vaultReady, services, haBaseUrl, haEntities, haToken, widgetId]
+    [hasTargets, vaultReady, services, cameras, haBaseUrl, haEntities, haToken, widgetId]
   );
 
   useEffect(() => {
-    if (!hasTargets || !vaultReady || shouldPauseAnimations) return;
+    if (!hasTargets || !vaultReady || isPaused) return;
     const controller = new AbortController();
     runProbe(controller.signal);
 
@@ -258,7 +332,7 @@ export const HomelabWidget: React.FC<HomelabWidgetProps> = ({
         window.clearInterval(timer);
       }
     };
-  }, [hasTargets, vaultReady, shouldPauseAnimations, refreshSec, runProbe]);
+  }, [hasTargets, vaultReady, isPaused, refreshSec, runProbe]);
 
   const serviceItems: HomelabServiceStatus[] = useMemo(() => {
     if (statusData?.services && statusData.services.length > 0) {
@@ -276,8 +350,18 @@ export const HomelabWidget: React.FC<HomelabWidgetProps> = ({
   }, [statusData, services]);
 
   const entityItems: HomeAssistantEntityReading[] = useMemo(() => {
+    const targetById = new Map(haEntities.map((t) => [t.id, t]));
     if (statusData?.entities && statusData.entities.length > 0) {
-      return statusData.entities;
+      return statusData.entities.map((reading) => {
+        const cfg = targetById.get(reading.id);
+        if (!cfg) return reading;
+        const allowControl = Boolean(cfg.allowControl);
+        return {
+          ...reading,
+          controllable: Boolean(reading.controllable ?? allowControl),
+          requiresPin: cfg.requirePin ?? reading.requiresPin,
+        };
+      });
     }
     return haEntities.map((e) => ({
       id: e.id,
@@ -287,16 +371,109 @@ export const HomelabWidget: React.FC<HomelabWidgetProps> = ({
       formattedValue: '...',
       tone: 'neutral',
       iconHint: e.iconHint,
+      controllable: Boolean(e.allowControl),
+      requiresPin: e.requirePin,
     }));
   }, [statusData, haEntities]);
+
+  const cameraSnapshots: HomelabCameraSnapshot[] = useMemo(() => {
+    if (statusData?.cameras && statusData.cameras.length > 0) {
+      return statusData.cameras;
+    }
+    return cameras.map((c) => ({
+      id: c.id,
+      name: c.name,
+      state: 'ERROR',
+      error: 'Loading...',
+    }));
+  }, [statusData, cameras]);
+
+  const executeEntityAction = useCallback(
+    (ent: HomeAssistantEntityReading, serviceName: string) => {
+      if (!haBaseUrl || !haToken) {
+        setActionError('Add a device-local Home Assistant token in Settings to control entities.');
+        return;
+      }
+      const cfg = haEntities.find((e) => e.id === ent.id);
+      setActionError('');
+      setPendingEntityIds((prev) => ({ ...prev, [ent.id]: true }));
+      void callHomeAssistantService({
+        baseUrl: haBaseUrl,
+        accessToken: haToken,
+        entityId: ent.entityId,
+        action: serviceName,
+        targetConfig: cfg
+          ? {
+              id: cfg.id,
+              label: cfg.label,
+              unitOverride: cfg.unitOverride,
+              iconHint: cfg.iconHint,
+              allowControl: cfg.allowControl,
+              requirePin: cfg.requirePin,
+            }
+          : { id: ent.id, label: ent.label, allowControl: true, requirePin: ent.requiresPin },
+      })
+        .then((res) => {
+          if (res.ok && res.entity) {
+            setStatusData((prev) => {
+              if (!prev) return prev;
+              const updatedEntities = prev.entities.map((item) =>
+                item.id === ent.id ? res.entity! : item
+              );
+              const nextData = { ...prev, entities: updatedEntities };
+              writeCachedHomelabStatus(widgetId, nextData);
+              return nextData;
+            });
+          } else {
+            setActionError(res.error || 'Home Assistant action failed.');
+          }
+        })
+        .catch(() => {
+          setActionError('Failed to send Home Assistant command.');
+        })
+        .finally(() => {
+          setPendingEntityIds((prev) => {
+            const next = { ...prev };
+            delete next[ent.id];
+            return next;
+          });
+        });
+    },
+    [haBaseUrl, haToken, haEntities, widgetId]
+  );
+
+  const handleTriggerEntityAction = useCallback(
+    (ent: HomeAssistantEntityReading, serviceName: string, actionLabel: string) => {
+      if (ent.requiresPin && isPinLockActive) {
+        if (!onAuthorizeAction) {
+          setActionError('Parent PIN verification is required for this control.');
+          return;
+        }
+        onAuthorizeAction(
+          () => {
+            executeEntityAction(ent, serviceName);
+            useDashboardStore.getState().lockKiosk();
+          },
+          {
+            title: 'Confirm Smart Home Action',
+            subtitle: `Enter parent PIN to ${actionLabel.toLowerCase()} ${ent.label}`,
+          }
+        );
+        return;
+      }
+      executeEntityAction(ent, serviceName);
+    },
+    [isPinLockActive, onAuthorizeAction, executeEntityAction]
+  );
 
   const lanBlockedDetected = useMemo(
     () =>
       Boolean(
         serviceItems.some((s) => s.blockedByLanGate) ||
-          entityItems.some((e) => e.blockedByLanGate)
+          entityItems.some((e) => e.blockedByLanGate) ||
+          cameraSnapshots.some((c) => c.blockedByLanGate)
       ),
-    [serviceItems, entityItems]
+    [serviceItems, entityItems, cameraSnapshots]
   );
 
   const upCount = useMemo(
@@ -401,9 +578,8 @@ export const HomelabWidget: React.FC<HomelabWidgetProps> = ({
           <Server className="w-7 h-7 text-cyan-400/80 mb-2" />
           <p className="text-xs font-semibold">Monitor Your Self-Hosted Stack</p>
           <p className={`text-[11px] mt-1 max-w-xs leading-relaxed ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
-            Track local Docker/NAS services (Plex, Pi-hole, Immich, Uptime Kuma) and Home
-            Assistant entities with device-local <code className="font-mono">db.vault</code> token
-            isolation.
+            Track local Docker/NAS services, toggle Home Assistant controls, and view LAN camera
+            snapshots with device-local <code className="font-mono">db.vault</code> token isolation.
           </p>
           {onOpenSettings && (
             <button
@@ -424,60 +600,67 @@ export const HomelabWidget: React.FC<HomelabWidgetProps> = ({
         </div>
       ) : (
         <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-y-auto pr-0.5">
-          {/* Self-Hosted LAN Policy Notice */}
           {lanBlockedDetected && (
             <div className="px-2.5 py-2 rounded-xl border border-amber-500/35 bg-amber-500/12 text-amber-200 text-[10px] flex items-start gap-2 shrink-0">
               <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
               <span>
-                Private LAN / <code className="font-mono">.local</code> probes require{' '}
-                <code className="font-mono">AMBIENTLY_ALLOW_PRIVATE_FEEDS=true</code> on your
-                self-hosted Docker or Raspberry Pi server (or use a public HTTPS reverse-proxy URL).
+                Private LAN / <code className="font-mono">.local</code> probes & camera snapshots
+                require <code className="font-mono">AMBIENTLY_ALLOW_PRIVATE_FEEDS=true</code> on
+                your self-hosted Docker or Raspberry Pi server.
               </span>
             </div>
           )}
 
-          {/* Missing Device-Local HA Token Notice */}
-          {haBaseUrl && haEntities.length > 0 && vaultReady && !haToken && (
-            <div
-              className={`px-2.5 py-1.5 rounded-xl border text-[10px] flex items-center justify-between gap-2 shrink-0 ${
-                originMismatch
-                  ? isLight
-                    ? 'border-amber-500/35 bg-amber-500/10 text-amber-800'
-                    : 'border-amber-500/35 bg-amber-500/12 text-amber-200'
-                  : isLight
-                    ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-800'
-                    : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200'
-              }`}
-            >
-              <span className="flex items-center gap-1.5 min-w-0">
-                <KeyRound className="w-3 h-3 shrink-0" />
-                <span className="truncate">
-                  {originMismatch ? (
-                    'Home Assistant URL changed — re-save access token in Settings for this address.'
-                  ) : (
-                    <>
-                      Add your Home Assistant token on this device (<code className="font-mono">db.vault</code>).
-                    </>
-                  )}
-                </span>
-              </span>
-              {onOpenSettings && (
-                <button
-                  type="button"
-                  data-no-drag="true"
-                  data-no-canvas-swipe="true"
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onOpenSettings();
-                  }}
-                  className="px-2 py-0.5 rounded-lg bg-cyan-600 text-white font-semibold shrink-0 cursor-pointer"
-                >
-                  Set Token
-                </button>
-              )}
+          {actionError && (
+            <div className="px-2.5 py-1.5 rounded-xl border border-rose-500/35 bg-rose-500/12 text-rose-200 text-[10px] shrink-0">
+              {actionError}
             </div>
           )}
+
+          {haBaseUrl &&
+            (haEntities.length > 0 || cameras.some((c) => c.sourceType === 'ha_entity')) &&
+            vaultReady &&
+            !haToken && (
+              <div
+                className={`px-2.5 py-1.5 rounded-xl border text-[10px] flex items-center justify-between gap-2 shrink-0 ${
+                  originMismatch
+                    ? isLight
+                      ? 'border-amber-500/35 bg-amber-500/10 text-amber-800'
+                      : 'border-amber-500/35 bg-amber-500/12 text-amber-200'
+                    : isLight
+                      ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-800'
+                      : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200'
+                }`}
+              >
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <KeyRound className="w-3 h-3 shrink-0" />
+                  <span className="truncate">
+                    {originMismatch ? (
+                      'Home Assistant URL changed — re-save access token in Settings for this address.'
+                    ) : (
+                      <>
+                        Add your Home Assistant token on this device (<code className="font-mono">db.vault</code>).
+                      </>
+                    )}
+                  </span>
+                </span>
+                {onOpenSettings && (
+                  <button
+                    type="button"
+                    data-no-drag="true"
+                    data-no-canvas-swipe="true"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenSettings();
+                    }}
+                    className="px-2 py-0.5 rounded-lg bg-cyan-600 text-white font-semibold shrink-0 cursor-pointer"
+                  >
+                    Set Token
+                  </button>
+                )}
+              </div>
+            )}
 
           {/* Services & HA Grid */}
           <div className={showTwoColumns ? 'grid grid-cols-2 gap-2.5' : 'space-y-2.5'}>
@@ -554,11 +737,14 @@ export const HomelabWidget: React.FC<HomelabWidgetProps> = ({
                   {entityItems.map((ent) => {
                     const Icon = ENTITY_ICONS[ent.iconHint || 'gauge'];
                     const valueToneClass = getEntityToneClass(ent.tone, isLight);
+                    const primaryAction = resolvePrimaryEntityAction(ent);
+                    const isBusy = Boolean(pendingEntityIds[ent.id]);
+
                     return (
                       <div
                         key={ent.id}
                         title={ent.error || `${ent.entityId}: ${ent.formattedValue}`}
-                        className={`px-2.5 py-2 rounded-xl flex flex-col justify-between gap-1 ${cardSurfaceClass}`}
+                        className={`px-2.5 py-2 rounded-xl flex flex-col justify-between gap-1.5 ${cardSurfaceClass}`}
                       >
                         <div className="flex items-center justify-between gap-1">
                           <span
@@ -570,8 +756,41 @@ export const HomelabWidget: React.FC<HomelabWidgetProps> = ({
                           </span>
                           <Icon className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                         </div>
-                        <div className={`text-sm font-bold tracking-tight truncate ${valueToneClass}`}>
-                          {ent.formattedValue}
+                        <div className="flex items-center justify-between gap-1.5">
+                          <div className={`text-sm font-bold tracking-tight truncate ${valueToneClass}`}>
+                            {ent.formattedValue}
+                          </div>
+                          {primaryAction && haToken && (
+                            <button
+                              type="button"
+                              data-no-drag="true"
+                              data-no-canvas-swipe="true"
+                              disabled={isBusy}
+                              onPointerDown={(e) => e.stopPropagation()}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleTriggerEntityAction(
+                                  ent,
+                                  primaryAction.service,
+                                  primaryAction.label
+                                );
+                              }}
+                              className={`px-2 py-0.5 rounded-lg text-[10px] font-semibold flex items-center gap-1 cursor-pointer shrink-0 disabled:opacity-50 ${
+                                isLight
+                                  ? 'bg-cyan-600/15 hover:bg-cyan-600/25 text-cyan-800 border border-cyan-600/30'
+                                  : 'bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-200 border border-cyan-500/35'
+                              }`}
+                            >
+                              {isBusy ? (
+                                <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                              ) : ent.requiresPin && isPinLockActive ? (
+                                <Lock className="w-2.5 h-2.5 text-amber-300" />
+                              ) : (
+                                <Power className="w-2.5 h-2.5" />
+                              )}
+                              <span>{primaryAction.label}</span>
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
@@ -580,8 +799,93 @@ export const HomelabWidget: React.FC<HomelabWidgetProps> = ({
               </div>
             )}
           </div>
+
+          {/* Optional LAN Camera Snapshots */}
+          {cameras.length > 0 && (
+            <div className="space-y-1.5 pt-1">
+              <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider opacity-60">
+                <Camera className="w-3 h-3 text-cyan-400" />
+                <span>Cameras</span>
+              </span>
+              <div className="grid grid-cols-2 gap-2">
+                {cameraSnapshots.map((cam) => (
+                  <button
+                    key={cam.id}
+                    type="button"
+                    data-no-drag="true"
+                    data-no-canvas-swipe="true"
+                    disabled={!cam.imageDataUrl}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (cam.imageDataUrl) {
+                        setExpandedCamera(cam);
+                      }
+                    }}
+                    className={`rounded-xl overflow-hidden border text-left relative aspect-video flex flex-col justify-end cursor-pointer disabled:cursor-default ${cardSurfaceClass}`}
+                  >
+                    {cam.imageDataUrl ? (
+                      <img
+                        src={cam.imageDataUrl}
+                        alt={cam.name}
+                        className="absolute inset-0 w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center p-2 text-center">
+                        <Camera className="w-4 h-4 text-gray-500 mb-1" />
+                        <span className="text-[10px] text-gray-400 line-clamp-2">
+                          {cam.error || 'Snapshot unavailable'}
+                        </span>
+                      </div>
+                    )}
+                    <div className="relative z-10 px-2 py-1 bg-black/65 backdrop-blur-xs text-[10px] font-semibold text-white truncate">
+                      {cam.name}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
+
+      {/* Expanded Camera Modal */}
+      {expandedCamera &&
+        expandedCamera.imageDataUrl &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            role="dialog"
+            aria-modal="true"
+            {...createBackdropDismissHandlers(() => setExpandedCamera(null))}
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="max-w-3xl w-full rounded-2xl bg-gray-900 border border-gray-800 overflow-hidden shadow-2xl"
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+                <div className="flex items-center gap-2 text-sm font-bold text-white">
+                  <Camera className="w-4 h-4 text-cyan-400" />
+                  <span>{expandedCamera.name}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setExpandedCamera(null)}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <img
+                src={expandedCamera.imageDataUrl}
+                alt={expandedCamera.name}
+                className="w-full max-h-[75vh] object-contain bg-black"
+              />
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 };

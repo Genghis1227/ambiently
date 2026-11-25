@@ -2,6 +2,7 @@ import { db } from '../services/db';
 import type { HomelabLocalVaultCredentials } from '../types/phase5Widgets';
 
 export const HOMELAB_VAULT_KEY_PREFIX = 'homelab-cred:';
+export const SHARED_HOMELAB_VAULT_KEY = 'homelab-cred:__shared_ha__';
 export const HOMELAB_VAULT_UPDATED_EVENT = 'ambiently_homelab_vault_updated';
 
 const memoryFallbackVault = new Map<string, string>();
@@ -77,6 +78,9 @@ export async function saveHomelabCredentialsToVault(
 
   if (!hasIndexedDb()) {
     memoryFallbackVault.set(key, serialized);
+    if (cleanCreds.boundOrigin) {
+      memoryFallbackVault.set(SHARED_HOMELAB_VAULT_KEY, serialized);
+    }
     notifyHomelabVaultUpdated(widgetId);
     return;
   }
@@ -87,7 +91,48 @@ export async function saveHomelabCredentialsToVault(
     description: 'Device-local Home Assistant access token (never synced to cloud)',
     updated_at: new Date().toISOString(),
   });
+  if (cleanCreds.boundOrigin) {
+    await db.vault.put({
+      key: SHARED_HOMELAB_VAULT_KEY,
+      value: serialized,
+      description: 'Shared device-local Home Assistant token (never synced to cloud)',
+      updated_at: new Date().toISOString(),
+    });
+  }
   notifyHomelabVaultUpdated(widgetId);
+}
+
+export async function loadHomelabCredentialsWithSharedFallback(
+  widgetId: string,
+  targetBaseUrl?: string | null
+): Promise<HomelabLocalVaultCredentials | null> {
+  const own = await loadHomelabCredentialsFromVault(widgetId);
+  if (own) return own;
+
+  const targetOrigin = extractHomelabOrigin(targetBaseUrl);
+  if (!targetOrigin) return null;
+
+  let rawShared: string | null = null;
+  if (!hasIndexedDb()) {
+    rawShared = memoryFallbackVault.get(SHARED_HOMELAB_VAULT_KEY) ?? null;
+  } else {
+    try {
+      const entry = await db.vault.get(SHARED_HOMELAB_VAULT_KEY);
+      rawShared = entry ? entry.value : null;
+    } catch {
+      return null;
+    }
+  }
+  if (!rawShared) return null;
+  try {
+    const parsed = normalizeHomelabCredentials(JSON.parse(rawShared));
+    if (parsed && parsed.boundOrigin === targetOrigin) {
+      return parsed;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 export async function loadHomelabCredentialsFromVault(

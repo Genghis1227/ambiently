@@ -151,7 +151,7 @@ export default defineConfig({
             // Cache lazy-excluded immutable hashed chunks on first demand rather than eager precache
             urlPattern: ({ url }) =>
               url.origin === (globalThis as unknown as { location: { origin: string } }).location.origin &&
-              /^\/assets\/(ChangelogModal|vendor-heif|WidgetSettingsModal|SettingsModal|AddWidgetModal|PhotoSourcesModal|MediaSearchModal|CalendarUrlGuideModal|Phase[0-9]WidgetSettingsPanels?)-[a-zA-Z0-9_-]+\.js$/.test(
+              /^\/assets\/(ChangelogModal|vendor-heif|WidgetSettingsModal|SettingsModal|AddWidgetModal|PhotoSourcesModal|MediaSearchModal|CalendarUrlGuideModal|Phase[0-9]WidgetSettingsPanels?|NowPlayingSettingsPanel)-[a-zA-Z0-9_-]+\.js$/.test(
                 url.pathname
               ),
             handler: 'CacheFirst',

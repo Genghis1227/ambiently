@@ -39,7 +39,8 @@ export type WidgetCatalogIconKey =
   | 'daily_discovery'
   | 'chalkboard'
   | 'soundscape'
-  | 'homelab';
+  | 'homelab'
+  | 'now_playing';
 
 export interface WidgetCategoryMeta {
   id: WidgetCategoryId;
@@ -87,6 +88,7 @@ export interface HouseholdInheritedDefaults {
   weather: WeatherDefaults;
   hasCustomWeather: boolean;
   calendarSources?: Array<Record<string, any>>;
+  haBaseUrl?: string;
 }
 
 export const DEFAULT_WEATHER_DEFAULTS: WeatherDefaults = {
@@ -971,17 +973,61 @@ export const WIDGET_CATALOG_ENTRIES: WidgetCatalogEntry[] = [
         pillLabel: 'Home Lab & HA',
         title: 'Home Lab & Home Assistant',
         description:
-          'LAN service health checks and read-only Home Assistant entity badges with device-local db.vault token storage.',
+          'LAN service health checks, interactive Home Assistant controls, and camera snapshots with local db.vault tokens.',
         defaultGridPos: { w: 4, h: 5 },
         defaultConfig: {
           services: [],
           haBaseUrl: '',
           haEntities: [],
+          cameras: [],
           displayMode: 'auto',
           showLatency: true,
           refreshIntervalSec: 60,
         },
         keywords: ['homelab', 'uptime kuma', 'home assistant', 'pihole', 'nas', 'immich', 'proxmox'],
+      },
+    ],
+  },
+  {
+    id: 'now_playing',
+    category: 'media_ambient',
+    title: 'Now Playing Media',
+    description:
+      'Live track artwork, playback progress, and optional controls via Home Assistant media players or Plex active sessions.',
+    iconKey: 'now_playing',
+    color: 'from-emerald-500/20 to-amber-500/20 text-emerald-300 border-emerald-500/30',
+    keywords: [
+      'now playing',
+      'music',
+      'audio',
+      'sonos',
+      'spotify',
+      'plex',
+      'media player',
+      'album art',
+      'playback',
+      'track',
+      'podcast',
+    ],
+    variants: [
+      {
+        type: 'now_playing',
+        pillLabel: 'Now Playing',
+        title: 'Now Playing',
+        description:
+          'Artwork, track details, progress bar, and Home Assistant / Plex playback monitoring.',
+        defaultGridPos: { w: 4, h: 3 },
+        defaultConfig: {
+          source: 'home_assistant',
+          haBaseUrl: '',
+          haEntityId: '',
+          allowControls: true,
+          requirePinForControls: false,
+          displayMode: 'auto',
+          showProgress: true,
+          refreshIntervalSec: 15,
+        },
+        keywords: ['now playing', 'music', 'plex', 'sonos', 'spotify', 'media player'],
       },
     ],
   },
@@ -1136,10 +1182,21 @@ export function extractHouseholdInheritedDefaults(
     }
   }
 
+  let haBaseUrl: string | undefined;
+  for (const w of sortedActive) {
+    if (w.type !== 'homelab' && w.type !== 'now_playing') continue;
+    const rawUrl = typeof w.config?.haBaseUrl === 'string' ? w.config.haBaseUrl.trim() : '';
+    if (rawUrl) {
+      haBaseUrl = rawUrl;
+      break;
+    }
+  }
+
   return {
     weather,
     hasCustomWeather,
     calendarSources,
+    ...(haBaseUrl ? { haBaseUrl } : {}),
   };
 }
 
@@ -1168,6 +1225,12 @@ export function buildWidgetPayloadFromVariant(
     }
   } else if (variant.type === 'calendar' && inherited.calendarSources) {
     nextConfig.sources = inherited.calendarSources;
+  } else if (
+    (variant.type === 'homelab' || variant.type === 'now_playing') &&
+    inherited.haBaseUrl &&
+    !nextConfig.haBaseUrl
+  ) {
+    nextConfig.haBaseUrl = inherited.haBaseUrl;
   }
 
   return {
